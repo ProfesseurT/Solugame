@@ -1,0 +1,876 @@
+// Le monde : un village de la Loire, son domaine, ses vignes d'automne et les collines,
+// à l'heure dorée. Tout est construit en code au chargement (aucun fichier à télécharger).
+// Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
+// et hors de la zone d'ombre ne dessine que ce qui sert.
+import * as THREE from 'three';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+
+export { SOLEIL };
+export const BRUME = '#efb68a';
+export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
+const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
+
+function hasard(s) {
+  return () => {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const lisse = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+function hash(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
+function bruit(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash(i, j) + (hash(i + 1, j) - hash(i, j)) * u;
+  const b = hash(i, j + 1) + (hash(i + 1, j + 1) - hash(i, j + 1)) * u;
+  return a + (b - a) * v;
+}
+// Relief : plat dans la zone de jeu, collines autour, vallée pour la départementale
+export function hauteur(x, z) {
+  const r = Math.hypot(x, z);
+  if (r < 192) return 0;
+  const k = lisse((r - 192) / 150);
+  const h = k * (14 + 34 * bruit(x * 0.007 + 3, z * 0.007 - 2) + 7 * bruit(x * 0.03, z * 0.03));
+  return h * lisse((Math.abs(z - 10) - 9) / 50);
+}
+
+// Ordre de dessin des objets opaques : du plus proche au plus couvrant, pour que le test de
+// profondeur écarte tôt les pixels cachés (sol dessiné après ce qui le recouvre, ciel en dernier).
+export const ORDRE = { bati: 1, vegetal: 2, herbe: 3, sol: 4, ciel: 10, nuages: 11 };
+
+// Rangement des géométries fixes par quartier de 64 m (secteurs d'angle au-delà de 195 m),
+// puis fusion : un appel de dessin par quartier, élagué s'il est hors champ ou hors zone d'ombre.
+// Boîte englobante (centre et demi-tailles) d'un objet qui projette une ombre, pour l'élagage fin de la passe d'ombre
+const porteur = (obj, b) => ({ obj, cx: (b.min.x + b.max.x) / 2, cy: (b.min.y + b.max.y) / 2, cz: (b.min.z + b.max.z) / 2, hx: (b.max.x - b.min.x) / 2, hy: (b.max.y - b.min.y) / 2, hz: (b.max.z - b.min.z) / 2 });
+
+class Grille {
+  constructor() { this.cases = new Map(); }
+  push(...gs) {
+    for (const g of gs) {
+      if (!g.boundingBox) g.computeBoundingBox();
+      const b = g.boundingBox, x = (b.min.x + b.max.x) / 2, z = (b.min.z + b.max.z) / 2;
+      const k = Math.hypot(x, z) > 195 ? 'loin' + Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI * 2) * 10) : Math.floor(x / 64) + ',' + Math.floor(z / 64);
+      let l = this.cases.get(k);
+      if (!l) this.cases.set(k, l = []);
+      l.push(g);
+    }
+    return this.cases.size;
+  }
+  ajouter(scene, ombre, porteurs) {
+    for (const l of this.cases.values()) {
+      // le vent n'existe que sur certaines géométries (feuillages) : les autres reçoivent un poids nul
+      const vent = l.some(g => g.attributes.aVent);
+      if (vent) for (const g of l) if (!g.attributes.aVent) g.setAttribute('aVent', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+      const m = new THREE.Mesh(fusion(l), vent ? MAT_VENT : MAT);
+      m.castShadow = ombre; m.receiveShadow = true; m.renderOrder = ORDRE.bati; m.name = 'décor';
+      scene.add(m);
+      if (ombre) { m.geometry.computeBoundingBox(); porteurs.push(porteur(m, m.geometry.boundingBox)); }
+    }
+    this.cases.clear();
+  }
+}
+
+// Fausse occlusion ambiante et ombres de contact : bandes et taches sombres dégradées posées au sol
+// (pied des murs, sous les arbres, sous les rangs de vigne). Un seul maillage transparent.
+class Contact {
+  constructor() { this.p = []; this.a = []; }
+  tri(x0, z0, a0, x1, z1, a1, x2, z2, a2, y) { this.p.push(x0, y, z0, x1, y, z1, x2, y, z2); this.a.push(a0, a1, a2); }
+  quad(ax, az, aa, bx, bz, ba, cx, cz, ca, dx, dz, da, y) { this.tri(ax, az, aa, cx, cz, ca, bx, bz, ba, y); this.tri(bx, bz, ba, cx, cz, ca, dx, dz, da, y); }
+  // jupe autour d'une emprise rectangulaire : sombre contre le mur, nulle à « l » mètres
+  jupe(x0, z0, x1, z1, l, a, y = 0.06) {
+    const X0 = x0 - l, Z0 = z0 - l, X1 = x1 + l, Z1 = z1 + l;
+    this.quad(x0, z0, a, x1, z0, a, X0, Z0, 0, X1, Z0, 0, y); // nord
+    this.quad(x1, z0, a, x1, z1, a, X1, Z0, 0, X1, Z1, 0, y); // est
+    this.quad(x1, z1, a, x0, z1, a, X1, Z1, 0, X0, Z1, 0, y); // sud
+    this.quad(x0, z1, a, x0, z0, a, X0, Z1, 0, X0, Z0, 0, y); // ouest
+  }
+  // tache ronde ou ovale
+  tache(x, z, rx, rz, a, y = 0.06) {
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n * Math.PI * 2, t1 = (i + 1) / n * Math.PI * 2;
+      this.tri(x, z, a, x + Math.cos(t1) * rx, z + Math.sin(t1) * rz, 0, x + Math.cos(t0) * rx, z + Math.sin(t0) * rz, 0, y);
+    }
+  }
+  // bande le long de z, sombre au milieu
+  bande(x, z0, z1, l, a, y = 0.05) {
+    this.quad(x - l, z0, 0, x, z0, a, x - l, z1, 0, x, z1, a, y);
+    this.quad(x, z0, a, x + l, z0, 0, x, z1, a, x + l, z1, 0, y);
+  }
+  maillage() {
+    const g = new THREE.BufferGeometry(), n = this.a.length, c = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) c[i * 4 + 3] = this.a[i];
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(c, 4));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: '#2a2238', vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    m.renderOrder = 1; m.name = 'contact';
+    return m;
+  }
+}
+
+// Panneaux et enseignes : un seul atlas dessiné en code, un seul maillage. Les cases sont réservées au fur et à mesure,
+// le dessin attend la fin : le canevas est alors créé à la hauteur exacte (rien de vide en mémoire graphique).
+class Atlas {
+  constructor() { this.x = 0; this.y = 0; this.ligne = 0; this.geos = []; this.cases = []; }
+  // réserve une case w x h (pixels) pour un dessin ; place un rectangle w3 x h3 (mètres) dans le monde
+  poser(w, h, dessin, w3, h3, x, y, z, rot) {
+    if (this.x + w > 1024) { this.x = 0; this.y += this.ligne + 4; this.ligne = 0; }
+    const px = this.x, py = this.y;
+    this.x += w + 4; this.ligne = Math.max(this.ligne, h);
+    this.cases.push({ px, py, w, h, dessin });
+    const g = new THREE.PlaneGeometry(w3, h3), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + uv.getX(i) * w) / 1024, py + (1 - uv.getY(i)) * h); // v en pixels, ramené à la fin
+    g.rotateY(rot); g.translate(x, y, z);
+    this.geos.push(g);
+  }
+  maillage() {
+    const H = Math.ceil((this.y + this.ligne) / 4) * 4, cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = H;
+    const c = cv.getContext('2d');
+    for (const { px, py, w, h, dessin } of this.cases) { c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore(); }
+    for (const g of this.geos) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i) / H); }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const m = new THREE.Mesh(fusion(this.geos), new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5 }));
+    m.renderOrder = ORDRE.bati; m.name = 'enseignes';
+    return m;
+  }
+}
+
+export function construireMonde(scene, col, opts) {
+  const rnd = hasard(20261122);
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const plan = []; // dessin de la mini-carte
+  const rect = (x0, z0, x1, z1, c) => plan.push({ t: 'r', x0, z0, x1, z1, c });
+  const bati = new Grille(), contact = new Contact(), atlas = new Atlas(), porteurs = [];
+
+  /* ------------------------------------------------------------ ciel
+     Dôme dessiné après le décor (seuls les pixels restés vides sont calculés). Son horizon a
+     exactement la couleur de la brume, éclairée du côté du soleil : le paysage s'y fond sans couture. */
+  const ciel = new THREE.Group();
+  const brumeC = new THREE.Color(BRUME);
+  {
+    // le dégradé se calcule aux sommets ; seuls les pixels proches du soleil font le halo serré et le disque
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.ShaderMaterial({
+      uniforms: { uBrume: { value: brumeC }, uMilieu: { value: new THREE.Color('#e38a78') }, uZenith: { value: new THREE.Color('#2b4888') } },
+      vertexShader: `varying vec3 vDir;
+varying vec3 vCiel;
+uniform vec3 uBrume, uMilieu, uZenith;
+${GLSL_BRUME}
+void main() {
+  vDir = position;
+  vec3 d = normalize(position);
+  float y = max(d.y, 0.0), k = dot(d, SOLEIL_DIR), s = max(k, 0.0), s2 = s * s, s4 = s2 * s2, s8 = s4 * s4;
+  vec3 c = mix(cl_brumeLarge(uBrume, k), uMilieu, smoothstep(0.0, 0.22, y));
+  vCiel = mix(c, uZenith, smoothstep(0.12, 0.75, y)) + vec3(1.0, 0.68, 0.38) * (s8 * s2 * 0.3) * smoothstep(-0.04, 0.08, d.y);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+      fragmentShader: `varying vec3 vDir;
+varying vec3 vCiel;
+${GLSL_BRUME}
+void main() {
+  vec3 c = vCiel;
+  vec3 d = normalize(vDir);
+  float k = dot(d, SOLEIL_DIR);
+  if (k > 0.72) {
+    float y = max(d.y, 0.0);
+    c += vec3(1.0, 0.62, 0.3) * cl_halo(k) * (1.0 - smoothstep(0.0, 0.22, y)) * (1.0 - smoothstep(0.12, 0.75, y));
+    c += vec3(1.0, 0.68, 0.38) * pow(k, 120.0) * 0.9 * smoothstep(-0.04, 0.08, d.y);
+    c = mix(c, vec3(5.0, 4.0, 2.8), smoothstep(0.99885, 0.9992, k));
+  }
+  gl_FragColor = vec4(c, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+      side: THREE.BackSide, depthWrite: false, fog: false,
+    }));
+    dome.renderOrder = ORDRE.ciel; dome.frustumCulled = false; dome.name = 'ciel'; ciel.add(dome);
+    // nuages roses, éclairés par en dessous (dégradé du dessous doré vers le dessus mauve)
+    const nu = [];
+    for (let i = 0; i < 12; i++) {
+      const a = rnd() * Math.PI * 2, r = 520 + rnd() * 140, y = 95 + rnd() * 120;
+      const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+      const n = 3 + Math.floor(rnd() * 4);
+      for (let k = 0; k < n; k++) nu.push(S(18 + rnd() * 16, '#ffffff', cx + (rnd() - 0.5) * 70, y + rnd() * 8, cz + (rnd() - 0.5) * 70, 1.7, 0.42, 1.2));
+    }
+    const g = fusion(nu), p = g.attributes.position, cc = g.attributes.color, c = new THREE.Color(), v = new THREE.Vector3();
+    const bas = new THREE.Color('#ffd2a6'), haut = new THREE.Color('#e7a1a8'), lueur = new THREE.Color('#fff0d0');
+    for (let i = 0; i < p.count; i++) {
+      v.set(p.getX(i), p.getY(i), p.getZ(i));
+      const y = v.y, lum = Math.max(0, v.normalize().dot(SOLEIL));
+      c.copy(bas).lerp(haut, lisse((y - 90) / 70)).lerp(lueur, Math.pow(lum, 6) * 0.7);
+      cc.setXYZ(i, c.r, c.g, c.b);
+    }
+    const nuages = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, depthWrite: false }));
+    nuages.renderOrder = ORDRE.nuages; nuages.frustumCulled = false; nuages.name = 'nuages'; ciel.add(nuages);
+  }
+  scene.add(ciel);
+
+  /* ------------------------------------------------------------ lumière */
+  const hemi = new THREE.HemisphereLight('#d3cfe6', '#9a6a45', 1.75);
+  scene.add(hemi);
+  const soleilL = new THREE.DirectionalLight('#ffb46e', 3.15);
+  soleilL.castShadow = true;
+  const ts = opts.mobile ? 1024 : 2048;
+  soleilL.shadow.mapSize.set(ts, ts);
+  const sc = soleilL.shadow.camera;
+  sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 220;
+  soleilL.shadow.bias = -0.0006; soleilL.shadow.normalBias = 0.04;
+  scene.add(soleilL, soleilL.target);
+
+  /* ------------------------------------------------------------ terrain */
+  {
+    let g = new THREE.PlaneGeometry(1700, 1700, 110, 110);
+    g.rotateX(-Math.PI / 2);
+    const pa = g.attributes.position.array;
+    for (let i = 0; i < pa.length; i += 3) pa[i + 1] = hauteur(pa[i], pa[i + 2]) - 0.02;
+    // les coins du carré ne sont jamais à portée de vue (zone de jeu de 186 m, vue limitée à 620 m) : retirés
+    const ix = g.index.array, garde = [], proche = j => pa[j * 3] * pa[j * 3] + pa[j * 3 + 2] * pa[j * 3 + 2] < 830 * 830;
+    for (let i = 0; i < ix.length; i += 3) if (proche(ix[i]) || proche(ix[i + 1]) || proche(ix[i + 2])) garde.push(ix[i], ix[i + 1], ix[i + 2]);
+    // Découpé en morceaux : un disque au centre, puis deux couronnes de dix secteurs. Ce qui est derrière la caméra ou
+    // au-delà de sa portée n'est plus dessiné (les deux tiers des triangles du terrain, en moyenne). Les triangles sont
+    // rangés par morceau avant d'être dépliés : chaque morceau est une plage du même tampon (ni copie ni mémoire en plus).
+    const nT = garde.length / 3, cles = new Uint8Array(nT), ordre = new Uint32Array(nT);
+    for (let t = 0; t < nT; t++) {
+      const a = garde[t * 3] * 3, b = garde[t * 3 + 1] * 3, c = garde[t * 3 + 2] * 3;
+      const x = (pa[a] + pa[b] + pa[c]) / 3, z = (pa[a + 2] + pa[b + 2] + pa[c + 2]) / 3, r = Math.hypot(x, z);
+      cles[t] = r < 230 ? 0 : (r < 480 ? 1 : 11) + Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI * 2) * 10) % 10;
+      ordre[t] = t;
+    }
+    ordre.sort((a, b) => cles[a] - cles[b]);
+    const trie = new Uint32Array(garde.length);
+    for (let j = 0; j < nT; j++) { const t = ordre[j]; trie[j * 3] = garde[t * 3]; trie[j * 3 + 1] = garde[t * 3 + 1]; trie[j * 3 + 2] = garde[t * 3 + 2]; }
+    g.setIndex(new THREE.BufferAttribute(trie, 1));
+    g = g.toNonIndexed();
+    g.deleteAttribute('uv');
+    g.computeVertexNormals();
+    const q = g.attributes.position, cols = new Float32Array(q.count * 3), types = new Float32Array(q.count), c = new THREE.Color();
+    // teintes lues une fois (et non à chaque triangle)
+    const herbes = ['#8ea04f', '#97a855', '#86994a', '#9aa95a'].map(h => new THREE.Color(h));
+    const champs = ['#c9b46a', '#93a84e', '#d8a83c', '#b86b32', '#7d9146', '#8a6a48', '#56713d', '#a9a24f'].map(h => new THREE.Color(h));
+    const qa = q.array;
+    for (let i = 0; i < q.count; i += 3) {
+      const o = i * 3, x = (qa[o] + qa[o + 3] + qa[o + 6]) / 3, z = (qa[o + 2] + qa[o + 5] + qa[o + 8]) / 3;
+      const r = Math.hypot(x, z);
+      if (r < 200) c.copy(herbes[Math.floor(hash(Math.floor(x / 13), Math.floor(z / 13)) * herbes.length)]);
+      else c.copy(champs[Math.floor(hash(Math.floor(x / 55) + 7, Math.floor(z / 48) - 3) * champs.length)]);
+      for (let k = 0; k < 3; k++) { cols[(i + k) * 3] = c.r; cols[(i + k) * 3 + 1] = c.g; cols[(i + k) * 3 + 2] = c.b; types[i + k] = r < 200 ? T.herbe : T.champ; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    g.setAttribute('aMat', new THREE.BufferAttribute(types, 1));
+    // un maillage par morceau : mêmes tampons, plage de sommets à lui, sphère englobante à lui (pour l'élagage)
+    for (let j = 0; j < nT;) {
+      let f = j;
+      while (f < nT && cles[ordre[f]] === cles[ordre[j]]) f++;
+      const m = new THREE.BufferGeometry();
+      for (const [nom, at] of Object.entries(g.attributes)) m.setAttribute(nom, at);
+      m.setDrawRange(j * 3, (f - j) * 3);
+      // sphère serrée, comme three.js la calcule : centre de la boîte, rayon jusqu'au sommet le plus loin
+      const b = new THREE.Box3(), v = new THREE.Vector3(), sp = new THREE.Sphere();
+      for (let i = j * 9; i < f * 9; i += 3) b.expandByPoint(v.set(qa[i], qa[i + 1], qa[i + 2]));
+      b.getCenter(sp.center);
+      let r2 = 0;
+      for (let i = j * 9; i < f * 9; i += 3) r2 = Math.max(r2, sp.center.distanceToSquared(v.set(qa[i], qa[i + 1], qa[i + 2])));
+      sp.radius = Math.sqrt(r2); m.boundingSphere = sp;
+      const sol = new THREE.Mesh(m, MAT);
+      sol.receiveShadow = true; sol.renderOrder = ORDRE.sol; sol.name = 'terrain';
+      scene.add(sol);
+      j = f;
+    }
+  }
+
+  /* ------------------------------------------------------------ routes, place, cour, parcelles */
+  const surf = [];
+  const ROUTE = '#55575f', LIGNE = '#ece6d4', TROTT = '#bdb19b';
+  surf.push(B(840, 0.06, 7, ROUTE, 0, 0, 10));
+  surf.push(B(840, 0.065, 0.14, LIGNE, 0, 0, 6.85), B(840, 0.065, 0.14, LIGNE, 0, 0, 13.15));
+  for (let x = -414; x < 420; x += 9) surf.push(B(3, 0.068, 0.15, LIGNE, x, 0, 10));
+  rect(-200, 6.5, 200, 13.5, '#4a4c55');
+  // trottoirs du bourg
+  surf.push(B(130, 0.09, 4, TROTT, 90, 0, 4.5), B(130, 0.09, 4, TROTT, 90, 0, 15.5));
+  rect(25, 2.5, 155, 6.5, TROTT); rect(25, 13.5, 155, 17.5, TROTT);
+  // rue du bourg vers la place et la mairie
+  surf.push(B(6, 0.062, 90, ROUTE, 95, 0, -35));
+  rect(92, -80, 98, 6.5, '#4a4c55');
+  // place pavée
+  surf.push(B(38, 0.08, 34, '#cdb998', 95, 0, -46));
+  surf.push(B(16, 0.081, 9, '#cdb998', 95, 0, -77));
+  rect(76, -63, 114, -29, '#cdb998'); rect(87, -82, 103, -72, '#cdb998');
+  // chemin et cour du domaine
+  surf.push(B(4, 0.06, 41.5, '#c9b993', -90, 0, -14.25));
+  surf.push(B(53, 0.055, 38, '#cfc1a0', -88.5, 0, -53));
+  rect(-92, -34, -88, 6.5, '#c9b993'); rect(-115, -72, -62, -34, '#cfc1a0');
+  // parking de l'église
+  surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
+  rect(115, -64, 127, -55, '#cfc1a0');
+
+  // vignes d'automne : chenin (jaune) et cabernet franc (rouge)
+  const PAL = {
+    chenin: ['#e2b23a', '#d9a832', '#eac24a', '#cfa13a', '#bca73e', '#e6b845'],
+    cabernet: ['#c2562e', '#b0402c', '#d0702f', '#9e3a2e', '#c98a34', '#b84a35'],
+  };
+  const PARCELLES = [
+    [-165, -110, -125, -20, 'chenin'], [-58, -110, -12, -25, 'cabernet'], [0, -110, 50, -25, 'chenin'],
+    [145, -110, 178, -10, 'cabernet'], [-160, 25, -112, 100, 'chenin'], [-106, 25, -60, 100, 'cabernet'],
+    [-50, 30, -8, 108, 'cabernet'], [-2, 30, 36, 108, 'chenin'], [60, 34, 172, 110, 'cabernet'],
+  ];
+  const parcs = PARCELLES.map(([x0, z0, x1, z1, cep]) => {
+    const q = col.parcelle(x0, z0, x1, z1, 2.2);
+    q.cep = cep;
+    surf.push(B(x1 - x0, 0.045, z1 - z0, '#7a5c3f', (x0 + x1) / 2, 0, (z0 + z1) / 2));
+    // enherbement un rang sur deux, et tournières enherbées au bout des rangs
+    for (let k = 0; k < q.n - 1; k += 2) surf.push(B(1.15, 0.07, q.zr1 - q.zr0 + 1.2, k % 4 ? '#8a9a4c' : '#7f9046', q.xr + (k + 0.5) * q.ecart, 0, (q.zr0 + q.zr1) / 2));
+    surf.push(B(x1 - x0, 0.07, 1.6, '#7f9046', (x0 + x1) / 2, 0, z0 + 0.8), B(x1 - x0, 0.07, 1.6, '#7f9046', (x0 + x1) / 2, 0, z1 - 0.8));
+    rect(x0, z0, x1, z1, '#7a5c3f');
+    plan.push({ t: 'rangs', q, c: cep === 'chenin' ? '#d8ad3c' : '#bf5a30' });
+    return q;
+  });
+  const surfaces = new THREE.Mesh(fusion(surf), MAT);
+  surfaces.receiveShadow = true; surfaces.renderOrder = ORDRE.sol; surfaces.name = 'surfaces';
+  scene.add(surfaces);
+
+  /* ------------------------------------------------------------ rangs de vigne
+     Une instance par travée (6 m entre deux piquets) : feuillage, souches et piquet. Le feuillage
+     ondule (relief irrégulier, vent) dans le shader ; quelques manquants coupent les rangs ; fils de
+     palissage, piquets de tête inclinés et leurs haubans au bout de chaque rang. Les travées sont
+     rangées par blocs de 30 m : l'élagage (vue et ombre) est fin, et les blocs lointains passent
+     à une géométrie simplifiée. */
+  const vignes = [];
+  {
+    // sub : nombre de tronçons du feuillage ; loin : sans piquet ni dessous (invisibles au-delà de 45 m, et la
+    // version lointaine ne porte pas d'ombre) : 18 triangles au lieu de 32
+    const geoTravee = (sub, loin = false) => {
+      const P = [[-0.15, 0.58], [-0.31, 1.08], [0, 1.66], [0.31, 1.08], [0.15, 0.58]];
+      const pos = [], cols = [], mats = [], idx = [];
+      const sommet = (x, y, z, c, m) => { pos.push(x, y, z); cols.push(c.r, c.g, c.b); mats.push(m); return mats.length - 1; };
+      const blanc = new THREE.Color('#ffffff'), souche = new THREE.Color('#5a3f2b'), piquet = new THREE.Color('#8d7c66');
+      for (let r = 0; r <= sub; r++) for (const [x, y] of P) sommet(x, y, -0.5 + r / sub, blanc, T.feuillage);
+      for (let r = 0; r < sub; r++) for (let i = 0; i < 4; i++) { const a = r * 5 + i, b = a + 1, c = a + 5, d = a + 6; idx.push(a, c, b, b, c, d); }
+      // dessous fermé : la carte d'ombre ne garde que les faces arrière, un volume ouvert laisserait passer le soleil
+      if (!loin) for (let r = 0; r < sub; r++) { const a = r * 5 + 4, b = r * 5, c = a + 5, d = b + 5; idx.push(a, c, b, b, c, d); }
+      for (const [i, j, k] of [[0, 1, 4], [1, 3, 4], [1, 2, 3]]) { idx.push(i, j, k); const o = sub * 5; idx.push(o + i, o + k, o + j); }
+      // souches : un bandeau sombre sous le feuillage
+      for (const s of [-1, 1]) {
+        const a = sommet(s * 0.055, 0, -0.5, souche, T.bois), b = sommet(s * 0.055, 0.62, -0.5, souche, T.bois);
+        const c = sommet(s * 0.055, 0, 0.5, souche, T.bois), d = sommet(s * 0.055, 0.62, 0.5, souche, T.bois);
+        if (s < 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+      }
+      // piquet au début de la travée (épaisseur en z ramenée à une travée de 6 m)
+      if (!loin) {
+        const bx = new THREE.BoxGeometry(0.08, 1.85, 0.08 / 6).translate(0, 0.925, -0.5 + 0.04 / 6);
+        const o = mats.length, bp = bx.attributes.position;
+        for (let i = 0; i < bp.count; i++) sommet(bp.getX(i), bp.getY(i), bp.getZ(i), piquet, T.bois);
+        for (const i of bx.index.array) idx.push(o + i);
+        bx.dispose();
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+      g.setAttribute('aMat', new THREE.Float32BufferAttribute(mats, 1));
+      g.setIndex(idx); g.computeVertexNormals();
+      return g;
+    };
+    const gFine = geoTravee(4), gSimple = geoTravee(1), gLoin = geoTravee(1, true);
+    const matV = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), undefined, { vent: [0.05, 0.9, 1.7, 1.7], teinteFeuillage: true, ondule: true });
+    const fils = [];
+    const m = new THREE.Matrix4(), pos = new THREE.Vector3(), quat = new THREE.Quaternion(), ech = new THREE.Vector3(), c = new THREE.Color();
+    const PALC = { chenin: PAL.chenin.map(h => new THREE.Color(h)), cabernet: PAL.cabernet.map(h => new THREE.Color(h)) };
+    // piquets de tête : deux modèles (début et fin de rang), copiés et déplacés
+    const TETE = [-1, 1].map(s => teinter(new THREE.BoxGeometry(0.11, 2.1, 0.11).translate(0, 1.0, 0).rotateX(s * 0.2), '#7d6b55'));
+    for (const q of parcs) {
+      const pal = PALC[q.cep], blocs = new Map();
+      for (let k = 0; k < q.n; k++) {
+        const rx = q.xr + k * q.ecart;
+        for (let z = q.zr0; z < q.zr1 - 0.5; z += 6) {
+          let len = Math.min(6, q.zr1 - z);
+          if (rnd() < 0.11 && len > 3) len -= 1.0 + rnd() * 1.3; // manquant : un ou deux ceps absents
+          const t = bruit(rx * 0.09 + 11, z * 0.045);
+          c.copy(pal[Math.min(pal.length - 1, Math.floor(t * pal.length * 1.2))]).lerp(pick(pal), 0.3);
+          const cle = Math.floor((rx - q.x0) / 30) + ',' + Math.floor((z + len / 2 - q.z0) / 30);
+          if (!blocs.has(cle)) blocs.set(cle, []);
+          blocs.get(cle).push(rx, z + len / 2, len, 0.92 + rnd() * 0.16, 0.9 + rnd() * 0.2, c.r, c.g, c.b);
+        }
+        // fils de palissage, piquets de tête inclinés vers l'extérieur et haubans
+        for (const y of [0.62, 1.15, 1.55]) fils.push(rx, y, q.zr0 - 0.1, rx, y, q.zr1 + 0.1);
+        for (const s of [-1, 1]) {
+          const zb = s < 0 ? q.zr0 - 0.15 : q.zr1 + 0.15;
+          bati.push(deplacer(TETE[s < 0 ? 0 : 1].clone(), rx, 0, zb));
+          fils.push(rx, 1.95, zb + s * 0.4, rx, 0, zb + s * 1.5);
+        }
+        contact.bande(rx, q.zr0, q.zr1, 0.85, 0.2);
+      }
+      // de loin, toute la parcelle en un seul appel de dessin (géométrie simplifiée, sans ombre portée)
+      const nt = [...blocs.values()].reduce((a, l) => a + l.length / 8, 0), loin = new THREE.InstancedMesh(gLoin, matV, nt);
+      let it = 0;
+      const blocsP = [];
+      for (const travees of blocs.values()) {
+        const n = travees.length / 8, im = new THREE.InstancedMesh(gFine, matV, n), bb = new THREE.Box3();
+        let sx = 0, sz = 0;
+        for (let i = 0; i < n; i++) {
+          const o = i * 8;
+          sx += travees[o]; sz += travees[o + 1];
+          bb.expandByPoint(pos.set(travees[o] - 0.4, 0, travees[o + 1] - travees[o + 2] / 2)).expandByPoint(pos.set(travees[o] + 0.4, 2, travees[o + 1] + travees[o + 2] / 2));
+          m.compose(pos.set(travees[o], 0, travees[o + 1]), quat, ech.set(travees[o + 4], travees[o + 3], travees[o + 2]));
+          im.setMatrixAt(i, m); im.setColorAt(i, c.setRGB(travees[o + 5], travees[o + 6], travees[o + 7]));
+          loin.setMatrixAt(it, m); loin.setColorAt(it++, c);
+        }
+        im.castShadow = true; im.receiveShadow = true; im.renderOrder = ORDRE.vegetal; im.name = 'vigne'; im.computeBoundingSphere();
+        scene.add(im); blocsP.push({ im, x: sx / n, z: sz / n });
+        porteurs.push(porteur(im, bb));
+      }
+      loin.receiveShadow = true; loin.renderOrder = ORDRE.vegetal; loin.name = 'vigne-loin'; loin.visible = false; loin.computeBoundingSphere();
+      scene.add(loin);
+      vignes.push({ q, loin, blocs: blocsP });
+    }
+    const gf = new THREE.BufferGeometry();
+    gf.setAttribute('position', new THREE.Float32BufferAttribute(fils, 3));
+    const lf = new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: '#3d3833' }));
+    lf.renderOrder = ORDRE.vegetal; lf.name = 'palissage'; scene.add(lf);
+    vignes.fine = gFine; vignes.simple = gSimple;
+  }
+
+  /* ------------------------------------------------------------ bâtiments */
+  const fenetre = (L, x, y, z, f, volets) => {
+    L.push(B(0.98, 1.34, 0.08, '#efe7d6', x, y, z + f * 0.02));
+    L.push(B(0.74, 1.1, 0.1, rnd() < 0.2 ? '#4a3a2a' : '#2f3c4f', x, y, z + f * 0.035)); // certaines fenêtres sont déjà allumées
+    if (volets) L.push(B(0.46, 1.32, 0.06, volets, x - 0.75, y, z + f * 0.05), B(0.46, 1.32, 0.06, volets, x + 0.75, y, z + f * 0.05));
+  };
+  // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options
+  function maison(o) {
+    const L = [], { w, d, h } = o, ht = o.ht ?? Math.min(w, d) * 0.55;
+    L.push(B(w, h, d, o.mur || TUF, 0, h / 2, 0));
+    L.push(B(w + 0.14, 0.6, d + 0.14, o.socle || '#b9a98b', 0, 0.3, 0));
+    L.push(toit(w + 0.8, d + 0.8, ht, o.toit || ARD, 0, h, 0, d > w));
+    if (o.cheminee !== false) L.push(B(0.7, ht * 0.8 + 0.9, 0.7, '#a99a82', w * 0.3, h + ht * 0.45, d > w ? d * 0.22 : 0));
+    const etages = o.etages ?? Math.max(1, Math.floor((h - 0.3) / 2.8)), nf = o.nf ?? Math.max(1, Math.floor(w / 3.1));
+    const porte = o.porte ?? Math.floor(nf / 2);
+    for (let e = 0; e < etages; e++) for (let i = 0; i < nf; i++) {
+      const x = -w / 2 + (i + 0.5) * w / nf, y = 1.75 + e * 2.8;
+      fenetre(L, x, y, -d / 2, -1, o.volets);
+      if (e === 0 && o.vitrine) continue;
+      if (e === 0 && i === porte) { L.push(B(1.15, 2.25, 0.12, o.porteC || '#5b3a2a', x, 1.12, d / 2 + 0.04)); continue; }
+      fenetre(L, x, y, d / 2, 1, o.volets);
+      if (e >= 1 && o.fleurs !== false && rnd() < 0.45) {
+        L.push(B(0.96, 0.17, 0.24, '#6b4a30', x, y - 0.74, d / 2 + 0.15), B(0.9, 0.07, 0.2, '#4f7a32', x, y - 0.63, d / 2 + 0.15));
+        const fl = pick(['#d23a4a', '#e86a8a', '#c42d3a', '#f4f1ea', '#e0457a']);
+        for (let k = 0; k < 5; k++) L.push(B(0.12, 0.11, 0.12, k % 2 ? fl : '#5d8a36', x - 0.36 + k * 0.18, y - 0.55 + (k % 2) * 0.03, d / 2 + 0.16));
+      }
+    }
+    if (o.vitrine) {
+      const vw = w * 0.56, vx = -w * 0.14;
+      L.push(B(vw + 0.3, 2.35, 0.09, o.vitrine, vx, 1.45, d / 2 + 0.03));
+      L.push(B(vw, 2.0, 0.11, '#3a5068', vx, 1.4, d / 2 + 0.05));
+      L.push(B(1.15, 2.3, 0.12, o.porteC || o.vitrine, w * 0.33, 1.15, d / 2 + 0.05));
+      if (o.banne) for (let k = 0; k < 6; k++) {
+        const g = new THREE.BoxGeometry(vw / 6, 0.08, 1.4); g.rotateX(0.32);
+        g.translate(vx - vw / 2 + (k + 0.5) * vw / 6, 2.95, d / 2 + 0.68);
+        L.push(teinter(g, k % 2 ? '#f3ead8' : o.banne));
+      }
+    }
+    if (o.drapeau) {
+      L.push(C(0.04, 0.04, 2.6, 5, '#ddd', 0, h - 0.5, d / 2 + 0.9, 'y'));
+      L.push(B(0.05, 0.6, 0.3, '#2b4ea2', 0, h + 0.4, d / 2 + 1.0), B(0.05, 0.6, 0.3, '#f4f1ea', 0, h + 0.4, d / 2 + 1.3), B(0.05, 0.6, 0.3, '#d23a3a', 0, h + 0.4, d / 2 + 1.6));
+    }
+    poser(L, o.x, o.z, o.rot || 0, bati);
+    const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5;
+    const bx = col.boiteC(o.x, o.z, tourne ? d : w, tourne ? w : d);
+    bx.haut = true;
+    plan.push({ t: 'b', x0: bx.x0, z0: bx.z0, x1: bx.x1, z1: bx.z1 });
+    contact.jupe(bx.x0 - 0.07, bx.z0 - 0.07, bx.x1 + 0.07, bx.z1 + 0.07, 1.7, 0.5);
+    return o;
+  }
+  // point sur la façade (coordonnées monde) : lx le long de la façade, avance devant
+  const facade = (o, lx, avance) => {
+    const r = o.rot || 0, a = o.d / 2 + avance;
+    return { x: o.x + Math.sin(r) * a + Math.cos(r) * lx, z: o.z + Math.cos(r) * a - Math.sin(r) * lx, rot: r };
+  };
+  function enseigne(txt, p, y, w, h, fond, encre, bord) {
+    const W = 512, H = Math.max(64, Math.round(512 * h / w));
+    atlas.poser(W, H, c => {
+      c.fillStyle = fond; c.fillRect(0, 0, W, H);
+      c.strokeStyle = bord || encre; c.lineWidth = bord ? 18 : 6;
+      const m = bord ? 12 : 10;
+      c.strokeRect(m, m, W - 2 * m, H - 2 * m);
+      c.fillStyle = encre; c.textAlign = 'center'; c.textBaseline = 'middle';
+      // une seule mesure du texte, puis taille proportionnelle à la place disponible
+      const police = n => `bold ${n}px Georgia, 'Times New Roman', serif`;
+      c.font = police(100);
+      const t = Math.max(12, Math.min(Math.round(H * 0.52), Math.floor(100 * (W - 60) / c.measureText(txt).width)));
+      c.font = police(t);
+      c.fillText(txt, W / 2, H / 2 + 3);
+    }, w, h, p.x, y, p.z, p.rot);
+  }
+
+  // Domaine du Clos Libre
+  const VOLETS = ['#5d7d8f', '#7a8f6a', '#9aa3ad', '#6b7f99', '#8e6f5a', '#5f8a87'];
+  maison({ x: -100, z: -64, w: 16, d: 10, h: 7.2, rot: 0, volets: '#6b7f99', porteC: '#3e4f63' });
+  const chai = maison({ x: -70, z: -52, w: 26, d: 12, h: 6.2, rot: -Math.PI / 2, cheminee: false, porte: -1, toit: ARD2, etages: 1, nf: 6, fleurs: false });
+  {
+    const L = [B(3.4, 3.8, 0.16, '#5b3a2a', 0, 1.9, 6.06), B(3.8, 0.3, 0.2, '#d8cbb0', 0, 3.95, 6.07)];
+    poser(L, chai.x, chai.z, chai.rot, bati);
+    enseigne('CHAI', facade(chai, 0, 0.12), 4.65, 2.2, 0.7, '#5b3a2a', '#f1e2c4');
+  }
+  // fûts et cartons devant le chai
+  for (let i = 0; i < 5; i++) {
+    bati.push(C(0.46, 0.46, 0.95, 10, '#7a4a2a', -77.1, 0.46, -41.5 - i * 1.0, 'x'));
+    bati.push(C(0.475, 0.475, 0.06, 10, '#3a3a3e', -76.8, 0.46, -41.5 - i * 1.0, 'x'), C(0.475, 0.475, 0.06, 10, '#3a3a3e', -77.4, 0.46, -41.5 - i * 1.0, 'x'));
+  }
+  col.boite(-77.7, -46.2, -76, -40.8);
+  contact.jupe(-77.6, -46.0, -76.6, -41.0, 0.7, 0.35);
+  bati.push(B(1.25, 0.14, 1.05, '#9a7b55', -78.4, 0.07, -57.5));
+  for (let i = 0; i < 12; i++) bati.push(B(0.4, 0.28, 0.32, '#b98a55', -78.8 + (i % 3) * 0.41, 0.28 + Math.floor(i / 6) * 0.29, -57.75 + (Math.floor(i / 3) % 2) * 0.34));
+  col.boiteC(-78.4, -57.5, 1.3, 1.1);
+  contact.jupe(-79.0, -58.0, -77.8, -57.0, 0.5, 0.3);
+  // muret et portail
+  bati.push(B(21.6, 1.1, 0.5, '#d9cdb2', -104.2, 0.55, -33.5), B(24.6, 1.1, 0.5, '#d9cdb2', -74.4, 0.55, -33.5));
+  col.boite(-115, -33.75, -93.4, -33.25); col.boite(-86.6, -33.75, -62, -33.25);
+  contact.jupe(-115, -33.75, -93.4, -33.25, 0.8, 0.3); contact.jupe(-86.6, -33.75, -62, -33.25, 0.8, 0.3);
+  for (const x of [-93, -87]) { bati.push(B(0.8, 2.6, 0.8, TUF, x, 1.3, -33.5), B(1, 0.2, 1, '#cbbf9f', x, 2.7, -33.5)); col.boiteC(x, -33.5, 0.8, 0.8); }
+  bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 3.25, -33.5));
+  enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 3.65, 5.6, 0.72, '#2b2b30', '#f0d9a0');
+
+  // Le bourg : maisons le long de la départementale
+  const nord = [[34, 10, 8, 6.2], [46, 9, 8, 7], [58, 11, 9, 6.5, 'boul'], [80, 9, 8, 7.5, 'epicerie'], [110, 11, 8, 6.6, 'resto'], [124, 10, 8, 7], [137, 11, 9, 6.4]];
+  for (const [x, w, d, h, t] of nord) {
+    const resto = t === 'resto';
+    const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t ? '#e7d6a8' : null, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
+    if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.14), 3.25, 4.6, 0.62, '#efe0b4', '#6b3d1f');
+    if (resto) enseigne('RESTAURANT LA TREILLE', facade(o, -w * 0.14, 0.14), 3.5, 5.6, 0.7, '#2f5d50', '#f3e7c9');
+    if (t === 'epicerie') {
+      enseigne('ÉPICERIE DU BOURG', facade(o, -w * 0.14, 0.14), 3.25, 5.0, 0.62, '#2f4a6b', '#f3e7c9');
+      // l'étal devant la vitrine : cageots de fruits et de légumes
+      for (const [dx, fruit] of [[-2.6, '#e0802f'], [-1.6, '#c42d3a'], [-0.6, '#5d8a36']]) {
+        bati.push(B(0.86, 0.46, 0.56, '#9a7b55', x + dx, 0.23, 2.0), B(0.76, 0.1, 0.46, fruit, x + dx, 0.5, 2.0));
+      }
+      col.boiteC(x - 1.6, 2.0, 2.9, 0.6);
+    }
+  }
+  for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]])
+    maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS) });
+  // rue de la place
+  for (const z of [-14, -24]) {
+    maison({ x: 86, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: Math.PI / 2, volets: pick(VOLETS) });
+    maison({ x: 104, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: -Math.PI / 2, volets: pick(VOLETS) });
+  }
+  // la place : cave, bar, mairie, église
+  const cave = maison({ x: 68, z: -46, w: 9, d: 8, h: 6.5, rot: Math.PI / 2, volets: '#8e2a3b', vitrine: '#6e1f2e', banne: '#8e2a3b', porteC: '#6e1f2e' });
+  enseigne('CAVE DU PRESSOIR', facade(cave, 0, 0.14), 3.5, 5.4, 0.8, '#7a2233', '#f5e6c8');
+  maison({ x: 68, z: -36, w: 8, d: 8, h: 7, rot: Math.PI / 2, volets: pick(VOLETS) });
+  maison({ x: 68, z: -56, w: 8, d: 8, h: 6.2, rot: Math.PI / 2, volets: pick(VOLETS) });
+  const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', banne: '#1f3b4d' });
+  enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.14), 3.5, 4.4, 0.7, '#1f3b4d', '#f2d488');
+  maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
+  const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
+  enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
+  {
+    const L = [
+      B(10, 9, 24, TUF, 0, 4.5, 0), B(10.2, 0.6, 24.2, '#b9a98b', 0, 0.3, 0),
+      toit(10.8, 24.8, 5.2, ARD, 0, 9, 0, true),
+      B(5.6, 17, 5.6, TUF, 0, 8.5, 10), C(0, 4.3, 9, 4, ARD, 0, 21.5, 10, 'y', Math.PI / 4),
+      B(2.2, 3.6, 0.2, '#4a3324', 0, 1.8, 12.86), C(1.1, 1.1, 0.2, 14, '#3d5f8e', 0, 6.4, 12.86, 'z'),
+      C(0.85, 0.85, 0.16, 14, '#f2ead8', 0, 14.6, 12.86, 'z'), B(0.08, 0.6, 0.05, '#222', 0, 14.75, 12.96),
+    ];
+    for (let z = -9; z <= 5; z += 4.6) for (const s of [1, -1]) L.push(B(0.12, 3.4, 1.1, '#3d5f8e', s * 5.03, 4.8, z));
+    poser(L, 128, -46, -Math.PI / 2, bati);
+    const b = col.boite(115.2, -51, 140, -41); b.haut = true;
+    plan.push({ t: 'b', x0: 115.2, z0: -51, x1: 140, z1: -41 });
+    contact.jupe(116, -51.2, 140.2, -40.9, 1.8, 0.42);
+  }
+  // fontaine (l'eau ondule et reflète le ciel), monument, bancs, réverbères, terrasse du bar
+  bati.push(C(2.1, 2.3, 0.7, 14, '#d9cdb2', 95, 0.35, -46), C(1.85, 1.85, 0.1, 14, '#4f93b8', 95, 0.66, -46),
+    C(0.35, 0.4, 2.0, 8, '#d9cdb2', 95, 1.4, -46), C(0.85, 0.55, 0.3, 10, '#d9cdb2', 95, 2.45, -46), C(0.72, 0.72, 0.05, 10, '#4f93b8', 95, 2.58, -46));
+  col.boiteC(95, -46, 4.4, 4.4);
+  contact.tache(95, -46, 3.4, 3.4, 0.38);
+  bati.push(B(2.2, 0.8, 2.2, '#cfc3a8', 104, 0.4, -35), B(0.9, 4.2, 0.9, '#e3dac6', 104, 2.9, -35), C(0, 0.75, 0.8, 4, '#e3dac6', 104, 5.4, -35, 'y', Math.PI / 4));
+  col.boiteC(104, -35, 2.2, 2.2);
+  contact.jupe(102.9, -36.1, 105.1, -33.9, 0.9, 0.38);
+  for (const [x, z] of [[86, -58.5], [104, -58.5]]) {
+    bati.push(B(2, 0.1, 0.55, '#6b4a30', x, 0.48, z), B(2, 0.5, 0.08, '#6b4a30', x, 0.78, z - 0.25), B(0.1, 0.45, 0.5, '#2d2d33', x - 0.85, 0.22, z), B(0.1, 0.45, 0.5, '#2d2d33', x + 0.85, 0.22, z));
+    col.boiteC(x, z, 2, 0.6);
+    contact.tache(x, z, 1.4, 0.6, 0.3);
+  }
+  for (const [x, z] of [[78.5, -32], [111.5, -32], [78.5, -60.5], [111.5, -60.5]]) {
+    bati.push(C(0.07, 0.1, 4.2, 6, '#2d2d33', x, 2.1, z), B(0.34, 0.44, 0.34, '#ffe1a0', x, 4.35, z), B(0.42, 0.06, 0.42, '#2d2d33', x, 4.6, z));
+    col.boiteC(x, z, 0.4, 0.4);
+    contact.tache(x, z, 0.5, 0.5, 0.35);
+  }
+  const terrasse = [[78.8, -62.6], [82.6, -62.6], [86.4, -62.6]];
+  for (const [x, z] of terrasse) {
+    bati.push(C(0.48, 0.48, 0.05, 10, '#ece5d8', x, 0.76, z), C(0.05, 0.05, 0.76, 6, '#333', x, 0.38, z),
+      C(0.03, 0.03, 2.4, 5, '#ddd', x, 1.5, z), C(0, 1.35, 0.5, 8, '#1f3b4d', x, 2.55, z),
+      B(0.42, 0.06, 0.42, '#2d2d33', x - 0.75, 0.46, z), B(0.42, 0.06, 0.42, '#2d2d33', x + 0.75, 0.46, z));
+    col.boiteC(x, z, 2.2, 1);
+    contact.tache(x, z, 1.5, 1.0, 0.25);
+  }
+  // panneau d'entrée d'agglomération
+  bati.push(C(0.05, 0.05, 2.4, 5, '#cfcfcf', 24, 1.2, 4.2));
+  enseigne('LE BOURG', { x: 24, z: 4.2, rot: -Math.PI / 2 }, 2.55, 2.2, 0.62, '#ffffff', '#1d1d1d', '#c8202a');
+  bati.push(teinter(new THREE.PlaneGeometry(2.1, 0.58).rotateY(Math.PI / 2).translate(23.98, 2.55, 4.2), '#8d9196'));
+  col.boiteC(24, 4.2, 0.2, 0.2);
+
+  // château au loin, sur la colline (hors zone de jeu)
+  {
+    const cx = -240, cz = -225, y0 = hauteur(cx, cz) - 1;
+    const L = [B(30, 13, 12, '#efe6d3', 0, y0 + 6.5, 0), toit(31, 13, 7, ARD, 0, y0 + 13, 0)];
+    for (const [x, z] of [[-15, -6], [15, -6], [-15, 6], [15, 6]]) L.push(C(3.2, 3.2, 17, 10, '#efe6d3', x, y0 + 8.5, z), C(0, 3.8, 8, 10, ARD, x, y0 + 21, z));
+    for (let i = -3; i <= 3; i++) for (const e of [0, 1]) L.push(B(1.1, 1.6, 0.1, '#2f3c4f', i * 3.6, y0 + 4 + e * 4.4, 6.04));
+    poser(L, cx, cz, 0.55, bati);
+  }
+
+  /* ------------------------------------------------------------ arbres
+     Fusionnés avec le décor de leur quartier (aucun appel de dessin en plus) ; le feuillage porte
+     un poids de vent par sommet, plus fort en haut. */
+  {
+    const arbres = []; // [x, z, type]
+    for (let x = -170; x < -14; x += 9) if (Math.abs(x + 90) > 6) arbres.push([x + rnd() * 2, -3.5, 'peuplier']);
+    for (let x = 26; x <= 152; x += 12) if (x < 86 || x > 104) { arbres.push([x, 4.6, 'platane']); arbres.push([x + 6, 15.4, 'platane']); }
+    for (const z of [-57, -35]) arbres.push([79.5, z, 'platane']);
+    for (const z of [-55, -47, -39]) arbres.push([111.5, z, 'platane']);
+    for (const [x, z] of [[-6, -40], [-6, -80], [-45, -13], [-20, -16], [22, -14], [-128, 20], [-70, 19.5], [-20, 21], [-6, 60], [52, 70], [-110, -95], [-60, -10], [160, 22]]) arbres.push([x, z, 'chene']);
+    arbres.push([-110, -45, 'cedre']);
+    for (let i = 0; i < 300; i++) {
+      const a = rnd() * Math.PI * 2, r = 205 + rnd() * 230, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.abs(z - 10) < 28 || hauteur(x, z) < 3) continue;
+      arbres.push([x, z, rnd() < 0.3 ? 'peuplier' : 'chene', hauteur(x, z)]);
+    }
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Vector3(), axe = new THREE.Vector3(0, 1, 0), cc = new THREE.Color();
+    // modèles construits une fois, puis copiés, recolorés et placés (bien plus rapide que de tout regénérer)
+    const modele = { tronc: C(0.16, 0.26, 1, 6, '#ffffff', 0, 0.5, 0, 'y'), fe1: S(1, '#ffffff', 0, 0, 0, 1, 1, 1, 1), fe0: S(1, '#ffffff', 0, 0, 0, 1, 1, 1, 0) };
+    for (const g of [modele.fe1, modele.fe0]) {
+      const pf = g.attributes.position, poids = new Float32Array(pf.count);
+      for (let i = 0; i < pf.count; i++) poids[i] = 0.25 + 0.75 * (pf.getY(i) + 1) / 2;
+      g.setAttribute('aVent', new THREE.BufferAttribute(poids, 1));
+      g.attributes.aMat.array.fill(T.feuillage);
+    }
+    modele.tronc.attributes.aMat.array.fill(T.bois);
+    const copie = (g, couleur) => {
+      const n = g.clone(), a = n.attributes.color.array;
+      cc.set(couleur);
+      for (let i = 0; i < a.length; i += 3) { a[i] = cc.r; a[i + 1] = cc.g; a[i + 2] = cc.b; }
+      return n;
+    };
+    const FEU = {
+      platane: ['#b9a23c', '#c9a845', '#a3a240', '#cf9d3e'], peuplier: ['#e0b53c', '#d9a733', '#e8c450'],
+      chene: ['#6f8a3a', '#8a8f3a', '#a6823a', '#5d7a36', '#b0773a'], cedre: ['#3f5c3c'],
+    };
+    for (const [x, z, t, y = 0] of arbres) {
+      const k = 0.85 + rnd() * 0.35;
+      const [th, fy, fx, fyS] = t === 'peuplier' ? [5.5, 8.2, 1.3, 4.2] : t === 'platane' ? [3.6, 5.6, 2.7, 2.1] : t === 'cedre' ? [3, 6, 4.2, 2.6] : [2.8, 4.6, 2.6, 2.2];
+      q.setFromAxisAngle(axe, rnd() * 6.28);
+      const tr = copie(modele.tronc, t === 'platane' ? '#a99a7c' : '#6a5441');
+      tr.applyMatrix4(m.compose(p.set(x, y, z), q, e.set(k * (t === 'cedre' ? 1.8 : 1), th * k, k * (t === 'cedre' ? 1.8 : 1))));
+      const fe = copie(y ? modele.fe0 : modele.fe1, pick(FEU[t]));
+      fe.applyMatrix4(m.compose(p.set(x, y + fy * k, z), q, e.set(fx * k, fyS * k, fx * k * (0.9 + rnd() * 0.2))));
+      bati.push(tr, fe);
+      if (y === 0) {
+        col.boiteC(x, z, 0.6 * k, 0.6 * k);
+        plan.push({ t: 'a', x, z, r: fx * k });
+        contact.tache(x, z, fx * k * 0.8, fx * k * 0.8, 0.3);
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------ détails : poteaux et fils, herbes hautes, panneaux, balles de foin */
+  // poteaux électriques en bois le long de la départementale, avec trois fils qui pendent
+  {
+    const poteaux = [];
+    for (let x = -178; x <= 178; x += 32) poteaux.push(x + (rnd() - 0.5) * 3);
+    const fils = [];
+    poteaux.forEach((x, i) => {
+      bati.push(C(0.1, 0.14, 8.6, 6, '#6e5a44', x, 4.3, 18), B(1.5, 0.1, 0.1, '#5e4a36', x, 8.0, 18));
+      for (const dx of [-0.6, 0, 0.6]) bati.push(C(0.035, 0.05, 0.16, 6, '#e8e4dc', x + dx, 8.13, 18));
+      col.boiteC(x, 18, 0.3, 0.3);
+      if (i) {
+        const x0 = poteaux[i - 1];
+        for (const dx of [-0.6, 0, 0.6]) for (let k = 0; k < 10; k++) {
+          const t0 = k / 10, t1 = (k + 1) / 10, sag = t => 0.7 * 4 * t * (1 - t);
+          fils.push(x0 + dx + (x - x0) * t0, 8.2 - sag(t0), 18, x0 + dx + (x - x0) * t1, 8.2 - sag(t1), 18);
+        }
+      }
+    });
+    const gf = new THREE.BufferGeometry();
+    gf.setAttribute('position', new THREE.Float32BufferAttribute(fils, 3));
+    scene.add(new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: '#2b2622' })));
+  }
+  // réverbères le long de la rue du bourg
+  for (const x of [32, 56, 80, 116, 140]) {
+    bati.push(C(0.07, 0.1, 4.6, 6, '#2d2d33', x, 2.3, 2.9), B(0.12, 0.08, 1.1, '#2d2d33', x, 4.6, 3.4), B(0.34, 0.22, 0.34, '#ffe1a0', x, 4.45, 3.9));
+    col.boiteC(x, 2.9, 0.3, 0.3);
+  }
+  // poubelles devant quelques maisons
+  for (const [x, z] of [[40.5, 2.2], [63, 2.2], [119, 2.2], [52, 17.8], [96.5, 17.8], [134, 17.8]]) {
+    bati.push(B(0.58, 0.95, 0.68, '#3d5a4a', x, 0.48, z), B(0.62, 0.06, 0.74, '#2f4a3c', x, 0.98, z));
+    col.boiteC(x, z, 0.6, 0.7);
+    contact.tache(x, z, 0.6, 0.65, 0.3, 0.1);
+  }
+  // balles de foin rondes sur les champs des collines
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2, r = 215 + rnd() * 170, x = Math.cos(a) * r, z = Math.sin(a) * r, y = hauteur(x, z);
+    if (Math.abs(z - 10) < 30 || y < 2) continue;
+    bati.push(C(0.78, 0.78, 1.25, 12, '#d6b058', x, y + 0.72, z, 'z', rnd() * 6.28));
+  }
+
+  // panneaux routiers (dessinés en code dans l'atlas, transparents autour de la forme)
+  function panneau(dessin, w, h, x, y, z, rot, poteau = true) {
+    const W = 256, H = Math.round(256 * h / w);
+    atlas.poser(W, H, dessin, w, h, x, y, z, rot);
+    bati.push(teinter(new THREE.PlaneGeometry(w * 0.96, h * 0.96).rotateY(rot + Math.PI).translate(x - Math.sin(rot) * 0.02, y, z - Math.cos(rot) * 0.02), '#8d9196'));
+    if (poteau) { bati.push(C(0.04, 0.04, y, 6, '#b9bcc2', x - Math.sin(rot) * 0.04, y / 2, z - Math.cos(rot) * 0.04)); col.boiteC(x, z, 0.15, 0.15); }
+  }
+  const octo = (c, W, H, fond) => { c.beginPath(); for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + k * Math.PI / 4; c.lineTo(W / 2 + Math.cos(a) * W / 2 * 0.98, H / 2 + Math.sin(a) * H / 2 * 0.98); } c.closePath(); c.fillStyle = fond; c.fill(); };
+  panneau((c, W, H) => { octo(c, W, H, '#fff'); c.save(); c.translate(W * 0.04, H * 0.04); c.scale(0.92, 0.92); octo(c, W, H, '#c8202a'); c.restore(); c.fillStyle = '#fff'; c.font = 'bold 78px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STOP', W / 2, H / 2 + 4); }, 0.8, 0.8, 91.7, 2.2, 5.2, Math.PI);
+  panneau((c, W, H) => { c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.fillStyle = '#c8202a'; c.fill(); c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 30, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#111'; c.font = 'bold 110px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('50', W / 2, H / 2 + 6); }, 0.7, 0.7, 24, 2.2, 16.6, -Math.PI / 2);
+  panneau((c, W, H) => {
+    c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(H / 2, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(H / 2, H); c.closePath(); c.fill();
+    c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
+    c.fillStyle = '#1d1d1d'; c.font = 'bold 30px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Domaine du Clos Libre', W / 2 + 18, H / 2 + 2);
+  }, 2.2, 0.36, -86.2, 2.0, 5.6, 0);
+  const enseignes = atlas.maillage();
+  scene.add(enseignes);
+
+  bati.ajouter(scene, true, porteurs);
+  const ao = contact.maillage();
+  scene.add(ao);
+
+  // herbes hautes, en touffes, partout où l'herbe est libre ; rangées par cases de 48 m
+  // pour n'afficher que celles qui sont proches (au loin, elles ne feraient que scintiller)
+  const herbes = [];
+  {
+    const libre = (x, z) => {
+      if (Math.abs(x) > 183 || Math.abs(z) > 183) return false;
+      if (Math.abs(z - 10) < 4.6) return false;
+      for (const [x0, z0, x1, z1] of PARCELLES) if (x > x0 - 0.8 && x < x1 + 0.8 && z > z0 - 0.8 && z < z1 + 0.8) return false;
+      const zones = [[91, -84, 99, 10], [-93, -36, -87, 7], [-117, -74, -60, -32], [74, -65, 116, -27], [86, -84, 104, -71], [24, 2, 156, 18.4], [114, -65, 128, -54]];
+      for (const [x0, z0, x1, z1] of zones) if (x > x0 && x < x1 && z > z0 && z < z1) return false;
+      return !col.dedans(x, z) && !col.dedans(x + 0.8, z) && !col.dedans(x - 0.8, z) && !col.dedans(x, z + 0.8) && !col.dedans(x, z - 0.8);
+    };
+    const pos = [];
+    for (let i = 0; i < 11000 && pos.length < 5000; i++) {
+      // en grappes : près d'un point précédent une fois sur deux
+      let x, z;
+      if (pos.length && rnd() < 0.55) { const p = pos[Math.floor(rnd() * pos.length)]; x = p[0] + (rnd() - 0.5) * 3; z = p[1] + (rnd() - 0.5) * 3; }
+      else { x = (rnd() - 0.5) * 366; z = (rnd() - 0.5) * 366; }
+      if (libre(x, z)) pos.push([x, z]);
+    }
+    // une touffe : cinq brins, un triangle chacun (au lieu de cinq cônes)
+    const P = [];
+    for (let k = 0; k < 5; k++) {
+      const a = k / 5 * Math.PI * 2 + 0.4, h = 0.36 + (k % 2) * 0.16, w = 0.045, cx = Math.cos(a) * 0.05, cz = Math.sin(a) * 0.05;
+      P.push(cx + Math.sin(a) * w, 0, cz - Math.cos(a) * w, cx - Math.sin(a) * w, 0, cz + Math.cos(a) * w, cx + Math.cos(a) * 0.14, h, cz + Math.sin(a) * 0.14);
+    }
+    const gT = new THREE.BufferGeometry();
+    gT.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); gT.computeVertexNormals();
+    const matH = matiere(T.feuillage, null, false, { vent: [0.1, 0.0, 0.52, 2.4] });
+    matH.side = THREE.DoubleSide;
+    const cases = new Map();
+    for (const [x, z] of pos) { const k = Math.floor(x / 48) + ',' + Math.floor(z / 48); if (!cases.has(k)) cases.set(k, []); cases.get(k).push(x, z); }
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Vector3(), pv = new THREE.Vector3(), c = new THREE.Color(), axe = new THREE.Vector3(0, 1, 0);
+    const TEINTES = ['#7f9a3e', '#94a845', '#a9a24a', '#6f8a3a', '#b8a050', '#c2a85a'].map(h => new THREE.Color(h));
+    for (const l of cases.values()) {
+      const n = l.length / 2, im = new THREE.InstancedMesh(gT, matH, n);
+      let sx = 0, sz = 0;
+      for (let i = 0; i < n; i++) {
+        const x = l[i * 2], z = l[i * 2 + 1], k = 0.7 + rnd() * 0.8;
+        sx += x; sz += z;
+        q.setFromAxisAngle(axe, rnd() * 6.28);
+        m.compose(pv.set(x, 0, z), q, e.set(k, k * (0.8 + rnd() * 0.5), k));
+        im.setMatrixAt(i, m); im.setColorAt(i, c.copy(pick(TEINTES)));
+      }
+      im.receiveShadow = true; im.renderOrder = ORDRE.herbe; im.name = 'herbe'; im.computeBoundingSphere();
+      scene.add(im);
+      herbes.push({ im, n, x: sx / n, z: sz / n });
+    }
+  }
+
+  /* ------------------------------------------------------------ mini-carte */
+  const carte = document.createElement('canvas');
+  carte.width = carte.height = 400 * ECH;
+  {
+    const c = carte.getContext('2d');
+    const X = x => (x + 200) * ECH, Z = z => (z + 200) * ECH;
+    c.fillStyle = '#86a04e'; c.fillRect(0, 0, carte.width, carte.height);
+    for (const e of plan) {
+      if (e.t === 'r') { c.fillStyle = e.c; c.fillRect(X(e.x0), Z(e.z0), (e.x1 - e.x0) * ECH, (e.z1 - e.z0) * ECH); }
+      else if (e.t === 'rangs') {
+        c.strokeStyle = e.c; c.lineWidth = 1.2; c.beginPath();
+        for (let k = 0; k < e.q.n; k++) { const x = X(e.q.xr + k * e.q.ecart); c.moveTo(x, Z(e.q.zr0)); c.lineTo(x, Z(e.q.zr1)); }
+        c.stroke();
+      }
+    }
+    c.fillStyle = 'rgba(70,95,45,.9)';
+    for (const e of plan) if (e.t === 'a') { c.beginPath(); c.arc(X(e.x), Z(e.z), Math.max(2, e.r * ECH * 0.8), 0, 7); c.fill(); }
+    for (const e of plan) if (e.t === 'b') {
+      c.fillStyle = '#efe4cb'; c.fillRect(X(e.x0), Z(e.z0), (e.x1 - e.x0) * ECH, (e.z1 - e.z0) * ECH);
+      c.strokeStyle = '#7d6e58'; c.lineWidth = 1.5; c.strokeRect(X(e.x0), Z(e.z0), (e.x1 - e.x0) * ECH, (e.z1 - e.z0) * ECH);
+    }
+    c.fillStyle = 'rgba(40,60,30,.55)';
+    const L = 186;
+    c.fillRect(0, 0, carte.width, X(-L)); c.fillRect(0, X(L), carte.width, carte.height);
+    c.fillRect(0, X(-L), X(-L), X(L) - X(-L)); c.fillRect(X(L), X(-L), carte.width, X(L) - X(-L));
+  }
+
+  const lieux = {
+    depart: { x: -99, z: -55, h: 0 },
+    // tracteur et van garés côte à côte à l'ouest de la cour, hors du passage entre le chai et le portail :
+    // on choisit l'un ou l'autre pour la tournée
+    tracteur: { x: -100, z: -42, h: Math.PI / 2 },
+    van: { x: -108, z: -37.5, h: Math.PI / 2 },
+    chai: { x: -80.6, z: -52 },
+    cave: { x: 77.8, z: -46 },
+    // les trois clients : où ils attendent, où le tracteur s'arrête
+    figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 } },
+    arrets: { cave: { x: 77.8, z: -46 }, bar: { x: 81.5, z: -57.2 }, treille: { x: 110.5, z: 9.4 }, epicerie: { x: 83, z: 9.4 } },
+    pc: { x: -78.6, z: -52 },
+    banc: { x: 86, z: -58.35, h: 0 },
+    terrasse: terrasse.map(([x, z]) => ({ x: x - 0.75, z, h: Math.PI / 2 })),
+    place: { x0: 79, z0: -60, x1: 111, z1: -33 },
+    fontaine: { x: 95, y: 2.62, z: -46 },
+    // itinéraire de la tournée, au départ du domaine (chai, portail, départementale, rue de la place)
+    // la conduite assistée (pilote.js) le suit sur la file de droite : il évite la fontaine, le monument, les bancs
+    route: [[-80.6, -52], [-84, -45], [-90, -38], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4]],
+    // du parking du domaine au chai (par le nord du tracteur garé)
+    versChai: [[-92, -38], [-84, -42], [-83, -52]],
+    retour: [[110.5, 9.4], [-90, 10], [-90, -38], [-84, -45], [-80.6, -52]],
+  };
+  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6']];
+
+  /* ------------------------------------------------------------ réglages selon la qualité, mise à jour par image */
+  let herbeLoin = 70, vigneLoin = 60, parcelleLoin = 90, dernierX = 1e9, dernierZ = 1e9;
+  function regler(q) {
+    herbeLoin = q.herbe; vigneLoin = q.vigne; parcelleLoin = q.parcelle;
+    for (const h of herbes) h.im.count = Math.max(1, Math.round(h.n * q.herbeN));
+    ao.material.opacity = q.ombres ? 0.85 : 1;
+    dernierX = 1e9;
+  }
+  // n'affiche que l'herbe proche, simplifie les vignes lointaines ; ne refait le tri que si la caméra a bougé de 2 m
+  function maj(cx, cz) {
+    if (Math.abs(cx - dernierX) + Math.abs(cz - dernierZ) < 2) return;
+    dernierX = cx; dernierZ = cz;
+    const d2 = (herbeLoin + 34) * (herbeLoin + 34), v2 = (vigneLoin + 21) * (vigneLoin + 21);
+    for (const h of herbes) h.im.visible = (h.x - cx) * (h.x - cx) + (h.z - cz) * (h.z - cz) < d2;
+    for (const p of vignes) {
+      // distance de la caméra à la parcelle : au-delà, un seul maillage pour toute la parcelle
+      const q = p.q, dx = Math.max(q.x0 - cx, 0, cx - q.x1), dz = Math.max(q.z0 - cz, 0, cz - q.z1), proche = dx * dx + dz * dz < parcelleLoin * parcelleLoin;
+      p.loin.visible = !proche;
+      for (const v of p.blocs) {
+        v.im.visible = proche;
+        if (proche) v.im.geometry = (v.x - cx) * (v.x - cx) + (v.z - cz) * (v.z - cz) < v2 ? vignes.fine : vignes.simple;
+      }
+    }
+  }
+
+  // Élagage fin de la passe d'ombre : ne garde que les blocs dont la boîte, vue depuis le soleil, touche
+  // le cadre d'ombre (les sphères englobantes de three.js en laissent passer deux fois trop, soleil bas oblige)
+  const LX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SOLEIL).normalize(), LY = new THREE.Vector3().crossVectors(SOLEIL, LX);
+  function ombres(t, b, bh) {
+    for (const p of porteurs) {
+      const dx = p.cx - t.x, dy = p.cy - t.y, dz = p.cz - t.z;
+      const ru = p.hx * Math.abs(LX.x) + p.hz * Math.abs(LX.z), rv = p.hx * Math.abs(LY.x) + p.hy * Math.abs(LY.y) + p.hz * Math.abs(LY.z);
+      p.obj.castShadow = Math.abs(dx * LX.x + dz * LX.z) < b + ru && Math.abs(dx * LY.x + dy * LY.y + dz * LY.z) < bh + rv;
+    }
+  }
+
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres };
+}

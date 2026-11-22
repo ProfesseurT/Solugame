@@ -1,0 +1,17 @@
+{
+  "name": "solugame",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "python3 -m http.server 8642",
+    "essai": "node scripts/essai.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "puppeteer-core": "23.11.1"
+  }
+}

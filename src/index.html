@@ -1,0 +1,343 @@
+<title>Tournée générale</title>
+<meta name="description" content="Tournée générale : le monde ouvert du vigneron et de la vigneronne. Un village, des vignes, un tracteur, et votre téléphone pour vous sortir de la paperasse. Démo de l'équipe Solumatic.">
+<meta name="theme-color" content="#14121e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="polices" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
+<style>
+/* Monde 3D plein écran ; l'interface flotte par-dessus. Un seul univers visuel (sombre), assumé. */
+:root{
+  --nuit:#14121e; --nuit-2:#221d31; --encre:#1d1a26; --papier:#f6f1e8; --blanc:#fffaf2; --gris:#6f6a7a; --trait:#e4dccd;
+  --or:#ffc35a; --vin:#8e2a3b; --vitisoft:#ff7a2f; --viticode:#ff3d8b; --phyto:#2fc6e0; --ok:#2f9e63; --alerte:#e5484d; --bleu:#2c3e66;
+  --titre:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
+  --ui:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --ombre:0 1px 2px rgba(0,0,0,.85),0 0 12px rgba(0,0,0,.45);
+  --st:env(safe-area-inset-top,0px); --sb:env(safe-area-inset-bottom,0px); --sl:env(safe-area-inset-left,0px); --sr:env(safe-area-inset-right,0px);
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--nuit);overflow:hidden;overscroll-behavior:none}
+#jeu{position:fixed;inset:0;overflow:hidden;font-family:var(--ui);color:var(--blanc);background:var(--nuit);
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#vue{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ---------- HUD */
+#hud{position:absolute;inset:0;pointer-events:none}
+#carte{position:absolute;left:calc(12px + var(--sl));top:calc(12px + var(--st));width:104px;height:104px;border-radius:22px;overflow:hidden;
+  border:2px solid rgba(255,250,242,.9);box-shadow:0 6px 18px rgba(0,0,0,.45);background:#4f6a36}
+#minimap{width:100%;height:100%;display:block}
+#objectif{position:absolute;left:calc(12px + var(--sl));top:calc(124px + var(--st));margin:0;max-width:min(58vw,330px);
+  font:700 13px/1.3 var(--ui);padding:7px 11px;border-radius:12px;background:rgba(20,18,30,.72);border-left:4px solid var(--vitisoft);text-shadow:none}
+#objectif:empty{display:none}
+#objectif.neuf{animation:neuf .5s ease-out}
+@keyframes neuf{from{transform:translateX(-14px);opacity:0}to{transform:none;opacity:1}}
+#statut{position:absolute;right:calc(14px + var(--sr));top:calc(10px + var(--st));display:grid;justify-items:end;gap:2px;text-shadow:var(--ombre)}
+#statut p{margin:0}
+#argent{display:grid;justify-items:end;line-height:1}
+#argent small{font:700 10px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;opacity:.85}
+#argent-v{font:900 34px/1 var(--titre);letter-spacing:.01em;color:#c8f2a8;font-variant-numeric:tabular-nums}
+#etoiles{display:flex;gap:3px}
+#etoiles i{width:17px;height:17px;background:rgba(255,255,255,.28);clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+#etoiles i.on{background:var(--or)}
+#etoiles.flash{animation:flash .8s steps(2) 3}
+@keyframes flash{50%{filter:brightness(2.2)}}
+#heure{font:700 13px/1 var(--ui);opacity:.9;font-variant-numeric:tabular-nums}
+#radio{position:absolute;left:50%;top:calc(14px + var(--st));transform:translate(-50%,-140%);transition:transform .45s cubic-bezier(.2,.9,.3,1.2);
+  display:grid;justify-items:center;text-shadow:var(--ombre)}
+#radio.vu{transform:translate(-50%,0);pointer-events:auto;cursor:pointer}
+#radio b{font:900 30px/1 var(--titre);letter-spacing:.06em;text-transform:uppercase;color:var(--or)}
+#radio span{font:500 13px/1.3 var(--ui)}
+#sous-titre{position:absolute;left:50%;bottom:calc(26px + var(--sb));transform:translateX(-50%);margin:0;width:max-content;max-width:min(86vw,620px);
+  text-align:center;font:500 17px/1.4 var(--ui);text-shadow:var(--ombre);opacity:0;transition:opacity .2s}
+#sous-titre.vu{opacity:1}
+#sous-titre b{color:var(--or);font-weight:700}
+#banniere{position:absolute;left:0;right:0;top:34%;display:grid;justify-items:center;gap:6px;opacity:0;pointer-events:none;padding-inline:16px;text-align:center}
+#banniere.vu{animation:ban 4.5s ease-out forwards}
+@keyframes ban{0%{opacity:0;transform:scale(1.5)}8%{opacity:1;transform:scale(1)}82%{opacity:1}100%{opacity:0}}
+#ban-t{font:900 clamp(54px,15vw,120px)/.9 var(--titre);text-transform:uppercase;letter-spacing:.01em;color:var(--blanc);
+  text-shadow:.05em .05em 0 var(--vitisoft),0 0 30px rgba(0,0,0,.5);transform:skewX(-6deg)}
+#ban-s{font:700 16px/1.3 var(--ui);text-shadow:var(--ombre)}
+#poche{position:absolute;right:calc(18px + var(--sr));bottom:calc(-26px + var(--sb));width:62px;height:104px;padding:0;pointer-events:auto;
+  border-radius:16px;border:3px solid #0c0b12;background:#191722;box-shadow:0 8px 24px rgba(0,0,0,.5);transform:rotate(-8deg);transition:transform .2s}
+#poche .ecr{position:absolute;inset:6px 5px 26px;border-radius:9px;background:linear-gradient(160deg,#3b3456,#1f1b2c)}
+#poche.alerte .ecr{background:linear-gradient(160deg,#ff9a5a,#8e2a3b);box-shadow:0 0 18px rgba(255,140,80,.7)}
+#poche.vibre{animation:vibre .5s 3}
+@keyframes vibre{0%,100%{transform:rotate(-8deg)}20%{transform:rotate(-14deg) translateX(-3px)}40%{transform:rotate(-2deg) translateX(3px)}60%{transform:rotate(-13deg)}80%{transform:rotate(-4deg)}}
+#poche:hover{transform:rotate(-8deg) translateY(-6px)}
+#badge{position:absolute;top:-8px;left:-8px;min-width:22px;height:22px;border-radius:11px;background:var(--alerte);font:700 13px/22px var(--ui);color:#fff;border:2px solid #fff}
+#stick{position:absolute;left:0;top:0;width:0;height:0;opacity:0;pointer-events:none;transition:opacity .15s}
+#stick::before{content:"";position:absolute;left:-58px;top:-58px;width:112px;height:112px;border-radius:50%;border:2px solid rgba(255,255,255,.4);background:rgba(20,18,30,.12)}
+#stick i{position:absolute;left:-23px;top:-23px;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.42)}
+#etiquettes{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.etiquette{position:absolute;left:0;top:0;white-space:nowrap;will-change:transform}
+.etiquette.action{font:700 16px/1 var(--ui);padding:12px 18px;border-radius:999px;border:2px solid var(--or);background:rgba(20,18,30,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.etiquette.cible{font:700 13px/1 var(--ui);padding:6px 10px;border-radius:999px;background:var(--vitisoft);color:#1d1a26}
+.etiquette.bulle{font:900 22px/1 var(--titre);letter-spacing:.03em;text-transform:uppercase;color:#fff;text-shadow:var(--ombre)}
+
+/* ---------- téléphone */
+#voile{position:absolute;inset:0;background:rgba(14,12,22,.35);opacity:0;pointer-events:none;transition:opacity .3s}
+#voile.vu{opacity:1;pointer-events:auto}
+#tel{position:absolute;left:50%;bottom:calc(10px + var(--sb));width:min(92vw,360px);height:min(calc(100% - 64px - var(--st) - var(--sb)),700px);
+  transform:translate(-50%,112%);transition:transform .38s cubic-bezier(.2,.9,.25,1);pointer-events:auto}
+#tel.ouvert{transform:translate(-50%,0)}
+@media (min-width:820px){#tel{left:auto;right:calc(40px + var(--sr));transform:translate(0,112%) rotate(4deg)}#tel.ouvert{transform:translate(0,0) rotate(-1deg)}}
+#tel .cadre{height:100%;box-sizing:border-box;padding:10px;border-radius:46px;background:#0d0c12;box-shadow:0 30px 70px rgba(0,0,0,.6),inset 0 0 0 2px #2b2836}
+#tel .ecran{position:relative;height:100%;border-radius:36px;overflow:hidden;background:var(--papier);color:var(--encre);display:flex;flex-direction:column}
+.barre-statut{flex:none;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font:700 13px/1 var(--ui);color:var(--encre);position:relative;z-index:2}
+.ecran:has(.app-accueil) .barre-statut,.ecran:has(.app-appel) .barre-statut{color:#fff}
+.barre-statut .ilot{position:absolute;left:50%;top:8px;width:84px;height:22px;margin-left:-42px;border-radius:12px;background:#0d0c12}
+.barre-statut .batt{display:inline-block;width:20px;height:10px;border:1.5px solid currentColor;border-radius:3px;margin-left:5px;vertical-align:-1px;background:linear-gradient(90deg,currentColor 70%,transparent 70%)}
+#app{flex:1;overflow-y:auto;overflow-x:hidden;margin-top:-34px;padding-top:34px;position:relative;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+.home{position:absolute;left:50%;bottom:6px;width:120px;height:18px;margin-left:-60px;border:0;background:transparent;padding:0}
+.home::after{content:"";position:absolute;left:0;right:0;top:7px;height:5px;border-radius:3px;background:rgba(29,26,38,.55)}
+.ph-toast{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);margin:0;padding:8px 14px;border-radius:999px;background:var(--encre);color:#fff;font:500 13px/1.2 var(--ui);opacity:0;pointer-events:none;white-space:nowrap}
+.ph-toast.vu{animation:toast 1.8s ease forwards}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,8px)}12%,80%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+
+/* écran d'accueil du téléphone */
+#app.app-appel{background:#2b2440}
+.app-accueil{background:linear-gradient(185deg,#2f4d8f 0%,#b9668a 48%,#f0a066 78%,#e3b14b 100%);color:#fff}
+.ph-accueil{padding:18px 18px 40px;display:grid;gap:14px}
+.ph-gheure{margin:6px 0 0;text-align:center;font:900 64px/1 var(--titre);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.ph-lieu{margin:-8px 0 4px;text-align:center;font:500 13px/1.2 var(--ui);opacity:.9}
+.ph-notif{display:flex;gap:10px;align-items:center;text-align:left;border:0;border-radius:18px;padding:10px 12px;background:rgba(255,250,242,.92);color:var(--encre);font:400 13px/1.35 var(--ui);box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.ph-notif .ic{width:36px;height:36px;flex:none;border-radius:10px}
+.ph-grille{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;margin-top:8px}
+.ph-ico{display:grid;justify-items:center;gap:6px;border:0;background:none;padding:0;color:#fff;font:500 12px/1.2 var(--ui);text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.ic{position:relative;display:grid;place-items:center;width:60px;height:60px;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.ic svg{width:58%;height:58%}
+.ic.bureau{background:var(--vin)} .ic.vitisoft{background:var(--vitisoft)} .ic.viticode{background:var(--viticode)}
+.ic.phyto{background:var(--phyto)} .ic.messages{background:#3aa35b} .ic.reglages{background:#7b7686}
+.pastille{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:10px;background:var(--alerte);font:700 12px/20px var(--ui);border:2px solid #fff;text-shadow:none}
+
+/* applis */
+.ap-tete{position:sticky;top:-34px;z-index:1;display:flex;align-items:center;gap:8px;margin-top:-34px;padding:42px 14px 12px;color:#fff;font:700 17px/1 var(--ui)}
+.ap-tete.bureau{background:var(--vin)} .ap-tete.vitisoft{background:var(--vitisoft)} .ap-tete.viticode{background:var(--viticode)}
+.ap-tete.phyto{background:#1fa9c2} .ap-tete.messages{background:#3aa35b} .ap-tete.reglages{background:#5e596a}
+.ap-tete span{flex:1}
+.ap-ret.vide{display:block}
+.ph-ligne{margin:18px 0 0;min-height:4.5em;max-width:28ch;text-align:center;font:400 15px/1.45 var(--ui)}
+.ph-ligne b{display:block;margin-bottom:2px;font:700 12px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--or)}
+.ap-ret{width:34px;height:34px;border:0;border-radius:50%;background:rgba(255,255,255,.2);font:700 24px/30px var(--ui);padding:0}
+.ap-ic{width:26px;height:26px;display:grid;place-items:center} .ap-ic svg{width:100%;height:100%}
+.ap-corps{padding:16px 16px 46px;display:grid;gap:10px;font:400 14px/1.45 var(--ui)}
+.ap-corps.centre{justify-items:center;padding-top:60px}
+.ap-corps h3{margin:0;font:700 22px/1.2 var(--ui);text-wrap:balance}
+.ap-sur{margin:0;font:700 11px/1.2 var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--gris)}
+.ap-sous{margin:-4px 0 0;color:var(--gris)}
+.ap-h{margin:8px 0 0;font:700 15px/1.2 var(--ui)}
+.ap-txt{margin:0}
+.ap-note{margin:4px 0 0;font-size:12px;color:var(--gris)}
+.tuiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tu{border-radius:14px;padding:10px 12px;color:#fff;font:500 12px/1.3 var(--ui)} .tu b{display:block;font:900 32px/1 var(--titre)}
+.tu.rouge{background:#a8322b} .tu.bleu{background:#2e3a55}
+.rappel{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--trait)}
+.av{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:#fff;font:700 13px/1 var(--ui)}
+.av.grand{width:96px;height:96px;font-size:30px;background:var(--vin)}
+.rq{display:grid;gap:4px;min-width:0} .rq b{font-size:14px} .rq>span{font-size:13px;color:#4a4655}
+.rl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tag{display:inline-block;padding:3px 8px;border-radius:7px;font:700 11px/1.2 var(--ui)}
+.tag.retard{background:#fbe3e0;color:#b0322a} .tag.decroche{background:#fbefd9;color:#93600f} .tag.jour{background:#e3e9f7;color:#2c4a8c}
+.tag.ok{background:#dcf2e5;color:#1f7a49} .tag.fx{background:#ffe6d6;color:#b5501a}
+.ap-bt{display:inline-block;text-align:center;text-decoration:none;border:1.5px solid #cfc6b6;background:#fff;color:var(--encre);border-radius:11px;padding:8px 12px;font:700 13px/1.2 var(--ui)}
+.ap-bt.plein{background:var(--bleu);border-color:var(--bleu);color:#fff}
+.ap-bt.orange{background:var(--vitisoft);border-color:var(--vitisoft);color:#1d1a26}
+.ap-bt.cyan{background:#1fa9c2;border-color:#1fa9c2;color:#fff}
+.ap-bt.large{padding:14px;font-size:15px;margin-top:6px}
+.ap-bt:disabled{opacity:.55;cursor:default}
+.ph-appel{min-height:100%;box-sizing:border-box;padding:70px 20px 40px;display:grid;justify-items:center;align-content:start;gap:12px;
+  background:linear-gradient(180deg,#2b2440,#4a2a3b);color:#fff;font:400 15px/1.3 var(--ui)}
+.ph-appel .ap-sur{color:rgba(255,255,255,.7)} .ph-appel b{font:700 22px/1.2 var(--ui)}
+.onde{display:flex;gap:5px;height:40px;align-items:center;margin-top:20px}
+.onde i{width:6px;border-radius:3px;background:var(--or);animation:onde 1s ease-in-out infinite}
+.onde i:nth-child(2){animation-delay:.15s}.onde i:nth-child(3){animation-delay:.3s}.onde i:nth-child(4){animation-delay:.45s}.onde i:nth-child(5){animation-delay:.6s}
+@keyframes onde{0%,100%{height:8px}50%{height:36px}}
+.carte-a-faire{display:grid;gap:8px;padding:14px;border-radius:16px;background:#fff1e6;border:1.5px solid #ffc9a3}
+.carte-a-faire.ok{background:#e6f5ec;border-color:#b5e1c6}
+.onglets{display:flex;gap:6px;padding:0 12px 10px;background:var(--vin);position:sticky;top:34px;z-index:1}
+.onglets button{flex:1;border:0;border-radius:999px;padding:7px 4px;background:rgba(255,255,255,.14);color:#fff;font:700 12px/1.1 var(--ui)}
+.onglets button.on{background:#fff;color:var(--vin)}
+.carte-a-faire.bureau{background:#f7e6e8;border-color:#e3b6be}
+.cd-ligne{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-block:1px solid var(--trait)}
+.cd-ligne small{color:var(--gris)}
+.pas{display:flex;align-items:center;gap:10px;flex:none}
+/* consigne de mission dans un écran du téléphone : c'est le jeu qui parle, pas l'appli */
+.consigne{margin:0 0 10px;padding:8px 12px;border-radius:10px;border:1.5px dashed var(--vitisoft);background:rgba(255,122,47,.1);color:#9a3d0c;font:700 13px/1.3 var(--ui)}
+.pas button{width:40px;height:40px;border-radius:50%;border:1.5px solid #cfc6b6;background:#fff;color:var(--encre);font:700 22px/1 var(--ui);padding:0}
+.pas button:disabled{opacity:.35;cursor:default}
+.pas b{min-width:22px;text-align:center;font:700 22px/1 var(--ui)}
+.arret{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--trait)}
+.arret .rq{flex:1}
+.num{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--vin);color:#fff;font:700 14px/1 var(--ui)}
+.num.vide{background:#e7e0d4;color:var(--encre)}
+.roue.petite{width:24px;height:24px;border-width:4px}
+.vtuiles{display:grid;gap:8px}
+.vtuile{display:grid;gap:3px;text-align:left;border:1.5px solid var(--trait);background:#fff;border-radius:14px;padding:12px 14px;font:400 13px/1.35 var(--ui);color:#4a4655}
+.vtuile b{font-size:15px;color:var(--encre)} .vtuile em{font-style:normal;color:var(--encre);margin-top:4px}
+.vtuile.ouverte{border-color:var(--vitisoft)}
+.fc-client{margin:0}
+.fc-ligne{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-block:1px solid var(--trait)} .fc-ligne small{color:var(--gris)}
+.fc-tot{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-variant-numeric:tabular-nums} .fc-tot b{text-align:right}
+.fc-tot .g{font-size:16px;font-weight:700}
+.fc-ok{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:16px}
+.coche{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--ok);color:#fff;font:700 18px/1 var(--ui)}
+.roue{width:46px;height:46px;border-radius:50%;border:5px solid #f0dccb;border-top-color:var(--vitisoft);animation:tourne .8s linear infinite}
+@keyframes tourne{to{transform:rotate(360deg)}}
+.qr{display:grid;grid-template-columns:repeat(11,1fr);width:150px;aspect-ratio:1;padding:10px;background:#fff;border-radius:12px;justify-self:center;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.qr i.n{background:var(--encre)}
+.msg{display:grid;gap:3px;text-align:left;border:0;border-bottom:1px solid var(--trait);background:none;padding:12px 2px;font:400 13px/1.35 var(--ui);color:#4a4655}
+.msg b{font-size:15px;color:var(--encre)}
+.fil{align-content:start}
+.bulle{margin:0;max-width:85%;padding:10px 13px;border-radius:16px 16px 16px 4px;background:#fff;border:1px solid var(--trait)}
+.reg{display:flex;justify-content:space-between;align-items:center;border:1.5px solid var(--trait);background:#fff;border-radius:14px;padding:14px;font:500 15px/1 var(--ui);color:var(--encre)}
+.reg-choix{display:flex;gap:8px}
+.reg-choix .ap-bt{flex:1}
+.bulle.moi{margin-left:auto;background:#e3ecff;border-color:#c9d7f5;border-radius:16px 16px 4px 16px}
+.pad-cadre{position:relative;height:150px;border-radius:14px;background:#fff;border:1.5px dashed #c9bfae}
+#pad{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.pad-trait{position:absolute;left:16px;right:16px;bottom:30px;border-top:1px solid #d8d0c2;padding-top:4px;font:500 11px/1 var(--ui);color:var(--gris);pointer-events:none}
+
+/* ---------- PC du domaine : Vitisoft */
+#pc{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:0;background:rgba(12,10,18,.6);padding:calc(10px + var(--st)) 10px calc(10px + var(--sb))}
+.moniteur{width:min(96vw,1040px);aspect-ratio:16/10;max-height:calc(100vh - 70px);box-sizing:border-box;padding:12px;border-radius:14px;background:#141318;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 0 0 2px #2a2833}
+.pied{width:120px;height:28px;background:linear-gradient(#2a2833,#141318);clip-path:polygon(30% 0,70% 0,100% 100%,0 100%)}
+.pc-ecran{height:100%;border-radius:4px;overflow:hidden;background:#f3f1ec;color:#1f1d26}
+.vs{height:100%;display:flex;flex-direction:column;font:400 14px/1.4 var(--ui)}
+.vs-barre{flex:none;display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--vitisoft);color:#1d1a26}
+.vs-barre b{font:900 20px/1 var(--titre);letter-spacing:.04em;text-transform:uppercase}
+.vs-barre span{flex:1;font-weight:500}
+.vs-x{width:30px;height:30px;border:0;border-radius:8px;background:rgba(0,0,0,.15);font:700 20px/1 var(--ui)}
+.vs-corps{flex:1;display:flex;min-height:0}
+.vs-menu{flex:none;width:170px;display:grid;align-content:start;gap:2px;padding:10px 8px;background:#2a2733}
+.vs-menu button{text-align:left;border:0;border-radius:8px;padding:9px 10px;background:none;color:#d9d4e4;font:500 13px/1.2 var(--ui)}
+.vs-menu button.on{background:#3d3848;color:#fff;box-shadow:inset 3px 0 0 var(--vitisoft)}
+.vs-main{flex:1;min-width:0;overflow:auto;padding:16px 18px;touch-action:pan-y}
+.vs-main h2{margin:0 0 12px;font:700 18px/1.2 var(--ui)}
+.vs-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:10px;overflow:hidden}
+.vs-table th{text-align:left;font:700 11px/1.2 var(--ui);letter-spacing:.06em;text-transform:uppercase;color:#6f6a7a;background:#ebe7df;padding:9px 10px}
+.vs-table td{padding:10px;border-top:1px solid #ece7de;vertical-align:middle}
+.vs-table .c{text-align:center}.vs-table .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vs-table tfoot td{font-weight:700;background:#f7f4ee}
+.vs-table td.a{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.vs-bt{border:0;border-radius:8px;padding:8px 12px;background:var(--vitisoft);color:#1d1a26;font:700 13px/1.2 var(--ui)}
+.vs-bt.vert{background:#2f9e63;color:#fff}
+.vs-bt:disabled{opacity:.5}
+.vs-ok{color:#1f7a49;font-weight:700}.vs-gris{color:#8a8594}
+.vs-fx{font:700 11px/1.2 var(--ui);padding:3px 7px;border-radius:6px;background:#ffe6d6;color:#b5501a}
+.vs-envoi{display:inline-flex;gap:6px;align-items:center;color:#2f9e63;font-weight:700}
+.vs-note{margin:12px 0 0;color:#6f6a7a;font-size:12px}
+.vs-texte{margin:0;max-width:60ch}
+.vs-fin{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;border-radius:10px;background:#e6f5ec;border:1px solid #b5e1c6}
+@media (max-width:700px),(max-aspect-ratio:1/1){
+  .moniteur{aspect-ratio:auto;height:calc(100% - 40px);max-height:none;padding:8px}
+  .vs-corps{flex-direction:column}
+  .vs-menu{width:auto;display:flex;overflow-x:auto;padding:6px}
+  .vs-menu button{white-space:nowrap}
+  .vs-table thead{display:none}
+  .vs-table tr{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;padding:10px;border-top:1px solid #ece7de}
+  .vs-table td{border:0;padding:2px 0;text-align:left!important}
+  .vs-table td::before{content:attr(data-l);display:block;font:700 10px/1.2 var(--ui);letter-spacing:.06em;text-transform:uppercase;color:#8a8594}
+  .vs-table td.a{grid-column:1/3}
+  .vs-table tfoot tr{display:flex;justify-content:space-between}
+  .vs-table tfoot td::before{content:none}
+}
+
+/* ---------- écrans plein cadre */
+.ecran-plein{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;touch-action:pan-y;box-sizing:border-box;
+  padding:calc(24px + var(--st)) max(16px,var(--sr)) calc(28px + var(--sb)) max(16px,var(--sl));
+  background:linear-gradient(180deg,rgba(20,18,30,0) 30%,rgba(20,18,30,.55) 62%,rgba(20,18,30,.92) 100%);overflow-y:auto}
+.sur{margin:0;font:700 12px/1.2 var(--ui);letter-spacing:.3em;text-transform:uppercase;text-shadow:var(--ombre)}
+.logo{margin:0;display:grid;font:900 clamp(78px,24vw,168px)/.8 var(--titre);text-transform:uppercase;letter-spacing:-.005em;color:var(--blanc);
+  text-shadow:.045em .045em 0 var(--vin),.09em .09em 0 rgba(0,0,0,.35);transform:skewX(-6deg)}
+.logo span:last-child{color:var(--or);padding-top:.13em} /* place pour les accents de GÉNÉRALE */
+.logo span:first-child{padding-top:.14em}
+.accroche{margin:0;max-width:34ch;font:500 16px/1.5 var(--ui);text-wrap:balance;text-shadow:var(--ombre)}
+.choix{display:flex;gap:8px;padding:4px;border-radius:999px;background:rgba(20,18,30,.6);border:1px solid rgba(255,255,255,.2)}
+.perso{border:0;border-radius:999px;padding:10px 18px;background:transparent;font:700 15px/1 var(--ui)}
+.perso[aria-pressed="true"]{background:var(--blanc);color:var(--encre)}
+.cta{border:0;border-radius:999px;padding:16px 48px;background:var(--vitisoft);color:#1d1a26;font:900 28px/1 var(--titre);letter-spacing:.08em;text-transform:uppercase;box-shadow:0 8px 24px rgba(255,122,47,.35)}
+.cta:active{transform:translateY(1px)}
+/* le bouton s'allume quand le jeu est prêt (l'accueil s'affiche avant la construction du monde) */
+.cta:disabled{opacity:.5;box-shadow:none}
+.cta{transition:opacity .3s}
+/* aide de l'accueil : écrite dans la page pour s'afficher sans attendre le script ; doigt ou clavier selon l'appareil */
+.aide .tactile{display:none}
+@media (pointer:coarse){.aide .tactile{display:inline}.aide .clavier{display:none}}
+.aide{margin:0;max-width:44ch;font:400 13px/1.5 var(--ui);opacity:.92;text-wrap:balance}
+.version{margin:0;font:400 11px/1.3 var(--ui);opacity:.65}
+.ecran-plein>:first-child{margin-top:auto}
+#fin>:last-child{margin-bottom:auto}
+#fin{background:rgba(14,12,22,.72)}
+.carte-fin{display:grid;gap:12px;justify-items:center;max-width:440px;padding:24px 20px;border-radius:24px;background:var(--nuit-2);border:1px solid rgba(255,255,255,.12)}
+.carte-fin h2{margin:0;font:900 clamp(40px,11vw,64px)/.95 var(--titre);text-transform:uppercase;color:var(--or);text-wrap:balance}
+.carte-fin p{margin:0;font:400 15px/1.5 var(--ui)}
+.carte-fin ul{margin:0;padding:0;list-style:none;display:grid;gap:6px;text-align:left;font:500 14px/1.4 var(--ui)}
+.carte-fin li{padding-left:22px;position:relative} .carte-fin li::before{content:"";position:absolute;left:4px;top:.45em;width:9px;height:9px;border-radius:2px;background:var(--vitisoft)}
+#erreur{position:absolute;inset:0;margin:0;display:grid;place-items:center;padding:24px;text-align:center;font:500 16px/1.5 var(--ui);background:var(--nuit)}
+@media (min-width:600px) and (min-aspect-ratio:23/20){
+  #accueil{align-items:flex-start;text-align:left;padding-left:max(7vw,var(--sl));
+    background:linear-gradient(90deg,rgba(20,18,30,.9) 0%,rgba(20,18,30,.62) 34%,rgba(20,18,30,0) 60%)}
+  #accueil .logo{font-size:clamp(96px,11vw,170px)}
+  #accueil>:last-child{margin-bottom:auto}
+}
+@media (max-height:520px) and (orientation:landscape){
+  .ecran-plein{gap:8px}.logo{font-size:clamp(54px,12vw,96px)}.accroche{display:none}.cta{padding:12px 36px}
+  #tel{height:calc(100% - 20px - var(--st) - var(--sb));width:min(46vw,330px)}
+}
+@media (max-width:480px){#sous-titre{bottom:calc(92px + var(--sb));max-width:calc(100vw - 32px)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
+</style>
+<div id="jeu">
+  <canvas id="vue" aria-label="Le monde de Tournée générale : un village viticole à l'heure dorée"></canvas>
+  <div id="hud" hidden>
+    <div id="carte"><canvas id="minimap" width="208" height="208" aria-hidden="true"></canvas></div>
+    <p id="objectif" aria-live="polite"></p>
+    <div id="statut">
+      <p id="argent"><small>Ventes du jour</small><span id="argent-v">0 €</span></p>
+      <p id="etoiles" aria-label="Étoiles de retard"><i></i><i></i><i></i><i></i><i></i></p>
+      <p id="heure">17:40</p>
+    </div>
+    <div id="radio" role="button" aria-label="Couper ou rallumer la radio"><b>Radio Sarment</b><span>La musette qui décoiffe</span></div>
+    <p id="sous-titre" aria-live="polite"></p>
+    <div id="banniere" aria-live="polite"><b id="ban-t"></b><span id="ban-s"></span></div>
+    <button id="poche" aria-label="Sortir le téléphone"><span class="ecr"></span><b id="badge" hidden></b></button>
+  </div>
+  <div id="stick"><i></i></div>
+  <div id="etiquettes"></div>
+  <div id="voile"></div>
+  <div id="tel" aria-hidden="true">
+    <div class="cadre">
+      <div class="ecran">
+        <div class="barre-statut"><span id="tel-h">17:40</span><span class="ilot"></span><span>4G<i class="batt"></i></span></div>
+        <div id="app" class="app app-accueil"></div>
+        <button class="home" data-a="accueil" aria-label="Écran d'accueil du téléphone"></button>
+      </div>
+    </div>
+  </div>
+  <div id="pc" hidden><div class="moniteur"><div id="pc-ecran" class="pc-ecran"></div></div><div class="pied"></div></div>
+  <section id="accueil" class="ecran-plein">
+    <p class="sur">Solumatic présente</p>
+    <h1 class="logo"><span>Tournée</span><span>générale</span></h1>
+    <p class="accroche">Un village, des vignes, un tracteur. Et votre téléphone pour vous sortir de la paperasse.</p>
+    <div class="choix" role="group" aria-label="Personnage">
+      <button class="perso" data-h="vigneron" aria-pressed="true">Vigneron</button>
+      <button class="perso" data-h="vigneronne" aria-pressed="false">Vigneronne</button>
+    </div>
+    <button id="jouer" class="cta" disabled>Jouer</button>
+    <p class="aide" id="aide"><span class="tactile">Glissez le doigt n'importe où pour marcher, plus loin pour courir. Près du tracteur ou du van, touchez « Monter ». Près d'un passant, « Servir un verre ». Au volant : gardez le doigt posé pour avancer, le véhicule suit l'itinéraire de la mission ; glissez sur le côté pour tourner, vers le bas pour freiner. Deux doigts : tourner la caméra. Le téléphone est en bas à droite.</span><span class="clavier">Flèches ou ZQSD : bouger. Maj : courir. E : monter, descendre, servir un verre, ouvrir le PC. T : téléphone. M : son. R : radio. J et L, ou clic droit glissé : tourner la caméra ; C : la remettre derrière. Manette : stick gauche, gâchettes, A, Y.</span></p>
+    <p class="version">Démo 0.8 · un jeu original de l'équipe Solumatic</p>
+  </section>
+  <section id="fin" class="ecran-plein" hidden>
+    <div class="carte-fin">
+      <p class="sur">Fin de la démo</p>
+      <h2 id="fin-titre"></h2>
+      <p id="fin-texte"></p>
+      <p class="ap-h">Dans le jeu complet</p>
+      <ul id="fin-suite"></ul>
+      <button id="continuer" class="cta">Continuer la balade</button>
+    </div>
+  </section>
+  <p id="erreur" hidden>Votre navigateur ne sait pas afficher la 3D (WebGL). Essayez avec un navigateur récent, sur ordinateur ou téléphone.</p>
+</div>
