@@ -37,6 +37,8 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 
 Première fois : `npm install`. Après toute modification de `src/` : `npm run build`, puis `node scripts/essai.mjs parcours 390x844` (doit finir sur « Aucune erreur. »). Essai local dans un navigateur : `npm run serve` puis http://127.0.0.1:8642/. Forcer un palier : `?qualite=faible|moyen|haut`.
 
+Adresse publique : https://professeurt.github.io/Solugame/ (GitHub Pages, branche `main`, racine, `.nojekyll`). Chaque push sur `main` met le jeu en ligne en une minute environ : ne pousser qu'à la demande de Teddy.
+
 Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (republier depuis `dist/jeu.html`).
 
 ## Règles du client (héritées du projet Bureau du Vigneron et d'« À vous de jouer »)

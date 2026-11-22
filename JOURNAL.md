@@ -206,3 +206,7 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** : 2 500 triangles par personnage en moyenne (2 300 avant) ; toujours un appel de dessin par personnage ; texture 2,7 Mo en mémoire graphique ; 15 personnages construits en 64 ms au lieu de 25 (dont 24 ms pour l'atlas, une fois) ; image 3D prête vers 250 ms sur ordinateur. Fichier 582 Ko (186 Ko compressé).
 
 **Vérifié** : parcours en tracteur et en van, conduite assistée (aucun choc), ordinateur, trois paliers, équivalence de l'allègement de three.js ; planches avant et après regardées (visages, corps, gestes : boire, servir, conduire).
+
+## 22/11/2026 · Mis en ligne sur GitHub Pages
+
+**Demande de Teddy** : pousser sur git et héberger le jeu sur GitHub. Premier commit sur `main` (le dépôt était vide), GitHub Pages activé sur `main`, à la racine. Adresse : https://professeurt.github.io/Solugame/ . Vérifié depuis l'adresse publique : la page se charge, l'image 3D est prête, aucune erreur. Le dépôt est public : `CLAUDE.md` et `JOURNAL.md` y sont lisibles.
