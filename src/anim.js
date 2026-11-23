@@ -376,7 +376,7 @@ export class Anim {
     const roul = borne(this.lat * 0.012, -0.12, 0.12);
 
     const P = p.poste || POSTE_TRACTEUR;
-    const yB = (P.assise - gp.y) / s + 0.1 + sec, yP = (P.plancher - gp.y) / s + DIM.cheville;
+    const yB = (P.assise - (p.creux || 0) - gp.y) / s + 0.1 + sec, yP = (P.plancher - gp.y) / s + DIM.cheville;
     o[OS.bassin].position.set(0, yB, -0.03);
     o[OS.bassin].rotation.set(-0.12, 0, roul * 0.3);
     o[OS.ventre].rotation.set(0.1 + br * 0.3, this.ry * 0.12, roul * 0.5);

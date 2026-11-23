@@ -2,6 +2,7 @@
 // recul contre un mur, saut de côté) ; la pose est calculée par anim.js.
 import * as THREE from 'three';
 import { Anim } from './anim.js';
+import { OS } from './perso.js';
 import { angle, versAngle, borne, mix } from './outils.js';
 
 const SAUT = 0.55; // durée d'un saut de côté (s)
@@ -18,6 +19,7 @@ export class Pieton {
     this.volant = null;      // au volant : angle de braquage (rad, positif à gauche) ; null : déduit du mouvement du tracteur
     this.salut = false;      // vrai : quelqu'un à saluer (un signe de la main chaque fois que ça devient vrai)
     this.poste = null;       // au volant du van : son poste de conduite (assise, plancher, volant) ; null : le tracteur
+    this.creux = 0;          // au volant d'une voiture : de combien on s'enfonce dans le siège (caler)
     this.service = null;     // en train de servir un verre : { t, duree, cible } (main.js)
     this.transition = null;  // monter dans un véhicule, en descendre : 0 debout, 1 au volant (gestes.js) ; null sinon
     this.porte = null;       // la pile de cartons qu'on porte (un groupe enfant du personnage, gestes.js), ou null
@@ -105,6 +107,33 @@ export class Pieton {
     this.conduite = this.assis && !!g.parent && !g.parent.isScene;
     this.anim.poser(dt, this, t);
   }
+  // Assis au volant d'une voiture (son poste a un plafond), à sa place : on mesure la tête (chapeau compris) dans la pose
+  // de conduite, et l'on s'enfonce dans le siège de ce qu'il faut pour qu'elle passe sous le toit, avec une marge pour
+  // les mouvements de tête (anim.js : creux). Les grands s'enfoncent, les petits non.
+  caler(t = 0) {
+    const P = this.poste, tr = this.transition;
+    this.creux = 0;
+    if (!P || !P.plafond) return;
+    this.transition = null; this.sync(0, t);
+    const m = this.m, mesh = m.maillage, g = m.groupe, pos = mesh.geometry.attributes.position;
+    g.parent.updateWorldMatrix(true, false); g.updateMatrixWorld(true);
+    INV.copy(g.parent.matrixWorld).invert();
+    let ex = -1;
+    for (const i of sommetsTete(m)) {
+      VT.fromBufferAttribute(pos, i); mesh.applyBoneTransform(i, VT); VT.applyMatrix4(mesh.matrixWorld).applyMatrix4(INV);
+      ex = Math.max(ex, VT.y - P.plafond(VT.z));
+    }
+    this.creux = borne(ex + 0.035, 0, 0.25);
+    this.transition = tr; this.sync(0, t);
+  }
+}
+const INV = new THREE.Matrix4(), VT = new THREE.Vector3();
+// les sommets portés par l'os de la tête (tête, cheveux, couvre-chef), une fois par personnage
+function sommetsTete(m) {
+  if (m.sommetsTete) return m.sommetsTete;
+  const g = m.maillage.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, l = [];
+  for (let i = 0; i < si.count; i++) if ((si.getX(i) === OS.tete && sw.getX(i) > 0.5) || (si.getY(i) === OS.tete && sw.getY(i) > 0.5)) l.push(i);
+  return (m.sommetsTete = l);
 }
 
 /* ---------------------------------------------------------------- passants */

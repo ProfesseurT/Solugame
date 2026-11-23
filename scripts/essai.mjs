@@ -321,9 +321,20 @@ if (scenario === 'voitures') {
     const clic = s => { const e = q(s); if (!e) throw new Error('absent : ' + s); e.click(); };
     const saisir = n => { for (let i = 0; i < n; i++) clic('[data-a="qte:1"]'); clic('[data-a="signer"]'); };
     const dit = () => [J.hud.ligne, ...J.hud.file].filter(Boolean).map(l => l.txt).join(' ');
+    // de combien la tête (chapeau compris) d'un conducteur dépasse-t-elle sous le toit de sa voiture (négatif : elle passe)
+    const depasse = (p, poste) => {
+      const mesh = p.m.maillage, pos = mesh.geometry.attributes.position, par = p.m.groupe.parent, V = p.pos.clone();
+      CL.scene.updateMatrixWorld(true);
+      const inv = par.matrixWorld.clone().invert();
+      let ex = -9;
+      for (let i = 0; i < pos.count; i++) { V.fromBufferAttribute(pos, i); mesh.applyBoneTransform(i, V); V.applyMatrix4(mesh.matrixWorld).applyMatrix4(inv); if (V.y > 1.1) ex = Math.max(ex, V.y - poste.plafond(V.z)); }
+      return ex;
+    };
     try {
       CL.jouer(); CL.step(60);
       log.push(['un conducteur dans chaque voiture de la départementale', CL.voitures().length === 4 && CL.voitures().every(v => v.conducteur)]);
+      { const ex = CL.voitures().map(v => { const c = v.conducteur; c.m.groupe.visible = true; c.pos.set(v.x, 0, v.z); c.sync(1 / 60, 1); return depasse(c, v.mesh.userData.poste); });
+        log.push(['la tête des conducteurs passe sous le toit (' + ex.map(e => (e * 100).toFixed(0)).join(', ') + ' cm)', ex.every(e => e < 0)]); }
       { const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); }
       log.push(['sans le mode WTF, une voiture garée reste fermée', !CL.voitureProche && !J.auVolant && !J.gestes.actif]);
       const v = CL.voitures().find(x => x.sens > 0);
@@ -336,6 +347,7 @@ if (scenario === 'voitures') {
       const n0 = CL.gens.length;
       CL.agir(); CL.finirGeste(); CL.step(5);
       log.push(['empruntée : au volant, le conducteur est descendu, un passant de plus ; la portière refermée', J.auVolant && J.veh.genre === 'voiture' && CL.voitures().length === 3 && CL.gens.length === n0 + 1 && Math.abs(J.veh.m.porte.rotation.y) < 0.01]);
+      { const ex = depasse(J.joueur, J.veh.poste); log.push(['au volant, la tête du personnage passe sous le toit (' + (ex * 100).toFixed(0) + ' cm)', ex < 0]); }
       CL.ctrl.ky = -1; CL.step(150); CL.ctrl.ky = 0;
       log.push(['elle roule (' + CL.tr.v.toFixed(1) + ' m/s)', CL.tr.v > 8]);
       CL.step(60 * 21);
@@ -372,9 +384,14 @@ if (scenario === 'voitures') {
       for (let i = 0; i < 900 && Math.abs(w.v) > 0.3; i++) CL.step(1);
       CL.step(30); J.joueur.placer(w.x + 0.5, w.z - 2.3, Math.PI); CL.step(5);
       const d = w.conducteur, nv = CL.gens.length;
-      CL.agir(); let couche = 0;
-      for (let n = 0; n < 600 && J.gestes.actif; n++) { CL.step(1); couche = Math.min(couche, d.m.groupe.rotation.x); }
+      CL.agir(); let couche = 0, ecart = null;
+      for (let n = 0; n < 900 && J.gestes.actif; n++) {
+        CL.step(1); couche = Math.min(couche, d.m.groupe.rotation.x);
+        // quand il commence à tomber, où en est le personnage ? (devant la portière, qu'il a ouverte)
+        if (ecart === null && d.m.groupe.rotation.x < -0.2) { const v = J.veh, c = v.m.montee.chemin[0], h = v.p.h, x = v.p.pos.x + c[0] * Math.cos(h) + c[2] * Math.sin(h), z = v.p.pos.z - c[0] * Math.sin(h) + c[2] * Math.cos(h); ecart = Math.hypot(J.joueur.pos.x - x, J.joueur.pos.z - z); }
+      }
       CL.step(120);
+      log.push(['volée : il ne tombe qu\'une fois le personnage à sa portière (' + (ecart ?? -1).toFixed(2) + ' m)', ecart !== null && ecart < 0.3]);
       log.push(['volée : son conducteur est tombé (' + couche.toFixed(2) + '), s\'est relevé, s\'enfuit', J.auVolant && couche < -1.2 && CL.gens.length === nv + 1 && Math.abs(d.m.groupe.rotation.x) < 0.01]);
       log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }

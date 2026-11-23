@@ -127,7 +127,7 @@ function creerVehicule(genre, modele, lieu, poste) {
   return v;
 }
 // poste de conduite pour l'animation (van, voitures) : assise, plancher, volant (centre, rayon, inclinaison de la jante)
-const posteDe = m => ({ assise: m.dims.assise, plancher: m.dims.plancher, volant: m.volantCentre, rayon: m.volantRayon, inclinaison: m.volantInclinaison });
+const posteDe = m => ({ assise: m.dims.assise, plancher: m.dims.plancher, volant: m.volantCentre, rayon: m.volantRayon, inclinaison: m.volantInclinaison, plafond: m.plafond });
 const vTracteur = creerVehicule('tracteur', tracteur(), L.tracteur, null);
 const mVan = van();
 creerVehicule('van', mVan, L.van, posteDe(mVan));
@@ -207,16 +207,18 @@ function asseoirConducteur(vo) {
   const p = new Pieton(unPassant({}, rConducteurs)), P = vo.mesh.userData.poste;
   vo.mesh.add(p.m.groupe); p.m.groupe.position.copy(P.siege);
   p.assis = true; p.poste = P; p.volant = 0; p.m.maillage.castShadow = false;
-  p.sync(0, 0);
+  p.caler();
   vo.conducteur = p;
 }
 // Il descend de la voiture qu'on lui prend (v : sa jumelle, où il est déjà assis) : il ouvre sa portière et descend, et
-// nous la laisse ouverte ; en mode WTF, il en tombe (gestes.js : tomber). Puis il devient un passant du bas-côté de sa
-// voie : il nous la prête de bon cœur, ou il s'enfuit en criant au voleur. sorti() : il a quitté son siège.
+// nous la laisse ouverte ; en mode WTF, on lui a ouvert la portière et il en tombe (gestes.js : tomber). Puis il devient
+// un passant du bas-côté de sa voie : il nous la prête de bon cœur, ou il s'enfuit en criant au voleur. sorti() : il a
+// quitté son siège ; debout() : il est sur ses pieds, à l'écart.
 const GESTES_PNJ = []; // les gestes en cours des autres (main.js les fait avancer : bourg)
-function conducteurDescend(p, v, sorti) {
+function conducteurDescend(p, v, sorti, debout) {
   const G = new Gestes({ jeu, scene, col, acteur: p }), vole = jeu.wtf;
   G.lancer(vole ? G.tomber(v, sorti) : G.etapesDescendre(v, sorti, false), () => {
+    debout?.();
     const x = p.pos.x, z = p.pos.z;
     const zone = z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
     const pa = new Passant(p.m, zone, rPietons);
@@ -429,25 +431,37 @@ function prendreVoiture(c) {
   const m = voitureConduite(couleur, nom);
   finir(m.groupe);
   const v = creerVehicule('voiture', m, { x: c.x, z: c.z, h }, posteDe(m));
-  let libre = true; // la place du conducteur
+  let libre = true, debout = true, tLibre = 0; // la place du conducteur ; lui, sur ses pieds (depuis tLibre)
+  const p = ia ? c.conducteur : null;
   if (ia) {
-    // son conducteur passe dans la jumelle, à sa place, puis en descend (ou en tombe)
-    const p = c.conducteur;
-    c.conducteur = null; libre = false;
+    // son conducteur passe dans la jumelle, à sa place (il y attend qu'on vienne lui ouvrir, en mode WTF)
+    c.conducteur = null; libre = false; debout = false;
     m.caisse.add(p.m.groupe); p.m.groupe.position.copy(m.siege); p.m.groupe.rotation.set(0, 0, 0);
     p.poste = v.poste; p.pos.set(c.x, 0, c.z); p.sync(0, temps);
-    conducteurDescend(p, v, () => { libre = true; });
     voitures.splice(voitures.indexOf(c), 1);
     c.cri.vu = false;
     REMPLACER.push({ t: temps + 20, sens: c.sens, vmax: c.vmax, couleur, cri: c.cri });
   } else { GAREES.splice(GAREES.indexOf(c), 1); col.retirer(c.boite); }
   scene.remove(mesh); voituresM.splice(voituresM.indexOf(mesh), 1);
-  // on monte une fois sa place libre (il descend, on le laisse s'écarter)
   veh = v; tr = v.p; tm = v.m;
   ctrl.relacher();
+  const monter = () => auVolant(v);
+  if (ia && jeu.wtf) {
+    // mode WTF : on va jusqu'à sa portière, on l'ouvre, il en tombe ; on monte une fois qu'il s'est relevé et écarté
+    const ch = v.m.montee.chemin;
+    gestes.lancer([
+      ...gestes.allerVers(v, ch[0], -Math.PI / 2), gestes.portiere(v, 1),
+      { action: () => conducteurDescend(p, v, () => { libre = true; }, () => { debout = true; }) },
+      { maj: (dt, t, u, T) => { gestes.immobile(dt, t); if (debout && !tLibre) tLibre = T; return (tLibre && T > tLibre + 0.4) || T > 8; } },
+      ...gestes.etapesMonter(v, monter, true),
+    ]);
+    return;
+  }
+  // sinon il descend, nous laisse la portière ouverte et s'écarte ; puis on monte
+  if (ia) conducteurDescend(p, v, () => { libre = true; });
   gestes.lancer([
     { maj: (dt, t, u, T) => { gestes.immobile(dt, t); return (libre && T > 0.6) || T > 8; } },
-    ...gestes.etapesMonter(v, () => auVolant(v)),
+    ...gestes.etapesMonter(v, monter),
   ]);
 }
 function agir() {

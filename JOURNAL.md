@@ -607,3 +607,13 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Phares, la nuit (`eclairage`, engins.js) : glaces blanches et halos (un maillage additif), une flaque de lumière de 10 m sur la route, feux rouges à l'arrière ; pas de vraie lampe three.js (elle recompilerait toutes les matières et coûterait à chaque pixel) : 2 appels de dessin par véhicule allumé. Allumés pour les voitures de la départementale, pour le véhicule du joueur quand il roule ; leur éclat suit la nuit. Une première version gardait des disques sans couleur (`teinter` rend une nouvelle géométrie) : ils paraissaient bleus.
 
 **Vérifié** : bancs `voitures` (15 étapes : portière refermée, passant qui saute de côté, passant au téléphone aplati, conducteur tombé puis relevé) et `nuit` (phares allumés la nuit, éteints le jour et à pied) ; portière, descente, chute et phares en images ; `npm run verifie` ; conduite assistée en tracteur et en van ; banc des personnages en jeu ; banc d'allègement : équivalent. Pendant la vérification, la machine a monté à une charge de 228 (processus du système) : deux navigateurs de test se sont fermés en pleine partie ; tout repasse une fois la charge retombée.
+
+## 23/11/2026 · Retours de Teddy (16) : les têtes sous le toit, le vol dans l'ordre
+
+**Demandes** : « certaines voitures laissent dépasser la tête des gens » ; « il faut attendre que le personnage arrive à la portière pour que l'autre tombe de la voiture ».
+
+**Fait** :
+- Mesuré : sur le break et la berline (toits à 1,45 et 1,43 m), la tête d'un conducteur grand ou à chapeau montait jusqu'à 1,47 m, au ras du haut du pare-brise. Le poste de conduite d'une voiture donne maintenant son `plafond(z)` (sous le ciel de toit, sous le pare-brise et la lunette, d'après les stations de la coque vitrée). Assis au volant, chacun mesure une fois sa tête (les sommets portés par l'os de la tête : cheveux et chapeau compris) dans la pose de conduite et s'enfonce dans le siège de ce qu'il faut, marge comprise pour les mouvements de tête (`Pieton.caler`, `creux`, anim.js). Les petits ne bougent pas.
+- Mode WTF, voiture qui roule : on va d'abord jusqu'à sa portière, on l'ouvre ; alors seulement il tombe ; on monte une fois qu'il s'est relevé et écarté (il reste couché 0,65 s au lieu de 0,9). Sans le mode WTF, rien ne change : il descend et nous laisse la portière ouverte.
+
+**Vérifié** : banc `voitures` (19 étapes : têtes des 4 conducteurs de 3 à 8 cm sous le toit, celle du personnage aussi ; le conducteur volé ne tombe qu'une fois le personnage à 8 cm de sa portière) ; conducteurs photographiés de côté.

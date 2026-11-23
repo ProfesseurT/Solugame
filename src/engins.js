@@ -796,10 +796,18 @@ function porteVoiture(M) {
   return { z0, z1, x: W(z1), test: (x, y, z) => x > 0.6 && z > z0 && z < z1 && y > yb(z) + 0.05 && y < haut };
 }
 // Le poste de conduite d'une voiture (son repère : avant vers +z, +x à gauche, le côté du conducteur) : où se tient le
-// personnage assis (siege), dessus du siège (assise), plancher, volant (centre, rayon ; jante verticale, comme au tracteur)
+// personnage assis (siege), dessus du siège (assise), plancher, volant (centre, rayon ; jante verticale, comme au tracteur) ;
+// plafond(z) : la hauteur que la tête ne doit pas dépasser (sous le ciel de toit ; le long du pare-brise et de la lunette,
+// sous la vitre), d'après la coque vitrée (stations gh)
 function posteVoiture(M) {
-  const zPB = M.gh[M.gh.length - 1][0], zs = zPB - 0.98;
-  return { siege: new THREE.Vector3(0.37, 0, zs + 0.1), assise: 0.5, plancher: 0.36, volant: new THREE.Vector3(0.37, 0.88, zPB - 0.5), rayon: 0.17 };
+  const zPB = M.gh[M.gh.length - 1][0], zs = zPB - 0.98, ys = lin(M.ys), gh = M.gh;
+  const haut = i => (gh[i][1] ?? ys(gh[i][0]) + 0.05) - 0.06;
+  const plafond = z => {
+    if (z <= gh[0][0]) return haut(0);
+    for (let i = 1; i < gh.length; i++) if (z <= gh[i][0]) return haut(i - 1) + (haut(i) - haut(i - 1)) * (z - gh[i - 1][0]) / (gh[i][0] - gh[i - 1][0]);
+    return haut(gh.length - 1);
+  };
+  return { siege: new THREE.Vector3(0.37, 0, zs + 0.1), assise: 0.5, plancher: 0.36, volant: new THREE.Vector3(0.37, 0.88, zPB - 0.5), rayon: 0.17, plafond };
 }
 
 /* Une voiture qu'on conduit (empruntée, ou volée en mode WTF) : la même carrosserie que celle qui roulait ou attendait,
@@ -821,7 +829,7 @@ export function voitureConduite(couleur, nom) {
       rAr: M.rr, rAv: M.rr, yAr: M.rr, yAv: M.rr, emp: M.zAv - M.zAr, off: [L * 0.48, -L * 0.48], r: W + 0.08, pivot: new THREE.Vector3(0, 0.55, 0),
       zAr: M.zAr, zAv: M.zAv, xAr: M.xr, xAv: M.xr, assise: P.assise, plancher: P.plancher, emprise: [[-W, W, -L, L]],
     },
-    volantCentre: P.volant, volantRayon: P.rayon,
+    volantCentre: P.volant, volantRayon: P.rayon, plafond: P.plafond,
     // la montée : derrière la portière (hors de son passage), on entre par l'ouverture, on s'assoit en se baissant (pieds
     // au sol), on rentre les jambes
     montee: { chemin: [[W + 0.4, 0, M.portes[1] - 0.4], [W + 0.35, 0, s.z - 0.1], [W - 0.05, 0, s.z], [0.62, 0, s.z], [s.x, 0, s.z]], duree: 1.1, assis: 0.3, baisse: 0.75 },

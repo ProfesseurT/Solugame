@@ -244,17 +244,22 @@ export class Gestes {
   }
 
   /* ------------------------------------------------------------ monter, descendre */
-  etapesMonter(v, fin) {
+  // (place : on est déjà devant la portière ouverte)
+  etapesMonter(v, fin, place = false) {
     const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte, sonMontee = M.son || 'marche';
-    const etapes = this.allerVers(v, ch[0], -Math.PI / 2);
-    if (porte) etapes.push(this.portiere(v, 1));
+    const etapes = place ? [] : this.allerVers(v, ch[0], -Math.PI / 2);
+    if (porte && !place) etapes.push(this.portiere(v, 1));
     let marche = false;
     etapes.push({
       duree: M.duree,
       debut: () => {
-        const j = this.j;
-        v.m.caisse.add(j.m.groupe);
-        j.assis = true; j.poste = v.poste; j.transition = 0; j.baisse = M.baisse; j.v = 0;
+        const j = this.j, g = j.m.groupe;
+        v.m.caisse.add(g);
+        j.assis = true; j.poste = v.poste; j.v = 0;
+        // dans une voiture : à sa place d'abord, le temps de mesurer sa tête sous le toit (pieton.js : caler)
+        g.position.copy(v.m.siege); g.rotation.set(0, 0, 0); j.caler();
+        j.transition = 0; j.baisse = M.baisse;
+        surChemin(ch, 0, g.position); g.rotation.set(0, -Math.PI / 2, 0); j.sync(0);
       },
       maj: (dt, t, u) => {
         const j = this.j, g = j.m.groupe;
@@ -312,14 +317,14 @@ export class Gestes {
   monter(v, fin) { this.lancer(this.etapesMonter(v, fin)); }
   // Descendre du véhicule v : sorti() quand on pose le pied au sol (main.js repasse à pied)
   descendre(v, sorti, fin) { this.lancer(this.etapesDescendre(v, sorti), fin); }
-  // Mode WTF : on lui vole sa voiture, il en tombe. La portière s'ouvre, il est éjecté (encore assis, il se déplie en
+  // Mode WTF : on lui vole sa voiture, il en tombe. La portière s'ouvre (si on ne l'a pas déjà ouverte), il est éjecté (encore assis, il se déplie en
   // l'air), tombe sur le dos au pied de la voiture, la tête au loin, reste un instant par terre, puis se relève ; sorti()
   // quand il a quitté son siège, fin à la fin (main.js : il s'enfuit)
   tomber(v, sorti) {
     const j = () => this.j, A = new THREE.Vector3(), B = new THREE.Vector3();
     let psi = 0;
-    const W = v.m.dims.emprise[0][1], s = v.m.siege;
-    return [this.portiere(v, 1), {
+    const W = v.m.dims.emprise[0][1], s = v.m.siege, ouverte = Math.abs(v.m.porte.rotation.y - v.m.porteOuverte) < 0.05;
+    return [...(ouverte ? [] : [this.portiere(v, 1)]), {
       action: () => {
         const g = j().m.groupe;
         g.getWorldPosition(A); this.c.scene.attach(g); g.rotation.order = 'YXZ';
@@ -339,7 +344,7 @@ export class Gestes {
         if (u >= 1) { p.pos.set(B.x, 0, B.z); sorti(); }
       },
     }, {
-      duree: 0.9,
+      duree: 0.65,
       maj: (dt, t, u, T) => { const p = j(), g = p.m.groupe; g.rotation.x = -1.5 + Math.sin(T * 9) * 0.04 * (1 - u); p.transition = 0.4 * (1 - u); p.sync(dt, t); },
     }, {
       duree: 0.55,
