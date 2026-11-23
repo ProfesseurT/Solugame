@@ -356,3 +356,16 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Mesuré** (téléphone 390 x 844, palier moyen ; appels de dessin, ombres comprises) : chai avec le tracteur chargé 86 → 65 ; sur la route 88 → 68 ; domaine 86 → 79 ; place après les livraisons 80 → 74 ; dans le bureau 73 → 44 et 107 000 → 59 000 triangles (et, en jeu, sans passe d'ombre). Scène : 682 → 621 objets, 484 → 423 matrices recalculées par image.
 
 **Vérifié** : captures du chargement et d'une livraison en van (palette, van chargé vu par les vitres) ; `npm run verifie` ; conduite assistée complète en tracteur et en van ; banc d'allègement de three.js : équivalent.
+
+## 23/11/2026 · Passe d'assainissement (3) : `main.js` découpé
+
+**Constat** : `main.js` faisait 1 000 lignes et mêlait tout (paliers de qualité, particules, ombres de contact, bureau du chai, conduite, servir un verre, boucle, banc d'essai).
+
+**Fait** : trois parties autonomes sortent dans leur module, sans rien changer au jeu (mêmes objets, créés dans le même ordre, même tirage au sort pour les particules et les passants) :
+- `qualite.js` (`Paliers`) : estimation au démarrage, sonde pendant l'accueil, résolution adaptative, compilation des shaders en tâche de fond ; le jeu n'y branche que ses propres réglages (ciel, portée de la caméra, ombres de contact).
+- `particules.js` (`Particules`, `Taches`) : fumée, feuilles, gravillons, fontaine ; ombres de contact refaites à chaque image (`debut`, `poser`, `fin`).
+- `bureau.js` (`Bureau`) : la porte, le chèque, le portable, ses étiquettes et sa caméra ; chaque présence n'est plus calculée deux fois par image.
+
+`main.js` passe à 800 lignes.
+
+**Vérifié** : empreinte de la scène identique à celle du lot précédent ; mêmes appels de dessin et triangles aux six endroits mesurés ; `npm run verifie` ; conduite assistée en tracteur et en van (aucun choc, aucune traversée) ; accueil (la sonde monte bien à « haut » sur ordinateur) ; banc des personnages en jeu ; banc d'allègement de three.js : équivalent.

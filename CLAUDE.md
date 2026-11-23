@@ -9,7 +9,10 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 | Fichier | Rôle |
 |---|---|
 | `src/index.html` | Écrans HTML et tout le CSS (HUD, téléphone, portable du bureau du chai, fondu, accueil, fin). L'aide de l'accueil y est écrite (doigt ou clavier selon l'appareil) : elle s'affiche avant le script. |
-| `src/main.js` | Boucle de jeu, paliers de qualité automatiques, ombres, particules, entrées, branchements entre modules, banc de test `window.CL`. |
+| `src/main.js` | Boucle de jeu, ombres (cadre du soleil), entrées, servir un verre, branchements entre modules, banc de test `window.CL`. |
+| `src/qualite.js` | Paliers de qualité (`QUALITES`, `Paliers`) : estimation au démarrage, sonde pendant l'accueil, résolution adaptative, compilation des shaders en tâche de fond. |
+| `src/particules.js` | Particules (fumée, feuilles, gravillons, eau de la fontaine) et ombres de contact (`Taches`), en instances, sans allocation pendant le jeu. |
+| `src/bureau.js` | Le bureau du chai côté jeu : porte (entrer, sortir), chèque déposé, s'asseoir au portable, se lever ; ses étiquettes et sa caméra. |
 | `src/monde.js` | Le monde construit en code (ciel, lumière, collines, routes, vignes, bâtiments, arbres, détails, mini-carte), fusionné par quartiers. Le chai et son bureau (`chaiEtBureau`), le hameau des Grands Champs et son moulin (`hameau`, avec son propre tirage au sort). |
 | `src/modeles.js` | Formes de base, matières et textures procédurales dans le shader (pierre, ardoise, asphalte, vent...). |
 | `src/perso.js` | Personnages : un seul SkinnedMesh par personnage (18 os), tenues, visages (relief : arcades, pommettes, menton, `reliefVisage`), mains ; peau souple aux jointures (`liens` : un sommet proche d'une jointure suit aussi l'os voisin) ; coordonnées de texture dans le repère du personnage. |

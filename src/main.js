@@ -1,7 +1,7 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, BRUIT, compacter, B, MAT } from './modeles.js';
+import { UNI, compacter } from './modeles.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture } from './engins.js';
 import { perso, HEROS } from './perso.js';
@@ -18,6 +18,9 @@ import { versAngle, hasard, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
+import { Paliers } from './qualite.js';
+import { Particules, Taches } from './particules.js';
+import { Bureau } from './bureau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
 // Polices : la feuille de Google Fonts est préchargée sans bloquer la page (une feuille de style bloquante retenait tout le
@@ -53,136 +56,25 @@ for (const o of scene.children) if (o !== monde.ciel) o.traverse(x => { if (x.is
 const mesures = { debut: Math.round(T0), construction: Math.round(performance.now() - t0Monde) };
 const L = monde.lieux;
 
-/* ------------------------------------------------------------------ paliers de qualité
-   Choisis tout seuls : une première estimation (écran tactile ou non), puis la mesure du coût réel
-   d'une image pendant l'accueil (rendu synchronisé), puis une résolution qui s'adapte en continu.
-   ?qualite=faible|moyen|haut force un palier (essais). */
-const QUALITES = {
-  // téléphone modeste : pas de carte d'ombre (ombres de contact à la place), herbe proche et clairsemée
-  faible: { nom: 'faible', ratioMax: 1.25, ratioMin: 0.6, ombres: null, ombreTaille: 0, boite: 0, ombrePas: 0, herbe: 36, herbeN: 0.5, vigne: 20, parcelle: 45, brume: [55, 260], loin: 90, tache: 0.62, aniso: 1 },
-  // téléphone moyen : ombres 1024 filtrées à 4 lectures, recalculées une image sur deux
-  moyen: { nom: 'moyen', ratioMax: 1.6, ratioMin: 0.75, ombres: 'pcf', ombreTaille: 1024, boite: 72, ombrePas: 2, herbe: 58, herbeN: 0.85, vigne: 55, parcelle: 75, brume: [60, 290], loin: 130, tache: 0.45, aniso: 2 },
-  // ordinateur ou téléphone puissant : ombres 2048 à chaque image (douces sur ordinateur), herbe jusqu'à 95 m
-  haut: { nom: 'haut', ratioMax: 2, ratioMin: 1, ombres: 'soft', ombreTaille: 2048, boite: 96, ombrePas: 1, herbe: 95, herbeN: 1, vigne: 95, parcelle: 120, brume: [75, 350], loin: 200, tache: 0.36, aniso: 4 },
-};
-const ORDRE_Q = ['faible', 'moyen', 'haut'];
-const dpr = window.devicePixelRatio || 1;
-let forcee = QUALITES[new URLSearchParams(location.search).get('qualite')] || null;
-const modeste = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 2;
-let qualite = forcee || (tactile ? (modeste ? QUALITES.faible : QUALITES.moyen) : QUALITES.haut);
-let ratio = Math.min(dpr, qualite.ratioMax), ratioMaxEff = ratio;
-renderer.setPixelRatio(ratio);
-
-// Repère de la lumière (le même que celui de la caméra d'ombre) : on cale son centre sur la grille de texels
-const LX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SOLEIL).normalize();
-const LY = new THREE.Vector3().crossVectors(SOLEIL, LX);
-const DIR = new THREE.Vector3(), CIBLE = new THREE.Vector3();
-let nOmbre = 0;
-
-function appliquerQualite(q) {
-  qualite = q;
-  const S = monde.soleil, sm = renderer.shadowMap;
-  const avant = sm.enabled ? sm.type : -1;
-  sm.enabled = !!q.ombres;
-  // ombres douces à 16 lectures sur ordinateur seulement ; sur téléphone, « haut » garde le filtre à 4 lectures du
-  // palier moyen : moins de calcul par pixel, et pas de recompilation de tous les shaders quand la sonde monte d'un palier
-  sm.type = q.ombres === 'soft' && !tactile ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-  S.castShadow = !!q.ombres;
-  if (q.ombres) {
-    if (S.shadow.mapSize.x !== q.ombreTaille) { S.shadow.mapSize.set(q.ombreTaille, q.ombreTaille); if (S.shadow.map) { S.shadow.map.dispose(); S.shadow.map = null; } }
-    // Soleil bas : un cadre carré dans le repère de la lumière couvrirait une bande de sol 2,4 fois plus
-    // longue dans l'axe du soleil. On le resserre en hauteur : emprise au sol à peu près carrée,
-    // texels plus fins et moins d'objets à dessiner dans la carte d'ombre.
-    const c = S.shadow.camera, b = q.boite / 2, bh = b * SOLEIL.y + 3;
-    c.left = -b; c.right = b; c.top = bh; c.bottom = -bh; c.updateProjectionMatrix();
-    sm.needsUpdate = true;
-  }
-  if (avant !== (sm.enabled ? sm.type : -1)) {
-    scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
-    compiler();
-  }
-  scene.fog.near = q.brume[0]; scene.fog.far = q.brume[1];
-  // au-delà de 1,6 fois la fin de la brume tout est couleur de brume : inutile de le dessiner
-  monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800);
-  regarder();
-  UNI.uLoin.value = q.loin;
-  // filtrage anisotrope du bruit des matières (sol vu de biais) : jusqu'à 4 lectures de plus par texture, réservé aux appareils puissants
-  if (BRUIT.anisotropy !== q.aniso) { BRUIT.anisotropy = q.aniso; BRUIT.needsUpdate = true; }
-  monde.regler(q);
-  tacheMat.opacity = q.tache;
-  ratioMaxEff = Math.min(dpr, q.ratioMax);
-  if (ratio > ratioMaxEff) changerRatio(ratioMaxEff);
-}
+/* ------------------------------------------------------------------ paliers de qualité (qualite.js) */
+const paliers = new Paliers({
+  renderer, scene, camera, monde, tactile, mesures, redimensionner,
+  // réglages propres au jeu : au-delà de 1,6 fois la fin de la brume tout est couleur de brume, inutile de le dessiner
+  regler(q) { monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800); regarder(); taches.mat.opacity = q.tache; },
+});
 // Jusqu'où la caméra dessine : loin dehors (la brume du palier) ; dans le bureau du chai, la pièce seulement (le monde
 // extérieur, derrière les murs, n'est pas dessiné, ni le ciel)
 let vueDedans = false;
 function regarder(dedans = vueDedans) {
   vueDedans = dedans;
-  camera.far = dedans ? 16 : qualite.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
+  camera.far = dedans ? 16 : paliers.q.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
   monde.ciel.visible = !dedans;
 }
-// Compilation des shaders en tâche de fond (KHR_parallel_shader_compile) : l'accueil s'affiche tout de suite
-// et la page ne gèle pas ; l'image 3D apparaît quand tout est prêt (et après un changement de palier).
-let pret = false, nCompil = 0;
-function compiler() {
-  const n = ++nCompil;
-  pret = false;
-  const fin = () => { if (n === nCompil) { pret = true; if (!mesures.pret) mesures.pret = Math.round(performance.now()); } };
-  renderer.compileAsync(scene, camera).then(fin, fin);
-  // filet de sécurité : sur certains appareils la compilation en tâche de fond ne signale jamais sa fin
-  setTimeout(fin, 2500);
-}
-function changerRatio(r) {
-  r = Math.round(r * 100) / 100;
-  if (r === ratio) return;
-  ratio = r; renderer.setPixelRatio(ratio); redimensionner();
-}
-
-// Sonde : coût réel d'une image (rendu + attente de la carte graphique), mesuré pendant l'accueil
-const sonde = { n: 0, v: [], tours: 0, finie: !!forcee };
-function sonder(rendre) {
-  sonde.v.push(mesurer(rendre));
-  if (sonde.v.length < 16) return;
-  const v = sonde.v.sort((a, b) => a - b), ms = v[v.length >> 1], i = ORDRE_Q.indexOf(qualite.nom);
-  sonde.v = []; sonde.n = 0; sonde.tours++;
-  mesures.sonde = (mesures.sonde || '') + qualite.nom + ' ' + ms.toFixed(1) + ' ms ; ';
-  // vise environ 12 ms par image ; monte d'un palier s'il reste beaucoup de marge, descend si c'est trop lourd
-  let cible = qualite;
-  if (ms < (qualite.nom === 'faible' ? 5 : 6.5) && i < 2 && sonde.tours < 3) cible = QUALITES[ORDRE_Q[i + 1]];
-  else if (ms > (qualite.nom === 'haut' ? 15 : 22) && i > 0) cible = QUALITES[ORDRE_Q[i - 1]];
-  else changerRatio(Math.max(qualite.ratioMin, Math.min(ratioMaxEff, ratio * Math.sqrt(12 / Math.max(ms, 1)))));
-  if (cible !== qualite) { appliquerQualite(cible); if (sonde.tours < 4) return; }
-  sonde.finie = true;
-}
-// Résolution adaptative. Toutes les 2 s, on mesure le vrai coût d'une image (calcul + rendu + attente de la
-// carte graphique). On ne se fie pas à l'intervalle entre deux images : un téléphone en économie d'énergie
-// bride l'affichage à 30 images/s sans que le jeu soit trop lourd, et la qualité tombait au minimum.
-const dyn = { n: 0, bon: 0, essai: 0, bloque: 0, lent: 0 };
-const px1 = new Uint8Array(4);
-function mesurer(rendre) {
-  const gl = renderer.getContext();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); // vide la file de la carte graphique
-  const t = performance.now();
-  rendre();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
-  return performance.now() - t;
-}
-function adapter(cout) {
-  if (forcee || !sonde.finie) return;
-  mesures.dernier = Math.round(cout * 10) / 10;
-  dyn.bloque = Math.max(0, dyn.bloque - 1);
-  if (cout > 20) {
-    dyn.bon = 0;
-    if (dyn.essai > 0) { dyn.bloque = 15; dyn.essai = 0; } // la dernière hausse était de trop : on n'y revient pas tout de suite
-    if (ratio > qualite.ratioMin + 0.01) changerRatio(Math.max(qualite.ratioMin, ratio * 0.87));
-    else if (++dyn.lent >= 3 && qualite !== QUALITES.faible) { dyn.lent = 0; appliquerQualite(QUALITES[ORDRE_Q[ORDRE_Q.indexOf(qualite.nom) - 1]]); }
-  } else {
-    dyn.lent = 0;
-    dyn.essai = Math.max(0, dyn.essai - 1);
-    if (cout < 12) { if (++dyn.bon >= 2 && dyn.bloque <= 0 && ratio < ratioMaxEff - 0.01) { changerRatio(Math.min(ratioMaxEff, ratio * 1.1)); dyn.bon = 0; dyn.essai = 2; } }
-    else dyn.bon = 0;
-  }
-}
+// Repère de la lumière (le même que celui de la caméra d'ombre) : on cale son centre sur la grille de texels
+const LX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SOLEIL).normalize();
+const LY = new THREE.Vector3().crossVectors(SOLEIL, LX);
+const DIR = new THREE.Vector3(), CIBLE = new THREE.Vector3();
+let nOmbre = 0;
 
 const rnd = hasard(7);
 const pick = a => a[Math.floor(rnd() * a.length)];
@@ -204,78 +96,9 @@ const marque = new THREE.Group();
   scene.add(marque);
 }
 
-/* ------------------------------------------------------------------ particules (feuilles, fumée, eau de la fontaine)
-   Réserve fixe d'objets réutilisés : aucune allocation pendant le jeu. Couleurs en nombres (0xrrggbb). */
-const PMAX = 220;
-const parts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), new THREE.MeshLambertMaterial({ flatShading: true }), PMAX);
-parts.count = 0; parts.frustumCulled = false; parts.name = 'particules';
-parts.setColorAt(0, new THREE.Color());
-scene.add(parts);
-const pool = [];
-for (let i = 0; i < PMAX; i++) pool.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, vie: 0, v0: 1, c: new THREE.Color(), s: 1, g: 0, r: 0, sol: 0.05 });
-let nParts = 0;
-const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), pp = new THREE.Vector3(), pe = new THREE.Vector3();
-const AXE_P = new THREE.Vector3(0.6, 1, 0.3).normalize();
-function emettre(x, y, z, vx, vy, vz, vie, couleur, taille, grav, sol = 0.05) {
-  if (nParts >= PMAX) return;
-  const p = pool[nParts++];
-  p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.vie = vie; p.v0 = vie; p.c.setHex(couleur); p.s = taille; p.g = grav; p.r = rnd() * 6; p.sol = sol;
-}
-function majParticules(dt) {
-  let n = 0;
-  for (let i = 0; i < nParts; i++) {
-    const p = pool[i];
-    p.vie -= dt;
-    if (p.vie <= 0) continue;
-    p.vy -= p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-    if (p.y < p.sol) { p.y = p.sol; p.vy = 0; p.vx *= 0.8; p.vz *= 0.8; }
-    p.r += dt * 4;
-    const cx = p.x - camera.position.x, cy = p.y - camera.position.y, cz = p.z - camera.position.z;
-    const k = cx * cx + cy * cy + cz * cz < 9 ? 0.001 : p.s * (p.g < 0 ? 1 + (1 - p.vie / p.v0) * 1.5 : Math.min(1, p.vie * 2));
-    pq.setFromAxisAngle(AXE_P, p.r);
-    pm.compose(pp.set(p.x, p.y, p.z), pq, pe.set(k, k, k));
-    parts.setMatrixAt(n, pm); parts.setColorAt(n, p.c);
-    if (i !== n) { pool[i] = pool[n]; pool[n] = p; } // garde les vivantes au début, sans rien créer
-    n++;
-  }
-  nParts = n; parts.count = n;
-  parts.instanceMatrix.needsUpdate = true;
-  parts.instanceColor.needsUpdate = true;
-}
-// la fontaine de la place coule : quatre filets du bassin haut vers le bassin bas, un petit jet au centre
-let tFontaine = 0;
-function fontaine(dt) {
-  const f = L.fontaine;
-  if (Math.abs(camera.position.x - f.x) + Math.abs(camera.position.z - f.z) > 80) return;
-  tFontaine += dt;
-  while (tFontaine > 0.016) {
-    tFontaine -= 0.016;
-    const a = Math.floor(rnd() * 4) * Math.PI / 2 + 0.4 + (rnd() - 0.5) * 0.12, v = 0.85 + rnd() * 0.15;
-    emettre(f.x + Math.cos(a) * 0.74, f.y - 0.02, f.z + Math.sin(a) * 0.74, Math.cos(a) * v, 0.5 + rnd() * 0.2, Math.sin(a) * v, 0.7, rnd() < 0.5 ? 0xd8eef6 : 0xa9d3e6, 0.6, 9.8, 0.7);
-    if (rnd() < 0.3) emettre(f.x + (rnd() - 0.5) * 0.1, f.y + 0.05, f.z + (rnd() - 0.5) * 0.1, (rnd() - 0.5) * 0.3, 1.6 + rnd() * 0.4, (rnd() - 0.5) * 0.3, 0.4, 0xeaf6fb, 0.36, 9.8, 2.6);
-  }
-}
-
-/* ------------------------------------------------------------------ ombres de contact sous les personnages et les véhicules
-   Taches douces, toujours là (ancrage au sol), plus marquées quand la carte d'ombre est coupée ou loin. */
-const TMAX = 40;
-const tacheGeo = (() => {
-  const g = new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2), n = g.attributes.position.count, c = new Float32Array(n * 4);
-  for (let i = 0; i < n; i++) { const r = Math.hypot(g.attributes.position.getX(i), g.attributes.position.getZ(i)); c[i * 4 + 3] = r < 0.01 ? 1 : 0; }
-  g.setAttribute('color', new THREE.BufferAttribute(c, 4));
-  return g;
-})();
-const tacheMat = new THREE.MeshBasicMaterial({ color: '#1e1830', vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-const taches = new THREE.InstancedMesh(tacheGeo, tacheMat, TMAX);
-taches.frustumCulled = false; taches.renderOrder = 2; taches.count = 0; taches.name = 'taches';
-scene.add(taches);
-const tm4 = new THREE.Matrix4(), tq = new THREE.Quaternion(), tp = new THREE.Vector3(), te = new THREE.Vector3(), AXE_Y = new THREE.Vector3(0, 1, 0);
-let nTaches = 0;
-function tache(x, z, rx, rz, rot) {
-  if (nTaches >= TMAX) return;
-  tm4.compose(tp.set(x, 0.075, z), tq.setFromAxisAngle(AXE_Y, rot), te.set(rx, 1, rz));
-  taches.setMatrixAt(nTaches++, tm4);
-}
+/* ------------------------------------------------------------------ particules et ombres de contact (particules.js) */
+const particules = new Particules(scene, camera, rnd), emettre = particules.emettre;
+const taches = new Taches(scene);
 
 /* ------------------------------------------------------------------ personnages, tracteur, voitures */
 let choixHeros = stocke.lire('tournee-generale-heros') === 'vigneronne' ? 'vigneronne' : 'vigneron';
@@ -434,10 +257,9 @@ const etqMonter = hud.etiquette(tactile ? 'Monter' : 'Monter (E)', 'action', () 
 const etqServir = hud.etiquette(tactile ? 'Servir un verre' : 'Servir un verre (E)', 'action');
 const etqDescendre = hud.etiquette(tactile ? 'Descendre' : 'Descendre (E)', 'action', () => agir());
 const etqCible = hud.etiquette('', 'cible');
-const etqPC = hud.etiquette(tactile ? 'Déposer le chèque' : 'Déposer le chèque (E)', 'action');
-const etqEntrer = hud.etiquette(tactile ? 'Entrer au bureau' : 'Entrer au bureau (E)', 'action');
-const etqSortir = hud.etiquette(tactile ? 'Sortir' : 'Sortir (E)', 'action');
-const etqPortable = hud.etiquette(tactile ? 'S\'asseoir au portable' : 'S\'asseoir au portable (E)', 'action');
+// le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
+const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, tactile, regarder });
+const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -489,41 +311,9 @@ jeu.charger = (piles, place, fin) => {
 };
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
-/* ------------------------------------------------------------------ le bureau du chai
-   La pièce est au bout sud du chai (monde.js). On y entre par sa porte (gestes.js : fondu au noir au seuil, la caméra
-   passe dans un coin de la pièce) ; au bureau en bois, on dépose le chèque, puis on s'assoit au portable (pc.js : Le
-   bureau et Vitisoft). */
-const BU = L.bureau;
-jeu.dedans = false;
-let auPortable = false;
-const pres = (p, d) => Math.hypot(joueur.pos.x - p.x, joueur.pos.z - p.z) < d;
-const presPorteDehors = () => !jeu.dedans && !jeu.auVolant && pres(BU.dehors, 2.6);
-const presPorteDedans = () => jeu.dedans && pres(BU.dedans, 1.5);
-const presDepot = () => jeu.dedans && mission.chequeADeposer && pres(BU.depot, 2.0);
-const presChaise = () => jeu.dedans && !mission.chequeADeposer && !auPortable && pres(BU.chaise, 1.8);
-const fonduVers = noir => $('fondu').classList.toggle('noir', noir);
-// le chèque de l'épicerie, posé sur le bureau une fois déposé
-const cheque3D = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT);
-cheque3D.position.set(BU.depot.x, BU.depot.y, BU.depot.z); cheque3D.rotation.y = 0.3; cheque3D.visible = false; scene.add(cheque3D);
-function passerPorte(entrer) {
-  ctrl.relacher();
-  gestes.passer(BU, entrer, { fondu: fonduVers, passe: () => { jeu.dedans = entrer; regarder(entrer); cam.pret = false; if (!entrer) cam.yaw = -Math.PI / 2; }, fin: () => {} });
-}
-function asseoirPortable() {
-  ctrl.relacher();
-  gestes.asseoir(BU, () => { auPortable = true; mission.ouvrirPC(); pc.ouvrir(mission.pcDispo ? 'vitisoft' : 'bureau'); });
-}
-jeu.leverPortable = () => { if (!auPortable) return; auPortable = false; gestes.lever(BU, () => {}); };
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
-  // dans le bureau du chai : sortir ; d'abord poser le chèque de l'épicerie, ensuite s'asseoir au portable
-  if (jeu.dedans) {
-    if (presPorteDedans()) passerPorte(false);
-    else if (presDepot()) { mission.deposerCheque(); cheque3D.visible = true; }
-    else if (presChaise()) asseoirPortable();
-    return;
-  }
-  if (presPorteDehors()) { passerPorte(true); return; }
+  if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (servable) { servir(servable); return; }
   const v = vehiculeProche();
@@ -532,7 +322,7 @@ function agir() {
 const proj = new THREE.Vector3();
 function toucher(tp) {
   if (tel.ouvert || pc.ouvert || gestes.actif) return;
-  for (const e of [etqPC, etqEntrer, etqSortir, etqPortable, etqServir, etqMonter, etqDescendre]) {
+  for (const e of ETQ_ACTION) {
     if (e.el.hidden) continue;
     const r = e.el.getBoundingClientRect();
     if (tp.x > r.left - 12 && tp.x < r.right + 12 && tp.y > r.top - 12 && tp.y < r.bottom + 12) { agir(); return; }
@@ -653,9 +443,7 @@ function miseAJour(dt) {
   const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
 
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
-  joueur.clavier = auPortable && pc.ouvert;
-  // assis au portable : après un appel passé depuis le bureau, on y revient
-  if (auPortable && !pc.ouvert && !tel.ouvert && !gestes.actif && !jeu.finVue) pc.ouvrir();
+  bureau.avant(); // assis au portable : les mains sur le clavier ; après un appel passé depuis le portable, on y revient
   if (gestes.actif) {
     // un geste se joue (monter, descendre, porter les cartons) : il mène le personnage ; le véhicule reste à l'arrêt.
     // Doigt posé ou touche de direction enfoncée : une scène de cartons se joue trois fois plus vite.
@@ -757,7 +545,7 @@ function miseAJour(dt) {
     if (v.cri.vu) hud.placer(v.cri, v.x, 2.4, v.z, true);
   }
 
-  fontaine(dtm);
+  particules.fontaine(dtm, L.fontaine);
 
   mission.update(dt);
   tel.update(dt);
@@ -787,13 +575,8 @@ function miseAJour(dt) {
     }
   }
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
-  // le bureau du chai
-  const libreB = !tel.ouvert && !pc.ouvert && !gestes.actif;
-  const pcPres = libreB && (presPorteDehors() || presPorteDedans() || presDepot() || presChaise());
-  hud.placer(etqEntrer, BU.seuil.x - 0.2, 2.55, BU.seuil.z, libreB && presPorteDehors());
-  hud.placer(etqSortir, BU.seuil.x + 0.3, 2.3, BU.seuil.z, libreB && presPorteDedans());
-  hud.placer(etqPC, BU.depot.x, 1.25, BU.depot.z, libreB && presDepot());
-  hud.placer(etqPortable, BU.chaise.x, 1.45, BU.chaise.z, libreB && presChaise());
+  // le bureau du chai : ses étiquettes (les autres s'effacent devant elles), la pièce dessinée seulement si on la voit
+  const pcPres = bureau.maj();
   chercherServable();
   const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) { const t = vp.genre === 'van' ? (tactile ? 'Monter dans le van' : 'Monter dans le van (E)') : (tactile ? 'Monter' : 'Monter (E)'); if (etqMonter.el.textContent !== t) etqMonter.el.textContent = t; }
@@ -801,11 +584,9 @@ function miseAJour(dt) {
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 
-  // la pièce du bureau n'est dessinée que si on la voit : dedans, ou par la porte ouverte
-  monde.interieurBureau.visible = jeu.dedans || monde.porteBureau.rotation.y < -0.01;
   // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
   // son cadre
-  if (!camLibre && jeu.dedans) cam.salle(dt, BU, joueur.pos.x, joueur.pos.z, auPortable && (pc.ouvert || gestes.actif));
+  if (!camLibre && jeu.dedans) bureau.camera(dt);
   else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
   hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);
@@ -816,7 +597,7 @@ function miseAJour(dt) {
 // La matrice d'ombre ne change que lorsque la carte est recalculée : carte et matrice restent d'accord.
 function placerLumiere(x, z) {
   monde.ciel.position.copy(camera.position);
-  const q = qualite;
+  const q = paliers.q;
   if (!q.ombres) return;
   camera.getWorldDirection(DIR);
   const l = Math.hypot(DIR.x, DIR.z) || 1, av = q.boite * 0.26;
@@ -829,14 +610,15 @@ function placerLumiere(x, z) {
 }
 // Taches de contact de tout ce qui bouge (et des voitures garées)
 function majTaches() {
-  nTaches = 0;
-  if (!jeu.auVolant) tache(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
-  for (const v of VEHICULES) tache(v.m.groupe.position.x, v.m.groupe.position.z, v.genre === 'van' ? 1.15 : 1.2, v.genre === 'van' ? 2.5 : 2.1, v.m.groupe.rotation.y);
-  for (const p of passants) tache(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0);
-  for (const f of figurants) tache(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
-  for (const p of assis) tache(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
-  for (const m of voituresM) tache(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
-  taches.count = nTaches; taches.instanceMatrix.needsUpdate = true;
+  const t = taches;
+  t.debut();
+  if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
+  for (const v of VEHICULES) t.poser(v.m.groupe.position.x, v.m.groupe.position.z, v.genre === 'van' ? 1.15 : 1.2, v.genre === 'van' ? 2.5 : 2.1, v.m.groupe.rotation.y);
+  for (const p of passants) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0);
+  for (const f of figurants) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
+  for (const p of assis) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
+  for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
+  t.fin();
 }
 // Tout ce qui précède le dessin d'une image : décor animé, ombre, herbe proche
 function avantRendu(ego) {
@@ -846,7 +628,8 @@ function avantRendu(ego) {
   majTaches();
   monde.maj(camera.position.x, camera.position.z);
   // dans le bureau, la pièce ne reçoit pas d'ombre portée : on ne recalcule pas la carte d'ombre
-  if (qualite.ombres && !jeu.dedans && ++nOmbre >= qualite.ombrePas) {
+  const q = paliers.q;
+  if (q.ombres && !jeu.dedans && ++nOmbre >= q.ombrePas) {
     nOmbre = 0; renderer.shadowMap.needsUpdate = true;
     const c = monde.soleil.shadow.camera;
     monde.ombres(monde.soleil.target.position, c.right, c.top);
@@ -860,7 +643,7 @@ const rendre = () => renderer.render(scene, camera);
 let dernier = performance.now();
 function boucle(maintenant) {
   requestAnimationFrame(boucle);
-  if (document.hidden || !pret) { dernier = maintenant; return; }
+  if (document.hidden || !paliers.pret) { dernier = maintenant; return; }
   const enJeu = etat === 'jeu', voile = enJeu && (pc.ouvert || jeu.finVue);
   const pas = voile ? 60 : !enJeu || tel.ouvert ? 29 : 12.5;
   if (maintenant - dernier < pas) return;
@@ -874,7 +657,7 @@ function boucle(maintenant) {
     joueur.sync(dt, temps);
     for (const { p } of figurants) p.sync(dt, temps);
   } else miseAJour(dt);
-  majParticules(dt);
+  particules.maj(dt);
   if (monde.nuages) monde.nuages.rotation.y += dt * 0.004; // les nuages dérivent
   monde.moulin.rotation.x -= dt * 0.35; // les ailes du moulin des Grands Champs
   const ego = etat === 'jeu' && jeu.auVolant ? tr.pos : joueur.pos;
@@ -884,10 +667,8 @@ function boucle(maintenant) {
   if (enJeu && (tel.ouvert || voile)) { rendre(); return; }
   // le bourg se peuple une fois la première image affichée
   if (!peuplePrevu) { peuplePrevu = true; setTimeout(peupler, 30); }
-  // les premières images compilent les shaders ; ensuite la sonde mesure le vrai coût d'une image
-  if (!sonde.finie && ++sonde.n > 24) sonder(rendre);
-  else if (sonde.finie && !forcee && ++dyn.n >= 120) { dyn.n = 0; const calc = performance.now() - tDebut; adapter(calc + mesurer(rendre)); }
-  else rendre();
+  // les premières images compilent les shaders ; ensuite la sonde mesure le vrai coût d'une image (qualite.js)
+  paliers.rendreImage(rendre, tDebut);
 }
 
 function redimensionner() {
@@ -900,9 +681,9 @@ function redimensionner() {
 }
 addEventListener('resize', redimensionner);
 redimensionner();
-appliquerQualite(qualite);
-// toujours compiler au démarrage (appliquerQualite ne le fait que si le type d'ombre change : sinon l'image restait noire)
-if (!nCompil) compiler();
+paliers.appliquer(paliers.q);
+// toujours compiler au démarrage (appliquer ne le fait que si le type d'ombre change : sinon l'image restait noire)
+if (!paliers.nCompil) paliers.compiler();
 
 /* ------------------------------------------------------------------ écrans */
 for (const b of document.querySelectorAll('.perso')) {
@@ -939,11 +720,10 @@ window.CL = {
   passants() { return passants.map(p => p.p); },
   get pilote() { return pilote; },
   voitures() { return voitures; },
-  get qualite() { return qualite; },
-  get pret() { return pret; },
-  get ratio() { return ratio; },
-  // impose un palier (essais) : coupe la sonde et la résolution adaptative
-  palier(nom) { forcee = QUALITES[nom]; sonde.finie = true; appliquerQualite(forcee); changerRatio(Math.min(dpr, forcee.ratioMax)); },
+  get qualite() { return paliers.q; },
+  get pret() { return paliers.pret; },
+  get ratio() { return paliers.ratio; },
+  palier(nom) { paliers.forcer(nom); }, // impose un palier (essais)
   get etat() { return etat; },
   get joueur() { return joueur; },
   jouer() { $('jouer').click(); },
@@ -964,20 +744,20 @@ window.CL = {
   // caméra posée à la main pour les captures de vérification
   photo(px, py, pz, tx, ty, tz) { camLibre = px !== undefined; if (camLibre) { camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); } },
   step(n = 60, dt = 1 / 60) {
-    pret = true; // essais : on n'attend pas la compilation en tâche de fond
-    for (let i = 0; i < n; i++) { temps += dt; miseAJour(dt); majParticules(dt); hud.update(dt, camera, largeur, hauteurE); }
+    paliers.pret = true; // essais : on n'attend pas la compilation en tâche de fond
+    for (let i = 0; i < n; i++) { temps += dt; miseAJour(dt); particules.maj(dt); hud.update(dt, camera, largeur, hauteurE); }
     avantRendu(jeu.auVolant ? tr.pos : joueur.pos);
   },
   // coût de chaque étape d'une image (ms), la dernière colonne = attente de la carte graphique
   profil(n = 120) {
-    const T = { jeu: 0, particules: 0, avantRendu: 0, hud: 0, rendu: 0, gpu: 0 }, gl = renderer.getContext(), dt = 1 / 60;
+    const T = { jeu: 0, particules: 0, avantRendu: 0, hud: 0, rendu: 0, gpu: 0 }, dt = 1 / 60;
     for (let i = 0; i < n; i++) {
       const a = performance.now(); temps += dt; miseAJour(dt);
-      const b = performance.now(); majParticules(dt);
+      const b = performance.now(); particules.maj(dt);
       const c = performance.now(); avantRendu(jeu.auVolant ? tr.pos : joueur.pos);
       const d = performance.now(); hud.update(dt, camera, largeur, hauteurE);
       const e = performance.now(); rendre();
-      const f = performance.now(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+      const f = performance.now(); paliers.attendreGPU();
       const g = performance.now();
       T.jeu += b - a; T.particules += c - b; T.avantRendu += d - c; T.hud += e - d; T.rendu += f - e; T.gpu += g - f;
     }
@@ -1007,11 +787,11 @@ window.CL = {
   },
   bench(n = 120) {
     const t0 = performance.now();
-    for (let i = 0; i < n; i++) { temps += 1 / 60; miseAJour(1 / 60); majParticules(1 / 60); avantRendu(jeu.auVolant ? tr.pos : joueur.pos); rendre(); }
-    renderer.getContext().readPixels(0, 0, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, px1);
+    for (let i = 0; i < n; i++) { temps += 1 / 60; miseAJour(1 / 60); particules.maj(1 / 60); avantRendu(jeu.auVolant ? tr.pos : joueur.pos); rendre(); }
+    paliers.attendreGPU();
     const ms = (performance.now() - t0) / n;
     // une image de plus pour compter aussi la passe d'ombre (comptée avant la remise à zéro de three.js)
-    const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.shadowMap.needsUpdate = !!qualite.ombres; rendre(); inf.autoReset = true;
-    return ms.toFixed(2) + ' ms par image, ' + inf.render.calls + ' appels de dessin, ' + inf.render.triangles + ' triangles (ombres comprises), qualité ' + qualite.nom + ', ratio ' + ratio;
+    const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.shadowMap.needsUpdate = !!paliers.q.ombres; rendre(); inf.autoReset = true;
+    return ms.toFixed(2) + ' ms par image, ' + inf.render.calls + ' appels de dessin, ' + inf.render.triangles + ' triangles (ombres comprises), qualité ' + paliers.q.nom + ', ratio ' + paliers.ratio;
   },
 };
