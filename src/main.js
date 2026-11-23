@@ -14,13 +14,12 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission } from './mission.js';
 import { son } from './audio.js';
-import { versAngle, hasard } from './outils.js';
+import { versAngle, hasard, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
-const $ = id => document.getElementById(id);
 // Polices : la feuille de Google Fonts est préchargée sans bloquer la page (une feuille de style bloquante retenait tout le
 // script du jeu jusqu'à son arrivée, une à deux secondes sur un réseau mobile lent). Le texte s'affiche aussitôt, la police
 // arrive ensuite (display=swap). Les panneaux du décor sont dessinés avec des polices du système.
@@ -576,15 +575,17 @@ const SERVICE = 3.2;          // durée du geste (s)
 // les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js)
 function candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of figurants) if (x.p.servable) f(x.p, 2.4); }
 jeu.prospectServable = on => { for (const x of figurants) if (x.id === 'auberge') x.p.servable = on; };
+let dServable = 1e9;
+function essayerServable(p, portee) {
+  if (p.verre > 0 || p.sautT > 0 || (p.servi && temps - p.servi < 60)) return;
+  const d = Math.hypot(p.pos.x - joueur.pos.x, p.pos.z - joueur.pos.z);
+  if (d < portee && d < dServable) { dServable = d; servable = p; }
+}
 function chercherServable() {
   servable = null;
   if (jeu.auVolant || tel.ouvert || pc.ouvert || joueur.service || joueur.sautT > 0 || gestes.actif) return;
-  let dmin = 1e9;
-  candidats((p, portee) => {
-    if (p.verre > 0 || p.sautT > 0 || (p.servi && temps - p.servi < 60)) return;
-    const d = Math.hypot(p.pos.x - joueur.pos.x, p.pos.z - joueur.pos.z);
-    if (d < portee && d < dmin) { dmin = d; servable = p; }
-  });
+  dServable = 1e9;
+  candidats(essayerServable);
 }
 function servir(p) {
   joueur.service = { t: 0, duree: SERVICE, cible: p, donne: false };
@@ -604,17 +605,21 @@ function majService(dt) {
     if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; nVerres++; if (p.servable) mission.degustee(); }
     if (S.t >= SERVICE) joueur.service = null;
   }
-  candidats(p => {
-    if (!(p.verre > 0)) return;
-    const avant = p.tVerre;
-    p.tVerre += dt; p.verre -= dt;
-    if (avant < 0.6 && p.tVerre >= 0.6) {
-      son.jouer('tchin');
-      const b = p.etq;
-      if (b) { b.el.textContent = pick(REPLIQUES_VERRE); b.t = 2.4; b.vu = true; }
-    }
-    if (p.verre <= 0) p.verre = 0;
-  });
+  dtVerre = dt;
+  candidats(boire);
+}
+// celui qui a reçu un verre le boit ; il trinque au bout de 0,6 s
+let dtVerre = 0;
+function boire(p) {
+  if (!(p.verre > 0)) return;
+  const avant = p.tVerre;
+  p.tVerre += dtVerre; p.verre -= dtVerre;
+  if (avant < 0.6 && p.tVerre >= 0.6) {
+    son.jouer('tchin');
+    const b = p.etq;
+    if (b) { b.el.textContent = pick(REPLIQUES_VERRE); b.t = 2.4; b.vu = true; }
+  }
+  if (p.verre <= 0) p.verre = 0;
 }
 
 function miseAJour(dt) {

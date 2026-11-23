@@ -1,7 +1,7 @@
 // Entrées : un manche invisible au doigt (ou à la souris), deux doigts pour tourner la caméra,
 // le clavier, la manette, les touchers courts.
-const borne = (x, a, b) => x < a ? a : x > b ? b : x;
 // zone morte ronde d'un stick de manette, puis remise à l'échelle 0..1
+import { borne } from './outils.js';
 function morte(x, y, z) {
   const m = Math.hypot(x, y);
   if (m < z) return 0;

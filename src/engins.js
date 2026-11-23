@@ -1,6 +1,7 @@
 // Modèles du tracteur, du van de livraison et des voitures (géométrie low poly, roues séparées pour tourner).
 import * as THREE from 'three';
 import { B, C, T, MAT, MAT_VITRE, fusion, teinter, deplacer } from './modeles.js';
+import { assombrir } from './outils.js';
 
 const TAU = Math.PI * 2;
 const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : reflète le ciel
@@ -164,8 +165,6 @@ function fond(at, anneau, col, ty, sz) {
 function plaque(at, x0, x1, y0, y1, z, sz, col, ty, miroir) {
   for (const s of miroir ? [1, -1] : [1]) at.quad([x0 * s, y0, z], [x1 * s, y0, z], [x1 * s, y1, z], [x0 * s, y1, z], col, ty, [0, 0, sz]);
 }
-// teinte assombrie (joints de portes) ou éclaircie
-function nuance(c, k) { return '#' + new THREE.Color(c).multiplyScalar(k).getHexString(); }
 
 /* ---------------------------------------------------------------- roues
    Pneu à n pans (bande de roulement, flanc), jante claire à rayons (une facette sur deux plus sombre : les rayons se
@@ -240,7 +239,7 @@ function pneuAgricole(r, l, n, cote, nc) {
     }
     // jante : rebord, voile en retrait ; dedans, le flanc intérieur fermé
     at.quad(P(h * 0.95, rj, a0), P(h * 0.5, rj, a0), P(h * 0.5, rj, a1), P(h * 0.95, rj, a1), JA, T.carrosserie, [0, -cy, -sz]);
-    at.quad(P(h * 0.5, rj, a0), P(h * 0.5, rv, a0), P(h * 0.5, rv, a1), P(h * 0.5, rj, a1), i % 2 ? nuance(JA, 0.8) : JA, T.carrosserie, X);
+    at.quad(P(h * 0.5, rj, a0), P(h * 0.5, rv, a0), P(h * 0.5, rv, a1), P(h * 0.5, rj, a1), i % 2 ? assombrir(JA, 0.8) : JA, T.carrosserie, X);
     at.tri(P(h * 0.5, rv, a0), P(h * 0.5, rv, a1), P(h * 0.5, 0, 0), JA, T.carrosserie, X);
     at.tri(P(-h * 0.95, rj, a0), P(-h * 0.95, rj, a1), P(-h * 0.95, 0, 0), FL, 0, [-cote, 0, 0]);
   }
@@ -492,14 +491,14 @@ export function van() {
     // grappe sur le panneau de chargement
     grappe(at, (du, dv) => F(-1.56 + du, 1.33 + dv), ext, 0.046, BORDEAUX, PEINT);
     // joints de portes (traits sombres) : porte avant, et porte coulissante à droite (à gauche, la vraie porte fait les siens)
-    const J = nuance(CREME_V, 0.45), trait = (a, b) => {
+    const J = assombrir(CREME_V, 0.45), trait = (a, b) => {
       const dz = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dz, dy), oz = -dy / l * 0.006, oy = dz / l * 0.006;
       at.quad(F(a[0] + oz, a[1] + oy, 0.007), F(b[0] + oz, b[1] + oy, 0.007), F(b[0] - oz, b[1] - oy, 0.007), F(a[0] - oz, a[1] - oy, 0.007), J, PEINT, ext);
     };
     if (s < 0) {
       trait([1.16, 1.1], [0.95, 0.78]); trait([0.95, 0.78], [0.87, 0.37]); trait([-0.28, 0.37], [-0.28, 1.76]);
       trait([-1.18, 1.42], [-1.95, 1.42]);
-    } else at.quad(F(-1.06, 0.93), F(-0.94, 0.93), F(-0.94, 1.03), F(-1.06, 1.03), nuance(CREME_V, 0.9), PEINT, ext); // trappe à carburant
+    } else at.quad(F(-1.06, 0.93), F(-0.94, 0.93), F(-0.94, 1.03), F(-1.06, 1.03), assombrir(CREME_V, 0.9), PEINT, ext); // trappe à carburant
     // poignées
     (s > 0 ? extraP : extra).push(B(0.03, 0.035, 0.15, PLAST_V, s * 0.915, 1.0, -0.12));
     if (s < 0) extraC.push(B(0.03, 0.035, 0.15, PLAST_V, -0.915, 1.0, -0.56));
@@ -514,7 +513,7 @@ export function van() {
   /* -- toit : section à pans coupés, prolongée vers l'arrière ; l'avant suit la pente du pare-brise */
   dalle(at, [[0.835, 1.765], [0.75, 1.86], [-0.75, 1.86], [-0.835, 1.765], [-0.8, 1.745], [0.8, 1.745]], [],
     (u, v, f) => [u, v, f ? -2.06 : 0.62 - (v - 1.745) * 0.94], [0, 0, 1], CREME_V, PEINT);
-  for (const z of [-0.25, -0.85, -1.45]) at.quad([0.72, 1.864, z - 0.03], [-0.72, 1.864, z - 0.03], [-0.72, 1.864, z + 0.03], [0.72, 1.864, z + 0.03], nuance(CREME_V, 0.93), PEINT, [0, 1, 0]);
+  for (const z of [-0.25, -0.85, -1.45]) at.quad([0.72, 1.864, z - 0.03], [-0.72, 1.864, z - 0.03], [-0.72, 1.864, z + 0.03], [0.72, 1.864, z + 0.03], assombrir(CREME_V, 0.93), PEINT, [0, 1, 0]);
 
   /* -- avant : capot, face avant, coins, pare-chocs, phares, calandre, plaque */
   dalle(at, [[0.9, 1.3], [0.9, 1.96], [0.8, 2.04], [-0.8, 2.04], [-0.9, 1.96], [-0.9, 1.3]], [], (u, v, f) => [u, capotY(v) - f * E, v], [0, 1, 0], CREME_V, PEINT);
@@ -580,7 +579,7 @@ export function van() {
   }
   at.quad(RR(-0.84, 0.8), RR(0.84, 0.8), RR(0.84, 0.86), RR(-0.84, 0.86), BORDEAUX, PEINT, [0, 0, -1]);
   at.quad(RR(-0.84, 0.765), RR(0.84, 0.765), RR(0.84, 0.778), RR(-0.84, 0.778), BORDEAUX, PEINT, [0, 0, -1]);
-  const JR = nuance(CREME_V, 0.45);
+  const JR = assombrir(CREME_V, 0.45);
   for (const x of [0, 0.625, -0.625]) at.quad(RR(x - 0.006, 0.47, 0.007), RR(x + 0.006, 0.47, 0.007), RR(x + 0.006, 1.74, 0.007), RR(x - 0.006, 1.74, 0.007), JR, PEINT, [0, 0, -1]);
   at.quad(RR(-0.16, 1.71), RR(0.16, 1.71), RR(0.16, 1.742), RR(-0.16, 1.742), '#9a1820', T.carrosserie, [0, 0, -1]);
   extra.push(B(0.14, 0.035, 0.03, PLAST_V, -0.13, 1.0, -2.055));
@@ -779,7 +778,7 @@ function optiques(at, cr, M, e, f) {
     plaque(at, 0.46, wR - 0.05, sR - 0.15, sR - 0.03, zr - 0.002, -1, '#9a1820', T.carrosserie, true);
     plaque(at, 0.5, 0.6, sR - 0.12, sR - 0.07, zr - 0.004, -1, '#e9e6e0', T.carrosserie, true);
     decor(at, basse, 2, zR + 0.004, basse.zs[1] - 0.012, 0.04, 0.32, e, '#9a1820', T.carrosserie);
-    plaque(at, -0.44, 0.44, sR - 0.19, sR - 0.178, zr, -1, nuance(at.couleur, 0.45), T.carrosserie);
+    plaque(at, -0.44, 0.44, sR - 0.19, sR - 0.178, zr, -1, assombrir(at.couleur, 0.45), T.carrosserie);
     plaque(at, -0.25, 0.25, bR + 0.17, bR + 0.285, zr, -1, '#2c2c2e', 0);
     plaque(at, -0.24, 0.24, bR + 0.177, bR + 0.278, zr - 0.003, -1, '#ecebe3', 0);
     plaque(at, -(wR - 0.05), wR - 0.05, bR + 0.01, bR + 0.1, zr, -1, PLAST, 0);
@@ -822,7 +821,7 @@ export function voiture(couleur, modele, roule = false) {
     optiques(at, cr, M, 0.006);
     const P = [couleur, T.carrosserie], { basse, W, ys } = cr, extra = [];
     // joints de portes, poignées
-    const J = nuance(couleur, 0.5);
+    const J = assombrir(couleur, 0.5);
     for (const z of M.portes) { decor(at, basse, 2, z - 0.006, z + 0.006, 0, 1, 0.004, J, T.carrosserie); decor(at, basse, 1, z - 0.006, z + 0.006, 0, 1, 0.004, J, T.carrosserie); }
     for (const z of M.poignees) decor(at, basse, 2, z - 0.07, z + 0.07, 0.1, 0.17, 0.007, CHROME, T.carrosserie);
     const iv = M.gh.findIndex(g => g[2] === 'vitre');

@@ -105,7 +105,6 @@ export const DIALOGUES = {
       { qui: 'Vous', txt: 'Merci, je le saisis dans Vitisoft en rentrant.' },
     ],
   },
-  chequePied: [{ qui: '', txt: 'Le chèque se récupère au comptoir de l\'épicerie.' }],
   degustation: [
     { qui: 'Auberge du Moulin', txt: 'Il a du fruit, et pas trop de bois. Il irait bien avec ma carte d\'hiver.' },
     { qui: 'Auberge du Moulin', txt: 'Rappelez-moi quand je refais ma carte, d\'ici quelques semaines.' },

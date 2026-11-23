@@ -1,6 +1,6 @@
 // Les véhicules du domaine (tracteur, van) et les voitures de la départementale.
 import * as THREE from 'three';
-import { angle, versAngle } from './outils.js';
+import { angle, versAngle, borne, amortir as lisser } from './outils.js';
 
 /* ---------------------------------------------------------------- nature du sol
    D'après les surfaces dessinées dans monde.js (routes, place, cour, parcelles) : à reprendre
@@ -39,8 +39,6 @@ function bosse(x, z) {
   const b = h2(i, j + 1) + (h2(i + 1, j + 1) - h2(i, j + 1)) * u;
   return a + (b - a) * v - 0.5;
 }
-const lisser = (dt, k) => 1 - Math.exp(-dt * k);
-const borne = (x, a, b) => x < a ? a : x > b ? b : x;
 // ressort amorti : nouvelle vitesse de x vers la cible c (pulsation w, amortissement z)
 const ressort = (dt, x, v, c, w, z) => v + (w * w * (c - x) - 2 * z * w * v) * dt;
 
@@ -281,8 +279,8 @@ export class Voiture {
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i], n = cercles(o);
       for (let k = 0; k < n; k++) {
-        const [cx, cz, r, l] = CER[k], dx = (cx - this.x) * this.sens - LONG / 2 - l;
-        if (dx > -5 && dx < libre && Math.abs(cz - z) < 1.11 + r) { libre = dx; obst = o; }
+        const c = CER[k], dx = (c[0] - this.x) * this.sens - LONG / 2 - c[3];
+        if (dx > -5 && dx < libre && Math.abs(c[1] - z) < 1.11 + c[2]) { libre = dx; obst = o; }
       }
     }
     for (let i = 0; i < voitures.length; i++) {
@@ -299,8 +297,8 @@ export class Voiture {
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i], n = cercles(o);
       for (let k = 0; k < n; k++) {
-        const [cx, cz, r] = CER[k], dx = (cx - this.x) * this.sens;
-        if (dx > -6 && dx < 40 && Math.abs(cz - this.zAutre) < 1.11 + r) return false;
+        const c = CER[k], dx = (c[0] - this.x) * this.sens;
+        if (dx > -6 && dx < 40 && Math.abs(c[1] - this.zAutre) < 1.11 + c[2]) return false;
       }
     }
     for (let i = 0; i < voitures.length; i++) {

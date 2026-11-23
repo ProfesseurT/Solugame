@@ -4,6 +4,7 @@
 // Léger pour un téléphone : peu de nœuds permanents (le moteur et la rumeur ne sont branchés que
 // quand ils servent), notes groupées dans un seul filtre, et tout le son est mis en pause quand il est
 // coupé ou que la page est cachée. Rien n'est programmé quand le son est coupé.
+import { borne } from './outils.js';
 let ctx = null, maitre, musique, sfx, amb, bruitBuf, grainsBuf;
 let actif = true, radio = false, prochaine = 0, pas = 0, segment = 0;
 // la radio joue quand on est dans un véhicule, sauf si le joueur l'a coupée (choix gardé d'une partie à l'autre)
@@ -18,7 +19,6 @@ function majRadio() {
 }
 
 const f = n => 440 * Math.pow(2, (n - 69) / 12);
-const borne = (x, a, b) => x < a ? a : x > b ? b : x;
 const hasard = (a, b) => a + Math.random() * (b - a);
 
 /* ---------------------------------------------------------------- Radio Sarment */

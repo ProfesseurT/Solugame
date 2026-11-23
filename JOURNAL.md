@@ -333,3 +333,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Pose de repos (`anim.js`) : bras un peu écartés du corps, coudes légèrement pliés.
 
 **Vérifié** : banc des personnages (galerie, visages de face et de trois quarts, marche, assis, téléphone) et captures en jeu (héros qui marche, place du bourg, terrasse) ; `npm run verifie`, conduite assistée en tracteur et en van ; coût : 0,04 ms par image pour poser 14 personnages, image 3D prête à 331 ms.
+
+## 23/11/2026 · Passe d'assainissement (1) : outils communs, code mort, banc des personnages
+
+**Demande de Teddy** : une nouvelle passe pour repérer les autres problèmes et assainir le code au maximum ; l'optimisation est la clé.
+
+**État des lieux** : ESLint ne trouve rien ; tous les bancs passent (accueil téléphone et ordinateur, photo, parcours, conduite) sauf `essai-perso-jeu`. Sur un processeur 4 fois plus lent, une image coûte environ 3 ms et le démarrage 1,4 s jusqu'à l'image 3D. Environ 30 Ko alloués par image (surtout des nombres mis en boîte par V8 dans les poses, la caméra, les voitures).
+
+**Fait** :
+- Outils communs (`outils.js`) : `borne` (copiée 7 fois), `lisse` et `entre` (4 copies, deux formes), `mix`, `amortir`, `assombrir`, `$`, `esc` ; chaque module importe ce qu'il lui faut. Le monde est identique (même empreinte de scène, 10 lancements sur 10).
+- Code mort : 5 règles CSS (`vtuiles`, `vtuile`, `fc-ligne`, `coche`, `vs-x`) et un dialogue (`chequePied`).
+- Chaque image : plus de fonction neuve pour chercher à qui servir un verre ni pour le boire, plus de tableau neuf pendant un demi-tour du pilote, plus de déstructuration de tableau dans le calcul des voitures.
+- `essai-perso-jeu` : il échouait (« aucun passant n'a sauté ») depuis la conduite repensée du 22/11 : le tracteur accélère plus doucement et n'atteignait jamais le passant visé en 1,8 s. Le banc le laisse maintenant arriver (5 s au plus) : les passants sautent bien de côté. Le jeu n'était pas en cause.

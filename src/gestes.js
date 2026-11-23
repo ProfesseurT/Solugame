@@ -5,12 +5,10 @@
 // Repère d'un véhicule : avant vers +z, +x à gauche, le côté du conducteur.
 import * as THREE from 'three';
 import { son } from './audio.js';
-import { versAngle, angle } from './outils.js';
+import { versAngle, angle, lisse, mix } from './outils.js';
 import { MAT } from './modeles.js';
 import { geoCarton, PAS_CARTON } from './engins.js';
 
-const lisse = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-const mix = (a, b, t) => a + (b - a) * t;
 const angleVers = (a, b) => angle(b - a); // le plus court chemin de l'angle a à l'angle b
 const OUVERTE = -1.15;  // angle de la portière du van grande ouverte (rad)
 const GLISSE = 0.78;    // course de la porte coulissante vers l'arrière (m)

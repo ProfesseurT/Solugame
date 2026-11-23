@@ -4,9 +4,8 @@
 // Tout texte vient de textes.js.
 import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, MESSAGE_MATIN as MESSAGE } from './textes.js';
 import { son } from './audio.js';
+import { $, esc } from './outils.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 const ICONES = {

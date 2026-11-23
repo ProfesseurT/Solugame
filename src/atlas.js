@@ -12,6 +12,7 @@
 //    8 px recopiés de l'autre bord, pour que le filtrage ne fasse pas de couture ; le shader répète le motif (fract) ;
 //  - entières (visages, yeux, main, poche) : les coordonnées de la pièce vont de 0 à 1 sur la zone.
 import * as THREE from 'three';
+import { entre } from './outils.js';
 
 export const LA = 1024, HA = 512;
 const NEUTRE = 204;                 // multiplicateur 1
@@ -86,7 +87,6 @@ function bruit1(P, L, g) {
   }
   return out;
 }
-const lisse = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /* ---------------------------------------------------------------- motifs pavés
    Chaque motif remplit t (T x T pixels, périodique) : multiplicateur rouge, vert, bleu autour de 1, et la part teintée
@@ -418,10 +418,10 @@ function barbeCourte(px, z) {
   for (let y = z.h >> 1; y < z.h; y++) {
     const my = (1 - (y + 0.5) / z.h * 2) * FY, ly = (my - YM) / 0.0095;
     for (let x = 0; x < z.w; x++) {
-      let m = lisse(bord[x] + 0.005, bord[x] - 0.006, my);
+      let m = entre(bord[x] + 0.005, bord[x] - 0.006, my);
       if (m <= 0) continue;
       const lx = ((x + 0.5) / z.w * 2 - 1) * FX / 0.024;
-      m *= lisse(0.72, 1.32, lx * lx + ly * ly);
+      m *= entre(0.72, 1.32, lx * lx + ly * ly);
       if (m <= 0) continue;
       const k = m * 0.8, v = k * (0.62 + 0.36 * hacher(y * 997 + x, 41)), d = ((z.y + y) * LA + z.x + x) * 4;
       px[d] *= 1 - k + v * 0.95; px[d + 1] *= 1 - k + v * 0.97; px[d + 2] *= 1 - k + v * 1.05;
@@ -444,7 +444,7 @@ function peindreOeil(px, z, sens) {
   for (let x = 0; x < z.w; x++) {
     const a = ((x + 0.5) / z.w * 2 - 1) * OEIL.a;
     haut[x] = bordOeil(OEIL.haut, a) * H; bas[x] = bordOeil(OEIL.bas, a) * H;
-    coinA[x] = 1 - 0.32 * lisse(0.55, 1.0, Math.abs(a)); roseA[x] = lisse(-0.7, -0.98, a);
+    coinA[x] = 1 - 0.32 * entre(0.55, 1.0, Math.abs(a)); roseA[x] = entre(-0.7, -0.98, a);
   }
   for (let y = 0; y < z.h; y++) {
     const my = (0.5 - (y + 0.5) / z.h) * 2 * OEIL.b * H;
@@ -456,18 +456,18 @@ function peindreOeil(px, z, sens) {
       const coin = coinA[x] * ombre, rose = roseA[x], lis = surBas < 0.0004;
       let r = 255 * 0.93 * coin * (lis ? 0.75 : 1), g = 255 * (0.9 - 0.1 * rose) * coin * (lis ? 0.68 : 1), bl = 255 * (0.86 - 0.1 * rose) * coin * (lis ? 0.68 : 1);
       let t = 0;
-      const d = Math.hypot(mx, my - 0.0002), bi = lisse(ri + 0.00025, ri - 0.00025, d);
+      const d = Math.hypot(mx, my - 0.0002), bi = entre(ri + 0.00025, ri - 0.00025, d);
       if (bi > 0) {
         // iris : fibres en rayons, cercle sombre au bord, couronne claire autour de la pupille ; pupille noire
         const k = rayons[Math.floor((Math.atan2(my, mx) / (2 * Math.PI) + 1) * 64) & 63];
-        const m = (0.86 + 0.3 * (k - 0.5) + 0.2 * lisse(rp * 2.2, rp * 1.2, d) - 0.45 * lisse(ri * 0.72, ri, d)) * ombre;
-        const p = lisse(rp + 0.0002, rp - 0.0002, d), iris = NEUTRE * m, pup = 255 * 0.03;
+        const m = (0.86 + 0.3 * (k - 0.5) + 0.2 * entre(rp * 2.2, rp * 1.2, d) - 0.45 * entre(ri * 0.72, ri, d)) * ombre;
+        const p = entre(rp + 0.0002, rp - 0.0002, d), iris = NEUTRE * m, pup = 255 * 0.03;
         t = bi * (1 - p);
         r = t * iris + bi * p * pup + (1 - bi) * r; g = t * iris + bi * p * pup + (1 - bi) * g; bl = t * iris + bi * p * pup + (1 - bi) * bl;
       }
       // reflet de la lumière, en haut, du même côté sur les deux yeux
       const dr = Math.hypot(mx + sens * 0.0021, my - 0.0021);
-      if (dr < 0.001) { const k = lisse(0.001, 0.0006, dr); r = r * (1 - k) + 255 * k; g = g * (1 - k) + 255 * k; bl = bl * (1 - k) + 250 * k; t *= 1 - k; }
+      if (dr < 0.001) { const k = entre(0.001, 0.0006, dr); r = r * (1 - k) + 255 * k; g = g * (1 - k) + 255 * k; bl = bl * (1 - k) + 250 * k; t *= 1 - k; }
       px[d0] = r; px[d0 + 1] = g; px[d0 + 2] = bl; px[d0 + 3] = 255 * t;
     }
   }
@@ -483,12 +483,12 @@ function peindreMain(px, z) {
   for (let x = 0; x < N; x++) {
     const a = Math.PI / 8 + 2 * Math.PI * (x + 0.5) / N, w = Math.cos(a);
     let e = 9; for (const c of DOIGTS) e = Math.min(e, Math.abs(w - c));
-    dos[x] = Math.sin(a); zn[x] = w; paume[x] = lisse(0.1, 0.6, -dos[x]);
+    dos[x] = Math.sin(a); zn[x] = w; paume[x] = entre(0.1, 0.6, -dos[x]);
     rain[x] = Math.max(cloche((w - 0.48) / 0.08), cloche(w / 0.08), cloche((w + 0.48) / 0.08));
-    cJ[x] = 0.12 * cloche(e / 0.18); cJ2[x] = 0.08 * cloche(e / 0.15); cOng[x] = lisse(0.15, 0.11, e) * lisse(0.4, 0.6, dos[x]); cBord[x] = lisse(0.11, 0.07, e);
+    cJ[x] = 0.12 * cloche(e / 0.18); cJ2[x] = 0.08 * cloche(e / 0.15); cOng[x] = entre(0.15, 0.11, e) * entre(0.4, 0.6, dos[x]); cBord[x] = entre(0.11, 0.07, e);
   }
   for (let y = 0; y < N; y++) {
-    const v = (y + 0.5) / N, doigts = 0.5 * lisse(0.5, 0.58, v), ong = lisse(0.86, 0.89, v), ongB = lisse(0.89, 0.92, v);
+    const v = (y + 0.5) / N, doigts = 0.5 * entre(0.5, 0.58, v), ong = entre(0.86, 0.89, v), ongB = entre(0.89, 0.92, v);
     const j1 = cloche((v - 0.5) / 0.03), j2 = cloche((v - 0.72) / 0.022), plis = (1 - 0.14 * cloche((v - 0.53) / 0.018)) * (1 - 0.1 * cloche((v - 0.7) / 0.015)) * (1 - 0.1 * cloche((v - 0.84) / 0.015));
     for (let x = 0, i = y * N, d = ((z.y + y) * LA + z.x) * 4; x < N; x++, i++, d += 4) {
       const m = 1 + 0.04 * (g[i] - 0.5), p = paume[x];
@@ -501,7 +501,7 @@ function peindreMain(px, z) {
       } else if (dos[x] < -0.3) {
         // plis de la paume et des phalanges
         const w = zn[x];
-        k *= plis * (1 - 0.12 * cloche((v - 0.36 - 0.06 * w) / 0.018) * lisse(0.9, 0.5, w)) * (1 - 0.12 * cloche((v - 0.44 + 0.04 * w) / 0.018) * lisse(-0.9, -0.3, w));
+        k *= plis * (1 - 0.12 * cloche((v - 0.36 - 0.06 * w) / 0.018) * entre(0.9, 0.5, w)) * (1 - 0.12 * cloche((v - 0.44 + 0.04 * w) / 0.018) * entre(-0.9, -0.3, w));
       }
       px[d] = NEUTRE * r * k; px[d + 1] = NEUTRE * gg * k; px[d + 2] = NEUTRE * b * k; px[d + 3] = 255;
     }
@@ -511,7 +511,7 @@ function peindreMain(px, z) {
 function peindrePouce(px, z) {
   peindre(px, z, (u, v, o) => {
     const a = Math.PI / 6 + 2 * Math.PI * u, f = Math.cos(a);
-    const ong = lisse(0.55, 0.75, f) * lisse(0.68, 0.74, v);
+    const ong = entre(0.55, 0.75, f) * entre(0.68, 0.74, v);
     let k = 1 - 0.1 * Math.exp(-(((v - 0.5) / 0.03) ** 2));
     o[0] = k * (1 + 0.1 * ong); o[1] = k * (1 + 0.02 * ong); o[2] = k * (1 + 0.02 * ong);
   });
@@ -520,7 +520,7 @@ function peindrePouce(px, z) {
 function peindrePoche(px, z) {
   peindre(px, z, (u, v, o) => {
     const x = u * 64, y = v * 64, bord = Math.min(x, 64 - x, 64 - y);
-    let m = 0.98 - 0.08 * lisse(0.3, 0, v);
+    let m = 0.98 - 0.08 * entre(0.3, 0, v);
     if ((Math.abs(bord - 4.5) < 0.8 || Math.abs(y - 15) < 0.8) && ((Math.floor(x + y) >> 1) & 1)) m = 0.7;
     if (y < 15) m *= 0.94;
     if (bord < 1.5 || y < 1.5) m *= 0.8;

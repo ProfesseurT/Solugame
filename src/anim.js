@@ -5,14 +5,11 @@
 // signe de la main, pose assise, mains sur le volant, saut de côté, recul contre un mur.
 import * as THREE from 'three';
 import { OS, DIM, accessoires } from './perso.js';
-import { angle } from './outils.js';
+import { angle, borne, entre, mix, amortir } from './outils.js';
 
 const PI = Math.PI, TAU = 2 * Math.PI;
-const borne = (x, a, b) => (x < a ? a : x > b ? b : x);
-const lisse = (a, b, x) => { const t = borne((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const mix = (a, b, t) => a + (b - a) * t;
 // lissage exponentiel indépendant de la cadence ; dt = 0 : on se place d'un coup
-const kl = (dt, r) => (dt === 0 ? 1 : 1 - Math.exp(-dt * r));
+const kl = (dt, r) => (dt === 0 ? 1 : amortir(dt, r));
 
 // temporaires partagés
 const UN = new THREE.Vector3(1, 1, 1);
@@ -214,9 +211,9 @@ export class Anim {
     const o = this.o, dm = this.m.dim;
     // cadence (cycles de deux pas par seconde) : marche, petite course, course
     const cad = va < 1.4 ? 0.62 + 0.24 * va : va < 3 ? 0.956 + (va - 1.4) * 0.27 : 1.388 + (va - 3) * 0.13;
-    const tourne = borne(Math.abs(p.om) / 2.2, 0, 1) * (1 - lisse(0.4, 1.2, va));
+    const tourne = borne(Math.abs(p.om) / 2.2, 0, 1) * (1 - entre(0.4, 1.2, va));
     this.wPas += ((tourne > 0.2 ? 1 : 0) - this.wPas) * kl(dt, 8);
-    const wg = lisse(0.03, 0.5, va), w = lisse(2.4, 4.6, va);
+    const wg = entre(0.03, 0.5, va), w = entre(2.4, 4.6, va);
     this.ph += dt * Math.max(va > 0.03 ? cad : 0, this.wPas * 1.7) * sens;
     this.ph -= Math.floor(this.ph);
     const ph = this.ph, beta = 0.6 - 0.24 * w, S = va > 0.03 ? va / cad : 0, pas = Math.min(beta * S, 1.05);
@@ -248,13 +245,13 @@ export class Anim {
       let q = ph + JAMBES[j][2]; q -= Math.floor(q);
       let z, y, tg;
       if (q < beta) {
-        const u = q / beta, talon = lisse(0.5, 1, u) * (1 - 0.6 * w);
-        z = pas * (0.5 - u); y = 0.055 * talon; tg = 0.5 * talon - 0.25 * (1 - lisse(0, 0.2, u)) * (1 - w);
+        const u = q / beta, talon = entre(0.5, 1, u) * (1 - 0.6 * w);
+        z = pas * (0.5 - u); y = 0.055 * talon; tg = 0.5 * talon - 0.25 * (1 - entre(0, 0.2, u)) * (1 - w);
       } else {
         const u = (q - beta) / (1 - beta), sn = Math.sin(TAU * u) / TAU;
         z = mix(-pas / 2 + pas * u - (pas + (1 - beta) * S) * sn, -pas / 2 + pas * (u - sn), w);
         y = lever * Math.sin(PI * Math.pow(u, 0.85 - 0.25 * w));
-        tg = mix(0.55 + 0.35 * w, -0.25, lisse(0.05, 0.8, u));
+        tg = mix(0.55 + 0.35 * w, -0.25, entre(0.05, 0.8, u));
       }
       const libre = (1 - wg) * Math.max(0, -sg * this.poids); // le pied qui ne porte pas avance un peu
       const avance = sj * (sg > 0 ? 0.2 : -0.12), monte = sj * (sg > 0 ? 0.26 : 0.4);
@@ -360,7 +357,7 @@ export class Anim {
     for (let i = 0; i < n; i++) MEMO[i].copy(o[i].quaternion);
     vMemo.copy(o[OS.bassin].position);
     if (conduite) this.poseConduite(dt, p, t, br); else this.poseAssise(br);
-    const wb = lisse(0.8, 1, w);
+    const wb = entre(0.8, 1, w);
     for (let i = 0; i < n; i++) { q1.copy(o[i].quaternion); o[i].quaternion.copy(MEMO[i]).slerp(q1, BRAS.includes(i) ? wb : w); }
     v1.copy(o[OS.bassin].position); o[OS.bassin].position.copy(vMemo).lerp(v1, w);
     const baisse = Math.sin(PI * w) * (p.baisse ?? 0.3);
@@ -372,12 +369,12 @@ export class Anim {
   poseService(S, yB, w) {
     const A = accessoires(this.m);
     if (!S) { A.bouteille.visible = false; A.verre.visible = false; return; }
-    const u = borne(S.t / S.duree, 0, 1), wg = lisse(0, 0.1, u) * (1 - lisse(0.84, 1, u)) * w;
-    const tend = lisse(0.6, 0.78, u), verse = lisse(0.13, 0.22, u) * (1 - lisse(0.5, 0.58, u));
+    const u = borne(S.t / S.duree, 0, 1), wg = entre(0, 0.1, u) * (1 - entre(0.84, 1, u)) * w;
+    const tend = entre(0.6, 0.78, u), verse = entre(0.13, 0.22, u) * (1 - entre(0.5, 0.58, u));
     // le verre, main gauche : devant la poitrine, puis tendu
     vG.set(0.07 - 0.05 * tend, yB + 0.27 + 0.09 * tend, 0.33 + 0.15 * tend);
     A.verre.visible = u < 0.8 && wg > 0.05; A.verre.position.copy(vG); A.verre.rotation.set(0, 0, 0);
-    A.vin.scale.y = Math.max(0.02, lisse(0.2, 0.52, u));
+    A.vin.scale.y = Math.max(0.02, entre(0.2, 0.52, u));
     this.brasIK(0, vG.x + 0.035, vG.y + 0.01, vG.z - 0.06, 0.7, -0.7, -0.2, wg);
     // la bouteille, main droite : au repos contre soi, penchée au-dessus du verre pendant qu'on verse, puis rangée
     const rz = -0.35 - 1.55 * verse, mx = -Math.sin(rz) * 0.3, my = Math.cos(rz) * 0.3; // goulot dans le repère de la bouteille tournée
@@ -387,21 +384,21 @@ export class Anim {
     A.bouteille.visible = wg > 0.05 && u < 0.66; A.bouteille.position.copy(vB); A.bouteille.rotation.set(0, 0, rz);
     // poignet : sur le corps de la bouteille (un tiers de sa hauteur), décalé vers l'extérieur
     v1.set(vB.x - Math.sin(rz) * 0.1 - 0.04, vB.y + Math.cos(rz) * 0.1 - 0.03, vB.z - 0.05);
-    this.brasIK(3, v1.x, v1.y, v1.z, -0.7, -0.7, -0.2, wg * (1 - lisse(0.6, 0.68, u)));
+    this.brasIK(3, v1.x, v1.y, v1.z, -0.7, -0.7, -0.2, wg * (1 - entre(0.6, 0.68, u)));
   }
 
   // Boire : p.tVerre (s depuis qu'on a reçu le verre) ; on le reçoit, on trinque (« Santé ! »), on boit, on le baisse
   poseBoire(p, yB, w) {
     const A = accessoires(this.m), t = p.tVerre || 0, o = this.o;
     if (!(p.verre > 0)) { A.verre.visible = false; return; }
-    const sante = lisse(0.4, 1.0, t) * (1 - lisse(1.5, 1.9, t)), boit = lisse(1.6, 2.1, t) * (1 - lisse(3.3, 3.8, t));
-    const baisse = lisse(3.4, 4.0, t);
+    const sante = entre(0.4, 1.0, t) * (1 - entre(1.5, 1.9, t)), boit = entre(1.6, 2.1, t) * (1 - entre(3.3, 3.8, t));
+    const baisse = entre(3.4, 4.0, t);
     vG.set(-0.05, yB + 0.38, 0.42);                                   // reçu, bras tendu
     vG.lerp(v1.set(-0.1, yB + 0.62, 0.34), sante);                    // levé pour trinquer
     vG.lerp(v1.set(-0.03, yB + 0.64, 0.17), boit);                    // au bord des lèvres
     vG.lerp(v1.set(-0.09, yB + 0.33, 0.24), baisse * (1 - boit));     // redescendu, vide
     A.verre.visible = w > 0.05; A.verre.position.copy(vG); A.verre.rotation.set(-1.15 * boit, 0, 0);
-    A.vin.scale.y = Math.max(0.02, 1 - lisse(1.9, 3.3, t));
+    A.vin.scale.y = Math.max(0.02, 1 - entre(1.9, 3.3, t));
     this.brasIK(3, vG.x - 0.035, vG.y + 0.01, vG.z - 0.06, -0.7, -0.7, -0.2, w);
     o[OS.tete].rotation.x -= 0.22 * boit * w;                         // la tête part un peu en arrière en buvant
   }

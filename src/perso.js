@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { B, C, S, MAT, teinter, fusion, icosa, compacter, deplacer } from './modeles.js';
 import { Z, ZONE, GLSL_ZONES, FX, FY, OEIL, LA, HA, texturePersos } from './atlas.js';
-import { hasard } from './outils.js';
+import { hasard, lisse, assombrir } from './outils.js';
 
 /* ---------------------------------------------------------------- héros */
 
@@ -72,7 +72,7 @@ const OMBRE_PERSO = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthP
 
 /* ---------------------------------------------------------------- pièces : forme, zone, coordonnées de texture */
 
-const fonce = (c, k = 0.78) => '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
+const fonce = (c, k = 0.78) => assombrir(c, k);
 
 // Finit une pièce : couleur, zone de l'atlas, coordonnées de texture. Normales : celles de la pièce (boîtes, cylindres et
 // boules de modeles.js, volumes par anneaux, crâne et cheveux), sinon lissées ici (petites pièces faites à la main).
@@ -403,33 +403,32 @@ export function accessoires(m) {
    (jusqu'à la moitié, à la jointure même). Coudes, genoux, épaules, hanches, taille et cou se plient en courbe au lieu
    de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend [os voisin, poids]
    ou null. */
-const borneP = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 function liens(i, x, y) {
   switch (i) {
     case 0: // bassin : le ventre au-dessus ; en dessous, la cuisse de son côté (une jupe suit un peu les jambes)
-      if (y > 0.04) return [1, 0.45 * borneP((y - 0.04) / 0.07)];
-      if (y < -0.05 && Math.abs(x) > 0.015) return [x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * borneP((-0.05 - y) / 0.08)];
+      if (y > 0.04) return [1, 0.45 * lisse((y - 0.04) / 0.07)];
+      if (y < -0.05 && Math.abs(x) > 0.015) return [x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * lisse((-0.05 - y) / 0.08)];
       return null;
     case 1: // ventre : le bassin en bas, la poitrine en haut
-      if (y < 0.02) return [0, 0.5 * borneP((0.02 - y) / 0.07)];
-      if (y > 0.15) return [2, 0.45 * borneP((y - 0.15) / 0.07)];
+      if (y < 0.02) return [0, 0.5 * lisse((0.02 - y) / 0.07)];
+      if (y > 0.15) return [2, 0.45 * lisse((y - 0.15) / 0.07)];
       return null;
-    case 2: return y < 0.03 ? [1, 0.5 * borneP((0.03 - y) / 0.07)] : null; // poitrine : le ventre en bas
-    case 3: return y < 0.05 ? [2, 0.6 * borneP((0.05 - y) / 0.08)] : null; // le bas du cou suit la poitrine
+    case 2: return y < 0.03 ? [1, 0.5 * lisse((0.03 - y) / 0.07)] : null; // poitrine : le ventre en bas
+    case 3: return y < 0.05 ? [2, 0.6 * lisse((0.05 - y) / 0.08)] : null; // le bas du cou suit la poitrine
     case 4: case 7: // haut du bras : l'épaule suit la poitrine, le bas suit l'avant-bras
-      if (y > -0.07) return [2, 0.5 * borneP((y + 0.07) / 0.08)];
-      if (y < -0.23) return [i + 1, 0.5 * borneP((-0.23 - y) / 0.06)];
+      if (y > -0.07) return [2, 0.5 * lisse((y + 0.07) / 0.08)];
+      if (y < -0.23) return [i + 1, 0.5 * lisse((-0.23 - y) / 0.06)];
       return null;
     case 5: case 8: // avant-bras : le coude suit le bras, le poignet un peu la main
-      if (y > -0.06) return [i - 1, 0.5 * borneP((y + 0.06) / 0.06)];
-      if (y < -0.215) return [i + 1, 0.3 * borneP((-0.215 - y) / 0.035)];
+      if (y > -0.06) return [i - 1, 0.5 * lisse((y + 0.06) / 0.06)];
+      if (y < -0.215) return [i + 1, 0.3 * lisse((-0.215 - y) / 0.035)];
       return null;
-    case 6: case 9: return y > -0.025 ? [i - 1, 0.3 * borneP((y + 0.025) / 0.025)] : null;
+    case 6: case 9: return y > -0.025 ? [i - 1, 0.3 * lisse((y + 0.025) / 0.025)] : null;
     case 10: case 13: // cuisse : la hanche suit le bassin, le bas suit le tibia
-      if (y > -0.1) return [0, 0.5 * borneP((y + 0.1) / 0.1)];
-      if (y < -0.37) return [i + 1, 0.5 * borneP((-0.37 - y) / 0.07)];
+      if (y > -0.1) return [0, 0.5 * lisse((y + 0.1) / 0.1)];
+      if (y < -0.37) return [i + 1, 0.5 * lisse((-0.37 - y) / 0.07)];
       return null;
-    case 11: case 14: return y > -0.07 ? [i - 1, 0.5 * borneP((y + 0.07) / 0.07)] : null; // le genou suit la cuisse
+    case 11: case 14: return y > -0.07 ? [i - 1, 0.5 * lisse((y + 0.07) / 0.07)] : null; // le genou suit la cuisse
   }
   return null;
 }

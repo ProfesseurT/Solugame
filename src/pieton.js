@@ -2,10 +2,9 @@
 // recul contre un mur, saut de côté) ; la pose est calculée par anim.js.
 import * as THREE from 'three';
 import { Anim } from './anim.js';
-import { angle, versAngle } from './outils.js';
+import { angle, versAngle, borne } from './outils.js';
 
 const SAUT = 0.55; // durée d'un saut de côté (s)
-const borne = (x, a, b) => (x < a ? a : x > b ? b : x);
 
 /* ---------------------------------------------------------------- personnage à pied */
 export class Pieton {

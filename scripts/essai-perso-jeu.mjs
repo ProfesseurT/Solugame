@@ -51,7 +51,10 @@ const saut = await ev(async () => {
     if (Math.abs(gz + 46) > 3.5) CL.teleporter(gx < 95 ? gx - 14 : gx + 14, gz, gx < 95 ? Math.PI / 2 : -Math.PI / 2);
     else CL.teleporter(gx, gz + 14, Math.PI);
     CL.ctrl.ky = -1;
-    for (let i = 0; i < 110; i++) { CL.step(1); for (const c of gens) { if (c.position.y > 0.05) vus++; max = Math.max(max, c.position.y); } }
+    // le tracteur accélère en douceur (conduite repensée le 22/11) : on le laisse arriver, jusqu'à 5 s, et on s'arrête
+    // une fois le passant dépassé
+    const x0 = CL.tr.pos.x, z0 = CL.tr.pos.z;
+    for (let i = 0; i < 300 && Math.hypot(CL.tr.pos.x - x0, CL.tr.pos.z - z0) < 17; i++) { CL.step(1); for (const c of gens) { if (c.position.y > 0.05) vus++; max = Math.max(max, c.position.y); } }
     CL.ctrl.ky = 0; CL.step(90);
   }
   return { max, vus };

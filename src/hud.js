@@ -2,8 +2,8 @@
 // sous-titres, bannières, étiquettes posées sur les objets du monde.
 import * as THREE from 'three';
 import { ECH } from './monde.js';
+import { $ } from './outils.js';
 
-const $ = id => document.getElementById(id);
 const v3 = new THREE.Vector3();
 const TIRETS = [9, 6], PLEIN = [];
 

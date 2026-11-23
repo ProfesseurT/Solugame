@@ -1,14 +1,12 @@
 // La caméra qui suit le personnage ou le tracteur.
 import * as THREE from 'three';
-import { angle } from './outils.js';
+import { angle, borne, amortir as lisser } from './outils.js';
 
 /* ---------------------------------------------------------------- caméra qui suit
    Suivi souple, avec un peu d'avance dans le sens de la marche ; plus loin, plus haut et plus large
    quand le tracteur prend de la vitesse. Les bâtiments rapprochent la caméra sans à-coup (elle rentre
    vite, ressort lentement). On peut la tourner à la main (deux doigts, souris, clavier, manette) :
    elle revient derrière toute seule après un moment. */
-const lisser = (dt, k) => 1 - Math.exp(-dt * k);
-const borne = (x, a, b) => x < a ? a : x > b ? b : x;
 
 export class Camera {
   constructor(cam) {

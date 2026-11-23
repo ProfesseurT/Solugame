@@ -6,9 +6,8 @@
 import { VITISOFT } from './textes.js';
 import { eur } from './telephone.js';
 import { son } from './audio.js';
+import { $, esc } from './outils.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const hl = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' hl';
 const VUES = ['accueil', 'reglements', 'commandes', 'drm']; // les écrans où l'on agit ; les autres sont des fiches
 

@@ -1,12 +1,13 @@
 // Conduite assistée au doigt : tant que le doigt est posé sans tourner, le véhicule suit l'itinéraire de la mission
 // (sur la file de droite), règle sa vitesse dans les virages, ralentit derrière une voiture et s'arrête à la destination.
 // Le joueur reprend la main dès qu'il glisse le doigt sur le côté (main.js).
+import { borne } from './outils.js';
 
 const VOIE = 1.6;          // décalage vers la droite de l'itinéraire sur la départementale (on roule à droite)
 const surRoute = (a, b) => Math.abs(a[1] - 10) < 2.5 && Math.abs(b[1] - 10) < 2.5; // segment le long de la départementale (z = 10)
 const CROISIERE = { tracteur: 8.5, van: 12.5 }; // vitesse de croisière (m/s)
-const borne = (x, a, b) => (x < a ? a : x > b ? b : x);
 const SONDE = { x: 0, z: 0 }; // point d'essai devant ou derrière le véhicule (demi-tour)
+const COINS = [0, 0.8, -0.8]; // milieu et coins du pare-chocs, sondés pendant un demi-tour
 
 // l'itinéraire décalé sur la file de droite de la départementale (ailleurs, chemins et rues étroites : au milieu)
 function decaler(route) {
@@ -86,7 +87,7 @@ export class Pilote {
       // on sonde trois points (milieu et coins)
       const libre = s => {
         const o = s > 0 ? tr.d.off[0] : tr.d.off[1], k = o + s * (tr.d.r + 1.0);
-        for (const c of [0, 0.8, -0.8]) {
+        for (const c of COINS) {
           const px = pos.x + sx * k + cz * c, pz = pos.z + cz * k - sx * c;
           SONDE.x = px; SONDE.z = pz;
           if (col && col.resoudre(SONDE, 0.6)) return false;
