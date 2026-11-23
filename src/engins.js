@@ -850,12 +850,35 @@ export function voiture(couleur, modele, roule = false) {
       const yToit = M.gh[2][1] + 0.01;
       for (const s of [1, -1]) extra.push(B(0.035, 0.03, 1.6, '#2c2d31', s * 0.5, yToit + 0.045, -0.98), B(0.05, 0.04, 0.06, '#2c2d31', s * 0.5, yToit + 0.02, -1.74), B(0.05, 0.04, 0.06, '#2c2d31', s * 0.5, yToit + 0.02, -0.22));
     }
+    // baguettes de flanc, essuie-glaces au pied du pare-brise, pot d'échappement, antenne
+    decor(at, basse, 2, M.zAr + M.ra + 0.06, M.zAv - M.ra - 0.06, 0.42, 0.5, 0.006, '#1e1f23', 0);
+    const zPB = M.gh[M.gh.length - 1][0], yPB = ys(zPB) + 0.07, zLun = M.gh[0][0], yToit = Math.max(...M.gh.map(g => g[1] || 0));
+    for (const x0 of [0.06, -0.5]) barre(at, [x0, yPB, zPB - 0.04], [x0 + 0.46, yPB + 0.012, zPB - 0.05], 0.009, '#151517', 0);
+    extra.push(C(0.032, 0.032, 0.16, 6, '#3a3b3f', 0.42, cr.yb(cr.zR) + 0.08, cr.zR - 0.04, 'z'));
+    barre(at, [0.3, yToit, zLun + 0.35], [0.3, yToit + 0.3, zLun + 0.2], 0.005, '#151517', 0);
+    // l'habitacle, qu'on voit par les vitres : plancher, garnitures, ciel de toit, planche de bord, volant (à gauche, +x),
+    // sièges et appuie-têtes, banquette
+    const wi = Math.min(W(zPB), W(zLun)) - 0.12, sol = 0.34, SIEGE = (v & 0x100) ? '#8a7d6a' : '#3a3c42', GARN = '#2f3034';
+    at.quad([wi, sol, zLun], [-wi, sol, zLun], [-wi, sol, zPB], [wi, sol, zPB], '#26272b', 0, [0, 1, 0]);
+    for (const s of [1, -1]) at.quad([s * wi, sol, zLun], [s * wi, sol, zPB], [s * wi, ys(zPB) - 0.02, zPB], [s * wi, ys(zLun) - 0.02, zLun], GARN, 0, [-s, 0, 0]);
+    at.quad([wi, yToit - 0.05, zLun], [-wi, yToit - 0.05, zLun], [-wi, yToit - 0.05, zPB], [wi, yToit - 0.05, zPB], '#cfc8bb', 0, [0, -1, 0]);
+    at.quad([wi, sol, zLun + 0.02], [-wi, sol, zLun + 0.02], [-wi, ys(zLun), zLun + 0.02], [wi, ys(zLun), zLun + 0.02], GARN, 0, [0, 0, 1]);
+    extra.push(B(2 * wi, 0.3, 0.42, '#232428', 0, 0.78, zPB - 0.21), C(0.17, 0.17, 0.035, 10, '#141517', 0.37, 0.88, zPB - 0.48, 'z'));
+    const zs = zPB - 0.98, zb = zPB - 1.86;
+    for (const x of [0.37, -0.37]) extra.push(B(0.5, 0.14, 0.5, SIEGE, x, 0.5, zs), B(0.5, 0.55, 0.12, SIEGE, x, 0.84, zs - 0.27), B(0.26, 0.17, 0.1, SIEGE, x, 1.22, zs - 0.3));
+    extra.push(B(2 * wi - 0.1, 0.14, 0.48, SIEGE, 0, 0.5, zb), B(2 * wi - 0.1, 0.5, 0.12, SIEGE, 0, 0.8, zb - 0.27));
+    for (const x of [0.42, -0.42]) extra.push(B(0.24, 0.15, 0.1, SIEGE, x, 1.14, zb - 0.29));
     // roues : fusionnées à la caisse pour une voiture garée ; à part pour une voiture qui roule (voir plus bas)
     if (!roule) for (const [x, z] of [[M.xr, M.zAv], [-M.xr, M.zAv], [M.xr, M.zAr], [-M.xr, M.zAr]]) extra.push(deplacer(roue(M.rr, 0.2, 10, x > 0 ? 1 : -1, false).clone(), x, M.rr, z));
-    geo = fusion([...at.geos(), ...extra]);
+    // les vitres à part : transparentes (MAT_VITRE), on voit l'habitacle
+    const lv = at.lots.get(VITRE + '|'), atV = new Atelier();
+    at.lots.delete(VITRE + '|'); atV.lots.set(VITRE + '|', lv);
+    geo = { corps: fusion([...at.geos(), ...extra]), vitres: fusion(atV.geos()) };
     VOITURES.set(cle, geo);
   }
-  const m = new THREE.Mesh(geo, MAT); m.castShadow = true;
+  const m = new THREE.Mesh(geo.corps, MAT); m.castShadow = true;
+  const vitre = new THREE.Mesh(geo.vitres, MAT_VITRE); vitre.renderOrder = 3; m.add(vitre);
+  m.userData.vitres = geo.vitres; m.userData.corps = geo.corps;
   if (roule) {
     // un essieu : ses deux roues, autour de son axe (géométrie partagée par modèle)
     let ge = ESSIEUX.get(nom);

@@ -1,7 +1,8 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, compacter, indexer } from './modeles.js';
+import { UNI, MAT, MAT_VITRE, compacter, indexer } from './modeles.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture } from './engins.js';
 import { perso, HEROS } from './perso.js';
@@ -181,10 +182,20 @@ function peupler() {
 }
 // voitures garées (immobiles)
 const voituresM = [];
+// voitures garées : immobiles, fusionnées par quartier de 64 m (carrosseries, vitres), chaque quartier élagué hors champ
+const garees = new Map();
 for (const [x, z, r, c] of L.garees) {
-  const m = voiture(c); m.position.set(x, 0, z); m.rotation.y = r; scene.add(m); voituresM.push(m);
+  const m = voiture(c); m.position.set(x, 0, z); m.rotation.y = r; m.updateMatrix(); voituresM.push(m);
+  const k = Math.floor(x / 64) + ',' + Math.floor(z / 64);
+  if (!garees.has(k)) garees.set(k, [[], []]);
+  garees.get(k)[0].push(m.userData.corps.clone().applyMatrix4(m.matrix)); garees.get(k)[1].push(m.userData.vitres.clone().applyMatrix4(m.matrix));
   const tourne = Math.abs(Math.sin(r)) > 0.5;
   const b = col.boiteC(x, z, tourne ? 3.9 : 1.75, tourne ? 1.75 : 3.9); b.haut = false;
+}
+for (const [gc, gv] of garees.values()) {
+  const c = new THREE.Mesh(mergeGeometries(gc), MAT), v = new THREE.Mesh(mergeGeometries(gv), MAT_VITRE);
+  c.castShadow = true; c.receiveShadow = true; c.name = 'voitures garées'; v.renderOrder = 3; v.name = 'vitres garées';
+  scene.add(c, v);
 }
 const voitures = [];
 [[-120, 1, 11], [60, -1, 10.5], [230, 1, 12], [-260, -1, 11.5]].forEach(([x, s, v], i) => {

@@ -429,3 +429,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Essai écarté** : garder le décor fixe de la carte d'ombre en cache (copie de tampon à tampon) et n'y redessiner que ce qui bouge. La copie elle-même est négligeable (0,03 ms), mais ne pas effacer la carte avant d'y dessiner force un GPU à tuiles (tous les téléphones, les Mac) à recharger toute l'image précédente : 2,6 à 3 ms par image au lieu de 1,8. Sur ces GPU, effacer puis tout redessiner reste le chemin rapide ; on allège plutôt ce qu'on y dessine.
 
 **Vérifié** : mêmes images (captures du bourg, ombres propres) ; `npm run verifie` ; conduite assistée en tracteur et en van ; banc des personnages en jeu ; banc d'allègement de three.js : équivalent. Les temps par image n'ont pas pu être départagés finement : la machine de test était chargée par d'autres processus (charge 7), et ce Mac dessine une image en moins de 2 ms ; les comptes (sommets, triangles, appels de dessin) font foi.
+
+## 23/11/2026 · Retours de Teddy (7), lot 3 : devantures et voitures
+
+**Demande** : voitures encore plus texturées ; devantures des boutiques plus riches, sans panneaux blancs, du réalisme.
+
+**Fait** :
+- Devantures (`devanture`, monde.js) : caisson de bois peint en applique sur le rez-de-chaussée (soubassement, pilastres, bandeau où se pose l'enseigne, corniche, deux lanternes), vitrine à petits bois et porte vitrée. Vraie vitre (`MAT_VITRINE`, nouvelle matière) : presque invisible de face, réfléchissante en biais. Derrière, sur 25 cm, étagères et marchandises en volume (pains, bouteilles, bocaux, cageots, plantes, ardoise du menu), affichées seulement à moins de 50 m. Au fond, l'intérieur de chaque boutique peint en code et éclairé (atlas, sans ombre : une boutique allumée) : mur chaud et suspensions, puis miches et paniers de baguettes, rayonnages de bouteilles et tonneaux, bocaux, comptoir et tabourets du bar, salle du restaurant (tables nappées, chaises, cadres, bougies). Couleurs franches : boulangerie bordeaux, épicerie bleu nuit.
+- Voitures : vitres transparentes (comme le van) et habitacle derrière (plancher, garnitures, ciel de toit, planche de bord, volant à gauche, sièges et appuie-têtes, banquette) ; baguettes de flanc, essuie-glaces, pot d'échappement, antenne ; la saleté de la route sur le bas de caisse (dans le shader, d'après la hauteur : elle suit la voiture qui roule). Les voitures garées sont fusionnées par quartier de 64 m (carrosseries, vitres).
+
+**Coût** : mêmes triangles qu'au lot 2 à peu de chose près (domaine 95 600, route 143 000, place 162 000), deux à trois appels de dessin de plus ; texture des enseignes 14,2 → 15,9 Mo (intérieurs peints à 320 px de large). Une première version fusionnait marchandises et voitures garées avec tout le décor : +33 000 triangles sur la route, dessinés même de loin ; d'où l'affichage de près et le regroupement par quartier.
+
+**Vérifié** : captures des cinq boutiques du bourg et des voitures garées ; `npm run verifie` ; conduite assistée en tracteur et en van.

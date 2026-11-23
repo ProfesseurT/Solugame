@@ -3,8 +3,8 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
-import { hasard, lisse } from './outils.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { hasard, lisse, assombrir } from './outils.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
@@ -46,7 +46,7 @@ function petit(g) {
   return grand < 0.8 || (mince < 0.13 && grand < 2.6);
 }
 class Grille {
-  constructor() { this.cases = new Map(); }
+  constructor() { this.cases = new Map(); this.maillages = []; }
   push(...gs) {
     for (const g of gs) {
       if (!g.boundingBox) g.computeBoundingBox();
@@ -77,7 +77,8 @@ class Grille {
         m.onBeforeShadow = () => geo.setDrawRange(0, nOmbre);
         m.onAfterShadow = () => geo.setDrawRange(0, Infinity);
       }
-      m.castShadow = ombre; m.receiveShadow = true; m.renderOrder = ORDRE.bati; m.name = 'décor';
+      m.castShadow = ombre; m.receiveShadow = true; m.renderOrder = ORDRE.bati; m.name = ombre ? 'décor' : 'détails';
+      if (!ombre) { geo.computeBoundingSphere(); this.maillages.push(m); }
       scene.add(m);
       if (ombre) { m.geometry.computeBoundingBox(); porteurs.push(porteur(m, m.geometry.boundingBox)); }
     }
@@ -126,9 +127,10 @@ class Contact {
 // Panneaux et enseignes : un seul atlas dessiné en code, un seul maillage. Les cases sont réservées au fur et à mesure,
 // le dessin attend la fin : le canevas est alors créé à la hauteur exacte (rien de vide en mémoire graphique).
 class Atlas {
-  constructor() { this.x = 0; this.y = 0; this.ligne = 0; this.geos = []; this.cases = []; }
-  // réserve une case w x h (pixels) pour un dessin ; place un rectangle w3 x h3 (mètres) dans le monde
-  poser(w, h, dessin, w3, h3, x, y, z, rot) {
+  constructor() { this.x = 0; this.y = 0; this.ligne = 0; this.geos = []; this.geosL = []; this.cases = []; }
+  // réserve une case w x h (pixels) pour un dessin ; place un rectangle w3 x h3 (mètres) dans le monde. lumineux : sans
+  // éclairage ni ombre (l'intérieur allumé d'une boutique)
+  poser(w, h, dessin, w3, h3, x, y, z, rot, lumineux = false) {
     if (this.x + w > 1024) { this.x = 0; this.y += this.ligne + 4; this.ligne = 0; }
     const px = this.x, py = this.y;
     this.x += w + 4; this.ligne = Math.max(this.ligne, h);
@@ -136,18 +138,22 @@ class Atlas {
     const g = new THREE.PlaneGeometry(w3, h3), uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + uv.getX(i) * w) / 1024, py + (1 - uv.getY(i)) * h); // v en pixels, ramené à la fin
     g.rotateY(rot); g.translate(x, y, z);
-    this.geos.push(g);
+    (lumineux ? this.geosL : this.geos).push(g);
   }
   maillage() {
     const H = Math.ceil((this.y + this.ligne) / 4) * 4, cv = document.createElement('canvas');
     cv.width = 1024; cv.height = H;
     const c = cv.getContext('2d');
     for (const { px, py, w, h, dessin } of this.cases) { c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore(); }
-    for (const g of this.geos) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i) / H); }
+    for (const g of [...this.geos, ...this.geosL]) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i) / H); }
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     const m = new THREE.Mesh(fusion(this.geos), new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5 }));
     m.renderOrder = ORDRE.bati; m.name = 'enseignes';
+    if (this.geosL.length) {
+      this.lumineux = new THREE.Mesh(fusion(this.geosL), new THREE.MeshBasicMaterial({ map: tex }));
+      this.lumineux.renderOrder = ORDRE.bati; this.lumineux.name = 'intérieurs';
+    }
     return m;
   }
 }
@@ -159,7 +165,7 @@ export function construireMonde(scene, col, opts) {
   const pick = a => a[Math.floor(rnd() * a.length)];
   const plan = []; // dessin de la mini-carte
   const rect = (x0, z0, x1, z1, c) => plan.push({ t: 'r', x0, z0, x1, z1, c });
-  const bati = new Grille(), contact = new Contact(), atlas = new Atlas(), porteurs = [];
+  const bati = new Grille(), proches = new Grille(), contact = new Contact(), atlas = new Atlas(), porteurs = [], vitresB = [];
 
   /* ------------------------------------------------------------ ciel
      Dôme dessiné après le décor (seuls les pixels restés vides sont calculés). Son horizon a
@@ -502,6 +508,130 @@ void main() {
       L.push(teinter(g, c, T.feuillage));
     }
   }
+  /* Devanture de boutique en applique : un caisson de bois peint plaqué sur le rez-de-chaussée (soubassement, pilastres,
+     bandeau de l'enseigne, corniche, lanternes), une vitrine à petits bois (vraie vitre, transparente : MAT_VITRE) et une
+     porte vitrée. Derrière la vitre, sur 25 cm : étagères et marchandises en volume, devant l'intérieur de la boutique
+     peint en code et éclairé (atlas, matière sans ombre : une boutique allumée). Il donne la profondeur sans creuser la
+     maison. V reçoit les vitres. Repère de la maison : façade en z = d / 2, x le long de la façade. */
+  const BOIS_E = '#6b4a30', LUEUR = '#ffe1a0', VERRE = '#3a5068';
+  function devanture(L, V, Pm, o, w, d) {
+    const C = o.vitrine, CF = assombrir(C, 0.7), z0 = d / 2, vw = w * 0.56, vx = -w * 0.14, xp = w * 0.33;
+    const X0 = Math.max(-w / 2 + 0.3, vx - vw / 2 - 0.3), X1 = Math.min(w / 2 - 0.3, xp + 0.85), cx = (X0 + X1) / 2, lw = X1 - X0;
+    const xm = xp - 0.72, g0 = X0 + 0.13, g1 = xm - 0.13, gx = (g0 + g1) / 2, gw = g1 - g0;
+    // soubassement, pilastres et leurs bases, bandeau, moulure, corniche
+    L.push(B(gw + 0.26, 0.62, 0.3, C, gx, 0.31, z0 + 0.15), B(gw + 0.3, 0.06, 0.34, CF, gx, 0.64, z0 + 0.17));
+    for (const x of [X0, xm, X1]) L.push(B(0.26, 2.74, 0.34, C, x, 1.37, z0 + 0.17), B(0.32, 0.26, 0.38, CF, x, 0.13, z0 + 0.19));
+    L.push(B(lw + 0.26, 0.62, 0.36, C, cx, 3.05, z0 + 0.18), B(lw + 0.3, 0.07, 0.4, CF, cx, 2.72, z0 + 0.2), B(lw + 0.42, 0.11, 0.48, CF, cx, 3.41, z0 + 0.24));
+    // vitrine : petits bois, traverse d'imposte, la vitre
+    const nb = Math.max(2, Math.round(gw / 0.95)), pb = gw / nb;
+    for (let i = 1; i < nb; i++) L.push(B(0.05, 2.06, 0.06, C, g0 + i * pb, 1.67, z0 + 0.25));
+    L.push(B(gw, 0.05, 0.06, C, gx, 2.28, z0 + 0.25));
+    V.push(B(gw, 2.06, 0.01, VERRE, gx, 1.67, z0 + 0.24));
+    // dans la vitrine : planche du fond et, sauf au restaurant, deux étagères ; les marchandises
+    L.push(B(gw, 0.04, 0.22, BOIS_E, gx, 0.66, z0 + 0.11));
+    const table = o.boutique === 'resto';
+    if (!table) for (const y of [1.3, 1.85]) L.push(B(gw, 0.03, 0.12, BOIS_E, gx, y, z0 + 0.07));
+    marchandises(Pm, o.boutique, g0, g1, z0);
+    // porte vitrée : panneau bas, montants, traverse, vitre, poignée de laiton
+    const pw = X1 - xm - 0.26, px = (X1 + xm) / 2;
+    L.push(B(pw, 0.85, 0.06, C, px, 0.43, z0 + 0.22), B(pw, 0.07, 0.07, C, px, 2.3, z0 + 0.22));
+    for (const s of [-1, 1]) L.push(B(0.06, 1.45, 0.07, C, px + s * (pw / 2 - 0.03), 1.58, z0 + 0.22));
+    L.push(B(0.04, 0.22, 0.05, '#c9a55a', px - pw / 2 + 0.14, 1.12, z0 + 0.27));
+    V.push(B(pw, 1.85, 0.01, VERRE, px, 1.78, z0 + 0.21));
+    // lanternes de part et d'autre du bandeau
+    for (const x of [X0, X1]) L.push(B(0.05, 0.05, 0.28, '#2b2b30', x, 3.72, z0 + 0.3), B(0.18, 0.26, 0.18, '#2b2b30', x, 3.6, z0 + 0.46), B(0.13, 0.18, 0.13, LUEUR, x, 3.58, z0 + 0.46));
+    // l'intérieur peint, éclairé : derrière la vitrine et derrière la porte
+    const fond = (lx, l3, h3, y, porte) => { const p = facade(o, lx, 0.012), W = porte ? 80 : 320; atlas.poser(W, Math.round(W * h3 / l3), (c, w2, h2) => peindreInterieur(c, w2, h2, o.boutique, porte), l3, h3, p.x, y, p.z, p.rot, true); };
+    fond(gx, gw, 2.06, 1.67, false);
+    fond(px, pw, 2.3, 1.15, true);
+  }
+  // Marchandises en volume dans la vitrine (petites : pas d'ombre portée, voir petit())
+  function marchandises(L, genre, g0, g1, z0) {
+    const r = hasard(Math.round(g0 * 997) + 13), z = z0 + 0.08, coul = a => a[Math.floor(r() * a.length)];
+    if (genre === 'cave') {
+      for (const y of [1.33]) for (let x = g0 + 0.1; x < g1 - 0.06; x += 0.2) L.push(C(0.032, 0.032, 0.27, 5, coul(['#1f3b2a', '#3a1820', '#26301f']), x, y + 0.14, z), B(0.05, 0.07, 0.01, '#efe4c8', x, y + 0.1, z + 0.033));
+      for (let x = g0 + 0.35; x < g1 - 0.3; x += 0.75) L.push(B(0.5, 0.26, 0.18, '#9a7b55', x, 0.81, z0 + 0.1), C(0.03, 0.03, 0.12, 5, '#1f3b2a', x - 0.12, 1.0, z0 + 0.1), C(0.03, 0.03, 0.12, 5, '#3a1820', x + 0.12, 1.0, z0 + 0.1));
+    } else if (genre === 'boulangerie') {
+      for (let x = g0 + 0.2; x < g1 - 0.15; x += 0.3) L.push(S(0.06, '#d39443', x, 1.36, z, 1.6, 0.6, 0.9));
+      for (let x = g0 + 0.3; x < g1 - 0.3; x += 0.62) {
+        L.push(B(0.32, 0.2, 0.18, '#8a6a3a', x, 0.78, z0 + 0.1));
+        for (const dx of [-0.08, 0, 0.08]) L.push(C(0.026, 0.026, 0.55, 5, '#d9a55a', x + dx, 1.05, z0 + 0.1));
+        L.push(S(0.11, '#b9773a', x + 0.31, 0.74, z0 + 0.11, 1.15, 0.55, 0.85));
+      }
+    } else if (genre === 'epicerie') {
+      for (const y of [1.33]) for (let x = g0 + 0.1; x < g1 - 0.06; x += 0.16) { const h = 0.1 + r() * 0.08; L.push(C(0.045, 0.045, h, 6, coul(['#d8c48a', '#c4552e', '#e8dcc0', '#7a9a4a', '#c9a55a']), x, y + h / 2 + 0.015, z), C(0.047, 0.047, 0.02, 6, coul(['#c0392b', '#2f5d3a', '#d9a832']), x, y + h + 0.025, z)); }
+      for (let x = g0 + 0.3; x < g1 - 0.3; x += 0.7) { L.push(B(0.45, 0.16, 0.18, '#9a7b55', x, 0.76, z0 + 0.1)); for (let k = 0; k < 4; k++) L.push(S(0.05, coul(['#c42d3a', '#e0802f', '#9ab84a', '#e2c23a']), x - 0.15 + k * 0.1, 0.87, z0 + 0.1)); }
+    } else if (genre === 'bar') {
+      for (const y of [1.33]) for (let x = g0 + 0.1; x < g1 - 0.06; x += 0.18) { const h = 0.2 + r() * 0.1; L.push(C(0.03, 0.034, h, 5, coul(['#a8662a', '#2f5d3a', '#cfe0ea', '#6e1f2e', '#d9a832']), x, y + h / 2 + 0.015, z)); }
+      L.push(C(0.15, 0.12, 0.3, 8, '#b5532e', g0 + 0.3, 0.83, z0 + 0.11), S(0.22, '#4f7a32', g0 + 0.3, 1.15, z0 + 0.11, 1, 1.2, 0.55));
+    } else { // restaurant, auberge : une plante, l'ardoise du menu, des bougies
+      L.push(C(0.15, 0.12, 0.3, 8, '#b5532e', g0 + 0.3, 0.83, z0 + 0.11), S(0.24, '#4f7a32', g0 + 0.3, 1.2, z0 + 0.11, 1, 1.3, 0.55));
+      L.push(B(0.42, 0.58, 0.03, '#2b2b30', g1 - 0.4, 1.0, z0 + 0.12, 0), B(0.46, 0.04, 0.05, '#6b4a30', g1 - 0.4, 1.3, z0 + 0.12));
+      for (let x = g0 + 0.9; x < g1 - 0.8; x += 0.8) L.push(C(0.025, 0.025, 0.1, 5, '#f1e8d2', x, 0.73, z0 + 0.1), B(0.02, 0.03, 0.02, LUEUR, x, 0.8, z0 + 0.1));
+    }
+  }
+  // L'intérieur d'une boutique, peint : mur chaud éclairé par des suspensions, puis selon la boutique des rayonnages de
+  // bouteilles, de pains ou de bocaux, un comptoir, ou une salle de restaurant (tables nappées, chaises, cadres)
+  function peindreInterieur(c, W, H, genre, porte) {
+    const k = W / 512; c.scale(k, k); W /= k; H /= k; // dessinée pour 512 px de large, mise à l'échelle
+    const r = hasard(W * 31 + H + (genre || '').length * 7), sol = H * 0.82;
+    let g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#f7dfb2'); g.addColorStop(0.55, '#e3b47a'); g.addColorStop(0.82, '#b07a46'); g.addColorStop(1, '#6e4a2c');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#7a5434'; c.fillRect(0, sol, W, H - sol); // parquet
+    for (let x = 0; x < W; x += 18) { c.fillStyle = x % 36 ? '#6a4a2e' : '#83603e'; c.fillRect(x, sol, 9, H - sol); }
+    const lampes = porte ? [W / 2] : [W * 0.2, W * 0.5, W * 0.8];
+    for (const x of lampes) {
+      const rg = c.createRadialGradient(x, H * 0.16, 2, x, H * 0.16, H * 0.55);
+      rg.addColorStop(0, 'rgba(255,244,214,0.95)'); rg.addColorStop(1, 'rgba(255,244,214,0)');
+      c.fillStyle = rg; c.fillRect(0, 0, W, H);
+      c.strokeStyle = '#2b2018'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H * 0.1); c.stroke();
+      c.fillStyle = '#3b2a20'; c.beginPath(); c.moveTo(x - 16, H * 0.17); c.lineTo(x + 16, H * 0.17); c.lineTo(x + 7, H * 0.1); c.lineTo(x - 7, H * 0.1); c.fill();
+    }
+    const etageres = (couleurs, hMin, hMax, larg) => {
+      for (const y of [H * 0.34, H * 0.55, H * 0.74]) {
+        c.fillStyle = '#5a3c26'; c.fillRect(W * 0.04, y, W * 0.92, 5);
+        for (let x = W * 0.05; x < W * 0.94; x += larg + 2 + r() * 3) { const h = hMin + r() * (hMax - hMin); c.fillStyle = couleurs[Math.floor(r() * couleurs.length)]; c.fillRect(x, y - h, larg, h); }
+      }
+    };
+    if (genre === 'cave') {
+      etageres(['#1f3b2a', '#3a1820', '#26301f', '#4a1f28'], 18, 24, 7);
+      c.fillStyle = '#6e4a2c'; for (const x of [W * 0.15, W * 0.78]) { c.beginPath(); c.ellipse(x, sol - 18, 22, 18, 0, 0, 7); c.fill(); c.strokeStyle = '#3b2a20'; c.lineWidth = 2; c.stroke(); }
+    } else if (genre === 'boulangerie') {
+      // étagères de miches (rondes, entaillées) ; paniers de baguettes debout ; le comptoir et sa vitrine à gâteaux
+      for (const y of [H * 0.34, H * 0.55]) {
+        c.fillStyle = '#5a3c26'; c.fillRect(W * 0.04, y, W * 0.92, 5);
+        for (let x = W * 0.07; x < W * 0.93; x += 19 + r() * 4) {
+          c.fillStyle = ['#c98a3e', '#b8742f', '#d9a050'][Math.floor(r() * 3)]; c.beginPath(); c.ellipse(x, y - 6, 9, 7, 0, Math.PI, 0); c.fill();
+          c.strokeStyle = '#8a5428'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 4, y - 9); c.lineTo(x + 2, y - 5); c.stroke();
+        }
+      }
+      for (let x = W * 0.1; x < W * 0.9; x += W * 0.2) {
+        for (let k = -2; k <= 2; k++) { c.save(); c.translate(x + k * 4, H * 0.74); c.rotate(k * 0.08); c.fillStyle = '#d9a55a'; c.fillRect(-2.5, -H * 0.2, 5, H * 0.2); c.restore(); }
+        c.fillStyle = '#8a6a3a'; c.fillRect(x - 14, H * 0.66, 28, H * 0.09);
+      }
+      c.fillStyle = '#8a5a34'; c.fillRect(W * 0.05, sol - H * 0.12, W * 0.9, H * 0.12); c.fillStyle = 'rgba(220,235,240,0.55)'; c.fillRect(W * 0.05, sol - H * 0.2, W * 0.9, H * 0.08);
+      for (let x = W * 0.1; x < W * 0.9; x += 26) { c.fillStyle = ['#e8c8a0', '#8e2a3b', '#f1e8d2', '#c98a4a'][Math.floor(r() * 4)]; c.beginPath(); c.arc(x, sol - H * 0.135, 6, 0, 7); c.fill(); }
+    } else if (genre === 'epicerie') {
+      etageres(['#c4552e', '#e8dcc0', '#7a9a4a', '#c9a55a', '#2e6a9a', '#d9a832'], 10, 18, 9);
+      c.fillStyle = '#8a5a34'; c.fillRect(W * 0.6, sol - H * 0.15, W * 0.35, H * 0.15);
+    } else if (genre === 'bar') {
+      etageres(['#a8662a', '#2f5d3a', '#cfe0ea', '#6e1f2e', '#d9a832'], 14, 22, 6);
+      c.fillStyle = '#5a3c26'; c.fillRect(0, sol - H * 0.2, W, H * 0.2); c.fillStyle = '#c9a55a'; c.fillRect(0, sol - H * 0.21, W, 4);
+      for (let x = W * 0.12; x < W; x += W * 0.18) { c.fillStyle = '#2b2018'; c.fillRect(x - 2, sol - H * 0.12, 4, H * 0.12); c.beginPath(); c.ellipse(x, sol - H * 0.12, 12, 4, 0, 0, 7); c.fill(); }
+    } else { // salle de restaurant : cadres, tables nappées, chaises, bougies
+      for (let x = W * 0.12; x < W * 0.9; x += W * 0.26) { c.fillStyle = '#6b4a30'; c.fillRect(x, H * 0.3, 38, 28); c.fillStyle = ['#7a8f6a', '#c98a4a', '#8e5a6a'][Math.floor(r() * 3)]; c.fillRect(x + 4, H * 0.3 + 4, 30, 20); }
+      for (let x = W * 0.16; x < W; x += W * 0.3) {
+        c.fillStyle = '#5a3c26'; c.fillRect(x - 30, sol - H * 0.26, 6, H * 0.26); c.fillRect(x + 24, sol - H * 0.26, 6, H * 0.26); // dossiers
+        c.fillStyle = '#f4f1ea'; c.beginPath(); c.ellipse(x, sol - H * 0.15, 34, 9, 0, 0, 7); c.fill(); c.fillRect(x - 34, sol - H * 0.15, 68, H * 0.12);
+        c.fillStyle = '#ffe1a0'; c.beginPath(); c.arc(x, sol - H * 0.19, 3, 0, 7); c.fill();
+      }
+    }
+    // les bords plus sombres : de la profondeur
+    g = c.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, 'rgba(40,24,12,0.45)'); g.addColorStop(0.12, 'rgba(40,24,12,0)'); g.addColorStop(0.88, 'rgba(40,24,12,0)'); g.addColorStop(1, 'rgba(40,24,12,0.45)');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  }
   // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options (mur : couleur imposée)
   function maison(o) {
     const L = [], { w, d, h } = o, ht = o.ht ?? Math.min(w, d) * 0.55, surZ = d > w;
@@ -586,14 +716,12 @@ void main() {
         feuilles(L, items, 'x', sx); feuilles(L, coin, 'z', 1);
       }
     }
+    const V = [], Pm = [];
     if (o.vitrine) {
-      const vw = w * 0.56, vx = -w * 0.14;
-      L.push(B(vw + 0.3, 2.35, 0.09, o.vitrine, vx, 1.45, d / 2 + 0.03));
-      L.push(B(vw, 2.0, 0.11, '#3a5068', vx, 1.4, d / 2 + 0.05));
-      L.push(B(1.15, 2.3, 0.12, o.porteC || o.vitrine, w * 0.33, 1.15, d / 2 + 0.05));
-      if (o.banne) for (let k = 0; k < 6; k++) {
-        const g = new THREE.BoxGeometry(vw / 6, 0.08, 1.4); g.rotateX(0.32);
-        g.translate(vx - vw / 2 + (k + 0.5) * vw / 6, 2.95, d / 2 + 0.68);
+      devanture(L, V, Pm, o, w, d);
+      if (o.banne) for (let k = 0; k < 6; k++) { // le store, sous le bandeau
+        const vw = w * 0.56, vx = -w * 0.14, g = new THREE.BoxGeometry(vw / 6, 0.08, 1.4); g.rotateX(0.32);
+        g.translate(vx - vw / 2 + (k + 0.5) * vw / 6, 2.56, d / 2 + 0.98);
         L.push(teinter(g, k % 2 ? '#f3ead8' : o.banne));
       }
     }
@@ -603,8 +731,11 @@ void main() {
     }
     finirPlaques(L);
     poser(L, o.x, o.z, o.rot || 0, bati);
-    const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5;
-    const bx = col.boiteC(o.x, o.z, tourne ? d : w, tourne ? w : d);
+    if (V.length) poser(V, o.x, o.z, o.rot || 0, vitresB);
+    if (Pm.length) poser(Pm, o.x, o.z, o.rot || 0, proches);
+    // collision : la maison, et sa devanture (36 cm devant la façade)
+    const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5, av = o.vitrine ? 0.36 : 0, r0 = o.rot || 0;
+    const bx = col.boiteC(o.x + Math.sin(r0) * av / 2, o.z + Math.cos(r0) * av / 2, tourne ? d + av : w, tourne ? w : d + av);
     bx.haut = true;
     plan.push({ t: 'b', x0: bx.x0, z0: bx.z0, x1: bx.x1, z1: bx.z1 });
     contact.jupe(bx.x0 - 0.07, bx.z0 - 0.07, bx.x1 + 0.07, bx.z1 + 0.07, 1.7, 0.5);
@@ -751,8 +882,8 @@ void main() {
     const rndMonde = rnd;
     rnd = hasard(4242);
     // l'auberge, façade vers la placette (vitrine, store bordeaux, enseigne) ; terrasse
-    const au = maison({ x: -44, z: 131, w: 14, d: 8, h: 5.8, rot: -Math.PI / 2, volets: '#7a8f6a', vitrine: '#5a6b2f', banne: '#7d2333', porteC: '#4a3324' });
-    enseigne('AUBERGE DU MOULIN', facade(au, -1.96, 0.12), 4.15, 5.2, 0.62, '#5a6b2f', '#f1e2c4');
+    const au = maison({ x: -44, z: 131, w: 14, d: 8, h: 5.8, rot: -Math.PI / 2, volets: '#7a8f6a', vitrine: '#5a6b2f', boutique: 'resto', banne: '#7d2333', porteC: '#4a3324' });
+    enseigne('AUBERGE DU MOULIN', facade(au, -1.96, 0.37), 3.05, 5.2, 0.54, '#5a6b2f', '#f1e2c4');
     for (const z of [126.5, 129.5]) {
       bati.push(C(0.42, 0.42, 0.04, 10, '#efe7d6', -50.6, 0.74, z), C(0.04, 0.04, 0.72, 5, '#2b2b30', -50.6, 0.36, z), C(0.2, 0.2, 0.02, 8, '#2b2b30', -50.6, 0.01, z));
       for (const dz of [-0.7, 0.7]) bati.push(B(0.4, 0.04, 0.4, '#5b3a2a', -50.6, 0.45, z + dz), B(0.04, 0.45, 0.4, '#5b3a2a', -50.6 + (dz < 0 ? -0.2 : 0.2), 0.68, z + dz));
@@ -859,16 +990,16 @@ void main() {
   const nord = [[34, 10, 8, 6.2], [46, 9, 8, 7], [58, 11, 9, 6.5, 'boul'], [80, 9, 8, 7.5, 'epicerie'], [110, 11, 8, 6.6, 'resto'], [124, 10, 8, 7], [137, 11, 9, 6.4]];
   for (const [x, w, d, h, t] of nord) {
     const resto = t === 'resto';
-    const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t ? '#e7d6a8' : null, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
-    if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.14), 3.25, 4.6, 0.62, '#efe0b4', '#6b3d1f');
-    if (resto) enseigne('RESTAURANT LA TREILLE', facade(o, -w * 0.14, 0.14), 3.5, 5.6, 0.7, '#2f5d50', '#f3e7c9');
+    const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t === 'boul' ? '#6b2a2a' : t ? '#2f4a6b' : null, boutique: resto ? 'resto' : t === 'boul' ? 'boulangerie' : t, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
+    if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.37), 3.05, 4.6, 0.54, '#efe0b4', '#6b3d1f');
+    if (resto) enseigne('RESTAURANT LA TREILLE', facade(o, -w * 0.14, 0.37), 3.05, 5.6, 0.54, '#2f5d50', '#f3e7c9');
     if (t === 'epicerie') {
-      enseigne('ÉPICERIE DU BOURG', facade(o, -w * 0.14, 0.14), 3.25, 5.0, 0.62, '#2f4a6b', '#f3e7c9');
+      enseigne('ÉPICERIE DU BOURG', facade(o, -w * 0.14, 0.37), 3.05, 5.0, 0.54, '#2f4a6b', '#f3e7c9');
       // l'étal devant la vitrine : cageots de fruits et de légumes
       for (const [dx, fruit] of [[-2.6, '#e0802f'], [-1.6, '#c42d3a'], [-0.6, '#5d8a36']]) {
-        bati.push(B(0.86, 0.46, 0.56, '#9a7b55', x + dx, 0.23, 2.0), B(0.76, 0.1, 0.46, fruit, x + dx, 0.5, 2.0));
+        bati.push(B(0.86, 0.46, 0.56, '#9a7b55', x + dx, 0.23, 2.2), B(0.76, 0.1, 0.46, fruit, x + dx, 0.5, 2.2));
       }
-      col.boiteC(x - 1.6, 2.0, 2.9, 0.6);
+      col.boiteC(x - 1.6, 2.2, 2.9, 0.6);
     }
   }
   for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]])
@@ -898,12 +1029,12 @@ void main() {
     maison({ x: 104, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: -Math.PI / 2, volets: pick(VOLETS) });
   }
   // la place : cave, bar, mairie, église
-  const cave = maison({ x: 68, z: -46, w: 9, d: 8, h: 6.5, rot: Math.PI / 2, volets: '#8e2a3b', vitrine: '#6e1f2e', banne: '#8e2a3b', porteC: '#6e1f2e' });
-  enseigne('CAVE DU PRESSOIR', facade(cave, 0, 0.14), 3.5, 5.4, 0.8, '#7a2233', '#f5e6c8');
+  const cave = maison({ x: 68, z: -46, w: 9, d: 8, h: 6.5, rot: Math.PI / 2, volets: '#8e2a3b', vitrine: '#6e1f2e', boutique: 'cave', banne: '#8e2a3b', porteC: '#6e1f2e' });
+  enseigne('CAVE DU PRESSOIR', facade(cave, -9 * 0.14, 0.37), 3.05, 4.4, 0.54, '#7a2233', '#f5e6c8');
   maison({ x: 68, z: -36, w: 8, d: 8, h: 7, rot: Math.PI / 2, volets: pick(VOLETS) });
   maison({ x: 68, z: -56, w: 8, d: 8, h: 6.2, rot: Math.PI / 2, volets: pick(VOLETS) });
-  const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', banne: '#1f3b4d' });
-  enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.14), 3.5, 4.4, 0.7, '#1f3b4d', '#f2d488');
+  const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', boutique: 'bar', banne: '#1f3b4d' });
+  enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.37), 3.05, 4.4, 0.54, '#1f3b4d', '#f2d488');
   maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
   const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
   enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
@@ -1112,8 +1243,12 @@ void main() {
   const moulin = hameau();
   const enseignes = atlas.maillage();
   scene.add(enseignes);
+  if (atlas.lumineux) scene.add(atlas.lumineux);
+  // les vitres des boutiques, transparentes (un seul maillage)
+  if (vitresB.length) { const vb = new THREE.Mesh(fusion(vitresB), MAT_VITRINE); vb.renderOrder = 3; vb.name = 'vitrines'; scene.add(vb); }
 
   bati.ajouter(scene, true, porteurs);
+  proches.ajouter(scene, false, porteurs); // les marchandises des vitrines : seulement de près (maj)
   const ao = contact.maillage();
   scene.add(ao);
 
@@ -1248,6 +1383,7 @@ void main() {
     dernierX = cx; dernierZ = cz;
     const d2 = (herbeLoin + 34) * (herbeLoin + 34), v2 = (vigneLoin + 21) * (vigneLoin + 21);
     for (const h of herbes) h.im.visible = (h.x - cx) * (h.x - cx) + (h.z - cz) * (h.z - cz) < d2;
+    for (const m of proches.maillages) { const c = m.geometry.boundingSphere.center, r = m.geometry.boundingSphere.radius + 45; m.visible = (c.x - cx) * (c.x - cx) + (c.z - cz) * (c.z - cz) < r * r; }
     for (const p of vignes) {
       // distance de la caméra à la parcelle : au-delà, un seul maillage pour toute la parcelle
       const q = p.q, dx = Math.max(q.x0 - cx, 0, cx - q.x1), dz = Math.max(q.z0 - cz, 0, cz - q.z1), proche = dx * dx + dz * dz < parcelleLoin * parcelleLoin;

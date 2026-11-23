@@ -217,7 +217,9 @@ vec3 cl_detail(vec3 col) {
   } else if (m == 13) {
     k = 0.9 + 0.06 * sin(dot(vPosM.xz, vec2(0.5, 0.3))) + 0.12 * g;
   } else if (m == 16) {
-    k = 0.98 + 0.04 * g; // peinture lisse : pas de grain
+    // peinture lisse, sans grain ; la saleté de la route sur le bas de caisse (d'après la hauteur : elle suit la voiture)
+    k = 0.98 + 0.04 * g;
+    col = mix(col, col * vec3(0.7, 0.64, 0.56) + vec3(0.035, 0.03, 0.02), (1.0 - smoothstep(0.16, 0.56, vPosM.y)) * 0.6);
   } else if (m == 17 || m == 18) {
     // moellons : rangs, pierres de longueur inégale, joints de mortier clair ; l'enduit à la chaux (18) les couvre,
     // sauf là où il est tombé (plaques), et se salit par endroits
@@ -283,11 +285,12 @@ const GLSL_EMISSIF = `
   }
 }`;
 // Vitres qu'on traverse du regard (matière MAT_VITRE) : plus opaques en incidence rasante, comme une vraie vitre
-const GLSL_ALPHA = `
+// (a0 : opacité de face ; une vitrine de boutique est plus claire qu'une vitre de voiture)
+const GLSL_ALPHA = a0 => `
 {
   vec3 nT = normaleMonde(), vT = normalize(cameraPosition - vPosM);
   float cT = 1.0 - abs(dot(nT, vT));
-  diffuseColor.a = 0.42 + 0.53 * cT * cT;
+  diffuseColor.a = ${a0.toFixed(2)} + ${(0.95 - a0).toFixed(2)} * cT * cT;
 }`;
 // Vent : balancement doux et rafales qui traversent le paysage (position dans le monde, temps)
 const GLSL_VENT = `
@@ -356,9 +359,9 @@ ${poids ? `{
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL)
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = cl_detail(diffuseColor.rgb);')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (attr ? GLSL_EMISSIF : '') + (o.transparente ? GLSL_ALPHA : ''));
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (attr ? GLSL_EMISSIF : '') + (o.transparente ? GLSL_ALPHA(o.transparente === true ? 0.42 : o.transparente) : ''));
   };
-  const cle = 'cl-' + (attr ? 'attr' : typeFixe) + (vent ? '-v' : '') + (vs0 ? '-s' : '') + (o.teinteFeuillage ? '-t' : '') + (o.ondule ? '-o' : '') + (o.transparente ? '-tr' : '');
+  const cle = 'cl-' + (attr ? 'attr' : typeFixe) + (vent ? '-v' : '') + (vs0 ? '-s' : '') + (o.teinteFeuillage ? '-t' : '') + (o.ondule ? '-o' : '') + (o.transparente ? '-tr' + o.transparente : '');
   m.customProgramCacheKey = () => cle;
   return m;
 }
@@ -372,6 +375,8 @@ export const MAT_VENT = detailler(new THREE.MeshLambertMaterial({ vertexColors: 
 // Vitres qu'on traverse du regard (cabine du van) : la même matière, transparente, vue des deux côtés, en une passe.
 // Elle reflète le ciel comme les autres vitres et devient plus opaque en incidence rasante. Ne projette pas d'ombre.
 export const MAT_VITRE = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), undefined, { transparente: true });
+// Vitrines des boutiques : presque invisibles de face (on voit l'intérieur), réfléchissantes en biais
+export const MAT_VITRINE = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), undefined, { transparente: 0.12 });
 
 const tmpC = new THREE.Color();
 
