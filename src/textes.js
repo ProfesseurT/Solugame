@@ -70,6 +70,7 @@ export const DIALOGUES = {
   aPied: [{ qui: '', txt: 'Plus de 10 cartons à pied ? Prenez le tracteur ou le van.' }],
   sansCartons: v => [{ qui: '', txt: v === 'van' ? 'Les cartons sont dans le van.' : 'Les cartons sont sur le tracteur.' }],
   charge: [{ qui: '', txt: 'Tout est chargé. Lancez la tournée dans le bureau.' }],
+  accelerer: tactile => [{ qui: '', txt: tactile ? 'Gardez le doigt posé : les cartons vont trois fois plus vite.' : 'Gardez une flèche enfoncée : les cartons vont trois fois plus vite.' }],
   chequePlanifie: [{ qui: '', txt: 'Passage à l\'Épicerie du Bourg ajouté à la tournée : vous y récupérerez le règlement.' }],
   tournee: [{ qui: '', txt: 'Tournée lancée. L\'itinéraire est sur la carte.' }],
   conduite: [{ qui: '', txt: 'Doigt posé : on avance. En mission, le véhicule suit l\'itinéraire tout seul.' }, { qui: '', txt: 'Glissez sur le côté pour tourner vous-même, vers le bas pour freiner et reculer.' }],

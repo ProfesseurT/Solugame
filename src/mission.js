@@ -25,7 +25,10 @@ export class Mission {
     this.retardataire = { ...RETARD, statut: 'a_planifier' };
     this.attenteCheque = false; this.drm = 'a_faire'; // a_faire, calcul, faite
     this.appelEnCours = null; this.arret = 0; this.attenteBL = null; this.message = '3 rappels et 1 règlement en retard aujourd\'hui.';
-    this.cartons = []; // carton i du véhicule chargé -> id du client
+    this.cartons = []; // carton i du véhicule chargé (colonne i / 3) -> id du client
+    this.palette = []; // les piles de la palette du chai (main.js) : { client, n, groupe }
+    this.deposes = []; // les piles posées devant les clients
+    this.blPret = false; // les cartons sont posés : le client peut signer le bon de livraison
     this.charge = null; // le véhicule chargé au chai (tracteur ou van) : { genre, p, m }
   }
   client(id) { for (const c of this.clients) if (c.id === id) return c; return null; }
@@ -39,6 +42,18 @@ export class Mission {
   get nbTaches() { return this.nbEnvoyees + (this.retardataire.statut === 'a_planifier' ? 0 : 1); }
   get ht() { return this.clients.reduce((s, c) => s + c.cartons * 6 * c.pu, 0); }
   htClient(c) { return c.cartons * 6 * c.pu; }
+  // les piles de la palette du chai : celles de chaque client, 3 cartons au plus (une colonne du véhicule chacune)
+  pilesPrevues() {
+    const piles = [];
+    for (const id of LIVRAISONS) for (let n = this.client(id).demande; n > 0; n -= 3) piles.push({ client: id, n: Math.min(3, n) });
+    return piles;
+  }
+  // les colonnes du véhicule chargé qui portent les cartons du client id : [{ c, n }]
+  colonnesDe(id) {
+    const cols = [];
+    for (let c = 0; c < 6; c++) { let n = 0; for (let l = 0; l < 3; l++) if (this.cartons[3 * c + l] === id) n++; if (n) cols.push({ c, n }); }
+    return cols;
+  }
 
   demarrer() { this.etape = 'debut'; this.t = 0; }
   peutFermer() { return !this.appelEnCours; }
@@ -47,8 +62,8 @@ export class Mission {
 
   get cible() {
     const L = this.j.lieux;
-    if (this.etape === 'chai' || this.etape === 'chargement') return L.chai;
-    if (this.etape === 'livraisons') return L.arrets[ORDRE[this.arret]];
+    if (this.etape === 'chai') return L.chai;
+    if (this.etape === 'livraisons') return this.attenteBL ? null : L.arrets[ORDRE[this.arret]]; // on y est : plus de balise
     if (this.etape === 'retour' || (this.etape === 'pc' && this.retardataire.statut === 'recupere')) return L.pc;
     if (this.etape === 'retour' || this.etape === 'pc') return L.pc;
     return null;
@@ -99,28 +114,26 @@ export class Mission {
         const reste = this.clients.length - this.compter('signee');
         if (j.auVolant && Math.abs(j.tr.v) < 2.5) {
           if (!reste) {
-            this.aller('chargement'); j.tr.v *= 0.3; this.charge = j.veh; this.cartons = [];
-            for (const id of LIVRAISONS) for (let k = 0; k < this.client(id).cartons; k++) this.cartons.push(id);
+            // on descend, on porte les piles de la palette dans le véhicule, on remonte (gestes.js)
+            this.aller('chargement'); this.charge = j.veh; this.cartons = new Array(18).fill(null);
+            const V = this.charge;
+            j.charger(this.palette, (c, p) => {
+              for (let l = 0; l < p.n; l++) this.cartons[3 * c + l] = p.client;
+              V.p.charge += p.n;
+            }, () => {
+              for (const c of this.clients) c.statut = 'chargee';
+              this.aller('tournee');
+              this.notifier('Tournée du jour prête : 4 arrêts.', false);
+              hud.dire(DIALOGUES.charge); hud.objectif(OBJECTIFS.tournee);
+            });
           }
           else if (this.tRappel <= 0) { hud.dire(DIALOGUES.attenteSignature(reste)); this.tRappel = 8; }
         } else if (!j.auVolant && d < 4 && this.tRappel <= 0) { hud.dire(DIALOGUES.aPied); this.tRappel = 8; }
         break;
       }
-      case 'chargement': {
-        const n = Math.min(this.cartons.length, Math.floor(this.t / 0.2));
-        const V = this.charge;
-        while (V.p.charge < n) { V.m.cartons[V.p.charge].visible = true; V.p.charge++; son.jouer('carton'); }
-        if (this.t > this.cartons.length * 0.2 + 0.4) {
-          for (const c of this.clients) c.statut = 'chargee';
-          this.aller('tournee');
-          this.notifier('Tournée du jour prête : 4 arrêts.', false);
-          hud.dire(DIALOGUES.charge); hud.objectif(OBJECTIFS.tournee);
-        }
-        break;
-      }
       case 'livraisons': {
         const c = this.arretEn(this.arret), d = j.distance(j.lieux.arrets[c.id]);
-        if (this.attenteBL || this.attenteCheque) break;
+        if (this.attenteBL || this.attenteCheque || j.gestes.actif) break;
         if (c === this.retardataire) {
           // le chèque : en tracteur arrêté devant, ou à pied au comptoir
           const f = j.lieux.figurants[c.id], dPied = j.auVolant ? 1e9 : j.distance(f);
@@ -135,10 +148,15 @@ export class Mission {
         const bon = j.auVolant && j.tr === this.charge.p;
         if (j.auVolant && !bon && d < 6.5 && Math.abs(j.tr.v) < 2.5 && this.tRappel <= 0) { hud.dire(DIALOGUES.sansCartons(this.charge.genre)); this.tRappel = 7; }
         if (bon && d < 6.5 && Math.abs(j.tr.v) < 2.5) {
-          this.attenteBL = c.id; j.tr.v *= 0.3;
+          // on descend, on porte ses cartons jusqu'à lui (gestes.js), puis il signe le bon de livraison
+          this.attenteBL = c.id; this.blPret = false;
           hud.vider();
-          hud.dire(DIALOGUES.arrivee[c.id], () => { if (this.attenteBL === c.id && !j.tel.ouvert) j.tel.ouvrir('bl'); });
-          hud.objectif(`Faites signer le bon de livraison à ${c.du}`);
+          hud.dire(DIALOGUES.arrivee[c.id]);
+          j.decharger(j.lieux.figurants[c.id], this.colonnesDe(c.id), p => this.deposes.push(p), () => {
+            this.blPret = true;
+            hud.objectif(`Faites signer le bon de livraison à ${c.du}`);
+            if (this.attenteBL === c.id && !j.tel.ouvert) j.tel.ouvrir('bl');
+          });
         } else if (!j.auVolant && d < 5 && this.tRappel <= 0) { hud.dire(DIALOGUES.sansCartons(this.charge.genre)); this.tRappel = 7; }
         break;
       }
@@ -153,7 +171,7 @@ export class Mission {
     }
     if ((this.etape === 'tournee' || this.etape === 'rappels') && !j.tel.ouvert && !j.tel.notif && (this.etape === 'tournee' || this.compter('commande') > 0 || (this.compter('a_traiter') === 0 && this.retardataire.statut === 'a_planifier'))) j.tel.notifier('bureau');
     // étoiles de retard : les clients attendent leurs cartons
-    if (ATTENTE.includes(this.etape) && !j.tel.ouvert) {
+    if (ATTENTE.includes(this.etape) && !j.tel.ouvert && !j.gestes.actif) {
       this.retard += dt;
       if (this.retard > RETARD_ETOILE && this.etoiles < 5) { this.retard = 0; this.etoiles++; hud.etoiles(this.etoiles); son.jouer('etoile'); }
     }
@@ -236,12 +254,14 @@ export class Mission {
     const id = this.attenteBL;
     if (!id) return;
     const j = this.j, c = this.client(id);
-    c.statut = 'livree'; this.attenteBL = null;
+    if (!this.blPret) return;
+    c.statut = 'livree'; this.attenteBL = null; this.blPret = false;
     // on décharge les cartons de ce client
     for (let i = 0; i < this.cartons.length; i++) if (this.cartons[i] === id) { this.charge.m.cartons[i].visible = false; this.cartons[i] = null; }
     son.jouer('carton');
     j.hud.dire(DIALOGUES.livre(c));
     this.suivant();
+    j.remonter(this.charge); // on retourne au volant
   }
 
   /* ------------------------------------------------------------ actions du PC (Vitisoft) */

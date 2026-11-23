@@ -72,7 +72,7 @@ export class Telephone {
       case 'msg': m.envoyerMessage(this.client); this.app = 'bureau'; this.afficher(); this.toast('Message envoyé à Bar Le Cep.'); return;
       case 'tournee': m.demarrerTournee(); return;
       case 'cheque': m.planifierCheque(); break;
-      case 'bl': this.app = 'bl'; break;
+      case 'bl': if (!m.blPret) return; this.app = 'bl'; break;
       case 'effacer': this.afficher(); return;
       case 'livrer': if (this.encre > 120) { m.livrer(); this.fermer(); } return;
       case 'fil': this.fil = arg; break;
@@ -163,7 +163,7 @@ export class Telephone {
     }).join('');
     let carte = '';
     if (e === 'tournee') carte = '<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>4 arrêts, tout est chargé</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>';
-    else if (m.attenteBL) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
+    else if (m.attenteBL && m.blPret) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
     else if (e === 'chai') carte = '<div class="carte-a-faire bureau"><p class="ap-sur">Commandes envoyées</p><b>Chargez-les au chai dès qu\'elles sont signées</b></div>';
     // le règlement en retard : une tâche du jour, qu'on ajoute soi-même à la tournée
     const r = m.retardataire, planifie = r.statut !== 'a_planifier';
@@ -225,7 +225,7 @@ export class Telephone {
       return `<div class="arret"><span class="num">${i + 1}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(quoi)}</span></div>${etat}</div>`;
     }).join('');
     const bas = e === 'tournee' ? '<button class="ap-bt plein large" data-a="tournee">Démarrer la tournée</button>'
-      : m.attenteBL ? '<button class="ap-bt plein large" data-a="bl">Faire signer le bon de livraison</button>' : '';
+      : m.attenteBL && m.blPret ? '<button class="ap-bt plein large" data-a="bl">Faire signer le bon de livraison</button>' : '';
     return tete + `<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-note">${esc(BUREAU.tournee)}</p>${arrets}
       <p class="ap-note">${esc(BUREAU.itineraire)} : ${dist}.</p>${bas}</div>`;
   }

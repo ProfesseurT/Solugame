@@ -108,6 +108,12 @@ export class Camera {
     if (Math.abs(fov - this.c.fov) > 0.02) { this.c.fov = fov; this.c.updateProjectionMatrix(); }
     this.fovPose = this.c.fov;
   }
+  // une scène cadrée (gestes.js : charger, décharger) : la caméra vient doucement dans l'axe c.h, autour du point (c.x, c.z) ;
+  // tournée à la main, elle reste où on la met un moment
+  cadrer(dt, c, col) {
+    if (this.tMain > 1.5) this.yaw = angle(this.yaw + angle(c.h - this.yaw) * lisser(dt, 1.6));
+    this.suivre(dt, c.x, c.z, c.h, 0, false, col);
+  }
   // vue de l'accueil : tour lent autour d'un point
   // large : le personnage se place à droite du titre ; étroit : en haut de l'écran
   orbite(t, cx, cz, large) {

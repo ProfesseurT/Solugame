@@ -71,20 +71,25 @@ if (scenario === 'parcours') {
     { const p = CL.vehicule(genre).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } // à côté du véhicule choisi
     CL.step(3); CL.agir(); CL.finirGeste();
     log.push(['monté dans ' + (genre === 'van' ? 'le van' : 'le tracteur'), CL.jeu.auVolant && CL.jeu.veh.genre === genre]);
-    CL.teleporter(-84, -52, -Math.PI / 2); CL.step(240);
-    log.push(['chargement fait (' + CL.tr.charge + ' cartons)', m.etape === 'tournee' && CL.tr.charge === 11]);
+    // garé là où la conduite assistée s'arrête : on descend, on charge la palette, on remonte (gestes.js)
+    CL.teleporter(-83.4, -47.4, 2.83); CL.step(30);
+    log.push(['chargement commencé (on descend du véhicule)', m.etape === 'chargement' && CL.jeu.gestes.actif]);
+    CL.finirGeste(4000); CL.step(5);
+    log.push(['chargement fait (' + CL.tr.charge + ' cartons), palette vide, de nouveau au volant', m.etape === 'tournee' && CL.tr.charge === 11 && m.palette.every(p => !p.groupe.visible) && CL.jeu.auVolant]);
     T.ouvrir('tournee');
     log.push(['tournée à 4 arrêts', document.querySelectorAll('#app .arret').length === 4]);
     clic('[data-a="tournee"]');
     { const a = CL.jeu.lieux.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30); CL.step(900); }
     log.push(['chèque récupéré à l\'épicerie', m.retardataire.statut === 'recupere' && m.arret === 1]);
     for (const id of ['cave', 'bar', 'treille']) {
-      const a = CL.jeu.lieux.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); CL.step(480);
-      log.push(['bon de livraison ouvert chez ' + id, T.ouvert && T.app === 'bl']);
+      const a = CL.jeu.lieux.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); CL.finirGeste(4000); CL.step(10);
+      log.push(['cartons posés et bon de livraison ouvert chez ' + id, T.ouvert && T.app === 'bl' && m.blPret]);
       T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10);
       log.push(['livré chez ' + id, m.client(id).statut === 'livree']);
+      CL.finirGeste(2000); CL.step(5);
+      log.push(['de nouveau au volant après ' + id, CL.jeu.auVolant]);
     }
-    log.push(['tracteur vide', CL.jeu.tm.cartons.every(c => !c.visible)]);
+    log.push(['véhicule vide, 11 cartons posés devant les clients', CL.jeu.tm.cartons.every(c => !c.visible) && m.deposes.reduce((s, p) => s + p.userData.n, 0) === 11]);
     CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
     CL.jeu.joueur.placer(-78.0, -50.5, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
     log.push(['chèque déposé au bureau, PC pas encore ouvert', m.retardataire.statut === 'depose' && !CL.jeu.pc.ouvert]);

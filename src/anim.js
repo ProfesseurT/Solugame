@@ -63,6 +63,7 @@ export class Anim {
     this.conduite = false; this.hp = 0; this.px = 0; this.pz = 0; this.braq = 0; this.lat = 0;
     this.meche = 0; this.mecheV = 0; this.telVu = false; this.vt = 0;
     this.wServ = 0; this.wVerre = 0;
+    this.wPorte = 0; this.accroupi = 0; this.pile = new THREE.Vector3(0, 0.95, 0.36); this.pileL = 0.2;
   }
 
   // dt = 0 : tout se place d'un coup (placement, changement de personnage)
@@ -90,7 +91,14 @@ export class Anim {
     if (immobile && this.repos > 4 && this.envie <= 0 && (this.tEnvie -= dt) <= 0) { this.envie = 2.5 + r() * 3.5; this.tEnvie = 14 + r() * 24; }
     if (!immobile) this.envie = 0;
     this.envie = Math.max(0, this.envie - dt);
-    this.wTel += (((p.telephone || this.envie > 0) && !conduite ? 1 : 0) - this.wTel) * kl(dt, 5);
+    // porter une pile de cartons (gestes.js) : p.porte est la pile, un groupe enfant du personnage (repère du personnage) ;
+    // on s'accroupit d'autant plus qu'elle est basse (la prendre sur la palette, la poser au sol)
+    const pile = p.porte;
+    if (pile) { this.pile.copy(pile.position); this.pileL = 0.18 * pile.scale.x; }
+    this.wPorte += ((pile ? 1 : 0) - this.wPorte) * kl(dt, 8);
+    this.accroupi += ((pile ? borne((0.92 - pile.position.y) / 0.55, 0, 1) : 0) - this.accroupi) * kl(dt, 9);
+    if (pile) this.envie = 0;
+    this.wTel += (((p.telephone || this.envie > 0) && !conduite && !pile ? 1 : 0) - this.wTel) * kl(dt, 5);
     // signe de la main
     if (this.salut > 0) this.salut -= dt;
     this.tSalut = Math.max(0, this.tSalut - dt);
@@ -116,6 +124,13 @@ export class Anim {
     else if (p.assis) this.poseAssise(br);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
+
+    /* ------------------------------------------------ la pile de cartons, tenue des deux mains par le carton du bas */
+    if (this.wPorte > 0.01) {
+      const P = this.pile, l = this.pileL + 0.03;
+      this.brasIK(0, P.x + l, P.y + 0.02, P.z - 0.03, 0.8, -0.5, -0.5, this.wPorte);
+      this.brasIK(3, P.x - l, P.y + 0.02, P.z - 0.03, -0.8, -0.5, -0.5, this.wPorte);
+    }
 
     /* ------------------------------------------------ téléphone en main (main droite, l'autre vient le tenir) */
     const yB = o[OS.bassin].position.y;
@@ -216,11 +231,12 @@ export class Anim {
     const lacetB = -0.1 * wg * (1 - 0.4 * w) * c1;
     const roulisB = 0.04 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
     const b = o[OS.bassin];
+    const cr = this.accroupi;
     b.position.set(0.03 * this.poids * (1 - wg) + 0.016 * s1 * wg * (1 - w) - this.bank * 0.35,
-      DIM.yBassin - 0.014 - wg * (0.012 + 0.05 * w) + bob - 0.13 * att, -0.06 * choc);
-    b.rotation.set(0.03 + 0.05 * w, lacetB, roulisB + this.bank * 0.5);
-    // buste : penché en courant et en accélérant, épaules en contre-rotation, respiration, regard
-    const pen = 0.025 + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj;
+      DIM.yBassin - 0.014 - wg * (0.012 + 0.05 * w) + bob - 0.13 * att - 0.4 * cr, -0.06 * choc - 0.12 * cr);
+    b.rotation.set(0.03 + 0.05 * w + 0.35 * cr, lacetB, roulisB + this.bank * 0.5);
+    // buste : penché en courant et en accélérant, épaules en contre-rotation, respiration, regard ; penché pour ramasser
+    const pen = 0.025 + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj + 0.25 * cr;
     o[OS.ventre].rotation.set(pen * 0.45 + br * 0.3, -lacetB * 0.45 + this.ry * 0.12, -roulisB * 0.7 + this.bank * 0.3);
     o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12, -lacetB * 0.75 + this.ry * 0.22, -roulisB * 0.25 + this.bank * 0.2);
     o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85, lacetB * 0.2 + this.ry * 0.66, -this.bank * 0.6);

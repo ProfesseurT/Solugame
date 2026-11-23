@@ -516,6 +516,11 @@ void main() {
   for (let i = 0; i < 12; i++) bati.push(B(0.4, 0.28, 0.32, '#b98a55', -78.8 + (i % 3) * 0.41, 0.28 + Math.floor(i / 6) * 0.29, -57.75 + (Math.floor(i / 3) % 2) * 0.34));
   col.boiteC(-78.4, -57.5, 1.3, 1.1);
   contact.jupe(-79.0, -58.0, -77.8, -57.0, 0.5, 0.3);
+  // la palette des commandes du jour, à droite de l'endroit où l'on gare le véhicule pour charger (ses cartons sont
+  // posés par main.js : on les emporte un à un)
+  bati.push(B(1.2, 0.14, 1.0, '#9a7b55', -81.4, 0.07, -44.6));
+  col.boiteC(-81.4, -44.6, 1.25, 1.05);
+  contact.jupe(-82.0, -45.1, -80.8, -44.1, 0.5, 0.3);
   // muret et portail
   bati.push(B(21.6, 1.1, 0.5, '#d9cdb2', -104.2, 0.55, -33.5), B(24.6, 1.1, 0.5, '#d9cdb2', -74.4, 0.55, -33.5));
   col.boite(-115, -33.75, -93.4, -33.25); col.boite(-86.6, -33.75, -62, -33.25);
@@ -816,6 +821,8 @@ void main() {
     figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 } },
     arrets: { cave: { x: 77.8, z: -46 }, bar: { x: 81.5, z: -57.2 }, treille: { x: 110.5, z: 9.4 }, epicerie: { x: 83, z: 9.4 } },
     pc: { x: -78.6, z: -52 },
+    // la palette des commandes du jour (dessus à 0,14 m)
+    palette: { x: -81.4, z: -44.6, y: 0.14 },
     banc: { x: 86, z: -58.35, h: 0 },
     terrasse: terrasse.map(([x, z]) => ({ x: x - 0.75, z, h: Math.PI / 2 })),
     place: { x0: 79, z0: -60, x1: 111, z1: -33 },

@@ -251,3 +251,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Vérifié** : captures image par image des deux gestes (montée, descente, tracteur et van) ; `npm run verifie` ; conduite assistée complète en tracteur et en van avec 6 décalages de départ (0 à 8 s) : tournée finie à chaque fois, aucun choc sauf un, en tracteur à +8 s, qui existait déjà avec l'ancien code (même essai sur l'ancienne règle : même choc).
 
 **À regarder plus tard** : `scripts/essai-perso-jeu.mjs` échoue sur « un passant a sauté de côté (0 image en l'air) », avant comme après ce lot (même échec avec le code d'avant) : le banc ne trouve plus de passant à viser, ou le tracteur ne les atteint plus.
+
+## 23/11/2026 · Lot 2 : les cartons, portés à la main
+
+**Fait** :
+- Au chai : une palette des commandes du jour, juste à droite de l'endroit où la conduite assistée gare le véhicule (mesuré : vers (-83,4 ; -47,4), cap 2,83). On descend, on ouvre la porte coulissante (van), on porte les 4 piles (3 + 3 cartons pour la Cave du Pressoir, 2 pour le Bar Le Cep, 3 pour La Treille), la plus proche d'abord, et on les range dans le véhicule ; on referme, on remonte. La palette se vide, le plateau ou le van se remplit colonne par colonne.
+- Chez chaque client : on descend, on prend ses colonnes, on les porte jusqu'à lui et on les pose en rang à ses pieds (elles y restent), puis il signe le bon de livraison ; ensuite on retourne au volant tout seul. La balise de mission s'efface pendant ce temps.
+- `anim.js` : pose « porter » (les deux mains au carton du bas, bras fixes en marchant) et accroupi selon la hauteur de la pile (palette, sol, plancher du van, plateau du tracteur). Trop loin pour les bras, on tire la pile à soi, ou on la pousse au fond.
+- `engins.js` : un carton commun ; 6 colonnes de 3 dans chaque véhicule ; porte coulissante du van (pièce à part, qui contourne le passage de roue) ; côtés de chargement.
+- Caméra : cadrage de scène pendant les cartons, de côté, à l'opposé du véhicule (sinon il cache tout). Doigt posé ou flèche enfoncée : la scène va trois fois plus vite (annoncé une fois, au premier chargement).
+- Les étoiles de retard ne montent pas pendant un geste.
+
+**Vérifié** : captures du chargement et d'une livraison (tracteur et van) ; `npm run verifie` (28 étapes par parcours : chargement commencé, palette vide, cartons posés avant le bon de livraison, retour au volant, 11 cartons devant les clients) ; conduite assistée complète, tracteur et van, avec 3 décalages de départ : tournée finie, aucun choc. Durée d'un chargement au chai : environ 20 s (moins de 10 s en accéléré).

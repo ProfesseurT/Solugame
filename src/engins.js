@@ -193,6 +193,27 @@ function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
   return g;
 }
 
+/* ---------------------------------------------------------------- carton de 6 bouteilles
+   Un seul modèle pour tous : sur la palette du chai, dans les bras, dans le tracteur ou le van, devant les clients.
+   Centré sur l'origine ; on les empile tous les PAS_CARTON mètres. */
+export const PAS_CARTON = 0.29;
+let geoCartonP = null;
+export function geoCarton() {
+  if (!geoCartonP) geoCartonP = fusion([B(0.36, 0.28, 0.32, '#b98a55'), B(0.37, 0.03, 0.06, '#e8d9b8', 0, 0.13, 0)]);
+  return geoCartonP;
+}
+// Les cartons d'un véhicule : 6 colonnes de 3 (colonne c : cartons 3c, 3c + 1, 3c + 2, de bas en haut), cachés tant
+// qu'ils ne sont pas chargés. base(c) : centre du carton du bas de la colonne c, dans le repère de la caisse.
+function colonnes(caisse, base) {
+  const cartons = [];
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(geoCarton(), MAT), [x, y, z] = base(Math.floor(i / 3));
+    m.position.set(x, y + (i % 3) * PAS_CARTON, z);
+    m.castShadow = true; m.visible = false; caisse.add(m); cartons.push(m);
+  }
+  return cartons;
+}
+
 /* ---------------------------------------------------------------- tracteur */
 
 export function tracteur() {
@@ -256,15 +277,10 @@ export function tracteur() {
   essieu.add(pivots[0], pivots[1]);
   const rouesAv = [mk(gA, pivots[0], 0, 0, 0), mk(gA, pivots[1], 0, 0, 0)];
 
-  // jusqu'à 18 cartons sur le plateau (3 de large, 2 de profondeur, 3 de haut), cachés tant qu'ils ne sont pas chargés ;
-  // posés sur la caisse, ils roulent et tanguent avec elle
-  const cartons = [];
-  const geoCarton = fusion([B(0.4, 0.28, 0.32, '#b98a55'), B(0.41, 0.03, 0.06, '#e8d9b8', 0, 0.13, 0)]);
-  for (let i = 0; i < 18; i++) {
-    const m = new THREE.Mesh(geoCarton, MAT);
-    m.position.set(-0.42 + (i % 3) * 0.42, 1.43 + Math.floor(i / 6) * 0.29, -1.68 - (Math.floor(i / 3) % 2) * 0.34);
-    m.castShadow = true; m.visible = false; caisse.add(m); cartons.push(m);
-  }
+  // jusqu'à 18 cartons sur le plateau, en 6 colonnes de 3 (3 de large, 2 de profondeur) ; posés sur la caisse, ils
+  // roulent et tanguent avec elle. On charge et on décharge par le côté (chargeur : où l'on se tient, à droite ou à gauche).
+  const cartons = colonnes(caisse, c => [-0.42 + (c % 3) * 0.42, 1.43, -1.68 - Math.floor(c / 3) * 0.34]);
+  const chargeur = { droite: [-1.45, -1.85], gauche: [1.45, -1.85] };
   // siège : position du conducteur dans le repère de la caisse (qui coïncide avec celui du groupe au repos)
   // dims : rayons et hauteurs des roues, empattement, cercles de collision (centres le long de l'axe, rayon), point de
   // roulis et tangage ; en plus : position des roues (z et demi-voie), dessus du siège (assise) et plancher sous les pieds
@@ -273,7 +289,7 @@ export function tracteur() {
     zAr: -0.9, zAv: 1.35, xAr: 0.98, xAv: 0.84, assise: 1.5, plancher: 1.24,
   };
   return {
-    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, siege: new THREE.Vector3(0, 0.62, -0.62),
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, siege: new THREE.Vector3(0, 0.62, -0.62),
     dims, volantCentre: new THREE.Vector3(0, 1.9, -0.18), volantRayon: 0.2, volantInclinaison: -0.55,
   };
 }
@@ -304,7 +320,7 @@ function grappe(at, place, ext, r, col, ty) {
   at.poly([place(r * 0.4, r * 1.3), place(r * 1.9, r * 1.0), place(r * 3.0, r * 2.1), place(r * 2.2, r * 3.2), place(r * 0.9, r * 2.7)], '#5d7a36', T.carrosserie, ext);
 }
 
-let geoVolantVan = null, geoCartonVan = null;
+let geoVolantVan = null;
 export function van() {
   const { E, R, RA, X, ZAV, ZAR } = VAN;
   const groupe = new THREE.Group();
@@ -317,7 +333,11 @@ export function van() {
   const arche = za => [-83, -55, -27, 0, 27, 55, 83].map(d => { const t = d * Math.PI / 180; return [za + RA * Math.sin(t), R + RA * Math.cos(t)]; });
   const silhouette = [[-1.96, 0.36], ...arche(ZAR), ...arche(ZAV), [1.96, 0.36], [1.96, 0.852], [1.3, 1.033], [0.62, 1.765], [-1.96, 1.765]];
   const vitreCabine = [[1.147, 1.12], [0.627, 1.67], [-0.26, 1.7], [-0.26, 1.12]];
-  const vitreLaterale = [[-0.42, 1.12], [-0.42, 1.7], [-1.16, 1.7], [-1.16, 1.12]]; // porte coulissante, à droite
+  // porte coulissante, à droite : une pièce à part qui glisse vers l'arrière (on charge par là) ; sa vitre a un cadre
+  // (son bas contourne le passage de roue arrière, avec un peu de marge)
+  const COULISSANTE = [[-1.18, 0.76], [-1.11, 0.74], [-0.93, 0.6], [-0.86, 0.4], [-0.4, 0.4], [-0.4, 1.745], [-1.18, 1.745]];
+  const vitreLaterale = [[-0.47, 1.14], [-0.47, 1.68], [-1.11, 1.68], [-1.11, 1.14]];
+  const atC = new Atelier(), atCV = new Atelier(), extraC = [];
   // Porte du conducteur (à gauche) : une pièce à part, qui s'ouvre sur sa charnière avant (gestes.js). Le flanc gauche est
   // percé à sa forme ; ses bords sombres font les joints. Sa vitre est un peu plus petite que celle d'en face (cadre).
   const PORTE = [[-0.28, 0.4], [0.86, 0.4], [0.95, 0.78], [1.16, 1.1], [0.55, 1.745], [-0.28, 1.745]];
@@ -325,9 +345,9 @@ export function van() {
   const CHARNIERE = [0.9, 1.05]; // axe vertical de la porte : x, z
   const atP = new Atelier(), atPV = new Atelier(), extraP = [];
   for (const s of [1, -1]) {
-    const trous = s > 0 ? [PORTE] : [vitreCabine, vitreLaterale];
+    const trous = s > 0 ? [PORTE] : [vitreCabine, COULISSANTE];
     dalle(at, silhouette, trous, (u, v, f) => [s * (flancX(v) - f * E), v, u], [s, 0, 0], CREME_V, PEINT, { colIn: '#d6d0c2', tyIn: 0, colT: SOMBRE_V, tyT: 0 });
-    if (s < 0) for (const tr of trous) atV.poly(tr.map(([u, v]) => [s * (flancX(v) - E / 2), v, u]), VITRE, undefined, [s, 0, 0]);
+    if (s < 0) atV.poly(vitreCabine.map(([u, v]) => [s * (flancX(v) - E / 2), v, u]), VITRE, undefined, [s, 0, 0]);
     const F = (z, y, e = 0.005) => [s * (flancX(y) + e), y, z], ext = [s, 0, 0];
     // liseré bordeaux (une bande et un filet) tout le long ; à gauche, coupé par la porte (qui porte le sien)
     // z0 et z1 : début et fin de la bande selon la hauteur (le bord avant de la porte est en biais)
@@ -335,7 +355,7 @@ export function van() {
       for (const [y0, y1] of [[0.8, 0.86], [0.765, 0.778]]) a.quad(F(z0(y0), y0), F(z1(y0), y0), F(z1(y1), y1), F(z0(y1), y1), BORDEAUX, PEINT, ext);
     };
     const k = z => () => z, avant = y => y < 0.78 ? 0.86 + (y - 0.4) * 0.09 / 0.38 : 0.95 + (y - 0.78) * 0.21 / 0.32;
-    if (s < 0) bande(at, k(-1.96), k(1.9));
+    if (s < 0) { bande(at, k(-1.96), k(-1.18)); bande(atC, k(-1.18), k(-0.4)); bande(at, k(-0.4), k(1.9)); }
     else { bande(at, k(-1.96), k(-0.28)); bande(atP, k(-0.28), avant); bande(at, avant, k(1.9)); }
     // grappe sur le panneau de chargement
     grappe(at, (du, dv) => F(-1.56 + du, 1.33 + dv), ext, 0.046, BORDEAUX, PEINT);
@@ -346,11 +366,11 @@ export function van() {
     };
     if (s < 0) {
       trait([1.16, 1.1], [0.95, 0.78]); trait([0.95, 0.78], [0.87, 0.37]); trait([-0.28, 0.37], [-0.28, 1.76]);
-      trait([-0.4, 0.37], [-0.4, 1.76]); trait([-1.18, 0.37], [-1.18, 1.76]); trait([-1.18, 1.42], [-1.95, 1.42]);
+      trait([-1.18, 1.42], [-1.95, 1.42]);
     } else at.quad(F(-1.06, 0.93), F(-0.94, 0.93), F(-0.94, 1.03), F(-1.06, 1.03), nuance(CREME_V, 0.9), PEINT, ext); // trappe à carburant
     // poignées
     (s > 0 ? extraP : extra).push(B(0.03, 0.035, 0.15, PLAST_V, s * 0.915, 1.0, -0.12));
-    if (s < 0) extra.push(B(0.03, 0.035, 0.15, PLAST_V, -0.915, 1.0, -0.56));
+    if (s < 0) extraC.push(B(0.03, 0.035, 0.15, PLAST_V, -0.915, 1.0, -0.56));
     // rétroviseur : bras, coque, miroir
     extra.push(B(0.12, 0.035, 0.05, PLAST_V, s * 0.95, 1.13, 1.12), B(0.07, 0.21, 0.13, PLAST_V, s * 1.03, 1.2, 1.12));
     at.quad([s * 0.998, 1.105, 1.052], [s * 1.062, 1.105, 1.052], [s * 1.062, 1.295, 1.052], [s * 0.998, 1.295, 1.052], '#8ea2b4', T.vitre, [0, 0, -1]);
@@ -477,6 +497,13 @@ export function van() {
     const g = fusion(geos); deplacer(g, -CHARNIERE[0], 0, -CHARNIERE[1]);
     const m = new THREE.Mesh(g, mat); m.castShadow = mat === MAT; m.receiveShadow = true; porte.add(m);
   }
+  // la porte coulissante : un groupe qu'on écarte du flanc puis qu'on fait glisser vers l'arrière (gestes.js)
+  dalle(atC, COULISSANTE, [vitreLaterale], (u, v, f) => [-(flancX(v) - f * E), v, u], [-1, 0, 0], CREME_V, PEINT, { colIn: '#d6d0c2', tyIn: 0, colT: SOMBRE_V, tyT: 0 });
+  atCV.poly(vitreLaterale.map(([u, v]) => [-(flancX(v) - E / 2), v, u]), VITRE, undefined, [-1, 0, 0]);
+  const coulissante = new THREE.Group(); caisse.add(coulissante);
+  for (const [geos, mat] of [[[...atC.geos(), ...extraC], MAT], [atCV.geos(), MAT_VITRE]]) {
+    const m = new THREE.Mesh(fusion(geos), mat); m.castShadow = mat === MAT; m.receiveShadow = true; coulissante.add(m);
+  }
 
   const support = new THREE.Group(); support.position.copy(volantCentre); support.rotation.x = volantInclinaison; caisse.add(support);
   if (!geoVolantVan) {
@@ -499,25 +526,16 @@ export function van() {
   essieu.add(pivots[0], pivots[1]);
   const rouesAv = [mk(rG, pivots[0], 0, 0, 0), mk(rD, pivots[1], 0, 0, 0)];
 
-  // 18 cartons dans l'espace de chargement (3 de large entre les passages de roue, 3 de profondeur depuis les portes
-  // arrière, 2 de haut), cachés tant qu'ils ne sont pas chargés ; on les voit par les vitres arrière et latérale
-  if (!geoCartonVan) {
-    const a = new Atelier();
-    a.quad([-0.172, 0.1405, -0.03], [0.172, 0.1405, -0.03], [0.172, 0.1405, 0.03], [-0.172, 0.1405, 0.03], '#e8d9b8', 0, [0, 1, 0]);
-    geoCartonVan = fusion([B(0.34, 0.28, 0.32, '#b98a55'), ...a.geos()]);
-  }
-  const cartons = [];
-  for (let i = 0; i < 18; i++) {
-    const m = new THREE.Mesh(geoCartonVan, MAT);
-    m.position.set(0.36 - (i % 3) * 0.36, 0.69 + Math.floor(i / 9) * 0.29, -1.79 + (Math.floor(i / 3) % 3) * 0.34);
-    m.castShadow = true; m.visible = false; caisse.add(m); cartons.push(m);
-  }
+  // 18 cartons dans l'espace de chargement, en 6 colonnes de 3 (3 de large, 2 de profondeur, en face de la porte
+  // coulissante par où l'on charge) ; on les voit par les vitres. chargeur : où l'on se tient pour charger.
+  const cartons = colonnes(caisse, c => [0.36 - (c % 3) * 0.36, 0.69, -0.82 - Math.floor(c / 3) * 0.36]);
+  const chargeur = { droite: [-1.45, -0.8] };
   const dims = {
     rAr: R, rAv: R, yAr: R, yAv: R, emp: ZAV - ZAR, off: [1.16, -1.14], r: 1.0, pivot: new THREE.Vector3(0, 0.72, -0.1),
     zAr: ZAR, zAv: ZAV, xAr: X, xAv: X, assise: 0.78, plancher: 0.45,
   };
   return {
-    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte,
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte, coulissante, chargeur,
     siege: new THREE.Vector3(0.38, -0.1, -0.05), dims, volantCentre, volantRayon: 0.19, volantInclinaison,
   };
 }

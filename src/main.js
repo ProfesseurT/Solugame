@@ -16,7 +16,7 @@ import { Mission } from './mission.js';
 import { son } from './audio.js';
 import { versAngle, hasard } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
-import { Gestes } from './gestes.js';
+import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -407,7 +407,16 @@ const jeu = {
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
 const pc = new PC(jeu);
-const gestes = new Gestes({ jeu, scene, col }); // monter dans un véhicule, en descendre (gestes.js)
+const gestes = new Gestes({ jeu, scene, col }); // monter, descendre, porter les cartons (gestes.js)
+// la palette des commandes du jour devant le chai : les piles prévues par la mission, en carré
+{
+  const pal = new THREE.Group(); pal.position.set(L.palette.x, 0, L.palette.z); scene.add(pal);
+  const off = [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]];
+  mission.palette = mission.pilesPrevues().map((p, i) => {
+    const g = pileCartons(p.n); g.position.set(off[i][0], L.palette.y + 0.14, off[i][1]); pal.add(g);
+    return { ...p, groupe: g };
+  });
+}
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
@@ -432,28 +441,41 @@ function vehiculeProche() {
   for (const v of VEHICULES) { const d = Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z); if (d < dmin) { dmin = d; best = v; } }
   return best;
 }
+// Installé au volant (fin de la montée, gestes.js) : le moteur démarre
+function auVolant(v) {
+  veh = v; tr = v.p; tm = v.m;
+  jeu.auVolant = true;
+  joueur.poste = v.poste; joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
+  son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
+  if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
+  const sx = Math.sin(tr.h), sz = Math.cos(tr.h), [ex, ey, ez] = echappement(sx, sz);
+  for (let i = 0; i < 8; i++) emettre(ex, ey, ez, (rnd() - 0.5) * 0.6, 1.2 + rnd(), (rnd() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
+}
 // On monte (gestes.js : on va à la portière ou au marchepied, on s'installe), puis le moteur démarre
 function monter(v) {
   if (gestes.actif) return;
   veh = v; tr = v.p; tm = v.m;
   ctrl.relacher();
-  gestes.monter(v, () => {
-    jeu.auVolant = true;
-    joueur.poste = v.poste; joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
-    son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
-    if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
-    const sx = Math.sin(tr.h), sz = Math.cos(tr.h), [ex, ey, ez] = echappement(sx, sz);
-    for (let i = 0; i < 8; i++) emettre(ex, ey, ez, (rnd() - 0.5) * 0.6, 1.2 + rnd(), (rnd() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
-  });
+  gestes.monter(v, () => auVolant(v));
 }
-// On coupe le moteur, puis on descend à gauche (gestes.js) ; le véhicule reste à l'arrêt (il repartait seul)
+// Le véhicule reste à l'arrêt (il repartait seul), moteur et radio coupés
+function couperMoteur() { tr.v = 0; tr.pedale = 0; tr.frein = 0; son.radio(false); son.moteur(false, 0); }
+const aPied = () => { jeu.auVolant = false; };
+// On coupe le moteur, puis on descend à gauche (gestes.js)
 function descendre() {
   if (gestes.actif) return;
-  tr.v = 0; tr.pedale = 0; tr.frein = 0;
-  son.radio(false); son.moteur(false, 0);
-  ctrl.relacher();
-  gestes.descendre(veh, () => { jeu.auVolant = false; }, () => {});
+  couperMoteur(); ctrl.relacher();
+  gestes.descendre(veh, aPied, () => {});
 }
+// Les cartons (mission.js) : charger ceux de la palette du chai, décharger ceux d'un client, puis remonter au volant
+let accelerVu = false;
+jeu.charger = (piles, place, fin) => {
+  const v = veh; couperMoteur();
+  if (!accelerVu) { accelerVu = true; hud.dire(DIALOGUES.accelerer(tactile)); }
+  gestes.charger(v, piles, { sorti: aPied, place, installe: () => { auVolant(v); fin(); } });
+};
+jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
+jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
 const presPC = () => !jeu.auVolant && mission.pcDispo && Math.hypot(joueur.pos.x - L.pc.x, joueur.pos.z - L.pc.z) < 4;
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
@@ -585,8 +607,10 @@ function miseAJour(dt) {
 
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
   if (gestes.actif) {
-    // un geste se joue (monter, descendre) : il mène le personnage ; le véhicule reste à l'arrêt
-    gestes.update(dtm, temps);
+    // un geste se joue (monter, descendre, porter les cartons) : il mène le personnage ; le véhicule reste à l'arrêt.
+    // Doigt posé ou touche de direction enfoncée : une scène de cartons se joue trois fois plus vite.
+    const vite = gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1;
+    gestes.update(dtm * vite, temps);
     if (jeu.auVolant) tr.update(dtm, 0, 0, col, voitures, temps);
   } else if (jeu.auVolant) {
     let gaz = 0, braq = 0;
@@ -724,8 +748,9 @@ function miseAJour(dt) {
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 
-  // caméra, soleil, ciel
-  if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
+  // caméra, soleil, ciel ; un geste qui se regarde (charger, décharger) a son cadre
+  if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
+  else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
   hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);
 }
 
