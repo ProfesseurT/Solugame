@@ -1,0 +1,48 @@
+// Vérification avant chaque push (npm run verifie) : chaque push sur main met le jeu en ligne.
+//  1. construit le jeu (refuse tout tiret cadratin ou demi-cadratin) ;
+//  2. joue la mission entière en tracteur et en van (390 x 844), les deux en même temps ;
+//  3. regarde git : index.html doit aller avec src/ dans le même commit.
+// Code 1 si le build ou un parcours échoue, ou si le dernier commit a un index.html en retard sur src/.
+import { spawn, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// Lance un script node du dossier scripts/ et garde sa sortie (affichée seulement en cas d'échec).
+const lancer = (args, env = {}) => new Promise(ok => {
+  const p = spawn(process.execPath, args, { cwd: root, env: { ...process.env, ...env } });
+  let sortie = '';
+  p.stdout.on('data', d => { sortie += d; });
+  p.stderr.on('data', d => { sortie += d; });
+  p.on('close', code => ok({ code, sortie }));
+});
+const echec = (titre, sortie) => { console.log(`ÉCHEC ${titre}\n\n${sortie.trim()}\n`); process.exit(1); };
+
+const t0 = Date.now();
+const b = await lancer(['scripts/build.mjs']);
+if (b.code !== 0) echec('build', b.sortie);
+console.log('OK   build : ' + (b.sortie.match(/index\.html .*/) || [''])[0]);
+
+const parcours = await Promise.all([
+  lancer(['scripts/essai.mjs', 'parcours', '390x844', 'parcours']).then(r => ({ ...r, nom: 'parcours en tracteur' })),
+  lancer(['scripts/essai.mjs', 'parcours', '390x844', 'parcours-van'], { VEHICULE: 'van' }).then(r => ({ ...r, nom: 'parcours en van' })),
+]);
+for (const r of parcours) {
+  if (r.code !== 0 || !r.sortie.includes('Aucune erreur.')) echec(r.nom, r.sortie);
+  console.log(`OK   ${r.nom} : ${(r.sortie.match(/^OK /gm) || []).length} étapes, aucune erreur`);
+}
+
+// Ce que git voit après le build : fichiers du jeu modifiés depuis le dernier commit.
+const modifies = execFileSync('git', ['status', '--porcelain', '--', 'src', 'scripts', 'index.html', 'package.json', 'package-lock.json'], { cwd: root, encoding: 'utf8' })
+  .split('\n').filter(Boolean).map(l => l.slice(3));
+const duree = `(${Math.round((Date.now() - t0) / 1000)} s)`;
+if (!modifies.length) {
+  console.log(`\nPrêt à pousser : le dernier commit est vérifié ${duree}.`);
+} else if (modifies.length === 1 && modifies[0] === 'index.html') {
+  // src/ est commité mais pas l'index.html qui va avec : pousser mettrait en ligne une version en retard.
+  console.log('\nÉCHEC index.html : le dernier commit contient src/ sans l\'index.html reconstruit. L\'ajouter au commit avant de pousser.');
+  process.exit(1);
+} else {
+  console.log(`\nTout est vert ${duree}. Pas encore poussable : à commiter ensemble avant de pousser :\n  ${modifies.join('\n  ')}`);
+}

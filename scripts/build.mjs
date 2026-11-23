@@ -17,7 +17,8 @@ const srcDir = join(root, 'src');
 for (const f of await readdir(srcDir)) {
   const txt = await readFile(join(srcDir, f), 'utf8');
   if (/[–—]/.test(txt)) {
-    console.error(`Tiret cadratin ou demi-cadratin trouvé dans src/${f} : interdit par la charte.`);
+    // on attend que le message soit écrit : vers un tube (npm run verifie), l'écriture est différée sur macOS
+    await new Promise(ok => process.stderr.write(`Tiret cadratin ou demi-cadratin trouvé dans src/${f} : interdit par la charte.\n`, ok));
     process.exit(1);
   }
 }

@@ -226,3 +226,11 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Vérifié** : empreinte de la scène (toutes les géométries, instances et tenues, palier forcé « moyen ») identique avant et après (`527d0b7a`) : même monde, mêmes passants. Parcours en tracteur et en van : « Aucune erreur. ». ESLint : plus rien hors faux positifs des bancs d'essai.
 
 **Reste à décider** (lot 2) : sortir de main.js les paliers de qualité (environ 130 lignes) et les particules (environ 90) ; une commande `npm run verifie` (build, `index.html` à jour, parcours) avant chaque push.
+
+## 23/11/2026 · Lot 2 : `npm run verifie`
+
+**Fait** : `scripts/verifie.mjs`, lancé par `npm run verifie` avant chaque push. Il construit le jeu (le build refuse déjà les tirets longs), joue la mission entière en tracteur et en van en même temps (5 s environ), puis regarde git. Trois issues : « Prêt à pousser » (dernier commit vérifié) ; « Tout est vert, à commiter » avec la liste des fichiers ; échec (code 1) si le build ou un parcours échoue, ou si le dernier commit contient `src/` sans l'`index.html` reconstruit (pousser mettrait en ligne une version en retard).
+
+**Corrigé au passage** (`scripts/build.mjs`) : le message « Tiret cadratin trouvé dans... » se perdait quand la sortie passait par un tube (macOS diffère l'écriture et le script quittait avant) ; il attend maintenant que le message soit écrit.
+
+**Vérifié** sur une branche jetable : cas normal (« Prêt à pousser ») ; tiret cadratin glissé dans `src/` (code 1, message affiché) ; commit de `src/` sans `index.html` (code 1, « L'ajouter au commit avant de pousser »).

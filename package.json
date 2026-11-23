@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "verifie": "node scripts/verifie.mjs",
     "serve": "python3 -m http.server 8642",
     "essai": "node scripts/essai.mjs"
   },

@@ -33,13 +33,14 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 | `scripts/allege-three.mjs` | Plugin esbuild : retire de three.js ce que le jeu n'utilise jamais (shaders, GLSL, code mort), d'après ce que `src/` nomme. Dépend de three 0.170.0. |
 | `scripts/essai-allege.mjs` | Banc qui prouve que l'allègement ne change rien (programmes, GLSL, shaders traduits, images au bit près) : à relancer après une mise à jour de three ou un changement de matière. |
 | `scripts/essai.mjs` | Banc d'essai sans fenêtre (Chrome + puppeteer-core) : `parcours`, `perf`, `photo`, `accueil`, `poids` (démarrage, mémoire, coût de chaque étape d'une image ; `LENT=4` simule un processeur 4 fois plus lent, `QUALITE=faible` impose un palier). `essai-perso*.mjs` : bancs des personnages. |
+| `scripts/verifie.mjs` | `npm run verifie`, avant chaque push : build, mission entière en tracteur et en van (390 x 844, en parallèle), puis contrôle git (`index.html` doit être commité avec `src/`). Code 1 si quelque chose ne va pas. |
 | `index.html` | Généré : page complète pour GitHub Pages. Ne pas éditer à la main. |
 | `dist/jeu.html` | Généré : fragment publié en Artifact (non versionné). |
 | `JOURNAL.md` | Décisions, vérifications, état. |
 
-Première fois : `npm install`. Après toute modification de `src/` : `npm run build`, puis `node scripts/essai.mjs parcours 390x844` (doit finir sur « Aucune erreur. »). Essai local dans un navigateur : `npm run serve` puis http://127.0.0.1:8642/. Forcer un palier : `?qualite=faible|moyen|haut`.
+Première fois : `npm install`. Après toute modification de `src/` : `npm run verifie` (build, puis la mission entière en tracteur et en van ; finit sur « Prêt à pousser » ou dit quoi commiter). Essai local dans un navigateur : `npm run serve` puis http://127.0.0.1:8642/. Forcer un palier : `?qualite=faible|moyen|haut`.
 
-Adresse publique : https://professeurt.github.io/Solugame/ (GitHub Pages, branche `main`, racine, `.nojekyll`). Chaque push sur `main` met le jeu en ligne en une minute environ : ne pousser que lorsque tout est au vert (build, parcours « Aucune erreur. », `index.html` régénéré dans le commit).
+Adresse publique : https://professeurt.github.io/Solugame/ (GitHub Pages, branche `main`, racine, `.nojekyll`). Chaque push sur `main` met le jeu en ligne en une minute environ : ne pousser qu'après un `npm run verifie` qui finit sur « Prêt à pousser » (build, parcours tracteur et van, `index.html` dans le même commit que `src/`).
 
 Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (republier depuis `dist/jeu.html`).
 
