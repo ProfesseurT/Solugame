@@ -38,7 +38,9 @@ const TYPES = new Map(Object.entries({
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
 // au-delà de laquelle le détail procédural passe en version allégée (réglée par la qualité).
 // uNuit : 0 en plein jour (la lumière dorée), 1 en pleine nuit (main.js, d'après l'heure ; monde.js : nuit)
-export const UNI = { uTemps: { value: 0 }, uLoin: { value: 140 }, uNuit: { value: 0 } };
+// uSaison : 0 en automne (la tournée de Noël), 1 au printemps (la journée de traitement, en mai) : feuillages, champs et
+// herbe reverdissent (cl_saison) ; les rangs de vigne ont leurs propres couleurs (monde.js : saison)
+export const UNI = { uTemps: { value: 0 }, uLoin: { value: 140 }, uNuit: { value: 0 }, uSaison: { value: 0 } };
 
 // Bruit tuilable 128 x 128 : R grain fin, G grandes taches, B mouchetis, A plaques
 function bruitTuilable() {
@@ -197,9 +199,20 @@ uniform sampler2D tCailloux;
 uniform float uNuit;
 uniform float uTemps;
 uniform float uLoin;
+uniform float uSaison;
 varying vec3 vPosM;
 varying float vMat;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// la saison : au printemps, les feuillages d'automne passent au vert (leur éclat gardé), les champs verdissent à moitié,
+// l'herbe devient plus drue
+vec3 cl_saison(vec3 col) {
+  int m = int(vMat + 0.5);
+  float l = dot(col, vec3(0.3, 0.59, 0.11));
+  if (m == 8) return mix(col, vec3(0.42, 0.66, 0.24) * (0.45 + 0.9 * l), uSaison * 0.85);
+  if (m == 13) return mix(col, vec3(0.5, 0.68, 0.3) * (0.55 + 0.7 * l), uSaison * 0.55);
+  if (m == 4) return mix(col, col * vec3(0.86, 1.1, 0.8), uSaison * 0.7);
+  return col;
+}
 vec3 normaleMonde() { return normalize(cross(dFdx(vPosM), dFdy(vPosM))); }
 const vec2 SOLEIL_XZ = ${V2(SOLEIL)}; // vers le soleil, au sol
 // éclat moyen de chaque matière, pour la version allégée au loin
@@ -363,7 +376,7 @@ export function detailler(m, typeFixe, o = {}) {
   const attr = typeFixe === undefined, vent = o.vent, vs0 = !vent && attr && o.ventSommets;
   m.onBeforeCompile = sh => {
     sh.uniforms.tBruit = { value: BRUIT }; sh.uniforms.tCailloux = { value: CAILLOUX }; sh.uniforms.uNuit = UNI.uNuit;
-    sh.uniforms.uTemps = UNI.uTemps; sh.uniforms.uLoin = UNI.uLoin;
+    sh.uniforms.uTemps = UNI.uTemps; sh.uniforms.uLoin = UNI.uLoin; sh.uniforms.uSaison = UNI.uSaison;
     if (vent) sh.uniforms.uVent = { value: new THREE.Vector4(...vent) };
     const poids = vent ? 'float pv = clamp((position.y - uVent.y) / (uVent.z - uVent.y), 0.0, 1.0); pv *= pv * uVent.x; float tv = uTemps * uVent.w;' + (attr ? ' pv *= step(7.5, aMat) * step(aMat, 8.5);' : '')
       : vs0 ? 'float pv = aVent * 0.16; float tv = uTemps * 1.6;' : '';
@@ -412,7 +425,7 @@ ${poids ? `{
     sh.vertexShader = vs;
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL)
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = cl_detail(diffuseColor.rgb);')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = cl_detail(' + (o.ondule ? '' : 'uSaison > 0.0 ? cl_saison(diffuseColor.rgb) : ') + 'diffuseColor.rgb);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (attr ? GLSL_EMISSIF : '') + (o.transparente ? GLSL_ALPHA(o.transparente === true ? 0.42 : o.transparente) : ''));
   };
   const cle = 'cl-' + (attr ? 'attr' : typeFixe) + (vent ? '-v' : '') + (vs0 ? '-s' : '') + (o.teinteFeuillage ? '-t' : '') + (o.ondule ? '-o' : '') + (o.transparente ? '-tr' + o.transparente : '');

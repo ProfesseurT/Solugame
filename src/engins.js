@@ -1031,3 +1031,45 @@ export function voiture(couleur, modele, roule = false, ouvrante = false) {
   m.userData.feux = f;
   return m;
 }
+
+/* ---------------------------------------------------------------- le pulvérisateur (mission 2)
+   Porté à l'arrière du tracteur (sur le relevage, derrière le plateau) : une cuve de 600 L, son ventilateur, et deux
+   rampes qui se déplient de chaque côté au-dessus des rangs. Leurs descentes passent entre les rangs (à 2,2 et 4,4 m de
+   l'axe : le tracteur, au milieu d'un inter-rang, traite deux rangs de chaque côté), buses tournées vers les feuilles.
+   Repère de la caisse du tracteur. Chaque rampe : une partie fixe jusqu'au bord du tracteur, puis le bras, sur sa
+   charnière (bras : rotation.y, 0 déplié, replié le long du pulvérisateur, vers l'arrière) ; buses : d'où sort la
+   bouillie (repère de la caisse, rampes dépliées). */
+export function pulverisateur() {
+  const groupe = new THREE.Group(), VERT = '#2e6b4f', ACIER = '#5d6b78', NOIR = '#1e1e22', BLANC = '#eef0ec';
+  const corps = [
+    // châssis sur le relevage, cuve couchée en travers, son couvercle, le ventilateur et sa grille, le mât des rampes
+    B(1.3, 0.12, 0.9, VERT, 0, 0.62, -2.62), B(0.12, 0.7, 0.12, VERT, 0.55, 0.95, -2.28), B(0.12, 0.7, 0.12, VERT, -0.55, 0.95, -2.28),
+    teinter(C(0.5, 0.5, 1.45, 14, BLANC, 0, 1.18, -2.66, 'x'), BLANC, T.carrosserie), C(0.17, 0.17, 0.12, 10, '#2f6db0', 0.2, 1.7, -2.66),
+    C(0.52, 0.52, 0.32, 16, VERT, 0, 0.98, -3.2, 'z'), C(0.44, 0.44, 0.04, 16, NOIR, 0, 0.98, -3.37, 'z'),
+    B(0.12, 1.7, 0.12, VERT, 0, 1.55, -3.05), B(0.9, 0.12, 0.14, VERT, 0, 2.38, -3.05),
+  ];
+  const c = new THREE.Mesh(fusion(corps), MAT); c.castShadow = true; c.receiveShadow = true; groupe.add(c);
+  // une rampe (côté s) : la partie fixe, du mât au bord du tracteur (x = 1), puis le bras jusqu'à 4,6 m de l'axe, ses
+  // deux descentes (à 2,2 et 4,4 m de l'axe) et leurs buses ; le bras sur sa charnière, au bout de la partie fixe
+  const X0 = 1.0, L = 3.6, geoBras = s => {
+    const g = [B(L, 0.08, 0.08, ACIER, s * L / 2, 0, 0), B(L * 0.8, 0.05, 0.05, ACIER, s * L * 0.45, -0.22, 0)];
+    for (const d of [2.2 - X0, 4.4 - X0]) g.push(B(0.05, 1.45, 0.05, ACIER, s * d, -0.72, 0), B(0.16, 0.1, 0.1, NOIR, s * d, -1.1, 0), B(0.16, 0.1, 0.1, NOIR, s * d, -1.4, 0));
+    return compacter(fusion(g));
+  };
+  const fixe = [];
+  for (const s of [1, -1]) fixe.push(B(X0 - 0.2, 0.08, 0.08, ACIER, s * (0.2 + (X0 - 0.2) / 2), 2.38, -3.05), B(0.1, 0.16, 0.1, NOIR, s * X0, 2.38, -3.05));
+  const mf = new THREE.Mesh(fusion(fixe), MAT); mf.castShadow = true; groupe.add(mf);
+  const bras = [1, -1].map(s => {
+    const ch = new THREE.Group(); ch.position.set(s * X0, 2.38, -3.05);
+    const m = new THREE.Mesh(geoBras(s), MAT); m.castShadow = true; ch.add(m);
+    groupe.add(ch); ch.userData.s = s;
+    return ch;
+  });
+  // les buses (repère de la caisse, rampes dépliées) : sous chaque descente, et le ventilateur au milieu
+  const buses = [];
+  for (const s of [1, -1]) for (const d of [2.2, 4.4]) buses.push(new THREE.Vector3(s * d, 1.15, -3.05));
+  buses.push(new THREE.Vector3(0, 0.98, -3.4));
+  return { groupe, bras, buses, ouvert: 0 };
+}
+// les rampes s'ouvrent (k 1) ou se replient (k 0) : repliés, les bras se rangent le long du pulvérisateur, vers l'arrière
+export function deplier(p, k) { p.ouvert = k; const a = (1 - k) * Math.PI / 2 * 0.97; for (const b of p.bras) b.rotation.y = b.userData.s * a; }

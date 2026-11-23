@@ -187,6 +187,14 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .bulle{margin:0;max-width:85%;padding:10px 13px;border-radius:16px 16px 16px 4px;background:#fff;border:1px solid var(--trait)}
 .reg{display:flex;justify-content:space-between;align-items:center;border:1.5px solid var(--trait);background:#fff;border-radius:14px;padding:14px;font:500 15px/1 var(--ui);color:var(--encre)}
 .reg-choix{display:flex;gap:8px}
+.ap-res{display:flex;align-items:flex-end;gap:2px;height:14px} .ap-res b{width:3px;background:#fff;border-radius:1px} .ap-res b:nth-child(1){height:4px} .ap-res b:nth-child(2){height:7px} .ap-res b:nth-child(3){height:10px} .ap-res b:nth-child(4){height:13px} .ap-res.non b{opacity:.3}
+.rp-ligne{display:grid;gap:2px;padding:10px 0;border-top:1px solid var(--trait)} .rp-ligne p{margin:0} .rp-quand{display:flex;justify-content:space-between;align-items:center;gap:8px} .rp-p{font-size:13px;color:#4a4655}
+.rp-case{display:flex;align-items:center;gap:12px;text-align:left;border:1.5px solid var(--trait);background:#fff;border-radius:14px;padding:12px;color:var(--encre);font:400 14px/1.3 var(--ui)}
+.rp-case i{flex:none;width:22px;height:22px;border-radius:7px;border:2px solid #b9b3a6} .rp-case.on{border-color:#1fa9c2;background:#eaf8fb} .rp-case.on i{background:#1fa9c2 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12l5 5 9-10' stroke='%23fff' stroke-width='3' fill='none'/%3E%3C/svg%3E") center/16px no-repeat;border-color:#1fa9c2}
+.rp-case span{display:grid} .rp-case small{color:var(--gris)}
+.rp-puces{display:flex;flex-wrap:wrap;gap:8px} .rp-puce{border:1.5px solid #cfc6b6;background:#fff;border-radius:20px;padding:9px 14px;font:700 13px/1 var(--ui);color:var(--encre)} .rp-puce.on{background:#1fa9c2;border-color:#1fa9c2;color:#fff}
+.rp-dose{display:grid;justify-items:center;min-width:48px} .rp-dose small{font:500 10px/1.2 var(--ui);color:var(--gris)}
+.carte-a-faire.rp{background:#e6f6f9;border-color:#a9dde7} .consigne.rp{border-color:#1fa9c2;background:#e6f6f9;color:#14707f} .rp-apercu a{color:#14707f;font-weight:700}
 .reg-choix .ap-bt{flex:1}
 .bulle.moi{margin-left:auto;background:#e3ecff;border-color:#c9d7f5;border-radius:16px 16px 4px 16px}
 .pad-cadre{position:relative;height:150px;border-radius:14px;background:#fff;border:1.5px dashed #c9bfae}
@@ -288,6 +296,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .carte-fin p{margin:0;font:400 15px/1.5 var(--ui)}
 .carte-fin ul{margin:0;padding:0;list-style:none;display:grid;gap:6px;text-align:left;font:500 14px/1.4 var(--ui)}
 .carte-fin li{padding-left:22px;position:relative} .carte-fin li::before{content:"";position:absolute;left:4px;top:.45em;width:9px;height:9px;border-radius:2px;background:var(--vitisoft)}
+.carte-fin #fin-phyto{font-size:13px;opacity:.85} a.cta{text-decoration:none} .cta.cyan{background:#1fa9c2;color:#fff;font-size:20px;padding:12px 26px;box-shadow:0 8px 24px rgba(31,169,194,.35)}
 #erreur{position:absolute;inset:0;margin:0;display:grid;place-items:center;padding:24px;text-align:center;font:500 16px/1.5 var(--ui);background:var(--nuit)}
 @media (min-width:600px) and (min-aspect-ratio:23/20){
   #accueil{align-items:flex-start;text-align:left;padding-left:max(7vw,var(--sl));
@@ -324,7 +333,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
   <div id="tel" aria-hidden="true">
     <div class="cadre">
       <div class="ecran">
-        <div class="barre-statut"><span id="tel-h">17:40</span><span class="ilot"></span><span>4G<i class="batt"></i></span></div>
+        <div class="barre-statut"><span id="tel-h">17:40</span><span class="ilot"></span><span><span id="tel-res">4G</span><i class="batt"></i></span></div>
         <div id="app" class="app app-accueil"></div>
         <button class="home" data-a="accueil" aria-label="Écran d'accueil du téléphone"></button>
       </div>
@@ -345,12 +354,14 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
   </section>
   <section id="fin" class="ecran-plein" hidden>
     <div class="carte-fin">
-      <p class="sur">Fin de la démo</p>
+      <p class="sur" id="fin-sur"></p>
       <h2 id="fin-titre"></h2>
       <p id="fin-texte"></p>
-      <p class="ap-h">Dans le jeu complet</p>
+      <p class="ap-h" id="fin-h"></p>
       <ul id="fin-suite"></ul>
-      <button id="continuer" class="cta">Continuer la balade</button>
+      <p id="fin-phyto" hidden></p>
+      <a id="fin-cta" class="cta cyan" target="_blank" rel="noopener" hidden></a>
+      <button id="continuer" class="cta">Continuer</button>
     </div>
   </section>
   <p id="erreur" hidden>Votre navigateur ne sait pas afficher la 3D (WebGL). Essayez avec un navigateur récent, sur ordinateur ou téléphone.</p>

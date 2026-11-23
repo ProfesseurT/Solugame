@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture, voitureConduite, allumerPhares } from './engins.js';
+import { tracteur, van, voiture, voitureConduite, allumerPhares, pulverisateur, deplier } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -14,11 +14,12 @@ import { Hud } from './hud.js';
 import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
+import { Traitement } from './mission2.js';
 import { son } from './audio.js';
 import { hasard, lisse, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, PHYTO, LP_URL } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -323,10 +324,30 @@ const jeu = {
     for (const b of document.querySelectorAll('.perso')) b.setAttribute('aria-pressed', String(b.dataset.h === h));
   },
   finVue: false,
-  finDemo() { $('fin').hidden = false; this.finVue = true; ctrl.relacher(); },
+  tactile,
+  // la carte de fin d'une mission (F : textes.js, FIN ou TRAITEMENT.finCarte), avec la prévente du registre après la 2
+  finDemo() { montrerFin(FIN, false); },
+  finMission2() { montrerFin(TRAITEMENT.finCarte, true); },
 };
+function montrerFin(F, phyto) {
+  $('fin-sur').textContent = F.sur; $('fin-titre').textContent = F.titre; $('fin-texte').textContent = F.texte; $('fin-h').textContent = F.h;
+  $('fin-suite').replaceChildren(...F.suite.map(s => { const li = document.createElement('li'); li.textContent = s; return li; }));
+  const cta = $('fin-cta');
+  cta.hidden = !phyto;
+  if (phyto) { cta.textContent = PHYTO.cta; cta.href = LP_URL; $('fin-phyto').textContent = PHYTO.titre + ' ' + PHYTO.texte; }
+  $('fin-phyto').hidden = !phyto;
+  $('continuer').textContent = F.bouton;
+  $('fin').hidden = false; jeu.finVue = true; ctrl.relacher();
+}
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
+// La mission 2 (mission2.js) : le pulvérisateur, attelé au tracteur au réveil (replié, caché jusque-là)
+const pulve = pulverisateur();
+pulve.groupe.visible = false; vTracteur.m.caisse.add(pulve.groupe); deplier(pulve, 0);
+const traitement = new Traitement(jeu, { monde, particules, pulve, deplier, v: new THREE.Vector3(), rnd: hasard(97) });
+jeu.traitement = traitement;
+// la mission qui mène la balise, l'itinéraire et l'objectif
+const enCours = () => (traitement.actif ? traitement : mission);
 const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
 const pc = new PC(jeu);
 const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
@@ -378,6 +399,17 @@ function monter(v) {
 // Le véhicule reste à l'arrêt (il repartait seul), moteur et radio coupés
 function couperMoteur() { tr.v = 0; tr.vT = 0; tr.fm = 0; tr.pedale = 0; tr.frein = 0; son.radio(false); son.moteur(false, 0); }
 const aPied = () => { jeu.auVolant = false; };
+jeu.remplir = (cuve, debut, fin) => {
+  const v = veh;
+  couperMoteur(); ctrl.relacher();
+  gestes.lancer([
+    ...gestes.etapesDescendre(v, aPied),
+    ...gestes.allerA(() => ({ x: cuve.x + 1.15, z: cuve.z - 1.0 }), () => -Math.PI / 2),
+    { action: debut },
+    { duree: 2.6, maj: (dt, t) => gestes.immobile(dt, t) },
+    ...gestes.etapesMonter(v, () => auVolant(v)),
+  ], fin);
+};
 // On coupe le moteur, puis on descend à gauche (gestes.js)
 function descendre() {
   if (gestes.actif) return;
@@ -556,15 +588,20 @@ function lireEntrees() {
 function conduire(dt, dtm) {
   let gaz = 0, braq = 0, fm = false;
   const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
-  pilote.prendre(mission.route);
+  const M = enCours();
+  pilote.prendre(M.route);
   jeu.pilote = false;
-  if (ctrl.clavier && libre) { gaz = -ctrl.ky; braq = -ctrl.kx; }
+  if (ctrl.clavier && libre) {
+    gaz = -ctrl.ky; braq = -ctrl.kx;
+    // dans une parcelle du jour, la bouillie prête (mission2.js) : flèche du haut seule, le guidage suit les passages
+    if (traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, voitures, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
+  }
   else if (ctrl.id !== null && libre) {
     const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
     const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
     if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.35 && tr.v > 4) { fm = true; gaz *= 0.3; } }
     else {
-      const auto = tourne ? null : pilote.commande(tr, veh.genre, mission.cible, voitures, col);
+      const auto = tourne ? null : pilote.commande(tr, veh.genre, M.cible, voitures, col);
       if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
       else {
         braq = volant;
@@ -575,6 +612,7 @@ function conduire(dt, dtm) {
   } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0;
   if (ctrl.fm && libre) fm = true;
   tr.update(dtm, gaz, braq, col, voitures, temps, fm);
+  if (traitement.actif) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
   joueur.volant = tr.braq; // les mains suivent la direction
   joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
   if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
@@ -689,6 +727,19 @@ function phares() {
 /* ------------------------------------------------------------------ rentrer dormir
    Devant la porte de la maison du domaine, « Rentrer dormir » : on entre, fondu au noir, et l'on ressort au matin, 7 h, le
    lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
+// Après la tournée de Noël (mission.js : dodo), le réveil se fait quelques mois plus tard, en mai : le printemps (feuillages,
+// champs et rangs reverdissent : modeles.js uSaison, monde.js saison), le tracteur et le van à leur place, le
+// pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
+let mission2 = false, resAff = true;
+function printemps() {
+  mission.aller('libre');
+  monde.saison(true);
+  vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
+  const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
+  pulve.groupe.visible = true;
+  vTracteur.m.dims.emprise.push([-0.75, 0.75, -3.45, -2.2]); // le pulvérisateur, qu'on contourne à pied (gestes.js)
+  mission2 = true;
+}
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
 function dormir() {
   const P = L.maison;
@@ -703,10 +754,16 @@ function dormir() {
         jeu.minutes = (h >= 420 ? jour + 1 : jour) * 1440 + 420;
         horloge(0);
         joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
+        if (mission.etape === 'dodo') printemps();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
-    { action: () => { $('fondu').classList.remove('noir'); son.jouer('claque'); hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3); } },
+    {
+      action: () => {
+        $('fondu').classList.remove('noir'); son.jouer('claque');
+        if (mission2) { mission2 = false; traitement.demarrer(); } else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
+      },
+    },
   ]);
 }
 
@@ -720,7 +777,7 @@ function reperes(dt, ego, cible) {
     u.anneau.scale.set(k, 1, k); u.fleche.position.y = 3.2 + Math.sin(temps * 3) * 0.35; u.fleche.rotation.y = temps * 1.6;
     if ((tEtq -= dt) <= 0) {
       tEtq = 0.25;
-      etqCible.el.textContent = mission.nomCible + ' · ' + Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z)) + ' m';
+      etqCible.el.textContent = enCours().nomCible + ' · ' + Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z)) + ' m';
     }
   }
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
@@ -752,18 +809,25 @@ function miseAJour(dt) {
     const vite = gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1;
     gestes.update(dtm * vite, temps);
     if (jeu.auVolant && !gestes.roule) tr.update(dtm, 0, 0, col, voitures, temps); // (le véhicule qui roule tout seul : gestes.js)
-  } else if (jeu.auVolant) conduire(dt, dtm);
+  } else if (jeu.auVolant) {
+    // en traitant les rangs (mission2.js), doigt posé ou touche enfoncée : la scène va trois fois plus vite (trois pas de
+    // conduite par image)
+    const k = traitement.pulverise && (ctrl.id !== null || ctrl.ky < 0) ? 3 : 1;
+    for (let i = 0; i < k; i++) conduire(dt, dtm);
+  }
   else marcher(dtm);
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
   son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant);
   bourg(dtm, ego);
   phares();
   particules.fontaine(dtm, L.fontaine);
-  mission.update(dt);
+  if (traitement.actif) traitement.update(dt); else mission.update(dt);
+  // la barre d'état du téléphone : sans réseau en bas des Grands Champs (mission 2)
+  { const res = !traitement.actif || traitement.reseau; if (res !== resAff) { resAff = res; $('tel-res').textContent = res ? '4G' : 'Pas de service'; } }
   tel.update(dt);
   pc.update(dt);
   horloge(dtm);
-  const cible = mission.cible;
+  const cible = enCours().cible;
   reperes(dt, ego, cible);
   chai.maj(dt, ego, cap, camera.position); // la grande porte, la halle dessinée de près, dedans ou dehors (chai.js)
 
@@ -779,7 +843,7 @@ function miseAJour(dt) {
     if (jeu.auVolant && tr.v > 3 && Math.abs(tr.vT) > 0.8) capCam = cap + Math.atan2(tr.vT, tr.v) * 0.55 * Math.min(1, (Math.abs(tr.vT) - 0.8) / 2.5);
     cam.suivre(dt, ego.x, ego.z, capCam, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null, ego.y);
   }
-  hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, mission.route, jeu.auVolant ? null : VEH_CARTE);
+  hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, enCours().route, jeu.auVolant ? null : VEH_CARTE);
 }
 
 // Le cadre d'ombre suit le joueur, décalé vers l'avant de la caméra (rien de perdu derrière elle),
@@ -897,9 +961,7 @@ $('jouer').addEventListener('click', () => {
   dernier = performance.now();
 });
 $('poche').addEventListener('click', () => { if (etat === 'jeu' && $('fin').hidden && !pc.ouvert) { son.jouer('tap'); tel.basculer(); } });
-$('fin-titre').textContent = FIN.titre;
-$('fin-texte').textContent = FIN.texte;
-$('fin-suite').replaceChildren(...FIN.suite.map(s => { const li = document.createElement('li'); li.textContent = s; return li; }));
+// (la carte de fin se remplit quand elle s'affiche : montrerFin)
 $('continuer').addEventListener('click', () => { $('fin').hidden = true; jeu.finVue = false; ctrl.actions.length = 0; });
 
 document.addEventListener('gesturestart', e => e.preventDefault());
@@ -909,7 +971,9 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve,
+  // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
+  versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },

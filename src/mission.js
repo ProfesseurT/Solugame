@@ -106,6 +106,7 @@ export class Mission {
   // la balise : le prochain arrêt de la tournée, le chai s'il y a quelque chose à charger, le bureau du chai au retour
   get cible() {
     const L = this.j.lieux, e = this.etape, p = this.prospect;
+    if (e === 'dodo') return this.j.finVue ? null : L.maison;
     if (e === 'retour' || e === 'pc') return L.pc;
     if (e !== 'journee' && e !== 'livraisons') return null;
     // on y est (bon de livraison, chèque, prospect qui attend son verre) : plus de balise
@@ -114,6 +115,7 @@ export class Mission {
     return this.aCharger.length ? L.chai : null;
   }
   get nomCible() {
+    if (this.etape === 'dodo') return 'Maison';
     if (this.etape === 'livraisons' && this.tour.length) return this.arretDe(this.tour[0]).nom;
     return this.etape === 'retour' || this.etape === 'pc' ? 'Bureau du chai' : 'Chai';
   }
@@ -136,6 +138,7 @@ export class Mission {
   get objectif() {
     const j = this.j, e = this.etape, p = this.prospect, r = this.retardataire;
     if (e === 'avant' || e === 'debut') return null;
+    if (e === 'dodo') return OBJECTIFS.dodo;
     if (e === 'fin' || e === 'libre') return OBJECTIFS.libre;
     if (e === 'retour') return r.statut === 'recupere' ? OBJECTIFS.retour : j.dedans ? OBJECTIFS.pcOuvrir : OBJECTIFS.retourPC;
     if (e === 'pc') return this.toutFait ? OBJECTIFS.pcFini : OBJECTIFS.pc(this.tachesFaites);
@@ -194,7 +197,7 @@ export class Mission {
         break;
       case 'fin':
         if (this.etoiles > 0 && this.t > 1.5 + this.dec) { this.etoiles--; this.dec += 0.3; hud.etoiles(this.etoiles); }
-        if (this.t > 7.5) { this.aller('libre'); j.finDemo(); }
+        if (this.t > 7.5) { this.aller('dodo'); j.finDemo(); } // la carte de fin ; puis rentrer dormir (la mission 2 au réveil)
         break;
     }
     this.relancer(dt);

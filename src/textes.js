@@ -49,6 +49,7 @@ export const OBJECTIFS = {
   pcOuvrir: 'Asseyez-vous au portable : tout se fait dans Vitisoft',
   pc: n => `Vitisoft : règlement, factures, DRM (${n} sur 3)`,
   pcFini: 'Tout est fait : fermez Vitisoft',
+  dodo: 'Il est tard : rentrez dormir, à la maison du domaine',
   libre: 'Balade libre',
 };
 
@@ -249,11 +250,123 @@ export const MESSAGES = [
 ];
 
 export const FIN = {
+  sur: 'Fin de la mission 1',
   titre: 'C\'est ça, Tournée générale.',
-  texte: 'Le bureau dans la poche pour vendre et livrer, Vitisoft au domaine pour les règlements, les factures et la DRM. Le reste du monde est à vous.',
+  texte: 'Le bureau dans la poche pour vendre et livrer, Vitisoft au domaine pour les règlements, les factures et la DRM. Il est tard : rentrez dormir, la journée de traitement vous attend au réveil.',
+  h: 'La suite',
   suite: [
-    'Le DAE du transporteur, sur GAMMA 2, avec Vitisoft',
-    'Les QR codes nutritionnels de Viticode',
-    'Le registre phyto, au 1er janvier 2027',
+    'Mission 2 : la journée de traitement, avec le Registre phyto',
+    'Dans le jeu complet : le DAE du transporteur, sur GAMMA 2, avec Vitisoft',
+    'Dans le jeu complet : les QR codes nutritionnels de Viticode',
   ],
+  bouton: 'Continuer',
+};
+
+/* ---------------------------------------------------------------- mission 2 : la journée de traitement
+   Ce que fait le Registre phyto, d'après la page de prévente (LP de Teddy du 19/11/2026, reprise sur vitisoft.fr :
+   src/data/registre-phyto-demo.ts et registre-phyto.ts, lus le 23/11/2026) : un traitement se note sur place, dans la
+   vigne ; on coche les parcelles traitées, le produit et la dose ; le stade est repris du dernier traitement ; la cible ;
+   pas de réseau : noté, puis envoyé quand ça capte ; chaque ligne dit qui a saisi, et quand ; l'ETA ou la CUMA saisit
+   chez vous ; une erreur se corrige avec motif, rien n'est effacé ; en cas de contrôle : PDF, format officiel et fiche
+   Stat'Phyto. Parcelles retrouvées depuis le fichier Telepac. Aucune promesse de conformité (jamais « en règle ») :
+   l'application enregistre, le contenu du registre reste sous la responsabilité de l'exploitant. Le registre devient
+   numérique le 1er janvier 2027 (fiche de faits). La mission se passe en mai 2027 : l'appli y est ouverte ; avant le
+   1er janvier 2027 (EN_PREVENTE), l'écran le dit (aperçu, données fictives, ouverture le 1er janvier 2027).
+   Bouillie bordelaise et soufre mouillable : utilisables en agriculture biologique. Doses, parcelles, noms : fictifs. */
+export const TRAITEMENT = {
+  date: 'mardi 4 mai 2027', dateCourte: '4 mai 2027',
+  // les parcelles du domaine dans le registre (i : leur place dans PARCELLES, monde.js), celles du jour d'abord
+  parcelles: [
+    { id: 'perrieres', nom: 'Les Perrières', cep: 'Chenin', i: 0, jour: true, reseau: true },
+    { id: 'clos', nom: 'Le Clos', cep: 'Cabernet franc', i: 1, jour: true, reseau: true },
+    { id: 'grandschamps', nom: 'Les Grands Champs', cep: 'Cabernet franc', i: 6, jour: true, reseau: false },
+    { id: 'croix', nom: 'La Croix', cep: 'Chenin', i: 2 },
+    { id: 'garenne', nom: 'La Garenne', cep: 'Cabernet franc', i: 5 },
+    { id: 'basvignes', nom: 'Le Bas des Vignes', cep: 'Chenin', i: 4 },
+  ],
+  // les produits de l'armoire, et ce qu'il faut (dose) ; un fongicide de synthèse que le domaine, en bio, n'utilise pas
+  produits: [
+    { id: 'cuivre', nom: 'Bouillie bordelaise', sous: 'Cuivre · utilisable en bio', dose: 1.5, pas: 0.5, unite: 'kg/ha', bio: true },
+    { id: 'soufre', nom: 'Soufre mouillable', sous: 'Soufre · utilisable en bio', dose: 5, pas: 1, unite: 'kg/ha', bio: true },
+    { id: 'synthese', nom: 'Fongicide de synthèse', sous: 'Non utilisable en bio', dose: 0, pas: 0.5, unite: 'kg/ha', bio: false },
+  ],
+  cibles: ['Mildiou', 'Oïdium', 'Black-rot', 'Botrytis'], ciblesDuJour: ['Mildiou', 'Oïdium'],
+  stade: '6 feuilles étalées', stadeDe: 'repris du traitement du 28 avril',
+  // le registre de la campagne avant ce matin (données fictives) ; « par » : qui a saisi
+  avant: [
+    { quand: '28 avril 2027 · 8 h 10', parcelles: ['Les Perrières', 'Le Clos', 'Les Grands Champs', 'La Croix'], produits: ['Soufre mouillable · 5 kg/ha'], cibles: ['Oïdium'], stade: '6 feuilles étalées', par: 'ETA des Coteaux, le 28 avril à 11 h 02' },
+    { quand: '15 avril 2027 · 7 h 45', parcelles: ['Les Perrières', 'Le Clos', 'Les Grands Champs'], produits: ['Bouillie bordelaise · 1,5 kg/ha'], cibles: ['Mildiou'], stade: '3 feuilles étalées', par: 'vous, le 15 avril à 9 h 20' },
+  ],
+  message: {
+    de: 'Claire, conseillère viticole', apercu: 'Pluie cette nuit : mildiou et oïdium...',
+    fil: [
+      'Bonjour ! Avec la pluie de cette nuit et la douceur, les conditions sont réunies pour le mildiou ; l\'oïdium aussi.',
+      'Je vous conseille un passage aujourd\'hui, avant la pluie de jeudi : bouillie bordelaise à 1,5 kg/ha et soufre mouillable à 5 kg/ha, ensemble.',
+      'Les Perrières, Le Clos et Les Grands Champs d\'abord. Pensez à noter le traitement !',
+    ],
+  },
+  objectifs: {
+    message: 'Lisez le message de Claire, la conseillère (Messages)',
+    tracteur: 'Montez dans le tracteur : le pulvérisateur y est attelé',
+    aire: 'En tracteur, à l\'aire de remplissage : préparez la bouillie',
+    traiter: (noms, pc) => `Traitez ${noms}${pc ? ` (${pc} %)` : ''}`,
+    noter: noms => `Notez le traitement dans le Registre phyto : ${noms}`,
+    noterIci: noms => `Notez-le sur place, dans le Registre phyto : ${noms}`,
+    envoyer: 'Remontez vers la route : le traitement partira quand ça capte',
+    fin: 'Journée de traitement finie',
+  },
+  dialogues: {
+    reveil: [{ qui: '', txt: 'Mardi 4 mai 2027. Il a plu cette nuit.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
+    luMessage: [{ qui: '', txt: 'Cuivre et soufre : c\'est un traitement bio. Le pulvérisateur est attelé au tracteur.' }],
+    pasTracteur: [{ qui: '', txt: 'Le pulvérisateur est sur le tracteur : il faut le tracteur.' }],
+    remplir: [{ qui: '', txt: 'De l\'eau, la bouillie bordelaise, le soufre mouillable : la cuve est prête.' }, { qui: '', txt: 'Elle suffit pour les trois parcelles.' }],
+    guidage: tactile => [{ qui: '', txt: tactile ? 'Dans les rangs, doigt posé : le tracteur suit les passages tout seul, la scène va plus vite.' : 'Dans les rangs, flèche du haut seule : le tracteur suit les passages tout seul, la scène va plus vite.' }],
+    parcelleFinie: nom => [{ qui: '', txt: `${nom} : traitée.` }],
+    noter: [{ qui: '', txt: 'Je le note maintenant, sur le téléphone.' }],
+    sansReseau: [{ qui: '', txt: 'Pas de réseau en bas des Grands Champs. Je le note quand même.' }],
+    envoye: [{ qui: '', txt: 'Ça capte : le traitement des Grands Champs est parti.' }],
+    fin: [{ qui: '', txt: 'Trois parcelles traitées en bio, et tout est noté dans le registre.' }],
+    pasPrete: [{ qui: '', txt: 'La bouillie n\'est pas prête : d\'abord l\'aire de remplissage.' }],
+  },
+  app: {
+    nouveau: 'Noter un traitement',
+    parcelles: 'Parcelles traitées', parcellesNote: 'Retrouvées depuis votre fichier Telepac.',
+    produits: 'Produit et dose', stade: 'Stade', cible: 'Cible', recap: 'Vérifier',
+    enregistrer: 'Enregistrer', enregistre: 'Enregistré', horsReseau: 'Pas de réseau : noté, envoyé quand ça capte.',
+    attente: 'En attente d\'envoi', envoye: 'Envoyé',
+    registre: 'Campagne 2027', registreNote: 'Chaque ligne dit qui a saisi, et quand.',
+    exporter: 'Exporter pour un contrôle', exportNote: 'PDF, format officiel et fiche Stat\'Phyto.', exportOk: 'Export prêt.',
+    apercu: 'Aperçu de l\'application, données fictives. Ouverture le 1er janvier 2027.',
+    apercuApres: 'Données fictives.',
+    // ce que le téléphone rappelle quand la saisie ne correspond pas à ce qui a été fait
+    pasTraitee: (noms, n) => `${noms} : pas encore traitée${n > 1 ? 's' : ''} aujourd'hui.`,
+    aucune: 'Cochez les parcelles traitées.',
+    pasBio: 'Le domaine est en bio : bouillie bordelaise et soufre mouillable.',
+    dose: (p, d) => `${p} : la dose de la cuve, ${d}.`,
+    manque: 'Il manque un produit de la cuve.',
+    cibleJour: 'La cible : ce que dit Claire, mildiou et oïdium.',
+  },
+  bannieres: {
+    titre: ['Quelques mois plus tard', 'Mai 2027 · mission 2 : la journée de traitement'],
+    prete: ['Bouillie prête', 'Bouillie bordelaise 1,5 kg/ha · soufre mouillable 5 kg/ha'],
+    traitee: nom => ['Parcelle traitée', nom],
+    note: n => ['Traitement noté', `${n} parcelle${n > 1 ? 's' : ''} dans le registre`],
+    attente: ['Noté sans réseau', 'Envoyé quand ça capte'],
+    envoye: ['Envoyé', 'Le registre est à jour'],
+    fin: ['Journée de traitement finie', '3 parcelles traitées, tout est noté dans le registre'],
+  },
+  finCarte: {
+    sur: 'Fin de la mission 2',
+    titre: 'C\'est ça, le Registre phyto.',
+    texte: 'Un traitement se note sur place, dans la vigne, sur le téléphone. Sans réseau, il est noté et part quand ça capte.',
+    h: 'Dans l\'application',
+    suite: [
+      'Vous cochez les parcelles traitées, le produit et la dose',
+      'Le stade, repris du dernier traitement',
+      'Chaque ligne dit qui a saisi, et quand ; votre ETA ou CUMA saisit chez vous',
+      'Une erreur de saisie se corrige avec un motif : rien n\'est effacé',
+      'En cas de contrôle : PDF, format officiel et fiche Stat\'Phyto',
+    ],
+    bouton: 'Continuer la balade',
+  },
 };

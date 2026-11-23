@@ -410,6 +410,8 @@ export const son = {
         { const o = note(70, t, 0.2, 'sine', 0.3, sfx); o.frequency.exponentialRampToValueAtTime(35, t + 0.2); }
         note(523, t, 0.45, 'sine', 0.05, sfx, 0, true); note(787, t, 0.3, 'sine', 0.04, sfx, 0, true); break; // résonance de tôle
       case 'carton': bruit(t, 0.12, 500, 0.35); break;
+      case 'pulve': bruit(t, 0.75, 5200, 0.05, 'highpass'); break; // la bouillie pulvérisée : un souffle fin (joué en boucle, mission 2)
+      case 'remplir': for (let i = 0; i < 14; i++) bruit(t + 0.16 * i + Math.random() * 0.05, 0.12, 380 + Math.random() * 200, 0.05, 'bandpass'); break; // l'eau dans la cuve
       case 'portiere': bruit(t, 0.05, 2600, 0.22, 'bandpass'); bruit(t + 0.05, 0.09, 900, 0.12, 'bandpass'); break; // le loquet, la portière s'écarte
       case 'claque': bruit(t, 0.16, 280, 0.5); { const o = note(90, t, 0.14, 'sine', 0.22, sfx); o.frequency.exponentialRampToValueAtTime(50, t + 0.14); } break; // portière refermée
       case 'marche': bruit(t, 0.06, 1500, 0.2, 'bandpass'); note(310, t, 0.07, 'triangle', 0.04, sfx, 0, true); break; // pied sur le marchepied (tôle)

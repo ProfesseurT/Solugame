@@ -2,7 +2,7 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, EN_PREVENTE } from './textes.js';
 import { son } from './audio.js';
 import { $, esc, eur } from './outils.js';
 
@@ -59,8 +59,8 @@ export class Telephone {
   }
 
   action(a) {
-    const [nom, arg] = a.split(':');
-    const m = this.jeu.mission;
+    const [nom, arg, arg2] = a.split(':');
+    const m = this.jeu.mission, R = this.jeu.traitement;
     if (!m.peutFermer() && (nom === 'accueil' || nom === 'ouvrir')) return; // pendant un appel, on reste en ligne
     switch (nom) {
       case 'accueil': this.app = 'accueil'; this.fil = null; break;
@@ -78,15 +78,43 @@ export class Telephone {
       case 'bl': if (!m.blPret) return; this.app = 'bl'; break;
       case 'effacer': this.afficher(); return;
       case 'livrer': if (this.encre > 120) { m.livrer(); this.fermer(); } return;
-      case 'fil': this.fil = arg; break;
+      case 'fil': this.fil = arg; this.app = 'messages'; if (this.notif === 'messages') this.notifier(null); break;
       case 'son': son.basculer(); break;
       case 'radio': this.jeu.basculerRadio(); break;
       case 'wtf': this.jeu.basculerWtf(); break;
       case 'heros': this.jeu.changerHeros(arg); break;
       case 'bientot': this.toast('Dans le jeu complet.'); return;
+      // le Registre phyto (mission 2) : une saisie en cinq écrans, que l'appli vérifie à chaque étape
+      case 'rp-nouveau': R.nouvelleSaisie(); this.app = 'phytoP'; break;
+      case 'rp-cocher': R.cocher(arg); break;
+      case 'rp-dose': R.dose(arg, Number(arg2)); break;
+      case 'rp-cible': R.choisirCible(arg); break;
+      case 'rp-suite': {
+        const err = R.verifier();
+        if (err) { son.jouer('erreur'); this.toast(err); return; }
+        const S = R.saisie, suite = { parcelles: 'produits', produits: 'stade', stade: 'cible', cible: 'recap' }[S.etape];
+        S.etape = suite; this.app = { produits: 'phytoD', stade: 'phytoS', cible: 'phytoC', recap: 'phytoR' }[suite];
+        break;
+      }
+      case 'rp-retour': {
+        const S = R.saisie;
+        if (!S || S.etape === 'parcelles') { R.saisie = null; this.app = 'phyto'; break; }
+        S.etape = { produits: 'parcelles', stade: 'produits', cible: 'stade', recap: 'cible' }[S.etape];
+        this.app = { parcelles: 'phytoP', produits: 'phytoD', stade: 'phytoS', cible: 'phytoC' }[S.etape];
+        break;
+      }
+      case 'rp-enregistrer': {
+        const err = R.toutVerifier();
+        if (err || !R.saisie || R.saisie.etape !== 'recap') { son.jouer('erreur'); if (err) this.toast(err); return; }
+        const en = R.enregistrer(); this.app = 'phyto'; this.afficher(); this.toast(en ? TX.app.enregistre : TX.app.horsReseau); return;
+      }
+      case 'rp-export': this.app = 'phytoX'; break;
+      case 'rp-exporter': son.jouer('envoye'); this.toast(TX.app.exportOk); return;
     }
     this.afficher();
   }
+  // un écran à redessiner s'il est affiché (mission 2 : le registre change quand le réseau revient)
+  rafraichir(app) { if (this.ouvert && this.app.startsWith(app)) this.afficher(); }
   toast(txt) {
     this.dernierToast = { txt, t: performance.now() }; // le portable le remontre après avoir redessiné sa page
     const t = document.querySelector('#pc:not([hidden]) .ph-toast') || this.el.querySelector('.ph-toast');
@@ -154,17 +182,20 @@ export class Telephone {
   entete(titre, classe, retour = 'accueil') {
     if (this.surPortable) return '';
     const r = this.jeu.mission.peutFermer() ? `<button class="ap-ret" data-a="${retour}" aria-label="Retour">‹</button>` : '<i class="ap-ret vide"></i>';
-    return `<header class="ap-tete ${classe}">${r}<span>${esc(titre)}</span><i class="ap-ic">${ICONES[classe] || ''}</i></header>`;
+    const R = this.jeu.traitement, res = classe === 'phyto' && R && R.actif ? `<i class="ap-res${R.reseau ? '' : ' non'}" aria-label="${R.reseau ? 'Réseau' : 'Pas de réseau'}"><b></b><b></b><b></b><b></b></i>` : '';
+    return `<header class="ap-tete ${classe}">${r}<span>${esc(titre)}</span>${res}<i class="ap-ic">${ICONES[classe] || ''}</i></header>`;
   }
   onglets(actif) {
     return `<nav class="onglets">${[['bureau', 'Ma journée'], ['commande', 'Commandes'], ['tournee', 'Tournée']].map(([id, t]) =>
       `<button class="${id === actif ? 'on' : ''}" data-a="ouvrir:${id}">${t}</button>`).join('')}</nav>`;
   }
   accueil() {
+    const R = this.jeu.traitement, mai = R && R.actif;
     const n = this.notif === 'bureau'
-      ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>` : '';
+      ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>`
+      : this.notif === 'messages' && mai ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
     return `<div class="ph-accueil">
-      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">Le Bourg · ciel dégagé</p>${n}
+      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${mai ? `${esc(TX.date)} · ${R.reseau ? 'après la pluie' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé'}</p>${n}
       <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
     </div>`;
   }
@@ -294,17 +325,74 @@ export class Telephone {
       <p class="ap-txt">${esc(VITICODE.texte)}</p><p class="ap-note">${esc(VITICODE.chiffre)} · mission dans le jeu complet</p></div>`;
   }
   phyto() {
-    return this.entete('Registre phyto', 'phyto') + `<div class="ap-corps">
+    const R = this.jeu.traitement;
+    if (!R || !R.actif) return this.entete('Registre phyto', 'phyto') + `<div class="ap-corps">
       <p class="ap-sur">Registre phyto</p><h3>${esc(PHYTO.titre)}</h3><p class="ap-txt">${esc(PHYTO.texte)}</p>
       <a class="ap-bt plein cyan large" href="${esc(LP_URL)}" target="_blank" rel="noopener">${esc(PHYTO.cta)}</a>
-      <p class="ap-note">Mission dans le jeu complet : un traitement à noter, au fond des vignes, sans réseau.</p></div>`;
+      <p class="ap-note">Mission 2, après la tournée et une nuit de sommeil : un traitement à noter, au fond des vignes, sans réseau.</p></div>`;
+    const A = TX.app, aN = R.aNoter;
+    const lignes = R.registre.map(l => `<div class="rp-ligne"><p class="rp-quand"><b>${esc(l.quand)}</b>${l.statut === 'attente' ? `<span class="tag decroche">${esc(A.attente)}</span>` : `<span class="tag ok">${esc(A.envoye)}</span>`}</p>
+      <p>${esc(l.parcelles.join(', '))}</p><p class="rp-p">${esc(l.produits.join(' ; '))} · ${esc(l.cibles.join(', '))} · ${esc(l.stade)}</p><p class="ap-note">Saisi par ${esc(l.par)}</p></div>`).join('');
+    const a = aN.length ? `<div class="carte-a-faire rp"><p class="ap-sur">Traité aujourd'hui</p><b>${esc(R.noms(aN))}</b></div>` : '';
+    return this.entete('Registre phyto', 'phyto') + `<div class="ap-corps">${a}
+      <button class="ap-bt plein cyan large" data-a="rp-nouveau"${R.prete ? '' : ' disabled'}>${esc(A.nouveau)}</button>
+      <p class="ap-h">${esc(A.registre)}</p><p class="ap-note">${esc(A.registreNote)}</p>${lignes}
+      <button class="ap-bt large" data-a="rp-export">${esc(A.exporter)}</button>${this.apercuPhyto()}</div>`;
+  }
+  // sous chaque écran du registre : ce que l'on regarde (un aperçu, des données fictives) et la prévente
+  apercuPhyto() {
+    return EN_PREVENTE ? `<p class="ap-note rp-apercu">${esc(TX.app.apercu)} <a href="${esc(LP_URL)}" target="_blank" rel="noopener">${esc(PHYTO.cta)}</a></p>`
+      : `<p class="ap-note rp-apercu">${esc(TX.app.apercuApres)}</p>`;
+  }
+  // les écrans de la saisie : en-tête (retour : l'étape d'avant), titre de l'étape, son contenu, le bouton de suite
+  etapePhyto(n, titre, corps, suite = 'Suivant') {
+    return this.entete('Registre phyto', 'phyto', 'rp-retour') + `<div class="ap-corps"><p class="ap-sur">Noter un traitement · ${n} sur 5</p><h3>${esc(titre)}</h3>
+      ${corps}<button class="ap-bt plein cyan large" data-a="${suite === 'Suivant' ? 'rp-suite' : 'rp-enregistrer'}">${esc(suite)}</button>${this.apercuPhyto()}</div>`;
+  }
+  phytoP() {
+    const R = this.jeu.traitement, S = R.saisie;
+    if (!S) return this.phyto();
+    const l = R.parcelles.map(p => `<button class="rp-case${S.parcelles.has(p.id) ? ' on' : ''}" data-a="rp-cocher:${p.id}"><i></i><span><b>${esc(p.nom)}</b><small>${esc(p.cep)} · ${String(p.ha.toFixed(2)).replace('.', ',')} ha</small></span></button>`).join('');
+    return this.etapePhyto(1, TX.app.parcelles, `<p class="ap-note">${esc(TX.app.parcellesNote)}</p>${l}`);
+  }
+  phytoD() {
+    const R = this.jeu.traitement, S = R.saisie;
+    if (!S) return this.phyto();
+    const l = TX.produits.map(P => `<div class="cd-ligne"><span><b>${esc(P.nom)}</b><br><small>${esc(P.sous)}</small></span>
+      <div class="pas"><button data-a="rp-dose:${P.id}:-1" aria-label="Moins"${S.doses[P.id] <= 0 ? ' disabled' : ''}>−</button><b class="rp-dose">${String(S.doses[P.id]).replace('.', ',')}<small>${esc(P.unite)}</small></b><button data-a="rp-dose:${P.id}:1" aria-label="Plus">+</button></div></div>`).join('');
+    return this.etapePhyto(2, TX.app.produits, l);
+  }
+  phytoS() {
+    return this.etapePhyto(3, TX.app.stade, `<div class="cd-ligne"><span><b>${esc(TX.stade)}</b><br><small>${esc(TX.stadeDe)}</small></span><span class="tag ok">Repris</span></div>`);
+  }
+  phytoC() {
+    const S = this.jeu.traitement.saisie;
+    if (!S) return this.phyto();
+    return this.etapePhyto(4, TX.app.cible, `<div class="rp-puces">${TX.cibles.map(c => `<button class="rp-puce${S.cibles.has(c) ? ' on' : ''}" data-a="rp-cible:${c}">${esc(c)}</button>`).join('')}</div>`);
+  }
+  phytoR() {
+    const R = this.jeu.traitement, S = R.saisie;
+    if (!S) return this.phyto();
+    const parcs = R.parcelles.filter(p => S.parcelles.has(p.id)), ha = parcs.reduce((s, p) => s + p.ha, 0);
+    return this.etapePhyto(5, TX.app.recap, `<div class="rp-ligne"><p class="rp-quand"><b>${esc(TX.dateCourte)} · ${esc(this.jeu.heureTxt.replace(/^0/, '').replace(':', ' h '))}</b></p>
+      <p>${esc(parcs.map(p => p.nom).join(', '))} · ${String(ha.toFixed(2)).replace('.', ',')} ha</p>
+      <p class="rp-p">${esc(TX.produits.filter(P => P.bio).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`).join(' ; '))}</p>
+      <p class="rp-p">${esc([...S.cibles].join(', '))} · ${esc(TX.stade)}</p></div>${R.reseau ? '' : `<p class="consigne rp">${esc(TX.app.horsReseau)}</p>`}`, TX.app.enregistrer);
+  }
+  phytoX() {
+    return this.entete('Registre phyto', 'phyto', 'ouvrir:phyto') + `<div class="ap-corps"><p class="ap-sur">${esc(TX.app.exporter)}</p><h3>${esc(TX.app.registre)}</h3>
+      <p class="ap-txt">${esc(TX.app.exportNote)}</p>
+      <div class="rp-puces"><span class="rp-puce on">PDF</span><span class="rp-puce on">Format officiel</span><span class="rp-puce on">Fiche Stat'Phyto</span></div>
+      <button class="ap-bt plein cyan large" data-a="rp-exporter">Exporter</button>${this.apercuPhyto()}</div>`;
   }
   messages() {
+    const R = this.jeu.traitement, fils = R && R.actif ? [{ id: 'claire', ...TX.message }, ...MESSAGES] : MESSAGES;
     if (this.fil) {
-      const t = MESSAGES.find(x => x.id === this.fil);
+      const t = fils.find(x => x.id === this.fil);
+      if (t.id === 'claire') R.messageLu();
       return this.entete(t.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil">${t.fil.map(x => `<p class="bulle">${esc(x)}</p>`).join('')}</div>`;
     }
-    return this.entete('Messages', 'messages') + `<div class="ap-corps">${MESSAGES.map(t => `<button class="msg" data-a="fil:${t.id}"><b>${esc(t.de)}</b><span>${esc(t.apercu)}</span></button>`).join('')}</div>`;
+    return this.entete('Messages', 'messages') + `<div class="ap-corps">${fils.map(t => `<button class="msg" data-a="fil:${t.id}"><b>${esc(t.de)}</b><span>${esc(t.apercu)}</span></button>`).join('')}</div>`;
   }
   reglages() {
     const h = this.jeu.choixHeros;

@@ -9,6 +9,8 @@
 //   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe, les phares ; rentrer dormir, le matin revient
 //   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
 //   chateau   la route du château : monter en tracteur et en van, le tour, retenu au bord, à pied sur la pente ; la glisse
+//   traitement la mission 2 : rentrer dormir, le printemps, la bouillie, trois parcelles au guidage, le Registre phyto
+//             (refus, enregistrement, sans réseau puis envoyé), la carte de fin
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
@@ -481,6 +483,75 @@ if (scenario === 'chateau') {
         }
         CL.ctrl.kx = 0; CL.ctrl.ky = 0;
         log.push(['en voiture, la glisse se tient à l\'accélérateur (' + tenue.toFixed(1) + ' s sur 3,5, à ' + vmin.toFixed(1) + ' m/s au moins), sans tête-à-queue (' + (bmax * 57.3).toFixed(0) + ' degrés au plus)', tenue > 2.5 && vmin > 9 && bmax < 1.3]); }
+    } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('fin');
+}
+
+if (scenario === 'traitement') {
+  // la mission 2 : après la tournée, on rentre dormir ; au réveil, en mai, le message de Claire ; en tracteur, la bouillie
+  // à l'aire de remplissage ; les Perrières et le Clos traités au guidage (flèche du haut) ; le Registre phyto refuse ce
+  // qui ne correspond pas à ce qui a été fait, puis enregistre ; les Grands Champs, notés sans réseau, partent quand ça
+  // capte ; la carte de fin
+  const r = await ev(async () => {
+    const J = CL.jeu, T = CL.traitement, tel = J.tel, log = [];
+    const obj = () => document.querySelector('#objectif')?.textContent || '', toast = () => document.querySelector('#app .ph-toast')?.textContent || '';
+    const traiter = (id, x, z) => {
+      const p = T.parcelles.find(q => q.id === id);
+      CL.teleporter(x, z, 0); CL.step(10);
+      let n = 0; CL.ctrl.ky = -1;
+      for (; n < 60 * 150 && !p.traitee; n++) CL.step(1);
+      CL.ctrl.ky = 0; CL.step(30);
+      return [p, n / 60];
+    };
+    const noter = ids => {
+      tel.ouvrir('phyto'); tel.action('rp-nouveau');
+      for (const id of ids) tel.action('rp-cocher:' + id);
+      tel.action('rp-suite');
+      for (let i = 0; i < 3; i++) tel.action('rp-dose:cuivre:1'); for (let i = 0; i < 5; i++) tel.action('rp-dose:soufre:1');
+      tel.action('rp-suite'); tel.action('rp-suite'); tel.action('rp-cible:Mildiou'); tel.action('rp-cible:Oïdium'); tel.action('rp-suite');
+      tel.action('rp-enregistrer');
+    };
+    try {
+      CL.jouer(); CL.step(30);
+      log.push(['avant la mission 2, le Registre phyto annonce la mission', (tel.ouvrir('phyto'), document.querySelector('#app').textContent.includes('Mission 2')) && !T.actif]);
+      tel.fermer();
+      CL.versMission2(); CL.step(300);
+      log.push(['au réveil, la mission 2 : le printemps, le pulvérisateur attelé, le message de Claire', T.actif && CL.relief && CL.pulve.groupe.visible && tel.notif === 'messages' && obj().includes('Claire')]);
+      tel.ouvrir('messages'); tel.action('fil:claire'); tel.fermer(); CL.step(60);
+      log.push(['message lu : monter dans le tracteur', T.etape === 'preparer' && obj().includes('tracteur')]);
+      const v = CL.vehicule('tracteur');
+      for (let k = 0; k < 40 && !J.auVolant; k++) { const a = k * 0.5; J.joueur.placer(v.p.pos.x + Math.cos(a) * 2.8, v.p.pos.z + Math.sin(a) * 2.8, 0); CL.step(2); CL.agir(); CL.finirGeste(); CL.step(2); }
+      CL.teleporter(-86, -66, Math.PI); CL.step(20); CL.finirGeste(); CL.step(10);
+      log.push(['à l\'aire de remplissage, la bouillie est prête ; on est de nouveau au volant', T.prete && T.etape === 'traiter' && J.auVolant]);
+      const [p1, t1] = traiter('perrieres', -147, -116);
+      const [p2, t2] = traiter('clos', -36, -116);
+      log.push([`Les Perrières (${t1.toFixed(0)} s) et Le Clos (${t2.toFixed(0)} s) traités au guidage, à plus de 97 %`, p1.traitee && p2.traitee && t1 < 120 && t2 < 120]);
+      log.push(['ensuite : les noter dans le Registre phyto', obj().startsWith('Notez le traitement')]);
+      tel.ouvrir('phyto'); tel.action('rp-nouveau'); tel.action('rp-cocher:grandschamps'); tel.action('rp-suite');
+      const refusP = tel.app === 'phytoP' && toast().includes('pas encore traitée');
+      tel.action('rp-cocher:grandschamps'); tel.action('rp-cocher:perrieres'); tel.action('rp-cocher:clos'); tel.action('rp-suite');
+      tel.action('rp-dose:synthese:1'); tel.action('rp-suite'); const refusBio = tel.app === 'phytoD' && toast().includes('bio');
+      tel.action('rp-dose:synthese:-1'); for (let i = 0; i < 3; i++) tel.action('rp-dose:cuivre:1'); for (let i = 0; i < 4; i++) tel.action('rp-dose:soufre:1'); tel.action('rp-suite');
+      const refusDose = tel.app === 'phytoD' && toast().includes('5 kg/ha');
+      tel.action('rp-dose:soufre:1'); tel.action('rp-suite'); tel.action('rp-suite'); tel.action('rp-cible:Mildiou'); tel.action('rp-suite');
+      const refusCible = tel.app === 'phytoC';
+      tel.action('rp-cible:Oïdium'); tel.action('rp-suite'); tel.action('rp-enregistrer');
+      log.push(['le registre refuse une parcelle pas traitée, un produit pas bio, une mauvaise dose, une cible incomplète', refusP && refusBio && refusDose && refusCible]);
+      log.push(['enregistré : une ligne de plus, envoyée, qui dit qui a saisi et quand', T.registre.length === 3 && T.registre[0].statut === 'envoye' && T.registre[0].par.startsWith('vous') && !T.registre[0].quand.includes(' 0')]);
+      tel.fermer(); CL.step(30);
+      const [p3, t3] = traiter('grandschamps', -29, 24);
+      log.push([`Les Grands Champs traités (${t3.toFixed(0)} s) ; pas de réseau : la noter sur place`, p3.traitee && !T.reseau && obj().startsWith('Notez-le sur place') && document.querySelector('#tel-res').textContent === 'Pas de service']);
+      noter(['grandschamps']);
+      log.push(['sans réseau : noté, en attente d\'envoi', T.registre[0].statut === 'attente' && toast().includes('quand ça capte')]);
+      tel.fermer(); CL.step(30);
+      log.push(['objectif : remonter vers la route', obj().includes('ça capte')]);
+      CL.teleporter(-55, 12, Math.PI); CL.step(200);
+      log.push(['le réseau revient : envoyé, la journée de traitement est finie', T.registre[0].statut === 'envoye' && T.etape === 'fin']);
+      CL.step(60 * 7);
+      log.push(['la carte de fin, avec la prévente du registre', J.finVue && document.querySelector('#fin-titre').textContent.includes('Registre phyto') && !document.querySelector('#fin-cta').hidden]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });

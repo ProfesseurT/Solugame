@@ -374,6 +374,29 @@ void main() {
   surf.push(B(4, 0.06, 41.5, '#c9b993', -90, 0, -14.25));
   surf.push(B(53, 0.055, 38, '#cfc1a0', -88.5, 0, -53));
   rect(-92, -34, -88, 6.5, '#c9b993'); rect(-115, -72, -62, -34, '#cfc1a0');
+  // L'aire de remplissage du pulvérisateur, au nord de la cour (dalle de béton), et les chemins de vigne qui partent
+  // derrière le domaine vers le nord des Perrières et du Clos (mission 2 : la journée de traitement). Un chemin : une
+  // bande de terre battue le long de ses points, à plat.
+  const CHEMINS = [[[-86, -66], [-87.5, -80], [-100, -114], [-147, -114]], [[-87.5, -80], [-72, -114], [-36, -114]]];
+  for (const pts of CHEMINS) {
+    const p = [];
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1], [bx, bz] = pts[i], l = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / l * 2.1, nz = (bx - ax) / l * 2.1;
+      const A = [ax + nx, 0.05, az + nz], Bb = [ax - nx, 0.05, az - nz], Cc = [bx + nx, 0.05, bz + nz], D = [bx - nx, 0.05, bz - nz];
+      for (const [u, v, w] of [[A, Bb, Cc], [Bb, D, Cc]]) {
+        const ny = (v[2] - u[2]) * (w[0] - u[0]) - (v[0] - u[0]) * (w[2] - u[2]);
+        p.push(...u, ...(ny >= 0 ? v : w), ...(ny >= 0 ? w : v));
+      }
+      // le coin : un disque pour raccorder deux tronçons
+      if (i > 1) for (let k = 0; k < 8; k++) { const a0 = k / 8 * Math.PI * 2, a1 = (k + 1) / 8 * Math.PI * 2; p.push(ax, 0.05, az, ax + Math.cos(a1) * 2.1, 0.05, az + Math.sin(a1) * 2.1, ax + Math.cos(a0) * 2.1, 0.05, az + Math.sin(a0) * 2.1); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.computeVertexNormals();
+    surf.push(teinter(g, '#c9b993'));
+    plan.push({ t: 'l', pts, c: '#c9b993', w: 4.2 });
+  }
+  surf.push(B(6, 0.09, 8.5, '#8f8a80', -86, 0, -67));
+  rect(-89, -71.25, -83, -62.75, '#a9a399');
   // parking de l'église
   surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
   rect(115, -64, 127, -55, '#cfc1a0');
@@ -482,7 +505,7 @@ void main() {
       let it = 0;
       const blocsP = [];
       for (const travees of blocs.values()) {
-        const n = travees.length / 8, im = new THREE.InstancedMesh(gFine, matV, n), bb = new THREE.Box3();
+        const n = travees.length / 8, im = new THREE.InstancedMesh(gFine, matV, n), bb = new THREE.Box3(), i0 = it;
         let sx = 0, sz = 0;
         for (let i = 0; i < n; i++) {
           const o = i * 8;
@@ -493,7 +516,9 @@ void main() {
           loin.setMatrixAt(it, m); loin.setColorAt(it++, c);
         }
         im.castShadow = true; im.receiveShadow = true; im.renderOrder = ORDRE.vegetal; im.name = 'vigne'; im.computeBoundingSphere();
-        scene.add(im); blocsP.push({ im, x: sx / n, z: sz / n });
+        // (t : x du rang, z du milieu, longueur et couleur d'automne de chaque travée ; i0 : sa place dans « loin » ; traite :
+        // la travée a reçu le traitement, mission2.js)
+        scene.add(im); blocsP.push({ im, x: sx / n, z: sz / n, t: Float32Array.from(travees), i0, n, traite: new Uint8Array(n), b: bb.clone() });
         porteurs.push(porteur(im, bb));
       }
       loin.receiveShadow = true; loin.renderOrder = ORDRE.vegetal; loin.name = 'vigne-loin'; loin.visible = false; loin.computeBoundingSphere();
@@ -505,6 +530,41 @@ void main() {
     const lf = new THREE.LineSegments(gf, new THREE.LineBasicMaterial({ color: '#3d3833' }));
     lf.renderOrder = ORDRE.vegetal; lf.name = 'palissage'; scene.add(lf);
     vignes.fine = gFine; vignes.simple = gSimple;
+  }
+  // Les rangs selon la saison (main.js) : en automne leurs couleurs d'origine, au printemps de jeunes feuilles vertes (le
+  // chenin plus clair que le cabernet) ; traités (mission2.js), un voile bleuté de cuivre sur les feuilles
+  const PRINTEMPS = { chenin: ['#97bd4e', '#8db446', '#a2c459', '#88ae43'], cabernet: ['#6f9d3d', '#79a744', '#668f37', '#7fa64a'] };
+  const PRINTC = { chenin: PRINTEMPS.chenin.map(h => new THREE.Color(h)), cabernet: PRINTEMPS.cabernet.map(h => new THREE.Color(h)) };
+  const VOILE = new THREE.Color('#a3c6c8'), cT = new THREE.Color();
+  function teinteTravee(v, b, k) {
+    const T = b.t, o = k * 8;
+    if (UNI.uSaison.value < 0.5) cT.setRGB(T[o + 5], T[o + 6], T[o + 7]);
+    else { const pal = PRINTC[v.q.cep]; cT.copy(pal[Math.min(pal.length - 1, Math.floor(bruit(T[o] * 0.09 + 11, T[o + 1] * 0.045) * pal.length))]); }
+    if (b.traite[k]) cT.lerp(VOILE, 0.45);
+    b.im.setColorAt(k, cT); v.loin.setColorAt(b.i0 + k, cT);
+  }
+  function saison(printemps) {
+    UNI.uSaison.value = printemps ? 1 : 0;
+    for (const v of vignes) {
+      for (const b of v.blocs) { for (let k = 0; k < b.n; k++) teinteTravee(v, b, k); b.im.instanceColor.needsUpdate = true; }
+      v.loin.instanceColor.needsUpdate = true;
+    }
+  }
+  // Le pulvérisateur passe en (x, z) dans la parcelle v : les travées des rangs à moins de demi mètres de part et d'autre,
+  // à hauteur de z, reçoivent le traitement. Rend le nombre de travées traitées à l'instant.
+  function traiter(v, x, z, demi) {
+    let n = 0;
+    for (const b of v.blocs) {
+      if (x < b.b.min.x - demi || x > b.b.max.x + demi || z < b.b.min.z - 0.5 || z > b.b.max.z + 0.5) continue;
+      const T = b.t;
+      for (let k = 0; k < b.n; k++) {
+        const o = k * 8;
+        if (b.traite[k] || Math.abs(T[o] - x) > demi || Math.abs(T[o + 1] - z) > T[o + 2] / 2 + 0.3) continue;
+        b.traite[k] = 1; teinteTravee(v, b, k); n++;
+        b.im.instanceColor.needsUpdate = true; v.loin.instanceColor.needsUpdate = true;
+      }
+    }
+    return n;
   }
 
   /* ------------------------------------------------------------ bâtiments
@@ -1128,6 +1188,19 @@ void main() {
   for (const x of [-93, -87]) { bati.push(B(0.8, 2.6, 0.8, TUF, x, 1.3, -33.5), B(1, 0.2, 1, '#cbbf9f', x, 2.7, -33.5)); col.boiteC(x, -33.5, 0.8, 0.8); }
   bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 3.25, -33.5));
   enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 3.65, 5.6, 0.72, '#2b2b30', '#f0d9a0');
+  // l'aire de remplissage (mission 2) : une cuve d'eau de 1 000 L dans sa cage, sur un socle ; la potence et son tuyau ;
+  // l'armoire fermée des produits, son pictogramme ; un caniveau qui récupère ce qui coule
+  {
+    const x = -90.2, z = -67.5;
+    bati.push(B(1.3, 0.5, 1.3, '#8f8a80', x, 0.25, z), B(1.15, 1.05, 1.15, '#eef0ec', x, 1.03, z), C(0.16, 0.16, 0.1, 10, '#2f6db0', x, 1.6, z));
+    for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) bati.push(B(0.05, 1.15, 0.05, '#9aa1a8', x + dx, 1.08, z + dz));
+    for (const y of [0.6, 1.08, 1.56]) bati.push(B(1.24, 0.04, 1.24, '#9aa1a8', x, y, z));
+    bati.push(B(0.12, 3.2, 0.12, '#5d6b78', -88.6, 1.6, -71.2), B(2.6, 0.1, 0.1, '#5d6b78', -87.4, 3.15, -71.2), B(0.06, 0.9, 0.06, '#1e1e22', -86.2, 2.65, -71.2));
+    bati.push(B(1.3, 1.9, 0.6, '#55705a', -83.4, 0.95, -71.4), B(1.32, 0.06, 0.62, '#3e5244', -83.4, 1.92, -71.4), B(0.3, 0.3, 0.02, '#e8b923', -83.4, 1.3, -71.09), B(0.2, 0.2, 0.025, '#1e1e22', -83.4, 1.3, -71.085));
+    bati.push(B(5.6, 0.04, 0.3, '#5b5e66', -86, 0.07, -62.9));
+    col.boiteC(x, z, 1.4, 1.4); col.boiteC(-88.6, -71.2, 0.3, 0.3); col.boiteC(-83.4, -71.4, 1.4, 0.7);
+    contact.jupe(x - 0.65, z - 0.65, x + 0.65, z + 0.65, 0.6, 0.35); contact.jupe(-84.05, -71.7, -82.75, -71.1, 0.6, 0.35);
+  }
 
   // Le bourg : maisons le long de la départementale
   const nord = [[34, 10, 8, 6.2], [46, 9, 8, 7], [58, 11, 9, 6.5, 'boul'], [80, 9, 8, 7.5, 'epicerie'], [110, 11, 8, 6.6, 'resto'], [124, 10, 8, 7], [137, 11, 9, 6.4]];
@@ -1819,8 +1892,13 @@ void main() {
       // la boucle du bourg, à sens unique : la place, la Cave du Pressoir, le Bar Le Cep, et l'on redescend
       { sens: true, points: [[95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [95, 10]] },
       [[-55, 10], [-55, 124], [-53.2, 134.5]],                             // le chemin des Grands Champs, jusqu'à l'auberge
+      [[-84, -45], [-86.5, -56], [-86, -66]],                              // la cour, jusqu'à l'aire de remplissage
+      ...CHEMINS,                                                          // les chemins de vigne, derrière le domaine
     ],
     route0: [-82.8, -58.4], // où l'on part en tournée : la sortie du chai (main.js, cheminSortie)
+    // l'aire de remplissage du pulvérisateur (le tracteur s'y arrête, tourné vers le nord) ; les parcelles de vigne (q :
+    // collisions.js parcelle, cep), dans l'ordre de PARCELLES
+    aire: { x: -86, z: -66, h: Math.PI, cuve: { x: -90.2, z: -66.5 } }, parcelles: parcs,
     maison: { x: -100, z: -58.3 }, // devant la porte de la maison du domaine : on y rentre dormir (main.js)
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
@@ -1865,5 +1943,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, saison, traiter };
 }
