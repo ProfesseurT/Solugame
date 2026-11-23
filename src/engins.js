@@ -15,8 +15,12 @@ const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : r
 // couleur et type par sommet) prêtes pour fusion(). Chaque triangle est tourné vers `ext` (direction indicative
 // de l'extérieur) : l'ordre des sommets donné n'a pas d'importance.
 class Atelier {
-  constructor() { this.lots = new Map(); }
+  constructor() { this.lots = new Map(); this.detour = null; }
+  // detour : { test(x, y, z), at } : les facettes dont le centre passe le test vont dans un autre atelier (la portière
+  // d'une voiture qui s'ouvre)
   tri(a, b, c, col, ty, ext) {
+    const D = this.detour;
+    if (D && D.test((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3)) { D.at.tri(a, b, c, col, ty, ext); return; }
     const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     if (nx * nx + ny * ny + nz * nz < 1e-14) return; // facette dégénérée
@@ -203,6 +207,52 @@ function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
   pivots[0].position.set(xAv, 0, 0); pivots[1].position.set(-xAv, 0, 0);
   essieu.add(pivots[0], pivots[1]);
   return { rouesAr, rouesAv: [mk(g[2], pivots[0], 0, 0, 0), mk(g[3], pivots[1], 0, 0, 0)], pivots, essieu };
+}
+
+/* ---------------------------------------------------------------- phares, la nuit
+   Pas de vraie lampe (three.js recompilerait toutes les matières, et chaque pixel la paierait) : des glaces qui brillent,
+   avec leur halo (un maillage additif), une flaque de lumière sur la route devant le véhicule, et des feux rouges à
+   l'arrière. P : { av : [x, y, z] du phare droit-gauche (+x, repère du véhicule), ar : idem pour un feu arrière, ou null } ;
+   caisse : ce qui porte les feux (la caisse, ou la voiture) ; sol : ce qui porte la flaque, au ras du sol (sans le roulis de
+   la caisse). Rend { groupe, flaque } (cachés tant qu'ils ne sont pas allumés : main.js). Matières partagées : allumerPhares(n) règle
+   leur éclat d'après la nuit. */
+let MAT_PHARES = null;
+function matieresPhares() {
+  if (MAT_PHARES) return MAT_PHARES;
+  // la flaque : un dégradé, vif près du véhicule, qui s'efface au loin et sur les côtés
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
+  const c = cv.getContext('2d'), img = c.createImageData(64, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 64; x++) {
+    const u = (x + 0.5) / 64 * 2 - 1, v = (y + 0.5) / 128, l = Math.max(0, 1 - Math.pow(Math.abs(u) / (0.45 + 0.55 * v), 2)) * Math.pow(1 - v, 1.4) * Math.min(1, v * 6);
+    const i = (y * 64 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 * l; img.data[i + 3] = 255;
+  }
+  c.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const add = o => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, ...o });
+  MAT_PHARES = {
+    glaces: add({ vertexColors: true }),
+    flaque: add({ map: tex, color: '#ffe2b0', opacity: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+  };
+  return MAT_PHARES;
+}
+export function allumerPhares(n) { const M = matieresPhares(); M.glaces.opacity = n; M.flaque.opacity = 0.42 * n; }
+function eclairage(P, caisse, sol = caisse) {
+  const M = matieresPhares(), groupe = new THREE.Group(), G = [];
+  const disque = (x, y, z, r, coul, sz) => { const g = new THREE.CircleGeometry(r, 12); if (sz < 0) g.rotateY(Math.PI); g.translate(x, y, z); G.push(teinter(g, coul)); };
+  for (const s of [1, -1]) {
+    const [x, y, z] = P.av;
+    disque(s * x, y, z + 0.01, 0.075, '#fff6e2', 1); disque(s * x, y, z + 0.005, 0.26, '#2e2a24', 1);
+    if (P.ar) { const [xr, yr, zr] = P.ar; disque(s * xr, yr, zr - 0.01, 0.055, '#ff2a1a', -1); disque(s * xr, yr, zr - 0.005, 0.16, '#3a0a06', -1); }
+  }
+  const glaces = new THREE.Mesh(fusion(G), M.glaces); glaces.renderOrder = 5; glaces.frustumCulled = false;
+  // la flaque : 3,2 m de large, 10 m de long, posée au sol devant le pare-chocs
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 10).rotateX(-Math.PI / 2).translate(0, 0.04, P.av[2] + 5.4), M.flaque);
+  fl.renderOrder = 4; fl.frustumCulled = false;
+  groupe.add(glaces); groupe.visible = false; groupe.name = 'phares';
+  caisse.add(groupe);
+  // la flaque, à part (au sol) : main.js l'allume avec les glaces
+  fl.visible = false; sol.add(fl);
+  return { groupe, flaque: fl };
 }
 
 /* ---------------------------------------------------------------- carton de 6 bouteilles
@@ -446,6 +496,7 @@ export function tracteur() {
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62),
     dims, volantCentre: new THREE.Vector3(0, 1.9, -0.18), volantRayon: 0.2, volantInclinaison: -0.55,
+    phares: eclairage({ av: [0.29, 1.36, 1.88], ar: null }, caisse, groupe),
   };
 }
 
@@ -687,6 +738,7 @@ export function van() {
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte, coulissante, chargeur,
     siege: new THREE.Vector3(0.38, -0.1, -0.05), dims, volantCentre, volantRayon: 0.19, volantInclinaison,
+    phares: eclairage({ av: [0.62, 0.77, 2.09], ar: [0.72, 0.95, -2.18] }, caisse, groupe),
   };
 }
 
@@ -735,6 +787,14 @@ const MODELES = {
 };
 const NOMS = ['break', 'citadine', 'berline'];
 
+// La portière du conducteur d'une voiture (côté +x) : entre le joint du milieu et le joint avant (sans le montant du
+// pare-brise ni le rétroviseur), du bas de caisse au haut de la vitre. test : une facette en fait-elle partie ? (son
+// centre : du côté extérieur, dans ces bornes). z1 : sa charnière, à l'avant ; x : le flanc.
+function porteVoiture(M) {
+  const zPB = M.gh[M.gh.length - 1][0], z0 = M.portes[1] + 0.01, z1 = Math.min(M.portes[0], zPB - 0.22), yb = lin(M.yb);
+  const W = lin(M.W), haut = Math.max(...M.gh.filter(g => g[1] != null).map(g => g[1])) - 0.06;
+  return { z0, z1, x: W(z1), test: (x, y, z) => x > 0.6 && z > z0 && z < z1 && y > yb(z) + 0.05 && y < haut };
+}
 // Le poste de conduite d'une voiture (son repère : avant vers +z, +x à gauche, le côté du conducteur) : où se tient le
 // personnage assis (siege), dessus du siège (assise), plancher, volant (centre, rayon ; jante verticale, comme au tracteur)
 function posteVoiture(M) {
@@ -746,7 +806,7 @@ function posteVoiture(M) {
    avec l'interface du tracteur et du van (vehicules.js : quatre roues, deux pivots de direction, une caisse sur ressorts ;
    gestes.js : la montée par la portière du conducteur). Pas de plateau : elle ne porte pas de cartons. */
 export function voitureConduite(couleur, nom) {
-  const M = MODELES[nom], corps = voiture(couleur, nom, true);
+  const M = MODELES[nom], corps = voiture(couleur, nom, true, true), ph = corps.userData.phares;
   for (const e of corps.userData.essieux) corps.remove(e); // ses roues tournent et braquent à part
   const groupe = new THREE.Group(), caisse = new THREE.Group();
   groupe.add(caisse); caisse.add(corps);
@@ -755,13 +815,16 @@ export function voitureConduite(couleur, nom) {
   const P = posteVoiture(M), L = M.zs[M.zs.length - 1], W = Math.max(...M.W.map(w => w[1])), s = P.siege;
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant: null, feux: corps.userData.feux, corps, siege: s,
+    porte: corps.userData.porte, porteOuverte: -1.1, // la portière du conducteur (gestes.js : portiere)
+    phares: ph,
     dims: {
       rAr: M.rr, rAv: M.rr, yAr: M.rr, yAv: M.rr, emp: M.zAv - M.zAr, off: [L * 0.48, -L * 0.48], r: W + 0.08, pivot: new THREE.Vector3(0, 0.55, 0),
       zAr: M.zAr, zAv: M.zAv, xAr: M.xr, xAv: M.xr, assise: P.assise, plancher: P.plancher, emprise: [[-W, W, -L, L]],
     },
     volantCentre: P.volant, volantRayon: P.rayon,
-    // la montée : à côté de la portière, on s'assoit en se baissant (pieds au sol), on rentre les jambes
-    montee: { chemin: [[W + 0.45, 0, s.z - 0.25], [W + 0.3, 0, s.z], [W - 0.05, 0, s.z], [0.62, 0, s.z], [s.x, 0, s.z]], duree: 1.1, assis: 0.3, baisse: 0.75, son: 'portiere' },
+    // la montée : derrière la portière (hors de son passage), on entre par l'ouverture, on s'assoit en se baissant (pieds
+    // au sol), on rentre les jambes
+    montee: { chemin: [[W + 0.4, 0, M.portes[1] - 0.4], [W + 0.35, 0, s.z - 0.1], [W - 0.05, 0, s.z], [0.62, 0, s.z], [s.x, 0, s.z]], duree: 1.1, assis: 0.3, baisse: 0.75 },
   };
 }
 const PLAST = '#232428', NOIR = '#141518', CHROME = '#cfd3d8', LAQUE = '#191a1e';
@@ -858,13 +921,16 @@ const MAT_CLIGNO = new THREE.MeshBasicMaterial({ color: '#ffa21a' });
 // voiture qui roule (roule = true) a ses roues à part, un maillage par essieu (m.userData.essieux), qui tournent ; garée,
 // elles sont fusionnées à la caisse (aucun appel de dessin de plus).
 // Repère : avant vers +z, +x à sa gauche. userData.feux = { stop, g, d } (éteints : sans coût de dessin).
-export function voiture(couleur, modele, roule = false) {
+export function voiture(couleur, modele, roule = false, ouvrante = false) {
   const v = parseInt(String(couleur).replace('#', ''), 16) || 0;
   const nom = MODELES[modele] ? modele : NOMS[((v >> 16) + 2 * ((v >> 8) & 255) + (v & 255)) % 3];
-  const M = MODELES[nom], cle = nom + couleur + (roule ? ' roule' : '');
+  const M = MODELES[nom], cle = nom + couleur + (roule ? ' roule' : '') + (ouvrante ? ' porte' : '');
   let geo = VOITURES.get(cle);
   if (!geo) {
     const at = new Atelier(); at.couleur = couleur;
+    // ouvrante : la portière du conducteur (avant gauche, +x) à part, pour qu'elle s'ouvre (voitureConduite)
+    const P0 = ouvrante ? porteVoiture(M) : null, atP = ouvrante ? new Atelier() : null;
+    if (ouvrante) at.detour = { test: P0.test, at: atP };
     const cr = carrosserie(M, couleur, at);
     optiques(at, cr, M, 0.006);
     const P = [couleur, T.carrosserie], { basse, W, ys } = cr, extra = [];
@@ -891,6 +957,7 @@ export function voiture(couleur, modele, roule = false) {
     for (const x0 of [0.06, -0.5]) barre(at, [x0, yPB, zPB - 0.04], [x0 + 0.46, yPB + 0.012, zPB - 0.05], 0.009, '#151517', 0);
     extra.push(C(0.032, 0.032, 0.16, 6, '#3a3b3f', 0.42, cr.yb(cr.zR) + 0.08, cr.zR - 0.04, 'z'));
     barre(at, [0.3, yToit, zLun + 0.35], [0.3, yToit + 0.3, zLun + 0.2], 0.005, '#151517', 0);
+    at.detour = null; // l'habitacle reste à sa place
     // l'habitacle, qu'on voit par les vitres : plancher, garnitures, ciel de toit, planche de bord, volant (à gauche, +x),
     // sièges et appuie-têtes, banquette
     const wi = Math.min(W(zPB), W(zLun)) - 0.12, sol = 0.34, SIEGE = (v & 0x100) ? '#8a7d6a' : '#3a3c42', GARN = '#2f3034';
@@ -909,12 +976,33 @@ export function voiture(couleur, modele, roule = false) {
     const lv = at.lots.get(VITRE + '|'), atV = new Atelier();
     at.lots.delete(VITRE + '|'); atV.lots.set(VITRE + '|', lv);
     geo = { corps: fusion([...at.geos(), ...extra]), vitres: fusion(atV.geos()) };
+    if (ouvrante) {
+      // la portière : sa tôle et sa vitre, et une contre-porte dedans ; dans le repère de sa charnière
+      const z0 = P0.z0, z1 = P0.z1, xi = P0.x - 0.07, yb0 = lin(M.yb), ys0 = lin(M.ys);
+      atP.quad([xi, yb0(z1) + 0.12, z1], [xi, yb0(z0) + 0.12, z0], [xi, ys0(z0), z0], [xi, ys0(z1), z1], '#2f3034', 0, [-1, 0, 0]);
+      const lp = atP.lots.get(VITRE + '|'), atPV = new Atelier();
+      if (lp) { atP.lots.delete(VITRE + '|'); atPV.lots.set(VITRE + '|', lp); }
+      const vers = g => { g.translate(-P0.x, 0, -P0.z1); return g; };
+      geo.porte = vers(fusion(atP.geos())); geo.porteVitre = lp ? vers(fusion(atPV.geos())) : null; geo.charniere = [P0.x, P0.z1];
+    }
     VOITURES.set(cle, geo);
   }
   const m = new THREE.Mesh(geo.corps, MAT); m.castShadow = true;
   const vitre = new THREE.Mesh(geo.vitres, MAT_VITRE); vitre.renderOrder = 3; m.add(vitre);
+  if (geo.porte) {
+    // la portière du conducteur, sur sa charnière (à l'avant de la porte) ; elle s'ouvre vers l'extérieur (rotation < 0)
+    const ch = new THREE.Group(); ch.position.set(geo.charniere[0], 0, geo.charniere[1]); m.add(ch);
+    const pt = new THREE.Mesh(geo.porte, MAT); pt.castShadow = true; ch.add(pt);
+    if (geo.porteVitre) { const pv = new THREE.Mesh(geo.porteVitre, MAT_VITRE); pv.renderOrder = 3; ch.add(pv); }
+    m.userData.porte = ch;
+  }
   m.userData.vitres = geo.vitres; m.userData.corps = geo.corps;
   m.userData.nom = nom; m.userData.couleur = couleur; m.userData.poste = posteVoiture(M);
+  if (roule) {
+    // ses phares (allumés la nuit : main.js), d'après la face avant et l'arrière de la carrosserie
+    const ys = lin(M.ys), W = lin(M.W), zF = M.zs[M.zs.length - 1], zR = M.zs[0];
+    m.userData.phares = eclairage({ av: [(0.4 + W(zF) - 0.06) / 2, ys(zF) - 0.08, zF + 0.012], ar: [W(zR) - 0.16, ys(zR) - 0.1, zR - 0.012] }, m);
+  }
   if (roule) {
     // un essieu : ses deux roues, autour de son axe (géométrie partagée par modèle)
     let ge = ESSIEUX.get(nom);

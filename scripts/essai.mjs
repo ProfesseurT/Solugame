@@ -6,7 +6,7 @@
 //   parcours  joue toute la mission (3 commandes, 3 livraisons, 3 factures) et vérifie chaque étape ; VEHICULE=van : en van
 //   souple    la journée à la carte : le chèque seul, une tournée avec ce qui est déjà signé, un arrêt seul, chargement
 //             en deux fois (VEHICULE=van : en van)
-//   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe ; rentrer dormir, le matin revient
+//   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe, les phares ; rentrer dormir, le matin revient
 //   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
@@ -313,8 +313,9 @@ if (scenario === 'aides') {
 if (scenario === 'voitures') {
   // les voitures des autres : un conducteur dans chacune ; sans le mode WTF, une voiture garée reste fermée ; plantée
   // devant elle, une voiture s'arrête et son conducteur nous la prête (il devient un passant), une autre la remplace au
-  // loin ; une voiture ne charge pas de cartons au chai ; mode WTF : une voiture garée se vole, un passant s'aplatit puis
-  // se relève
+  // loin ; une voiture ne charge pas de cartons au chai ; mode WTF : une voiture garée se vole, le passant qui voit venir la
+  // voiture saute de côté, celui qui a le nez dans son téléphone s'aplatit puis se relève ; le conducteur d'une voiture
+  // volée en tombe
   const r = await ev(async () => {
     const q = s => document.querySelector(s), m = CL.mission, T = CL.jeu.tel, J = CL.jeu, log = [];
     const clic = s => { const e = q(s); if (!e) throw new Error('absent : ' + s); e.click(); };
@@ -334,7 +335,7 @@ if (scenario === 'voitures') {
       log.push(['à côté : « Emprunter la voiture »', CL.voitureProche === v && [...document.querySelectorAll('.etiquette.action')].some(e => e.textContent.startsWith('Emprunter la voiture'))]);
       const n0 = CL.gens.length;
       CL.agir(); CL.finirGeste(); CL.step(5);
-      log.push(['empruntée : au volant, le conducteur est descendu, un passant de plus', J.auVolant && J.veh.genre === 'voiture' && CL.voitures().length === 3 && CL.gens.length === n0 + 1]);
+      log.push(['empruntée : au volant, le conducteur est descendu, un passant de plus ; la portière refermée', J.auVolant && J.veh.genre === 'voiture' && CL.voitures().length === 3 && CL.gens.length === n0 + 1 && Math.abs(J.veh.m.porte.rotation.y) < 0.01]);
       CL.ctrl.ky = -1; CL.step(150); CL.ctrl.ky = 0;
       log.push(['elle roule (' + CL.tr.v.toFixed(1) + ' m/s)', CL.tr.v > 8]);
       CL.step(60 * 21);
@@ -352,12 +353,29 @@ if (scenario === 'voitures') {
       log.push(['mode WTF : la voiture garée se vole', CL.voitureProche === g]);
       CL.agir(); CL.finirGeste(); CL.step(5);
       log.push(['volée : au volant', J.auVolant && J.veh.genre === 'voiture' && CL.GAREES.length === ng - 1]);
+      // un passant qui voit venir la voiture saute de côté ; celui qui a le nez dans son téléphone se fait aplatir
+      const E = CL.gens[1];
+      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); E.attente = 99; E.p.placer(-91, -47, 0);
+      let saute = false; CL.ctrl.ky = -1; for (let n = 0; n < 150; n++) { CL.step(1); if (E.p.sautT > 0) saute = true; } CL.ctrl.ky = 0; CL.step(60);
+      log.push(['mode WTF : le passant qui la voit venir saute de côté', saute]);
       const G = CL.gens[0];
-      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); G.attente = 99; G.p.placer(-91, -47, 0); // dans la cour : pas de circulation
+      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); G.attente = 99; G.p.telephone = true; G.p.placer(-91, -47, 0); CL.step(40); // dans la cour : pas de circulation
       CL.ctrl.ky = -1; for (let n = 0; n < 300 && G.ecrase <= 0; n++) CL.step(1); CL.ctrl.ky = 0; CL.step(10);
-      log.push(['un passant aplati comme une crêpe', G.ecrase > 0 && G.p.m.groupe.scale.y < 0.3]);
+      log.push(['le nez dans son téléphone, il est aplati comme une crêpe', G.ecrase > 0 && G.p.m.groupe.scale.y < 0.3]);
       CL.step(200);
       log.push(['il s\'est relevé', G.ecrase <= 0 && Math.abs(G.p.m.groupe.scale.y - G.p.m.echelle) < 0.01]);
+      // voler une voiture qui roule : son conducteur tombe de la voiture, se relève et s'enfuit
+      CL.agir(); CL.finirGeste(); CL.step(5); G.p.telephone = false;
+      CL.step(60 * 21);
+      const w = CL.voitures().find(x => x.sens > 0);
+      CL.teleporter(w.x + 30, w.zVoie, -Math.PI / 2);
+      for (let i = 0; i < 900 && Math.abs(w.v) > 0.3; i++) CL.step(1);
+      CL.step(30); J.joueur.placer(w.x + 0.5, w.z - 2.3, Math.PI); CL.step(5);
+      const d = w.conducteur, nv = CL.gens.length;
+      CL.agir(); let couche = 0;
+      for (let n = 0; n < 600 && J.gestes.actif; n++) { CL.step(1); couche = Math.min(couche, d.m.groupe.rotation.x); }
+      CL.step(120);
+      log.push(['volée : son conducteur est tombé (' + couche.toFixed(2) + '), s\'est relevé, s\'enfuit', J.auVolant && couche < -1.2 && CL.gens.length === nv + 1 && Math.abs(d.m.groupe.rotation.x) < 0.01]);
       log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
@@ -387,12 +405,18 @@ if (scenario === 'nuit') {
       J.minutes = 21 * 60; CL.step(5);
       const f = CL.scene.fog.color;
       log.push(['21 h : la nuit, la brume bleu nuit', nuit() === 1 && f.b > f.r && f.r < 0.1]);
+      const tr = CL.vehicule('tracteur');
+      log.push(['la nuit, les voitures roulent phares allumés ; le tracteur garé, éteint', CL.voitures().every(v => v.mesh.userData.phares.groupe.visible && v.mesh.userData.phares.flaque.visible) && !tr.m.phares.groupe.visible]);
+      { const p = tr.p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
+      log.push(['au volant du tracteur, ses phares s\'allument', J.auVolant && tr.m.phares.groupe.visible && tr.m.phares.flaque.visible]);
+      CL.agir(); CL.finirGeste(); CL.step(3);
+      log.push(['descendu, ils s\'éteignent', !J.auVolant && !tr.m.phares.groupe.visible]);
       CL.teleporter(-100, -56.8, Math.PI); CL.step(20);
       log.push(['devant la maison : « Rentrer dormir »', [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Rentrer dormir'))]);
       CL.agir(); CL.finirGeste(); CL.step(5);
       log.push(['on ressort au matin, 7 h, le lendemain', J.heureTxt === '07:00' && J.minutes >= 1440 + 420 && !J.gestes.actif]);
       J.minutes += 40; CL.step(5);
-      log.push(['7 h 40 : le jour est revenu', nuit() === 0]);
+      log.push(['7 h 40 : le jour est revenu, phares éteints', nuit() === 0 && CL.voitures().every(v => !v.mesh.userData.phares.groupe.visible)]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });

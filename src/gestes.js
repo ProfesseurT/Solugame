@@ -169,21 +169,22 @@ export class Gestes {
   // aller à un point du repère du véhicule, tourné vers le cap (relatif au véhicule)
   allerVers(v, l, capRel) { return this.allerA(() => versMonde(v, l, this.cible), () => v.p.h + capRel); }
   // un battant (porte sur ses gonds, objet pt) s'ouvre jusqu'à l'angle ouverte (sens 1) ou se referme (sens -1), en
-  // duree secondes : grincement à l'ouverture, claquement à la fermeture
+  // duree secondes, depuis là où il est (déjà ouvert : rien ne bouge) : grincement à l'ouverture, claquement à la fermeture
   battant(pt, ouverte, sens, duree) {
-    let claque = false;
+    let claque = false, a0 = 0;
+    const but = sens > 0 ? ouverte : 0;
     return {
       duree,
-      debut: () => { if (sens > 0) son.jouer('portiere'); },
+      debut: () => { a0 = pt.rotation.y; claque = Math.abs(a0 - but) < 0.05; if (sens > 0 && !claque) son.jouer('portiere'); },
       maj: (dt, t, u) => {
-        pt.rotation.y = ouverte * (sens > 0 ? u : 1 - u);
+        pt.rotation.y = mix(a0, but, u);
         if (sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
         this.immobile(dt, t);
       },
     };
   }
-  // la portière du van
-  portiere(v, sens) { return this.battant(v.m.porte, OUVERTE, sens, sens > 0 ? 0.45 : 0.35); }
+  // la portière du van, ou d'une voiture (son angle d'ouverture : porteOuverte)
+  portiere(v, sens) { return this.battant(v.m.porte, v.m.porteOuverte ?? OUVERTE, sens, sens > 0 ? 0.45 : 0.35); }
   // la porte coulissante du van : elle s'écarte du flanc puis glisse vers l'arrière (sens 1), ou l'inverse
   coulissante(v, sens) {
     const pt = v.m.coulissante;
@@ -276,7 +277,7 @@ export class Gestes {
     });
     return etapes;
   }
-  etapesDescendre(v, sorti) {
+  etapesDescendre(v, sorti, fermer = true) {
     const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte;
     const etapes = [];
     if (porte) etapes.push(this.portiere(v, 1));
@@ -304,13 +305,54 @@ export class Gestes {
         }
       },
     });
-    if (porte) etapes.push(this.portiere(v, -1));
+    if (porte && fermer) etapes.push(this.portiere(v, -1)); // (fermer faux : on la laisse ouverte à qui monte ensuite)
     return etapes;
   }
   // Monter dans le véhicule v ; fin() quand on est installé (main.js passe en conduite)
   monter(v, fin) { this.lancer(this.etapesMonter(v, fin)); }
   // Descendre du véhicule v : sorti() quand on pose le pied au sol (main.js repasse à pied)
   descendre(v, sorti, fin) { this.lancer(this.etapesDescendre(v, sorti), fin); }
+  // Mode WTF : on lui vole sa voiture, il en tombe. La portière s'ouvre, il est éjecté (encore assis, il se déplie en
+  // l'air), tombe sur le dos au pied de la voiture, la tête au loin, reste un instant par terre, puis se relève ; sorti()
+  // quand il a quitté son siège, fin à la fin (main.js : il s'enfuit)
+  tomber(v, sorti) {
+    const j = () => this.j, A = new THREE.Vector3(), B = new THREE.Vector3();
+    let psi = 0;
+    const W = v.m.dims.emprise[0][1], s = v.m.siege;
+    return [this.portiere(v, 1), {
+      action: () => {
+        const g = j().m.groupe;
+        g.getWorldPosition(A); this.c.scene.attach(g); g.rotation.order = 'YXZ';
+        // face à la voiture, les pieds contre elle, couché sur le dos : la tête au loin
+        psi = v.p.h - Math.PI / 2;
+        versMonde(v, [W + 0.45, 0, s.z], B); B.y = 0;
+        j().transition = 1; j().baisse = 0;
+      },
+    }, {
+      duree: 0.45,
+      maj: (dt, t, u) => {
+        const p = j(), g = p.m.groupe;
+        g.position.set(mix(A.x, B.x, u), mix(A.y, 0.12, u) + Math.sin(Math.PI * u) * 0.3, mix(A.z, B.z, u));
+        g.rotation.set(-1.5 * u, psi, 0);
+        p.transition = 1 - 0.6 * u;
+        p.sync(dt, t);
+        if (u >= 1) { p.pos.set(B.x, 0, B.z); sorti(); }
+      },
+    }, {
+      duree: 0.9,
+      maj: (dt, t, u, T) => { const p = j(), g = p.m.groupe; g.rotation.x = -1.5 + Math.sin(T * 9) * 0.04 * (1 - u); p.transition = 0.4 * (1 - u); p.sync(dt, t); },
+    }, {
+      duree: 0.55,
+      maj: (dt, t, u) => { const p = j(), g = p.m.groupe; g.rotation.x = -1.5 * (1 - u); g.position.y = 0.12 * (1 - u); p.sync(dt, t); },
+    }, {
+      action: () => {
+        const p = j(), g = p.m.groupe;
+        g.rotation.set(0, psi + Math.PI, 0); g.rotation.order = 'XYZ';
+        p.assis = false; p.transition = null; p.baisse = undefined; p.poste = null;
+        p.placer(B.x, B.z, psi + Math.PI); // debout, dos à la voiture
+      },
+    }];
+  }
 
   /* ------------------------------------------------------------ le véhicule roule tout seul (au chai)
      Le long d'un chemin (points [x, z] serrés), en duree secondes, départ et arrivée en douceur ; recul : en marche

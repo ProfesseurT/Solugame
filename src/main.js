@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture, voitureConduite } from './engins.js';
+import { tracteur, van, voiture, voitureConduite, allumerPhares } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -210,24 +210,26 @@ function asseoirConducteur(vo) {
   p.sync(0, 0);
   vo.conducteur = p;
 }
-// Il descend de la voiture qu'on lui prend (h : son cap) et devient un passant, sur le bas-côté de sa voie : il nous la
-// prête de bon cœur, ou (mode WTF) il s'enfuit en criant au voleur
-function conducteurDescend(vo, h) {
-  const p = vo.conducteur, g = p.m.groupe;
-  vo.conducteur = null;
-  const s = g.position, c = Math.cos(h), sn = Math.sin(h);
-  const x = vo.x + c * 1.4 + sn * s.z, z = vo.z - sn * 1.4 + c * s.z; // côté conducteur : la gauche de la voiture (+x)
-  g.removeFromParent(); g.rotation.set(0, 0, 0); scene.add(g);
-  const zone = vo.z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
-  const pa = new Passant(p.m, zone, rPietons);
-  pa.p.placer(x, z, h + Math.PI / 2);
-  pa.cri = hud.etiquette('', 'bulle'); pa.p.etq = pa.cri; pa.bulle = 4;
-  if (jeu.wtf) {
-    const ex = x - joueur.pos.x, ez = z - joueur.pos.z, l = Math.hypot(ex, ez) || 1;
-    pa.fx = ex / l; pa.fz = ez / l; pa.fuite = 1.8;
-    hud.bulle(pa.cri, pick(REPLIQUES.volee), 2.4);
-  } else hud.bulle(pa.cri, pick(REPLIQUES.pretee), 3.2);
-  passants.push(pa);
+// Il descend de la voiture qu'on lui prend (v : sa jumelle, où il est déjà assis) : il ouvre sa portière et descend, et
+// nous la laisse ouverte ; en mode WTF, il en tombe (gestes.js : tomber). Puis il devient un passant du bas-côté de sa
+// voie : il nous la prête de bon cœur, ou il s'enfuit en criant au voleur. sorti() : il a quitté son siège.
+const GESTES_PNJ = []; // les gestes en cours des autres (main.js les fait avancer : bourg)
+function conducteurDescend(p, v, sorti) {
+  const G = new Gestes({ jeu, scene, col, acteur: p }), vole = jeu.wtf;
+  G.lancer(vole ? G.tomber(v, sorti) : G.etapesDescendre(v, sorti, false), () => {
+    const x = p.pos.x, z = p.pos.z;
+    const zone = z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
+    const pa = new Passant(p.m, zone, rPietons);
+    pa.p.placer(x, z, p.h);
+    pa.cri = hud.etiquette('', 'bulle'); pa.p.etq = pa.cri; pa.bulle = 4;
+    if (vole) {
+      const ex = x - joueur.pos.x, ez = z - joueur.pos.z, l = Math.hypot(ex, ez) || 1;
+      pa.fx = ex / l; pa.fz = ez / l; pa.fuite = 2.2;
+      hud.bulle(pa.cri, pick(REPLIQUES.volee), 2.4);
+    } else hud.bulle(pa.cri, pick(REPLIQUES.pretee), 3.2);
+    passants.push(pa);
+  });
+  GESTES_PNJ.push(G);
 }
 // les modèles de toutes les voitures, garées et qui roulent (leur ombre de contact : majTaches)
 const voituresM = [];
@@ -427,17 +429,26 @@ function prendreVoiture(c) {
   const m = voitureConduite(couleur, nom);
   finir(m.groupe);
   const v = creerVehicule('voiture', m, { x: c.x, z: c.z, h }, posteDe(m));
-  scene.remove(mesh); voituresM.splice(voituresM.indexOf(mesh), 1);
+  let libre = true; // la place du conducteur
   if (ia) {
+    // son conducteur passe dans la jumelle, à sa place, puis en descend (ou en tombe)
+    const p = c.conducteur;
+    c.conducteur = null; libre = false;
+    m.caisse.add(p.m.groupe); p.m.groupe.position.copy(m.siege); p.m.groupe.rotation.set(0, 0, 0);
+    p.poste = v.poste; p.pos.set(c.x, 0, c.z); p.sync(0, temps);
+    conducteurDescend(p, v, () => { libre = true; });
     voitures.splice(voitures.indexOf(c), 1);
     c.cri.vu = false;
-    conducteurDescend(c, h);
     REMPLACER.push({ t: temps + 20, sens: c.sens, vmax: c.vmax, couleur, cri: c.cri });
-  } else {
-    GAREES.splice(GAREES.indexOf(c), 1); col.retirer(c.boite);
-    son.jouer('portiere');
-  }
-  monter(v);
+  } else { GAREES.splice(GAREES.indexOf(c), 1); col.retirer(c.boite); }
+  scene.remove(mesh); voituresM.splice(voituresM.indexOf(mesh), 1);
+  // on monte une fois sa place libre (il descend, on le laisse s'écarter)
+  veh = v; tr = v.p; tm = v.m;
+  ctrl.relacher();
+  gestes.lancer([
+    { maj: (dt, t, u, T) => { gestes.immobile(dt, t); return (libre && T > 0.6) || T > 8; } },
+    ...gestes.etapesMonter(v, () => auVolant(v)),
+  ]);
 }
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
@@ -599,6 +610,8 @@ function bourg(dtm, ego) {
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
+  // les gestes des autres (un conducteur qui descend de sa voiture)
+  for (let i = GESTES_PNJ.length - 1; i >= 0; i--) { GESTES_PNJ[i].update(dtm, temps); if (!GESTES_PNJ[i].actif) GESTES_PNJ.splice(i, 1); }
   // une voiture prise est remplacée au loin, avec un nouveau conducteur
   for (let i = REMPLACER.length - 1; i >= 0; i--) {
     const r = REMPLACER[i];
@@ -649,7 +662,14 @@ function nuitA(minutes) {
   if (m >= 380 && m < 450) return 1 - lisse((m - 380) / 70);
   return 1;
 }
-function majNuit() { const n = nuitA(jeu.minutes); if (n !== UNI.uNuit.value) monde.nuit(n); }
+function majNuit() { const n = nuitA(jeu.minutes); if (n !== UNI.uNuit.value) { monde.nuit(n); allumerPhares(lisse((n - 0.15) / 0.5)); } }
+// Les phares, la nuit : ceux des voitures de la départementale, et du véhicule qu'on conduit (moteur en marche)
+function phares() {
+  const on = UNI.uNuit.value > 0.15;
+  const allumer = (ph, a) => { if (ph.groupe.visible !== a) { ph.groupe.visible = a; ph.flaque.visible = a; } };
+  for (const v of voitures) allumer(v.mesh.userData.phares, on);
+  for (const v of VEHICULES) allumer(v.m.phares, on && v === veh && (jeu.auVolant || gestes.roule));
+}
 
 /* ------------------------------------------------------------------ rentrer dormir
    Devant la porte de la maison du domaine, « Rentrer dormir » : on entre, fondu au noir, et l'on ressort au matin, 7 h, le
@@ -722,6 +742,7 @@ function miseAJour(dt) {
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
   son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant);
   bourg(dtm, ego);
+  phares();
   particules.fontaine(dtm, L.fontaine);
   mission.update(dt);
   tel.update(dt);

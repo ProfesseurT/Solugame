@@ -164,18 +164,20 @@ export class Passant {
       }
       this.dx = danger.x; this.dz = danger.z;
       const ex = p.pos.x - danger.x, ez = p.pos.z - danger.z, d = Math.hypot(ex, ez);
-      if (danger.wtf) {
-        // mode WTF : il ne s'écarte pas, il crie
-        if (Math.abs(danger.v) > 1.5 && d < 7 && this.bulle <= 0) { this.bulle = 4; cri = true; }
+      // Mode WTF : il essaie toujours de s'écarter, mais réagit plus tard (on peut l'attraper) ; le nez dans son téléphone,
+      // il ne voit rien venir
+      const wtf = danger.wtf, distrait = wtf && (p.telephone || p.anim.wTel > 0.5);
+      if (distrait) {
+        if (Math.abs(danger.v) > 1.5 && d < 3 && this.bulle <= 0) { this.bulle = 4; cri = true; }
       } else if (Math.abs(danger.v) > 1.5) {
-        const devant = ex * this.ux + ez * this.uz, cote = ex * this.uz - ez * this.ux;
-        if (devant > -0.5 && devant < 2.5 + Math.abs(danger.v) * 0.9 && Math.abs(cote) < 2.4 && p.sautT <= 0 && this.fuite < 0.3) {
+        const devant = ex * this.ux + ez * this.uz, cote = ex * this.uz - ez * this.ux, portee = wtf ? 1.2 + Math.abs(danger.v) * 0.5 : 2.5 + Math.abs(danger.v) * 0.9;
+        if (devant > -0.5 && devant < portee && Math.abs(cote) < 2.4 && p.sautT <= 0 && this.fuite < 0.3) {
           // il fonce droit dessus : saut de côté, hors de sa trajectoire
           const s = Math.abs(cote) > 0.15 ? Math.sign(cote) : (this.rnd() < 0.5 ? 1 : -1);
           p.sauter(this.uz * s, -this.ux * s);
           this.fuite = 1.5; this.fx = this.uz * s; this.fz = -this.ux * s;
           if (this.bulle <= 0) { this.bulle = 4; cri = true; }
-        } else if (d < 6) {
+        } else if (d < (wtf ? 4 : 6)) {
           this.fuite = Math.max(this.fuite, 1.2); this.fx = ex / (d || 1); this.fz = ez / (d || 1);
           if (this.bulle <= 0) { this.bulle = 4; cri = true; }
         }
