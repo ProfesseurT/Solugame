@@ -280,16 +280,19 @@ export function tracteur() {
   // jusqu'à 18 cartons sur le plateau, en 6 colonnes de 3 (3 de large, 2 de profondeur) ; posés sur la caisse, ils
   // roulent et tanguent avec elle. On charge et on décharge par le côté (chargeur : où l'on se tient, à droite ou à gauche).
   const cartons = colonnes(caisse, c => [-0.42 + (c % 3) * 0.42, 1.43, -1.68 - Math.floor(c / 3) * 0.34]);
-  const chargeur = { droite: [-1.45, -1.85], gauche: [1.45, -1.85] };
+  const chargeur = { droite: [-1.45, -1.85], gauche: [1.45, -1.85], arriere: [0, -2.8] };
+  const ridelle = 0.36; // hauteur dont on soulève une pile pour passer par-dessus les ridelles du plateau (gestes.js)
   // siège : position du conducteur dans le repère de la caisse (qui coïncide avec celui du groupe au repos)
   // dims : rayons et hauteurs des roues, empattement, cercles de collision (centres le long de l'axe, rayon), point de
   // roulis et tangage ; en plus : position des roues (z et demi-voie), dessus du siège (assise) et plancher sous les pieds
   const dims = {
     rAr: 0.78, rAv: 0.45, yAr: 0.78, yAv: 0.45, emp: 2.25, off: [1.05, -0.95], r: 1.12, pivot: new THREE.Vector3(0, 0.75, -0.35),
     zAr: -0.9, zAv: 1.35, xAr: 0.98, xAv: 0.84, assise: 1.5, plancher: 1.24,
+    // emprise au sol (repère de la caisse) : des rectangles [x0, x1, z0, z1] que le personnage contourne (gestes.js)
+    emprise: [[-1.22, 1.22, -1.7, -0.1], [-0.5, 0.5, -2.25, 1.9], [-1.0, 1.0, 0.88, 1.82], [-0.68, 0.68, -2.25, -1.45]],
   };
   return {
-    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, siege: new THREE.Vector3(0, 0.62, -0.62),
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62),
     dims, volantCentre: new THREE.Vector3(0, 1.9, -0.18), volantRayon: 0.2, volantInclinaison: -0.55,
   };
 }
@@ -533,6 +536,7 @@ export function van() {
   const dims = {
     rAr: R, rAv: R, yAr: R, yAv: R, emp: ZAV - ZAR, off: [1.16, -1.14], r: 1.0, pivot: new THREE.Vector3(0, 0.72, -0.1),
     zAr: ZAR, zAv: ZAV, xAr: X, xAv: X, assise: 0.78, plancher: 0.45,
+    emprise: [[-0.95, 0.95, -2.16, 2.17]],
   };
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte, coulissante, chargeur,

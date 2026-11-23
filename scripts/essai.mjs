@@ -132,6 +132,7 @@ if (scenario === 'parcours') {
     log.push(['DRM du mois dernier calculée', m.drm === 'faite']);
     clic('.vs-fin [data-a="fermer"]'); CL.step(560);
     log.push(['carte de fin', !q('#fin').hidden]);
+    log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     return log;
   }, process.env.VEHICULE || 'tracteur').catch(e => [['scénario interrompu : ' + e.message, false]]);
   for (const [msg, c] of r) ok(c, msg);
@@ -162,6 +163,7 @@ if (scenario === 'conduite') {
       if (m.etape === 'tournee' && !T.ouvert) { T.ouvrir('tournee'); q('[data-a="tournee"]').click(); }
       if (m.etape === 'retour' && J.distance(J.lieux.pc) < 6.5 && Math.abs(CL.tr.v) < 0.5) break;
       CL.step(1); t += 1 / 60;
+      if (J.gestes.actif && CL.dansVehicule()) CL.traversees++;
       if (CL.tr.chocVu > 0.15) chocs++;
       if (Math.abs(CL.tr.v) < 0.25 && !T.ouvert && !m.attenteBL && !m.attenteCheque && m.etape !== 'chargement') arret += 1 / 60; else arret = 0;
       if (arret > 15) { bloque = true; break; }
@@ -169,6 +171,7 @@ if (scenario === 'conduite') {
     C.id = null;
     log.push(['tournée complète en conduite assistée (' + VEH + ', ' + Math.round(t) + ' s de jeu)', !bloque && m.clients.every(c => c.statut === 'livree') && m.retardataire.statut === 'recupere' && J.distance(J.lieux.pc) < 6.5]);
     log.push(['aucun choc en route (' + chocs + ')', chocs === 0]);
+    log.push(['le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     return log;
   }, process.env.VEHICULE || 'tracteur').catch(e => [['scénario interrompu : ' + e.message, false]]);
   for (const [msg, c] of r) ok(c, msg);

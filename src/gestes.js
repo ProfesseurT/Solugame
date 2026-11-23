@@ -25,14 +25,14 @@ function aPortee(p, out) { out.copy(p); const l = Math.hypot(p.x, p.z); if (l > 
 // conduite, durée, et le moment où l'on commence à s'asseoir (fraction du chemin).
 const MONTEES = {
   // marchepied devant la roue arrière gauche, plancher, siège
-  tracteur: { chemin: [[1.3, 0, 0.12], [0.84, 0.7, 0.1], [0.42, 1.24, -0.28], [0, 1.24, -0.62]], duree: 1.25, assis: 0.45, baisse: 0.15 },
+  tracteur: { chemin: [[1.32, 0, 0.2], [0.86, 0.7, 0.14], [0.5, 1.24, 0.02], [0.28, 1.24, -0.34], [0, 1.24, -0.62]], duree: 1.35, assis: 0.55, baisse: 0.15 },
   // juste derrière la portière (hors de son passage), dans l'ouverture, le seuil, le siège
   van: { chemin: [[1.25, 0, -0.45], [1.2, 0, 0.05], [0.95, 0.06, 0.12], [0.55, 0.45, 0.0], [0.38, 0.45, -0.05]], duree: 1.25, assis: 0.35, baisse: 0.6 },
 };
 // ordre de remplissage des colonnes de cartons depuis le côté où l'on se tient : d'abord les plus éloignées
-const ORDRE = { tracteur: { droite: [2, 5, 1, 4, 0, 3], gauche: [0, 3, 1, 4, 2, 5] }, van: { droite: [0, 3, 1, 4, 2, 5] } };
+const ORDRE = { tracteur: { droite: [2, 5, 1, 4, 0, 3], gauche: [0, 3, 1, 4, 2, 5], arriere: [0, 1, 2, 3, 4, 5] }, van: { droite: [0, 3, 1, 4, 2, 5] } };
 
-const vT = new THREE.Vector3(), vA = new THREE.Vector3();
+const vT = new THREE.Vector3(), vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
 // point du repère du véhicule (x, z) dans le monde
 function versMonde(v, l, out) {
   const h = v.p.h, c = Math.cos(h), s = Math.sin(h);
@@ -43,6 +43,47 @@ function versMonde(v, l, out) {
 function surChemin(ch, u, out) {
   const n = ch.length - 1, s = Math.min(n - 1e-6, Math.max(0, u) * n), i = Math.floor(s), f = s - i;
   return out.set(mix(ch[i][0], ch[i + 1][0], f), mix(ch[i][1], ch[i + 1][1], f), mix(ch[i][2], ch[i + 1][2], f));
+}
+// Contourner un véhicule : le segment a-b (repère du véhicule) coupe-t-il le rectangle [x0, x1, z0, z1] ? (découpage de
+// Liang-Barsky)
+function coupe(a, b, r) {
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  for (const [p, q] of [[-dx, a.x - r[0]], [dx, r[1] - a.x], [-dz, a.z - r[2]], [dz, r[3] - a.z]]) {
+    if (Math.abs(p) < 1e-9) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t1 - t0 > 1e-4;
+}
+const MARGE = 0.24, TOUR = 0.62; // le corps contre l'emprise ; distance des coins du détour
+// point du monde dans le repère du véhicule, et l'inverse
+function versLocal(v, p) { const h = v.p.h, c = Math.cos(h), s = Math.sin(h), dx = p.x - v.p.pos.x, dz = p.z - v.p.pos.z; return { x: dx * c - dz * s, z: dx * s + dz * c }; }
+function depuisLocal(v, l) { const h = v.p.h, c = Math.cos(h), s = Math.sin(h); return { x: v.p.pos.x + l.x * c + l.z * s, z: v.p.pos.z - l.x * s + l.z * c }; }
+// Le chemin a-b sans traverser le véhicule v : tel quel s'il ne coupe pas son emprise, sinon par un ou deux de ses coins
+// (élargis), le plus court. Rend les points intermédiaires (repère du monde).
+function contourner(v, a, b) {
+  const E = v.m.dims.emprise;
+  if (!E) return [];
+  const R = E.map(([x0, x1, z0, z1]) => [x0 - MARGE, x1 + MARGE, z0 - MARGE, z1 + MARGE]);
+  const dans = (p, r) => p.x > r[0] && p.x < r[1] && p.z > r[2] && p.z < r[3];
+  // un bout du segment tout contre le véhicule (on va s'y tenir : marchepied, côté du plateau) : l'emprise exacte suffit
+  const libre = (p, q) => R.every((r, i) => !coupe(p, q, dans(p, r) || dans(q, r) ? E[i] : r));
+  const la = versLocal(v, a), lb = versLocal(v, b);
+  if (libre(la, lb)) return [];
+  const X0 = Math.min(...E.map(r => r[0])) - TOUR, X1 = Math.max(...E.map(r => r[1])) + TOUR;
+  const Z0 = Math.min(...E.map(r => r[2])) - TOUR, Z1 = Math.max(...E.map(r => r[3])) + TOUR;
+  const C = [{ x: X1, z: Z1 }, { x: X0, z: Z1 }, { x: X0, z: Z0 }, { x: X1, z: Z0 }];
+  const cands = [];
+  for (let i = 0; i < 4; i++) { cands.push([C[i]]); cands.push([C[i], C[(i + 1) % 4]]); cands.push([C[(i + 1) % 4], C[i]]); }
+  let best = null, lmin = 1e9;
+  for (const c of cands) {
+    const pts = [la, ...c, lb];
+    let l = 0, ok = true;
+    for (let i = 1; i < pts.length && ok; i++) { ok = libre(pts[i - 1], pts[i]); l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); }
+    if (ok && l < lmin) { lmin = l; best = c; }
+  }
+  return best ? best.map(p => depuisLocal(v, p)) : [];
 }
 // Cadre d'une scène entre deux points a et b (monde) : la caméra regarde de côté, du côté opposé au véhicule v
 // (sinon il cache tout)
@@ -98,15 +139,27 @@ export class Gestes {
   immobile(dt, t) { const j = this.j; if (j.assis) j.sync(dt, t); else j.update(dt, 0, 0, 0, false, this.c.col, t); }
 
   /* ------------------------------------------------------------ briques */
-  // marcher jusqu'au point p() (monde, {x, z}), puis se tourner vers le cap cap()
+  // marcher jusqu'au point p() (monde, {x, z}), puis se tourner vers le cap cap() ; en contournant les véhicules du
+  // domaine (jamais à travers) : par les coins de leur emprise, sans s'arrêter aux points de passage
   allerA(p, cap) {
-    let limite = 4;
+    let limite = 4, pts = [], k = 0;
     return [{
-      debut: () => { const q = p(), j = this.j; limite = 3 + Math.hypot(q.x - j.pos.x, q.z - j.pos.z) / 1.1; },
+      debut: () => {
+        const j = this.j, q = p();
+        pts = [];
+        let a = { x: j.pos.x, z: j.pos.z };
+        for (const v of this.c.jeu.vehicules) { const d = contourner(v, a, q); if (d.length) { pts.push(...d); a = d[d.length - 1]; } }
+        k = 0;
+        let l = 0, b = j.pos;
+        for (const c of [...pts, q]) { l += Math.hypot(c.x - b.x, c.z - b.z); b = c; }
+        limite = 3 + l / 1.1;
+      },
       maj: (dt, t, u, T) => {
-        const j = this.j, q = p(), dx = q.x - j.pos.x, dz = q.z - j.pos.z, d = Math.hypot(dx, dz);
-        if (d < 0.12 || T > limite) return true;
-        j.update(dt, dx, dz, 1, false, this.c.col, t, Math.min(j.porte ? 1.6 : 1.9, 0.4 + d * 1.8));
+        const j = this.j, fin = k >= pts.length, q = fin ? p() : pts[k], dx = q.x - j.pos.x, dz = q.z - j.pos.z, d = Math.hypot(dx, dz);
+        const vmax = j.porte ? 1.6 : 1.9;
+        if (!fin && d < 0.45) { k++; return false; }
+        if ((fin && d < 0.12) || T > limite) return true;
+        j.update(dt, dx, dz, 1, false, this.c.col, t, fin ? Math.min(vmax, 0.4 + d * 1.8) : vmax);
         return false;
       },
     }, {
@@ -154,31 +207,36 @@ export class Gestes {
   // point du monde dans le repère du personnage
   local(w, out) { const g = this.j.m.groupe; g.updateMatrixWorld(); return g.worldToLocal(out.copy(w)); }
   // prendre n cartons dont le carton du bas est en src() (monde) ; avant() cache ceux qu'on prend. Trop loin, on tire
-  // d'abord la pile jusqu'à soi ; puis on se baisse (selon sa hauteur) et on la soulève.
-  prendre(src, n, avant) {
-    const P = () => this.pile();
+  // d'abord la pile jusqu'à soi (soulevée de arc au-dessus d'une ridelle) ; puis on se baisse (selon sa hauteur) et on
+  // la soulève.
+  prendre(src, n, avant, arc = 0) {
+    const P = () => this.pile(), h = new THREE.Vector3();
     return {
-      duree: 0.85,
+      duree: 0.95,
       debut: () => { avant(); const p = P(); montrer(p, n); p.visible = true; this.j.porte = p; son.jouer('carton'); },
       maj: (dt, t, u, T) => {
-        const s = this.local(src(vA), vT), r = aPortee(s, vR);
-        P().position.copy(s).lerp(r, lisse(T / 0.28)).lerp(PORT, lisse((T - 0.35) / 0.5));
+        const s = this.local(src(vA), vT), r = aPortee(s, vR), k = arc / this.j.m.echelle;
+        h.set(0, k, 0);
+        // soulever, tirer à hauteur, redescendre à portée, puis dans les bras
+        P().position.copy(s).addScaledVector(h, lisse(T / 0.15)).lerp(vB.copy(r).add(h), lisse((T - 0.15) / 0.25))
+          .lerp(r, lisse((T - 0.4) / 0.1)).lerp(PORT, lisse((T - 0.5) / 0.45));
         this.immobile(dt, t);
       },
     };
   }
-  // poser la pile portée, le carton du bas en dst() (monde) ; trop loin, on la pose à portée puis on la pousse au fond.
-  // apres() montre les cartons posés là.
-  poser(dst, apres) {
-    const P = () => this.pile();
+  // poser la pile portée, le carton du bas en dst() (monde) ; trop loin, on la pose à portée puis on la pousse au fond
+  // (en passant à arc au-dessus d'une ridelle). apres() montre les cartons posés là.
+  poser(dst, apres, arc = 0) {
+    const P = () => this.pile(), h = new THREE.Vector3();
     return {
-      duree: 0.8,
+      duree: 0.9,
       maj: (dt, t, u, T) => {
-        const d = this.local(dst(vA), vT), r = aPortee(d, vR);
-        P().position.copy(PORT).lerp(r, lisse(T / 0.45)).lerp(d, lisse((T - 0.45) / 0.3));
+        const d = this.local(dst(vA), vT), r = aPortee(d, vR), k = arc / this.j.m.echelle;
+        h.set(0, k, 0);
+        P().position.copy(PORT).lerp(vB.copy(r).add(h), lisse(T / 0.45)).lerp(vC.copy(d).add(h), lisse((T - 0.45) / 0.25)).lerp(d, lisse((T - 0.7) / 0.15));
         if (T > 0.5) this.j.porte = null; // la pile glisse au fond : les mains la lâchent
         this.immobile(dt, t);
-        if (T + dt >= 0.8 && P().visible) { P().visible = false; this.j.porte = null; apres(); son.jouer('carton'); }
+        if (T + dt >= 0.9 && P().visible) { P().visible = false; this.j.porte = null; apres(); son.jouer('carton'); }
       },
     };
   }
@@ -254,17 +312,27 @@ export class Gestes {
   descendre(v, sorti, fin) { this.lancer(this.etapesDescendre(v, sorti), fin); }
 
   /* ------------------------------------------------------------ les cartons */
-  // le côté du véhicule où l'on se tient pour charger ou décharger : le plus proche du point (x, z)
+  // le côté du véhicule où l'on se tient pour charger ou décharger : le plus proche du point (x, z) parmi ceux où l'on
+  // peut se tenir (pas contre un mur, une table, une voiture garée) ; s'il n'y en a aucun, le plus proche
   cote(v, x, z) {
-    const ch = v.m.chargeur;
+    const ch = v.m.chargeur, sonde = { x: 0, z: 0 };
     let best = null, dmin = 1e9;
-    for (const k in ch) { versMonde(v, [ch[k][0], 0, ch[k][1]], this.cible); const d = Math.hypot(this.cible.x - x, this.cible.z - z); if (d < dmin) { dmin = d; best = k; } }
+    for (const pass of [true, false]) {
+      for (const k in ch) {
+        versMonde(v, [ch[k][0], 0, ch[k][1]], this.cible);
+        sonde.x = this.cible.x; sonde.z = this.cible.z;
+        if (pass && this.c.col.resoudre(sonde, 0.34)) continue;
+        const d = Math.hypot(this.cible.x - x, this.cible.z - z);
+        if (d < dmin) { dmin = d; best = k; }
+      }
+      if (best) return best;
+    }
     return best;
   }
   // se tenir au côté k du véhicule, tourné vers lui
   auVehicule(v, k) {
     const [x, z] = v.m.chargeur[k];
-    return this.allerVers(v, [x, 0, z], x < 0 ? Math.PI / 2 : -Math.PI / 2);
+    return this.allerVers(v, [x, 0, z], Math.abs(x) < 0.01 ? 0 : x < 0 ? Math.PI / 2 : -Math.PI / 2);
   }
   // centre du carton du bas de la colonne c du véhicule, dans le monde
   colonneMonde(v, c, out) { v.m.groupe.updateMatrixWorld(true); return v.m.caisse.localToWorld(out.copy(v.m.cartons[3 * c].position)); }
@@ -298,7 +366,7 @@ export class Gestes {
       etapes.push(this.poser(w => this.colonneMonde(v, c, w), () => {
         for (let l = 0; l < p.n; l++) v.m.cartons[3 * c + l].visible = true;
         place(c, p);
-      }));
+      }, v.m.ridelle || 0));
     });
     etapes.push(...this.fermerCote(v), ...this.etapesMonter(v, installe));
     this.lancer(etapes);
@@ -319,7 +387,7 @@ export class Gestes {
       const dec = (i - (cols.length - 1) / 2) * 0.44;
       const sol = () => pose.set(f.x + fx * 0.9 + fz * dec, DEMI - 0.04, f.z + fz * 0.9 - fx * dec);
       etapes.push(...spot);
-      etapes.push(this.prendre(w => this.colonneMonde(v, c, w), n, () => { for (let l = 0; l < 3; l++) v.m.cartons[3 * c + l].visible = false; }));
+      etapes.push(this.prendre(w => this.colonneMonde(v, c, w), n, () => { for (let l = 0; l < 3; l++) v.m.cartons[3 * c + l].visible = false; }, v.m.ridelle || 0));
       etapes.push(...this.allerA(() => { sol(); pt.x = pose.x + fx * 0.6; pt.z = pose.z + fz * 0.6; return pt; }, () => f.h + Math.PI));
       etapes.push(this.poser(w => w.copy(sol()), () => {
         const p = pileCartons(n); p.position.copy(pose); p.rotation.y = f.h; this.c.scene.add(p); ajout(p);

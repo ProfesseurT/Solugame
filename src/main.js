@@ -933,8 +933,18 @@ window.CL = {
   jouer() { $('jouer').click(); },
   teleporter(x, z, h = 0) { if (jeu.auVolant) tr.placer(x, z, h); else joueur.placer(x, z, h); cam.yaw = h; cam.pret = false; },
   agir,
-  // laisse le geste en cours (monter, descendre) se jouer jusqu'au bout
-  finirGeste(n = 900) { for (let i = 0; i < n && gestes.actif; i++) this.step(1); },
+  // laisse le geste en cours se jouer jusqu'au bout, en comptant les images où le personnage traverse un véhicule
+  finirGeste(n = 900) { for (let i = 0; i < n && gestes.actif; i++) { this.step(1); if (this.dansVehicule()) this.traversees++; } },
+  traversees: 0,
+  // le personnage, à pied, est-il dans l'emprise d'un véhicule du domaine ? (il ne doit jamais les traverser)
+  dansVehicule(marge = 0.12) {
+    if (joueur.assis || joueur.m.groupe.parent !== scene) return null;
+    for (const v of VEHICULES) {
+      const h = v.p.h, c = Math.cos(h), s = Math.sin(h), dx = joueur.pos.x - v.p.pos.x, dz = joueur.pos.z - v.p.pos.z, x = dx * c - dz * s, z = dx * s + dz * c;
+      for (const [x0, x1, z0, z1] of v.m.dims.emprise) if (x > x0 - marge && x < x1 + marge && z > z0 - marge && z < z1 + marge) return v.genre;
+    }
+    return null;
+  },
   // caméra posée à la main pour les captures de vérification
   photo(px, py, pz, tx, ty, tz) { camLibre = px !== undefined; if (camLibre) { camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); } },
   step(n = 60, dt = 1 / 60) {

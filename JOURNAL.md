@@ -297,3 +297,13 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Les roues des voitures qui roulent tournent (un maillage par essieu, deux roues chacun : 2 appels de dessin par voiture visible ; les voitures garées gardent leurs roues fusionnées).
 
 **Vérifié** : banc `parcours` avec trois nouvelles vérifications (au départ, rien dans Vitisoft ni dans le bureau ; les 3 commandes signées arrivent dans Vitisoft, pas encore à facturer) ; capture du débouché du chemin ; vitesse de rotation des roues mesurée (35,5 rad/s à 11 m/s, rayon 0,31 m) ; conduite assistée complète en tracteur et en van.
+
+## 23/11/2026 · Retours de Teddy (2) : le personnage ne traverse plus les véhicules
+
+**Fait (lot B)** :
+- Chaque véhicule du domaine a une emprise au sol (`dims.emprise` dans engins.js : quelques rectangles, roues arrière, caisse, essieu avant, plateau pour le tracteur ; la caisse pour le van). Pendant un geste, chaque trajet à pied qui couperait un véhicule le contourne par un ou deux de ses coins, le plus court (`contourner` dans gestes.js), sans s'arrêter aux points de passage. Un bout de trajet tout contre le véhicule (marchepied, côté du plateau) se contente de l'emprise exacte.
+- Pour charger ou décharger, on ne choisit qu'un côté où l'on peut se tenir (pas contre un mur, une table, une voiture garée) ; le tracteur se charge aussi par l'arrière du plateau.
+- Sur le plateau du tracteur, une pile passe par-dessus la ridelle (soulevée, glissée à hauteur, posée), dans les deux sens ; montée sur le tracteur un peu écartée de la roue arrière.
+- Bancs d'essai : une sonde compte les images où le personnage, à pied pendant un geste, est dans l'emprise d'un véhicule (`CL.dansVehicule`, `CL.traversees`) ; vérifiée dans `parcours` et `conduite`.
+
+**Vérifié** : la sonde trouve le défaut sur l'ancien code (1 022 images en tracteur, 1 483 en van) ; 0 maintenant, en parcours comme en conduite assistée, tracteur et van ; captures du chargement (contournement par l'avant, piles par-dessus la ridelle).
