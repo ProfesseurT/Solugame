@@ -214,7 +214,8 @@ function rayon(an, y) {
 }
 // Bande qui épouse un loft (ceinture, ourlet, poignet), agrandie de k
 const bande = (an, y0, y1, k, c, zone, n = 8, o) => { const a = rayon(an, y0), b = rayon(an, y1); return loft([[y0, a[1] * k, a[2] * k, a[3]], [y1, b[1] * k, b[2] * k, b[3]]], n, c, zone, true, true, o); };
-const avant = (an, y) => { const r = rayon(an, y); return (r[3] || 0) + r[2] * Math.cos(Math.PI / 8); }; // face avant d'un octogone
+const NT = 12, NM = 9; // pans du buste et du bassin, des membres (plus de pans : des formes plus rondes, moins de « boîte »)
+const avant = (an, y) => { const r = rayon(an, y); return (r[3] || 0) + r[2] * Math.cos(Math.PI / NT); }; // face avant du buste
 
 // Échange y et z (un loft construit le long de y devient couché le long de z : chaussures), et remet les triangles à l'endroit
 function coucher(g) {
@@ -242,7 +243,7 @@ function idsIcosa(detail) {
 // Boule déformée (tête, cheveux, barbe) : f reçoit les coordonnées sur la sphère unité et renvoie un facteur de rayon.
 // Là où f rentre les sommets sous la peau (facteur sous le seuil), les facettes entièrement cachées sont retirées.
 // Renvoie la géométrie (positions et normales lissées, arêtes vives gardées au bord des cheveux).
-function boule(rx, ry, rz, x, y, z, detail, f, jaw = 0, seuil = 0.999) {
+function boule(rx, ry, rz, x, y, z, detail, f, jaw = 0, seuil = 0.999, relief = null) {
   const g0 = icosa(detail), p = g0.attributes.position, { ids, nb } = idsIcosa(detail);
   const garde = f ? new Uint8Array(p.count) : null;
   for (let i = 0; i < p.count; i++) {
@@ -251,7 +252,7 @@ function boule(rx, ry, rz, x, y, z, detail, f, jaw = 0, seuil = 0.999) {
     if (f) garde[i] = k >= seuil ? 1 : 0;
     // mâchoire plus étroite que le crâne (surtout vers le menton), menton un peu en avant
     const t = uy < 0 ? -uy : 0, kx = 1 - jaw * t * t * t, kz = 1 - jaw * 0.45 * t * t;
-    p.setXYZ(i, x + ux * rx * k * kx, y + uy * ry * k, z + uz * rz * k * kz + (uz > 0 ? jaw * 0.1 * t * rz : 0));
+    p.setXYZ(i, x + ux * rx * k * kx, y + uy * ry * k, z + uz * rz * k * kz + (uz > 0 ? jaw * 0.1 * t * rz + (relief ? relief(ux, uy, uz) * rz * k : 0) : 0));
   }
   let P = p.array, I = ids;
   if (f) {
@@ -397,11 +398,68 @@ export function accessoires(m) {
   return m.acc;
 }
 
+/* ---------------------------------------------------------------- peau souple
+   Chaque pièce suit son os ; un sommet proche d'une jointure suit aussi l'os voisin, d'autant plus qu'il en est près
+   (jusqu'à la moitié, à la jointure même). Coudes, genoux, épaules, hanches, taille et cou se plient en courbe au lieu
+   de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend [os voisin, poids]
+   ou null. */
+const borneP = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+function liens(i, x, y) {
+  switch (i) {
+    case 0: // bassin : le ventre au-dessus ; en dessous, la cuisse de son côté (une jupe suit un peu les jambes)
+      if (y > 0.04) return [1, 0.45 * borneP((y - 0.04) / 0.07)];
+      if (y < -0.05 && Math.abs(x) > 0.015) return [x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * borneP((-0.05 - y) / 0.08)];
+      return null;
+    case 1: // ventre : le bassin en bas, la poitrine en haut
+      if (y < 0.02) return [0, 0.5 * borneP((0.02 - y) / 0.07)];
+      if (y > 0.15) return [2, 0.45 * borneP((y - 0.15) / 0.07)];
+      return null;
+    case 2: return y < 0.03 ? [1, 0.5 * borneP((0.03 - y) / 0.07)] : null; // poitrine : le ventre en bas
+    case 3: return y < 0.05 ? [2, 0.6 * borneP((0.05 - y) / 0.08)] : null; // le bas du cou suit la poitrine
+    case 4: case 7: // haut du bras : l'épaule suit la poitrine, le bas suit l'avant-bras
+      if (y > -0.07) return [2, 0.5 * borneP((y + 0.07) / 0.08)];
+      if (y < -0.23) return [i + 1, 0.5 * borneP((-0.23 - y) / 0.06)];
+      return null;
+    case 5: case 8: // avant-bras : le coude suit le bras, le poignet un peu la main
+      if (y > -0.06) return [i - 1, 0.5 * borneP((y + 0.06) / 0.06)];
+      if (y < -0.215) return [i + 1, 0.3 * borneP((-0.215 - y) / 0.035)];
+      return null;
+    case 6: case 9: return y > -0.025 ? [i - 1, 0.3 * borneP((y + 0.025) / 0.025)] : null;
+    case 10: case 13: // cuisse : la hanche suit le bassin, le bas suit le tibia
+      if (y > -0.1) return [0, 0.5 * borneP((y + 0.1) / 0.1)];
+      if (y < -0.37) return [i + 1, 0.5 * borneP((-0.37 - y) / 0.07)];
+      return null;
+    case 11: case 14: return y > -0.07 ? [i - 1, 0.5 * borneP((y + 0.07) / 0.07)] : null; // le genou suit la cuisse
+  }
+  return null;
+}
+
 /* ---------------------------------------------------------------- le personnage */
 
 // Tête (repère de l'os de la tête) : centre du crâne en (0, YC, ZC), demi-axes RX, RY, RZ. Proportions d'adulte :
 // 17,6 cm de large, 24 cm du menton au sommet, yeux à mi-hauteur.
 const YC = 0.2, ZC = 0.017, RX = 0.088, RY = 0.12, RZ = 0.108;
+const TETE = 1.06; // la tête et ce qu'elle porte, un peu plus grandes que leur modèle : des proportions moins « poupée »
+
+// Relief du visage (sphère unité : x vers sa gauche, y vers le haut, z vers l'avant ; yeux à y = 0, x = 0,36) : une
+// avancée vers l'avant, en unités du demi-axe z, sur la face avant seulement. Arcades, orbites, pommettes, bouche,
+// menton ; joues un peu creusées chez l'homme. Le crâne, les cheveux, la barbe et ce qu'on pose sur le visage (yeux,
+// sourcils, nez) suivent le même relief : rien ne flotte ni ne s'enfonce.
+const cloche = (d, s) => Math.exp(-(d * d) / (s * s));
+function reliefVisage(femme) {
+  return (x, y, z) => {
+    if (z <= 0) return 0;
+    const ax = Math.abs(x), avant = Math.min(1, z * 1.6);
+    const d = 0.032 * cloche(y - 0.25, 0.07) * cloche(x, 0.5)          // arcades
+      - 0.012 * cloche(y + 0.01, 0.1) * cloche(ax - 0.36, 0.14)          // orbites
+      + 0.045 * cloche(y + 0.2, 0.13) * cloche(ax - 0.56, 0.15)          // pommettes
+      - (femme ? 0.008 : 0.025) * cloche(y + 0.48, 0.13) * cloche(ax - 0.6, 0.14) // joues sous les pommettes
+      + 0.03 * cloche(y + 0.52, 0.12) * cloche(x, 0.32)                  // bouche
+      + 0.05 * cloche(y + 0.86, 0.1) * cloche(x, 0.26)                   // menton
+      - 0.015 * cloche(y - 0.55, 0.15) * cloche(x, 0.6);                 // front qui fuit un peu
+    return d * avant;
+  };
+}
 
 // Renvoie { groupe, maillage, os, dim, ... } : groupe est l'objet à ajouter à la scène (ou au tracteur).
 export function perso(o0) {
@@ -441,16 +499,16 @@ export function perso(o0) {
   /* bassin : hanches, ceinture, étui de sécateur ; jupe ou robe */
   const anB = [[-0.125, 0.12 * H, 0.085], [-0.085, 0.152 * H * K, 0.1 * K], [-0.02, 0.166 * H * K, 0.113 * K, -0.006], [0.05, 0.158 * H * K, 0.108 * K], [0.1, 0.152 * K * (1 + (H - 1) * 0.4), 0.104 * K + ventre * 0.3]];
   const cJupe = tenue === 'robe' ? haut : bas;
-  add(0, loft(anB, 8, jupe ? cJupe : bas, jupe ? zJupe : zBas));
+  add(0, loft(anB, NT, jupe ? cJupe : bas, jupe ? zJupe : zBas));
   if (jupe) {
     const long = tenue === 'robe' ? -0.5 : -0.46;
-    add(0, loft([[long, 0.27 * H, 0.25, 0.025], [-0.2, 0.205 * H * K, 0.165 * K, 0.005], [0.02, 0.17 * H * K, 0.118 * K], [0.1, 0.156 * K, 0.108 * K]], 10, cJupe, zJupe, false, true));
-    add(0, loft([[long, 0.276 * H, 0.256, 0.025], [long + 0.025, 0.272 * H, 0.252, 0.025]], 10, fonce(cJupe, 0.8), zJupe, false, false));
+    add(0, loft([[long, 0.27 * H, 0.25, 0.025], [-0.2, 0.205 * H * K, 0.165 * K, 0.005], [0.02, 0.17 * H * K, 0.118 * K], [0.1, 0.156 * K, 0.108 * K]], 14, cJupe, zJupe, false, true));
+    add(0, loft([[long, 0.276 * H, 0.256, 0.025], [long + 0.025, 0.272 * H, 0.252, 0.025]], 14, fonce(cJupe, 0.8), zJupe, false, false));
   }
   // ceinture visible seulement sous une chemise rentrée (veste, gilet et pull la couvrent)
   const longue = tenue === 'veste' || tenue === 'gilet' || tenue === 'pull';
   if (!longue && tenue !== 'salopette' && tenue !== 'robe') {
-    add(0, bande(anB, 0.05, 0.095, 1.03, '#2a2520', Z.ceinture, 8, { kv: 1 / 0.045, v0: 0.05 }), boite(0.048, 0.036, 0.012, '#c9a55a', Z.uni, 0, 0.072, avant(anB, 0.072) * 1.03 + 0.004));
+    add(0, bande(anB, 0.05, 0.095, 1.03, '#2a2520', Z.ceinture, NT, { kv: 1 / 0.045, v0: 0.05 }), boite(0.048, 0.036, 0.012, '#c9a55a', Z.uni, 0, 0.072, avant(anB, 0.072) * 1.03 + 0.004));
   }
   if (o.secateur) add(0, boite(0.04, 0.12, 0.065, '#5a3a28', Z.cuir, -0.178 * H * K, -0.07, 0.03, 0, 0, -0.08),
     boite(0.016, 0.06, 0.016, '#c0392b', Z.uni, -0.176 * H * K, 0.015, 0.045, 0, 0, 0.15), boite(0.016, 0.06, 0.016, '#c0392b', Z.uni, -0.182 * H * K, 0.015, 0.018, 0, 0, -0.15));
@@ -460,26 +518,26 @@ export function perso(o0) {
   const buste = femme ? 0.016 : 0;
   const anP = [[-0.02, 0.17 * K * E, 0.114 * K + ventre * 0.3], [0.1, 0.188 * E * K, 0.122 * K + buste, buste * 0.7], [0.2, 0.194 * E * K, 0.115 * K], [0.245, 0.172 * E, 0.102], [0.285, 0.112, 0.084, 0.002], [0.31, 0.066, 0.06, 0.004]];
   // le motif garde la même hauteur du ventre à la poitrine (os l'un au-dessus de l'autre, 20 cm d'écart)
-  add(1, loft(anV, 8, haut, zHaut)); add(2, loft(anP, 8, haut, zHaut, true, true, { v0: -0.2 }));
+  add(1, loft(anV, NT, haut, zHaut)); add(2, loft(anP, NT, haut, zHaut, true, true, { v0: -0.2 }));
   const ourlet = fonce(haut, 0.72);
   if (tenue === 'veste' || tenue === 'gilet') {
     // fermeture, poches plaquées, col montant, ourlet
     add(1, boite(0.012, 0.31, 0.01, '#1d1d22', Z.fermeture, 0, 0.055, avant(anV, 0.055) + 0.003),
       boite(0.085, 0.07, 0.012, ourlet, Z.poche, 0.085 * K, 0.0, avant(anV, 0.0) - 0.012, 0, 0.32), boite(0.085, 0.07, 0.012, ourlet, Z.poche, -0.085 * K, 0.0, avant(anV, 0.0) - 0.012, 0, -0.32));
     add(2, boite(0.012, 0.25, 0.01, '#1d1d22', Z.fermeture, 0, 0.1, avant(anP, 0.1) + 0.003), boite(0.07, 0.06, 0.012, ourlet, Z.poche, 0.075, 0.14, avant(anP, 0.14) - 0.006, 0, 0.3));
-    add(2, loft([[0.26, 0.112, 0.094, 0.004], [0.33, 0.084, 0.074, 0.008]], 8, o.col || ourlet, Z.toile, false, false));
-    add(1, bande(anV, -0.1, -0.07, 1.035, ourlet, zOurlet));
+    add(2, loft([[0.26, 0.112, 0.094, 0.004], [0.33, 0.084, 0.074, 0.008]], NT, o.col || ourlet, Z.toile, false, false));
+    add(1, bande(anV, -0.1, -0.07, 1.035, ourlet, zOurlet, NT));
   } else if (tenue === 'pull') {
-    add(1, bande(anV, -0.1, -0.05, 1.03, ourlet, Z.cotes));
-    add(2, loft([[0.255, 0.1, 0.085, 0.004], [0.3, 0.08, 0.07, 0.005]], 8, ourlet, Z.cotes, false, false));
+    add(1, bande(anV, -0.1, -0.05, 1.03, ourlet, Z.cotes, NT));
+    add(2, loft([[0.255, 0.1, 0.085, 0.004], [0.3, 0.08, 0.07, 0.005]], NT, ourlet, Z.cotes, false, false));
     if (o.col && o.col !== haut) add(2, boite(0.03, 0.03, 0.01, o.col, Z.chemise, 0.03, 0.282, 0.075, 0.5, 0, 0.5), boite(0.03, 0.03, 0.01, o.col, Z.chemise, -0.03, 0.282, 0.075, 0.5, 0, -0.5));
   } else if (tenue === 'chemise' || tenue === 'salopette' || tenue === 'jupe') {
     // col de chemise et boutons
     add(2, boite(0.055, 0.04, 0.012, o.col || '#f3eee6', Z.chemise, 0.035, 0.29, 0.07, 0.55, 0, 0.55), boite(0.055, 0.04, 0.012, o.col || '#f3eee6', Z.chemise, -0.035, 0.29, 0.07, 0.55, 0, -0.55));
     for (let i = 0; i < 3; i++) add(2, boite(0.012, 0.012, 0.006, '#ece6da', Z.uni, 0, 0.2 - i * 0.075, avant(anP, 0.2 - i * 0.075) + 0.003));
   } else if (tenue === 'robe') {
-    add(1, bande(anV, -0.03, 0.0, 1.03, fonce(haut, 0.6), Z.toile));
-    add(2, loft([[0.255, 0.1, 0.085, 0.004], [0.3, 0.08, 0.07, 0.005]], 8, fonce(haut, 0.85), Z.toile, false, false));
+    add(1, bande(anV, -0.03, 0.0, 1.03, fonce(haut, 0.6), Z.toile, NT));
+    add(2, loft([[0.255, 0.1, 0.085, 0.004], [0.3, 0.08, 0.07, 0.005]], NT, fonce(haut, 0.85), Z.toile, false, false));
   }
   if (tenue === 'salopette') {
     // bavette et bretelles
@@ -497,14 +555,16 @@ export function perso(o0) {
   /* tête : cou, crâne, visage (projeté de face), yeux, sourcils, nez, oreilles, cheveux, couvre-chef */
   const T = 3, yc = YC, zc = ZC, rx = RX, ry = RY, rz = RZ, jaw = femme ? 0.36 : 0.3, cou = femme ? 0.055 : 0.058 * K;
   // surface du visage (sans ses facettes) : z en (x, y), y compté depuis le centre du crâne
+  const relief = reliefVisage(femme);
   const surface = (x, y) => {
     const uy = y / ry, t = uy < 0 ? -uy : 0, kx = 1 - jaw * t * t * t, kz = 1 - jaw * 0.45 * t * t, ux = x / (rx * kx), r2 = 1 - ux * ux - uy * uy;
-    return zc + (r2 > 0 ? Math.sqrt(r2) : 0) * rz * kz + jaw * 0.1 * t * rz;
+    const uz = r2 > 0 ? Math.sqrt(r2) : 0;
+    return zc + uz * rz * kz + jaw * 0.1 * t * rz + relief(ux, uy, uz) * rz;
   };
-  add(T, loft([[-0.02, cou * 1.08, cou * 1.1], [0.11, cou, cou * 1.02, 0.008]], 7, peau, Z.peau));
+  add(T, loft([[-0.04, cou * 1.42, cou * 1.25, -0.012], [0.02, cou * 1.16, cou * 1.1, -0.002], [0.07, cou * 1.02, cou * 1.04, 0.004], [0.12, cou * 0.98, cou * 1.02, 0.01]], 10, peau, Z.peau));
   const zVisage = femme ? Z.visageF : (o.barbe || o.malRase) ? Z.visageB : Z.visageH;
   {
-    const [face, crane] = separer(boule(rx, ry, rz, 0, yc, zc, 3, null, jaw), (x, y, z) => z > zc - 0.012);
+    const [face, crane] = separer(boule(rx, ry, rz, 0, yc, zc, 3, null, jaw, 0.999, relief), (x, y, z) => z > zc - 0.012);
     add(T, finir(face, peau, zVisage, uvVisage(face, yc)), finir(crane, peau, Z.peau, uvBoite(crane, Z.peau)));
   }
   // yeux : amande posée sur le visage, blanc et iris dessinés (couleur de l'iris = couleur des sommets)
@@ -545,14 +605,14 @@ export function perso(o0) {
   const coif = o.coiffure;
   const rampe = (k, d, w) => 1 + (k - 1) * Math.max(-1.6, Math.min(1, d / w));
   const cheveux = (k, champ, sx = 1, sy = 1, sz = 1, dy = 0, c = ch, zone = Z.cheveux) => {
-    const g = boule(rx * k * sx, ry * k * sy, rz * k * sz, 0, yc + dy, zc, 3, (x, y, z) => rampe(k, champ(x, y, z), 0.09) / k, jaw, 0.975 / k);
+    const g = boule(rx * k * sx, ry * k * sy, rz * k * sz, 0, yc + dy, zc, 3, (x, y, z) => rampe(k, champ(x, y, z), 0.09) / k, jaw, 0.975 / k, relief);
     return finir(g, c, zone, uvSphere(g, zone, 0, yc + dy, zc, rx * k));
   };
   const court = (x, y, z) => Math.max(y - 0.5, Math.min(0.25 - z, y + 0.42), Math.min(Math.abs(x) - 0.82, y + 0.1, 0.5 - z));
   if (coif === 'chauve') add(T, cheveux(1.045, (x, y, z) => Math.min(0.25 - y, y + 0.5, 0.3 - z)));
-  else if (coif === 'carre') add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.35 - z, y + 0.62))), cheveux(1.13, (x, y, z) => Math.min(0.1 - z, y + 0.75, 0.6 - y), 1, 1, 1, -0.015));
+  else if (coif === 'carre') add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.62))), cheveux(1.1, (x, y, z) => Math.min(-0.08 - z, y + 0.62, 0.6 - y), 1, 1, 1, -0.012));
   else if (coif === 'long') {
-    add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.35 - z, y + 0.6))));
+    add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.6))));
     // longueur qui tombe dans le dos, en mèches
     add(T, loft([[yc - 0.3, 0.085, 0.032, zc - 0.085], [yc - 0.17, 0.092, 0.042, zc - 0.078], [yc - 0.05, 0.088, 0.055, zc - 0.058], [yc + 0.03, 0.07, 0.05, zc - 0.045]], 8, ch, Z.cheveux, true, false));
   } else add(T, cheveux(coif === 'court' ? 1.05 : 1.06, court));
@@ -566,7 +626,7 @@ export function perso(o0) {
   if (o.barbe) {
     const bord = ax => (ax >= 0.85 ? 0.05 : ax >= 0.5 ? -0.3 + (ax - 0.5) / 0.35 * 0.35 : ax >= 0.22 ? -0.42 + (ax - 0.22) / 0.28 * 0.12 : -0.43);
     const champ = (x, y, z) => Math.min(z + 0.25, bord(Math.abs(x)) - y, Math.max(Math.abs(x) - 0.26, -0.53 - y, y + 0.7, 0.4 - z));
-    const g = boule(rx * 1.03, ry * 1.03, rz * 1.03, 0, yc, zc, 3, (x, y, z) => rampe(1.03, champ(x, y, z), 0.07) / 1.03, jaw, 0.975 / 1.03);
+    const g = boule(rx * 1.03, ry * 1.03, rz * 1.03, 0, yc, zc, 3, (x, y, z) => rampe(1.03, champ(x, y, z), 0.07) / 1.03, jaw, 0.975 / 1.03, relief);
     add(T, finir(g, fonce(ch, 1.15), Z.barbe, uvSphere(g, Z.barbe, 0, yc, zc, rx))); // un peu plus claire que les cheveux
   }
   // lunettes : montures seules (les yeux restent visibles)
@@ -601,10 +661,10 @@ export function perso(o0) {
     const anH = [[-0.29, 0.047 * K, 0.049 * K], [-0.14, 0.055 * K, 0.056 * K], [0, 0.058 * K, 0.058 * K]];
     const anA = [[-0.245, 0.035 * K, 0.033 * K], [-0.1, 0.049 * K, 0.046 * K], [0, 0.048 * K, 0.047 * K]];
     const zA = avantBras === peau ? Z.peau : zManche;
-    add(i, boulette(0.058 * K, manche, zManche, 0, -0.02, 0, 1.0, 0.86, 0.96, 1), loft(anH, 7, manche, zManche));
-    add(i + 1, boulette(0.049 * K, avantBras, zA, 0, 0, 0), loft(anA, 7, avantBras, zA));
-    if (avantBras === peau) add(i, bande(anH, -0.3, -0.24, 1.12, manche, zManche, 7));
-    else add(i + 1, bande(anA, -0.245, -0.215, 1.08, fonce(manche, 0.8), zManche === Z.matelasse || zManche === Z.maille ? Z.cotes : zManche, 7));
+    add(i, boulette(0.058 * K, manche, zManche, 0, -0.02, 0, 1.0, 0.86, 0.96, 1), loft(anH, NM, manche, zManche));
+    add(i + 1, boulette(0.049 * K, avantBras, zA, 0, 0, 0), loft(anA, NM, avantBras, zA));
+    if (avantBras === peau) add(i, bande(anH, -0.3, -0.24, 1.12, manche, zManche, NM));
+    else add(i + 1, bande(anA, -0.245, -0.215, 1.08, fonce(manche, 0.8), zManche === Z.matelasse || zManche === Z.maille ? Z.cotes : zManche, NM));
     // main : la paume (épaisseur en x, largeur en z), les doigts qui s'enroulent vers la paume (-s x), le pouce devant
     const kh = femme ? 0.9 : 1, L = 0.17 * kh, dz = 0.004;
     const mo = { kv: -1 / L, miroir: s < 0 };
@@ -618,11 +678,11 @@ export function perso(o0) {
   /* jambes : cuisse, genou, chaussure ou botte */
   for (const [i, s] of [[10, 1], [13, -1]]) {
     const anC = [[-0.44, 0.058, 0.06], [-0.2, 0.077 * K, 0.08 * K], [0, 0.087 * K * H, 0.09 * K]];
-    const anJ = [[-0.4, 0.043, 0.046], [-0.26, 0.052, 0.058, -0.006], [-0.1, 0.058, 0.064, -0.01], [0, 0.058, 0.06]];
-    add(i, boulette(0.08 * K, jambe, zJambe, s * 0.004, -0.015, 0), loft(anC, 7, jambe, zJambe));
-    add(i + 1, boulette(0.06, jambe, zJambe, 0, 0, 0), loft(anJ, 7, jambe, zJambe));
-    if (o.bottes) add(i + 1, loft([[-0.41, 0.054, 0.058], [-0.19, 0.061, 0.068, -0.008]], 7, chau, Z.cuir), loft([[-0.2, 0.066, 0.073, -0.008], [-0.18, 0.066, 0.073, -0.008]], 7, fonce(chau, 0.75), Z.cuir));
-    else if (!jupe) add(i + 1, bande(anJ, -0.4, -0.35, 1.18, jambe, zJambe, 7));
+    const anJ = [[-0.4, 0.04, 0.044], [-0.3, 0.046, 0.05, -0.004], [-0.16, 0.057, 0.066, -0.012], [-0.06, 0.059, 0.064, -0.008], [0, 0.058, 0.06]];
+    add(i, boulette(0.08 * K, jambe, zJambe, s * 0.004, -0.015, 0), loft(anC, NM, jambe, zJambe));
+    add(i + 1, boulette(0.06, jambe, zJambe, 0, 0, 0), loft(anJ, NM, jambe, zJambe));
+    if (o.bottes) add(i + 1, loft([[-0.41, 0.054, 0.058], [-0.19, 0.061, 0.068, -0.008]], NM, chau, Z.cuir), loft([[-0.2, 0.066, 0.073, -0.008], [-0.18, 0.066, 0.073, -0.008]], NM, fonce(chau, 0.75), Z.cuir));
+    else if (!jupe) add(i + 1, bande(anJ, -0.4, -0.35, 1.18, jambe, zJambe, NM));
     // chaussure : volume couché le long du pied (talon, cou-de-pied, bout arrondi) sur une semelle débordante
     const kp = femme ? 0.9 : 1;
     const dessus = loft([[-0.078 * kp, 0.036 * kp, 0.03, -0.047], [-0.045 * kp, 0.046 * kp, 0.044, -0.036], [0.06 * kp, 0.048 * kp, 0.034, -0.045], [0.165 * kp, 0.045 * kp, 0.021, -0.054], [0.212 * kp, 0.022 * kp, 0.012, -0.058]], 8, chau, Z.cuir);
@@ -630,7 +690,7 @@ export function perso(o0) {
     add(i + 2, coucher(dessus), coucher(semelle));
   }
 
-  /* assemblage : chaque pièce suit son os avec un poids de 1 */
+  /* assemblage : chaque pièce suit son os ; près d'une jointure, elle suit aussi l'os voisin (peau souple, voir liens) */
   const W = [];
   for (let i = 0; i < P.length; i++) {
     const p = PARENT[i] < 0 ? [0, 0, 0] : W[PARENT[i]];
@@ -640,9 +700,14 @@ export function perso(o0) {
   for (let i = 0; i < G.length; i++) {
     if (!G[i].length) continue;
     for (const g of G[i]) deplacer(g, W[i][0], W[i][1], W[i][2]);
-    const g = fusion(G[i]), n = g.attributes.position.count;
+    const g = fusion(G[i]), n = g.attributes.position.count, pa = g.attributes.position.array;
     const si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4);
-    for (let k = 0; k < n; k++) { si[k * 4] = i; sw[k * 4] = 255; }
+    for (let k = 0; k < n; k++) {
+      const l = liens(i, pa[k * 3] - W[i][0], pa[k * 3 + 1] - W[i][1]);
+      const w = l ? Math.round(l[1] * 255) : 0;
+      si[k * 4] = i; sw[k * 4] = 255 - w;
+      if (w) { si[k * 4 + 1] = l[0]; sw[k * 4 + 1] = w; }
+    }
     g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4, true));
     parts.push(g);
@@ -664,6 +729,7 @@ export function perso(o0) {
   // sphère englobante fixe (sinon three.js la calcule une fois, dans la première pose)
   maillage.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.95, 0.1), 1.35);
   os[OS.tel].scale.setScalar(0.001);
+  os[OS.tete].scale.setScalar(TETE); // après bind : la tête (cou, cheveux, couvre-chef compris) un peu plus grande
 
   const groupe = new THREE.Group();
   const echelle = 0.96 * (o.taille ?? 1);

@@ -12,7 +12,7 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 | `src/main.js` | Boucle de jeu, paliers de qualité automatiques, ombres, particules, entrées, branchements entre modules, banc de test `window.CL`. |
 | `src/monde.js` | Le monde construit en code (ciel, lumière, collines, routes, vignes, bâtiments, arbres, détails, mini-carte), fusionné par quartiers. Le chai et son bureau (`chaiEtBureau`), le hameau des Grands Champs et son moulin (`hameau`, avec son propre tirage au sort). |
 | `src/modeles.js` | Formes de base, matières et textures procédurales dans le shader (pierre, ardoise, asphalte, vent...). |
-| `src/perso.js` | Personnages : un seul SkinnedMesh par personnage (18 os), tenues, visages, mains ; coordonnées de texture dans le repère du personnage. |
+| `src/perso.js` | Personnages : un seul SkinnedMesh par personnage (18 os), tenues, visages (relief : arcades, pommettes, menton, `reliefVisage`), mains ; peau souple aux jointures (`liens` : un sommet proche d'une jointure suit aussi l'os voisin) ; coordonnées de texture dans le repère du personnage. |
 | `src/atlas.js` | Atlas des personnages (1024 x 512) : visages, yeux, main, tissus (toile, jean, maille, cuir...), cheveux, dessinés en code une fois au démarrage et partagés par tous. |
 | `src/anim.js` | Animation procédurale : marche, course, pieds posés au sol, repos, regard, téléphone en main, salut, conduite (poste du tracteur ou du van), saut de côté, servir un verre, boire. |
 | `src/gestes.js` | Gestes joués tout seuls, étape par étape : monter dans le tracteur (marchepied) ou le van (portière qui s'ouvre et se referme), en descendre ; charger les piles de cartons de la palette du chai, les décharger devant un client (porte coulissante du van), remonter. Pendant un geste, le joueur ne commande plus le personnage ; la caméra cadre la scène de côté. |
@@ -75,7 +75,7 @@ Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (rep
 - Ombres : un soleil bas qui suit le joueur (cadre de 84 m, calé sur la grille de texels). Brouillard couleur horizon.
 - Entrées : manche flottant au doigt ou à la souris (`Controles`), clavier en plus. En tracteur au doigt, on montre la direction voulue, le tracteur tourne vers elle.
 - Résolution adaptative : le vrai coût d'une image est mesuré toutes les 2 s (au-delà de 20 ms le ratio baisse, puis le palier).
-- Personnage (perso.js, anim.js, atlas.js) : un SkinnedMesh de 18 os, animation procédurale ; une seule texture partagée qui module la couleur des sommets (un visage sert à tous les teints, un tissu à toutes les couleurs).
+- Personnage (perso.js, anim.js, atlas.js) : un SkinnedMesh de 18 os (deux influences au plus par sommet, près des jointures), animation procédurale ; une seule texture partagée qui module la couleur des sommets (un visage sert à tous les teints, un tissu à toutes les couleurs).
 - Décor de détail (monde.js) : jardinières, poteaux et fils, réverbères, poubelles, panneaux routiers dessinés en code, herbes hautes en instances, balles de foin, voitures garées (`lieux.garees`).
 - Banc de test : `window.CL` (`jouer()`, `step(n)`, `teleporter(x, z, h)`, `agir()`, `bench(n)`, `profil(n)`, `memoire()`, `photo(...)` pour poser la caméra).
 

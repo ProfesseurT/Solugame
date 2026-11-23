@@ -320,3 +320,16 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - arrière : relevage trois points, protection de prise de force, plateau des cartons et ses supports, plaque.
 
 **Vérifié** : captures sous quatre angles, montée et descente image par image ; parcours et conduite assistée en tracteur, aucune traversée, aucun choc ; coût au domaine : 99 appels de dessin, 116 000 triangles ombres comprises (101 000 avant), 1,3 ms par image.
+
+## 23/11/2026 · Retours de Teddy (4) : des personnages plus humains
+
+**Constat** (banc des personnages, avant) : buste en boîte, épaules en boules, articulations qui cassent net comme un pantin (chaque pièce suivait un seul os), cou en colonne sous la mâchoire, tête en œuf au profil plat, bras tout droits collés au corps, de longs cheveux qui enfermaient le visage.
+
+**Fait (lot D)** :
+- Peau souple (`perso.js`, `liens`) : près d'une jointure, un sommet suit aussi l'os voisin, jusqu'à la moitié à la jointure même : épaules, coudes, poignets, hanches, genoux, taille, bas du cou. Une jupe suit un peu les jambes.
+- Formes : buste et bassin à 12 pans (au lieu de 8), membres à 9 (au lieu de 7), mollet galbé en haut du tibia, cheville plus fine ; cou plus épais à la base, qui s'affine sous la mâchoire ; tête (et ce qu'elle porte) 6 % plus grande.
+- Visage (`reliefVisage`) : arcades, orbites, pommettes, avancée de la bouche, menton, joues un peu creusées chez l'homme, front qui fuit un peu. Le crâne, les cheveux, la barbe, les yeux, les sourcils et le nez suivent le même relief.
+- Cheveux longs et coupe au carré : ils partent de devant les oreilles et laissent les joues libres (avant, le visage paraissait encagoulé).
+- Pose de repos (`anim.js`) : bras un peu écartés du corps, coudes légèrement pliés.
+
+**Vérifié** : banc des personnages (galerie, visages de face et de trois quarts, marche, assis, téléphone) et captures en jeu (héros qui marche, place du bourg, terrasse) ; `npm run verifie`, conduite assistée en tracteur et en van ; coût : 0,04 ms par image pour poser 14 personnages, image 3D prête à 331 ms.

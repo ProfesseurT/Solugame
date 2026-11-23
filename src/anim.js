@@ -262,13 +262,14 @@ export class Anim {
         z * wg + 0.06 * libre + avance, tg * wg - 0.3 * sj, sg * (0.06 + 0.1 * (1 - wg) + 0.08 * libre));
     }
 
-    // bras : balancier opposé aux jambes, coudes pliés en courant ; bras levés en sautant, en avant au choc
+    // bras : balancier opposé aux jambes, coudes pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un
+    // peu écartés du corps, coudes légèrement pliés (des bras tout droits collés au corps font mannequin)
     const A = mix(0.32 * Math.min(1, va / 1.3), 0.75, w) * wg * sens;
     const cG = Math.cos(TAU * (ph - 0.5)), cD = c1, flot = Math.sin(this.resp * 0.9) * 0.02;
-    o[OS.brasG].rotation.set(-A * cG - 0.04 - 0.9 * choc - 0.5 * sj + flot, 0, 0.07 + 0.1 * w + 1.9 * sj);
-    o[OS.brasD].rotation.set(-A * cD - 0.04 - 0.9 * choc - 0.5 * sj - flot, 0, -(0.07 + 0.1 * w + 1.9 * sj));
-    o[OS.coudeG].rotation.set(mix(-0.14 - 0.4 * Math.max(0, cG) * wg, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
-    o[OS.coudeD].rotation.set(mix(-0.14 - 0.4 * Math.max(0, cD) * wg, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    o[OS.brasG].rotation.set(-A * cG - 0.04 - 0.9 * choc - 0.5 * sj + flot, 0, 0.115 + 0.1 * w + 1.9 * sj);
+    o[OS.brasD].rotation.set(-A * cD - 0.04 - 0.9 * choc - 0.5 * sj - flot, 0, -(0.115 + 0.1 * w + 1.9 * sj));
+    o[OS.coudeG].rotation.set(mix(-0.25 - 0.4 * Math.max(0, cG) * wg, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    o[OS.coudeD].rotation.set(mix(-0.25 - 0.4 * Math.max(0, cD) * wg, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
     o[OS.mainG].rotation.set(-0.12 - 0.2 * w, 0.1, 0.06);
     o[OS.mainD].rotation.set(-0.12 - 0.2 * w, -0.1, -0.06);
   }
