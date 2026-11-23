@@ -13,6 +13,7 @@ export class Controles {
     this.jx = 0; this.jy = 0;   // manche, repère écran (x à droite, y vers le bas)
     this.kx = 0; this.ky = 0;   // clavier et manette (stick gauche, gâchettes)
     this.courir = false;
+    this.fm = false;            // frein à main : espace, ou X / RB à la manette (au volant)
     this.actions = [];          // 'agir', 'tel', 'son', 'radio', 'echap'
     this.touchers = [];         // touchers courts {x, y}
     this.actif = true;
@@ -26,8 +27,8 @@ export class Controles {
     this.geste = null;          // geste à deux doigts {a, b, mx, my, d}
     this.ignores = new Set();   // doigts à ignorer jusqu'à ce qu'ils se lèvent
     this.souris = null;         // glisser de caméra à la souris (clic droit ou Alt)
-    this.clav = { x: 0, y: 0, cx: 0, cy: 0, courir: false };
-    this.pad = { x: 0, y: 0, cx: 0, cy: 0, courir: false, b: [] };
+    this.clav = { x: 0, y: 0, cx: 0, cy: 0, courir: false, fm: false };
+    this.pad = { x: 0, y: 0, cx: 0, cy: 0, courir: false, fm: false, b: [] };
     this.tPad = 0;
 
     this.rayon();
@@ -122,6 +123,7 @@ export class Controles {
       const k = e.key.toLowerCase();
       if (DIR[e.code]) { this.touches.add(DIR[e.code]); e.preventDefault(); }
       else if (e.key === 'Shift') this.clav.courir = true;
+      else if (e.code === 'Space') { this.clav.fm = true; e.preventDefault(); }
       else if (!e.repeat && (k === 'e' || e.key === 'Enter')) this.actions.push('agir');
       else if (!e.repeat && k === 't') this.actions.push('tel');
       else if (!e.repeat && k === 'm') this.actions.push('son');
@@ -133,9 +135,10 @@ export class Controles {
     addEventListener('keyup', e => {
       if (DIR[e.code]) this.touches.delete(DIR[e.code]);
       if (e.key === 'Shift') this.clav.courir = false;
+      if (e.code === 'Space') this.clav.fm = false;
       this.majClavier();
     });
-    addEventListener('blur', () => { this.touches.clear(); this.clav.courir = false; this.majClavier(); this.relacher(); });
+    addEventListener('blur', () => { this.touches.clear(); this.clav.courir = false; this.clav.fm = false; this.majClavier(); this.relacher(); });
 
     // manette : lue à chaque image tant qu'il y en a une de branchée
     addEventListener('gamepadconnected', () => this.lancerManette());
@@ -161,6 +164,7 @@ export class Controles {
     this.kx = borne(c.x + p.x, -1, 1); this.ky = borne(c.y + p.y, -1, 1);
     this.kcam = borne(c.cx + p.cx, -1, 1); this.kcamY = borne(c.cy + p.cy, -1, 1);
     this.courir = c.courir || p.courir;
+    this.fm = c.fm || p.fm;
   }
 
   lancerManette() {
@@ -169,7 +173,7 @@ export class Controles {
     this.tPad = requestAnimationFrame(f);
   }
   // disposition standard : stick gauche avancer et tourner, gâchettes accélérer (RT) et freiner (LT),
-  // A agir, Y téléphone, B retour, X courir, LB radio, stick droit caméra (clic : derrière)
+  // A agir, Y téléphone, B retour, X courir (au volant : frein à main, comme RB), LB radio, stick droit caméra (clic : derrière)
   lireManette() {
     let gp = null;
     try {
@@ -177,7 +181,7 @@ export class Controles {
       if (l) for (let i = 0; i < l.length; i++) if (l[i] && l[i].connected) { gp = l[i]; break; }
     } catch (_) { gp = null; }
     const p = this.pad;
-    if (!gp) { p.x = p.y = p.cx = p.cy = 0; p.courir = false; this.combiner(); return false; }
+    if (!gp) { p.x = p.y = p.cx = p.cy = 0; p.courir = p.fm = false; this.combiner(); return false; }
     const ax = i => gp.axes[i] || 0, bt = i => (gp.buttons[i] && gp.buttons[i].value) || 0;
     const k = morte(ax(0), ax(1), 0.16), kc = morte(ax(2), ax(3), 0.18);
     const rt = bt(7), lt = bt(6);
@@ -185,6 +189,7 @@ export class Controles {
     p.y = rt > 0.05 || lt > 0.05 ? lt - rt : ax(1) * k;
     p.cx = ax(2) * kc; p.cy = ax(3) * kc;
     p.courir = bt(2) > 0.5;
+    p.fm = bt(2) > 0.5 || bt(5) > 0.5; // au volant, X ou RB : frein à main
     const appui = i => { const on = bt(i) > 0.5, avant = p.b[i]; p.b[i] = on; return on && !avant; };
     if (appui(0)) this.actions.push('agir');
     if (appui(3)) this.actions.push('tel');

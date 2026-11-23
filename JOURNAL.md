@@ -403,3 +403,14 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** : le décor du bourg passe de 20 000 à 36 600 triangles (ombres non comprises) ; les chaînes d'angle et encadrements sont des plaques plates (un quadrilatère) et les toits rejoignent directement le décor du quartier, pour que la construction du monde ne coûte rien de plus (environ 130 ms sur ordinateur, avant comme après). Mêmes appels de dessin.
 
 **Vérifié** : captures de la rue, de la place, de la rue de la place, du carrefour, du chevet, du calvaire, du domaine, vue d'en haut ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; accueil ; banc d'allègement de three.js : équivalent ; ESLint.
+
+## 23/11/2026 · Retours de Teddy (7), lot 1 : freiner et déraper
+
+**Demande** : permettre le frein et donc de déraper avec les véhicules.
+
+**Fait** :
+- Physique (`vehicules.js`) : le véhicule garde une vitesse de côté que les pneus freinent jusqu'à leur adhérence. En conduite normale elle est effacée à chaque instant (rien ne change, conduite assistée comprise). Au frein à main, l'arrière se bloque, l'adhérence de côté tombe, l'angle de braquage n'est plus borné par l'adhérence et la rotation prend de l'élan : le véhicule part en travers, on contre-braque pour le tenir. Un gros freinage en plein virage fait aussi glisser, un peu.
+- Commandes : au doigt, vers le bas et sur le côté quand on est lancé ; espace au clavier ; RB (ou X au volant) à la manette. Aides de l'accueil et dialogue de conduite mis à jour.
+- Effets : traces de pneus sur l'asphalte et les pavés (instances dans une réserve tournante, seule la bande ajoutée est envoyée à la carte graphique), fumée des pneus ou poussière selon le sol, crissement synthétisé (sifflement qui ondule et souffle serré), roues arrière qui ne tournent plus.
+
+**Vérifié** : van lancé à 15 m/s puis frein à main à gauche : demi-tour en glissant (jusqu'à 8 m/s de côté), traces visibles ; le tracteur, plus lent, de même ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée).

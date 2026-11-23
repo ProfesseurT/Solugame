@@ -86,3 +86,35 @@ export class Taches {
   }
   fin() { this.im.count = this.n; this.im.instanceMatrix.needsUpdate = true; }
 }
+
+/* Traces de pneus laissées en dérapant sur l'asphalte et les pavés : bandes sombres posées au sol, en instances, dans une
+   réserve tournante (les plus anciennes sont reprises). Seule la bande ajoutée est envoyée à la carte graphique. */
+const qm = new THREE.Matrix4(), qq = new THREE.Quaternion(), qp = new THREE.Vector3(), qe = new THREE.Vector3();
+export class Traces {
+  constructor(scene, max = 360) {
+    const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    const m = new THREE.MeshBasicMaterial({ color: '#1b1816', transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const im = new THREE.InstancedMesh(g, m, max);
+    im.frustumCulled = false; im.renderOrder = 1; im.count = 0; im.name = 'traces';
+    scene.add(im);
+    this.im = im; this.max = max; this.n = 0; this.der = [null, null]; // dernier point de chaque roue
+  }
+  // la roue k passe en (x, z) : une bande depuis son dernier point (largeur l)
+  marquer(k, x, z, l) {
+    const d = this.der[k];
+    if (!d) { this.der[k] = { x, z }; return; }
+    const dx = x - d.x, dz = z - d.z, L = Math.hypot(dx, dz);
+    if (L < 0.3) return;
+    if (L < 3) {
+      const i = this.n++ % this.max;
+      qm.compose(qp.set((x + d.x) / 2, 0.07, (z + d.z) / 2), qq.setFromAxisAngle(Y, Math.atan2(dx, dz)), qe.set(l, 1, L + 0.05));
+      this.im.setMatrixAt(i, qm);
+      this.im.instanceMatrix.addUpdateRange(i * 16, 16);
+      this.im.instanceMatrix.needsUpdate = true;
+      this.im.count = Math.min(this.n, this.max);
+    }
+    d.x = x; d.z = z;
+  }
+  lever() { this.der[0] = this.der[1] = null; }
+}
+const Y = new THREE.Vector3(0, 1, 0);

@@ -183,8 +183,13 @@ function creerMoteur() {
   gs.connect(gf); gf.connect(gg); gg.connect(bus);
   const ff = filtre('bandpass', 1400, 3.5), fg = gain(0);
   rs.connect(ff); ff.connect(fg); fg.connect(bus);
-  o1.start(); lfo.start(); o2.start();
-  M = { bus, mg, o1, lp1, lfo, lfoG, o2, g2, bp3, g3, rf, rg, gs, gf, gg, fg, brancher: branchement(bus, maitre) };
+  // crissement des pneus en dérapage : un sifflement aigu qui ondule, mêlé d'un souffle serré
+  const oc = ctx.createOscillator(); oc.type = 'triangle'; oc.frequency.value = 1150;
+  const lc = ctx.createOscillator(); lc.frequency.value = 9; const lcg = gain(60); lc.connect(lcg); lcg.connect(oc.frequency);
+  const bc = filtre('bandpass', 1900, 9), cg = gain(0);
+  oc.connect(cg); rs.connect(bc); bc.connect(cg); cg.connect(bus);
+  o1.start(); lfo.start(); o2.start(); oc.start(); lc.start();
+  M = { bus, mg, o1, lp1, lfo, lfoG, o2, g2, bp3, g3, rf, rg, gs, gf, gg, fg, oc, cg, brancher: branchement(bus, maitre) };
 }
 
 /* ---------------------------------------------------------------- ambiance */
@@ -321,7 +326,7 @@ export const son = {
         moteurOn = false;
         M.o1.frequency.setTargetAtTime(12, t, 0.25); M.lfo.frequency.setTargetAtTime(2.5, t, 0.25);
         M.mg.gain.setTargetAtTime(0, t + 0.15, 0.2);
-        for (const g of [M.g2, M.g3, M.rg, M.gg, M.fg]) g.gain.setTargetAtTime(0, t, 0.08);
+        for (const g of [M.g2, M.g3, M.rg, M.gg, M.fg, M.cg]) g.gain.setTargetAtTime(0, t, 0.08);
         M.brancher(false);
       }
       return;
@@ -351,6 +356,11 @@ export const son = {
     M.gf.frequency.setTargetAtTime(P.gf, t, 0.1); M.gg.gain.setTargetAtTime(P.gg * Math.min(1, a / 3), t, 0.1);
     M.gs.playbackRate.setTargetAtTime(0.4 + a / 7, t, 0.1);
     M.fg.gain.setTargetAtTime(etat && etat.frotte ? etat.frotte * 0.14 : 0, t, 0.05);
+    // dérapage : les pneus crissent sur le dur, les graviers crépitent ailleurs
+    const gl = etat && etat.glisse > 0.18 ? etat.glisse : 0, dur = etat && (etat.sol === 'asphalte' || etat.sol === 'paves');
+    M.cg.gain.setTargetAtTime(dur ? gl * 0.07 : 0, t, 0.05);
+    M.oc.frequency.setTargetAtTime(1050 + gl * 450, t, 0.08);
+    if (gl && !dur) M.gg.gain.setTargetAtTime(P.gg * 1.6 + gl * 0.12, t, 0.05);
   },
   // on : on vient de monter dans un véhicule (la radio joue si elle n'est pas coupée), ou d'en descendre
   radio(on) { dansVehicule = on; majRadio(); },

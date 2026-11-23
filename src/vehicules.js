@@ -62,6 +62,8 @@ export class Tracteur {
   constructor(modele, genre = 'tracteur') {
     this.m = modele; this.genre = genre; this.T = TEMPERAMENTS[genre]; this.d = { ...DIMS, ...(modele.dims || {}) };
     this.pos = new THREE.Vector3(); this.h = 0; this.v = 0; this.braq = 0;
+    // dérive : vitesse de côté (m/s, positive vers la gauche du véhicule), frein à main lissé 0..1, glissement 0..1
+    this.vT = 0; this.fm = 0; this.glisse = 0;
     this.rotR = 0; this.rotA = 0; this.vignes = false; this.choc = 0; this.chocVu = 0; this.charge = 0;
     this.sol = 'gravier';
     // commandes lissées
@@ -73,12 +75,12 @@ export class Tracteur {
     this.rl = 0; this.rlv = 0; this.tg = 0; this.tgv = 0; this.pp = 0; this.ppv = 0; this.es = 0; this.esv = 0;
   }
   placer(x, z, h) {
-    this.pos.set(x, 0, z); this.h = h; this.v = 0; this.lacet = 0; this.pedale = this.frein = 0; this.braq = 0;
+    this.pos.set(x, 0, z); this.h = h; this.v = 0; this.vT = 0; this.fm = 0; this.glisse = 0; this.lacet = 0; this.pedale = this.frein = 0; this.braq = 0;
     this.rl = this.rlv = this.tg = this.tgv = this.pp = this.ppv = this.es = this.esv = 0;
     this.sync(0, 0);
   }
-  // gaz -1..1 (NaN : doigt posé, on garde la vitesse), braq -1..1 (positif : à gauche)
-  update(dt, gaz, braq, col, voitures, t) {
+  // gaz -1..1 (NaN : doigt posé, on garde la vitesse), braq -1..1 (positif : à gauche), fm : frein à main (0 ou 1)
+  update(dt, gaz, braq, col, voitures, t, fm = 0) {
     if (dt <= 0) return;
     const S = SOLS[this.sol] || SOLS.herbe, vign = this.vignes, T = this.T, EMP = this.d.emp;
     const av0 = Math.abs(this.v);
@@ -95,6 +97,7 @@ export class Tracteur {
     }
     this.pedale += borne(pousse - this.pedale, -5 * dt, 2.6 * dt);
     this.frein += borne(frein - this.frein, -8 * dt, 5 * dt);
+    this.fm += ((fm ? 1 : 0) - this.fm) * lisser(dt, fm ? 12 : 5);
 
     /* -- vitesse */
     const vmax = vign ? T.vmaxVigne : T.vmax, vmaxAr = vign ? T.vmaxArVigne : T.vmaxAr;
@@ -114,6 +117,7 @@ export class Tracteur {
     if (this.v < -vmaxAr) res += 1.5;
     res += 0.1 * Math.abs(this.aLat);                            // les pneus frottent dans les virages serrés
     res += this.frein * T.frein * S.grip;
+    res += this.fm * T.frein * 0.5 * S.grip;                     // frein à main : les roues arrière bloquées
     const vAvant = this.v;
     this.v += acc * dt;
     const dres = res * dt;
@@ -123,20 +127,36 @@ export class Tracteur {
     this.aLong += ((this.v - vAvant) / dt - this.aLong) * lisser(dt, 12);
     const av = Math.abs(this.v);
 
-    /* -- direction : angle borné par l'adhérence, volant qui tourne à vitesse finie et revient seul */
-    const lim = Math.min(T.braqMax, Math.atan(EMP * T.alat * S.grip / Math.max(0.01, av * av)));
+    /* -- dérive : le frein à main, ou un gros freinage en plein virage, fait perdre l'adhérence de côté ; l'arrière part,
+       on contre-braque pour la tenir. derive 0..1 */
+    const freinVirage = this.frein > 0.55 && av > 7 && Math.abs(braq) > 0.3 ? (this.frein - 0.55) * 1.6 : 0;
+    const derive = Math.min(1, this.fm * Math.min(1, av / 3) + freinVirage * 0.6);
+
+    /* -- direction : angle borné par l'adhérence (au-delà en dérive), volant qui tourne à vitesse finie et revient seul */
+    const lim0 = Math.min(T.braqMax, Math.atan(EMP * T.alat * S.grip / Math.max(0.01, av * av)));
+    const lim = lim0 + (T.braqMax - lim0) * derive;
     const cible = borne(braq, -1, 1) * lim;
     const rentre = Math.abs(cible) < Math.abs(this.braq) || cible * this.braq < 0;
     const vit = (rentre ? 2.4 : 1.35) / (1 + av * 0.07);
     this.braq += borne(cible - this.braq, -vit * dt, vit * dt);
     this.volant = this.braq * T.volant;
-    let lacetCin = (this.v / EMP) * Math.tan(this.braq);
+    let lacetCin = (this.v / EMP) * Math.tan(this.braq) * (1 + 0.75 * derive); // en dérive, l'arrière fait pivoter
     if (vign && av > 0.5) lacetCin += Math.sin(t * 2.7 + this.pos.z * 0.9) * 0.05 * Math.min(1, av / 3); // les ornières font louvoyer
-    this.lacet += (lacetCin - this.lacet) * lisser(dt, 9);
+    this.lacet += (lacetCin - this.lacet) * lisser(dt, 9 - 5 * derive); // en dérive, la rotation a de l'élan
+    const dh = this.lacet * dt;
+    this.h = angle(this.h + dh);
+    // la vitesse ne tourne pas avec le véhicule : ce qui reste de côté, les pneus le freinent jusqu'à leur adhérence
+    // (en conduite normale, ils l'effacent entièrement ; en dérive, le véhicule glisse en travers)
+    const cd = Math.cos(dh), sd = Math.sin(dh), vL = this.v * cd + this.vT * sd;
+    this.vT = this.vT * cd - this.v * sd;
+    this.v = vL;
+    const adh = T.alat * S.grip * 1.2 * (1 - 0.78 * derive) * dt;
+    this.vT -= Math.sign(this.vT) * Math.min(Math.abs(this.vT), adh);
+    this.v -= Math.sign(this.v) * Math.min(Math.abs(this.v), Math.abs(this.vT) * 0.6 * dt); // glisser de côté freine
+    this.glisse = Math.min(1, Math.abs(this.vT) / 3.5);
     this.aLat = this.v * this.lacet;
-    this.h = angle(this.h + this.lacet * dt);
     let fx = Math.sin(this.h), fz = Math.cos(this.h);
-    this.pos.x += fx * this.v * dt; this.pos.z += fz * this.v * dt;
+    this.pos.x += (fx * this.v + fz * this.vT) * dt; this.pos.z += (fz * this.v - fx * this.vT) * dt;
 
     /* -- deux cercles (avant, arrière) contre le décor, les voitures et l'autre véhicule du domaine */
     let touche = false, nx = 0, nz = 0;
@@ -167,6 +187,7 @@ export class Tracteur {
     this.chocVu = 0;
     let frotte = 0;
     if (touche) {
+      this.vT *= 0.4;
       const n = Math.hypot(nx, nz) || 1; nx /= n; nz /= n;
       const sv = this.v >= 0 ? 1 : -1, fn = fx * nx + fz * nz, dot = fn * sv; // dot < 0 : on pousse contre l'obstacle
       if (dot < -0.8 && av > 2.5) { // de face : on rebondit
@@ -207,7 +228,7 @@ export class Tracteur {
   sync(dt, t) {
     const m = this.m, S = SOLS[this.sol] || SOLS.herbe, av = Math.abs(this.v), D = this.d, EMP = D.emp, K = this.T.ressorts;
     m.groupe.position.set(this.pos.x, 0, this.pos.z); m.groupe.rotation.y = this.h;
-    this.rotR += this.v * dt / D.rAr; this.rotA += this.v * dt / D.rAv;
+    this.rotR += this.v * (1 - this.fm) * dt / D.rAr; this.rotA += this.v * dt / D.rAv; // frein à main : l'arrière ne tourne plus
     m.rouesAr[0].rotation.x = m.rouesAr[1].rotation.x = this.rotR;
     m.rouesAv[0].rotation.x = m.rouesAv[1].rotation.x = this.rotA;
     m.pivots[0].rotation.y = m.pivots[1].rotation.y = this.braq;

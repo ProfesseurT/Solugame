@@ -19,7 +19,7 @@ import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 import { Paliers } from './qualite.js';
-import { Particules, Taches } from './particules.js';
+import { Particules, Taches, Traces } from './particules.js';
 import { Bureau } from './bureau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -99,6 +99,7 @@ const marque = new THREE.Group();
 /* ------------------------------------------------------------------ particules et ombres de contact (particules.js) */
 const particules = new Particules(scene, camera, rnd), emettre = particules.emettre;
 const taches = new Taches(scene);
+const traces = new Traces(scene);
 
 /* ------------------------------------------------------------------ personnages, tracteur, voitures */
 let choixHeros = stocke.lire('tournee-generale-heros') === 'vigneronne' ? 'vigneronne' : 'vigneron';
@@ -270,6 +271,18 @@ function echappement(sx, sz) {
   if (veh.genre === 'van') return [tr.pos.x - sx * 2.3 + sz * 0.45, 0.35, tr.pos.z - sz * 2.3 - sx * 0.45];
   return [tr.pos.x + sx * 1.45 + sz * 0.3, 2.55, tr.pos.z + sz * 1.45 - sx * 0.3];
 }
+// En dérapage : traces de pneus sur l'asphalte et les pavés, fumée des pneus (ou poussière ailleurs) derrière les roues arrière
+const POUSSIERE = { gravier: 0xcfc1a0, herbe: 0x9a8f6a, vigne: 0x7a5c3f };
+function derapage(dt) {
+  const g = tr.glisse, D = tr.d;
+  if (g < 0.18 || Math.abs(tr.v) + Math.abs(tr.vT) < 1.5) { traces.lever(); return; }
+  const fx = Math.sin(tr.h), fz = Math.cos(tr.h), zr = D.zAr ?? -0.9, xr = D.xAr ?? 0.98, dur = tr.sol === 'asphalte' || tr.sol === 'paves';
+  for (let k = 0; k < 2; k++) {
+    const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
+    if (dur) traces.marquer(k, x, z, veh.genre === 'van' ? 0.22 : 0.4); else traces.lever();
+    if (rnd() < dt * 26 * g) emettre(x, 0.25, z, (rnd() - 0.5) * 0.8, 0.5 + rnd() * 0.6, (rnd() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
+  }
+}
 // le véhicule à portée de main (le plus proche, à moins de 5 m), ou null
 function vehiculeProche() {
   let best = null, dmin = 5;
@@ -294,7 +307,7 @@ function monter(v) {
   gestes.monter(v, () => auVolant(v));
 }
 // Le véhicule reste à l'arrêt (il repartait seul), moteur et radio coupés
-function couperMoteur() { tr.v = 0; tr.pedale = 0; tr.frein = 0; son.radio(false); son.moteur(false, 0); }
+function couperMoteur() { tr.v = 0; tr.vT = 0; tr.fm = 0; tr.pedale = 0; tr.frein = 0; son.radio(false); son.moteur(false, 0); }
 const aPied = () => { jeu.auVolant = false; };
 // On coupe le moteur, puis on descend à gauche (gestes.js)
 function descendre() {
@@ -451,7 +464,7 @@ function miseAJour(dt) {
     gestes.update(dtm * vite, temps);
     if (jeu.auVolant) tr.update(dtm, 0, 0, col, voitures, temps);
   } else if (jeu.auVolant) {
-    let gaz = 0, braq = 0;
+    let gaz = 0, braq = 0, fm = false;
     const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
     pilote.prendre(mission.route);
     jeu.pilote = false;
@@ -462,7 +475,8 @@ function miseAJour(dt) {
       // vers le haut : un peu plus vite.
       const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
       const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
-      if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; }
+      // vers le bas : freiner ; vers le bas et sur le côté, lancé : frein à main, le véhicule part en dérapage
+      if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.35 && tr.v > 4) { fm = true; gaz *= 0.3; } }
       else {
         const auto = tourne ? null : pilote.commande(tr, veh.genre, mission.cible, voitures, col);
         if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
@@ -473,7 +487,9 @@ function miseAJour(dt) {
         }
       }
     } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0; // doigt levé : on s'arrête en douceur
-    tr.update(dtm, gaz, braq, col, voitures, temps);
+    if (ctrl.fm && libre) fm = true;
+    tr.update(dtm, gaz, braq, col, voitures, temps, fm);
+    derapage(dtm);
     joueur.volant = tr.braq; // les mains suivent la direction
     joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
     if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
