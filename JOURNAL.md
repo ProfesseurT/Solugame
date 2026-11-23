@@ -583,3 +583,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Une voiture ne porte pas de cartons : au chai, rien ne se charge, l'aide le dit.
 
 **Vérifié** : nouveau banc `voitures` (13 étapes, dans `npm run verifie`) ; conducteur, emprunt, crêpe et relevé filmés ; conduite assistée en tracteur et en van (mêmes durées, aucun choc) ; banc des personnages en jeu. Un premier essai n'aplatissait le passant qu'à grande vitesse : le pare-chocs le repoussait devant lui à chaque image ; tout contact avec un véhicule lancé l'aplatit désormais.
+
+## 23/11/2026 · Retours de Teddy (14) : plus de cloche, la nuit qui tombe, marcher au clavier
+
+**Demandes** : « supprimer le son de la cloche, c'est chiant » ; « mettre en place la nuit qui tombe ; un truc au niveau de la maison : quand on rentre, ça remet au matin » ; « un mode marcher / courir avec la touche Maj sur laptop : quand je fais la flèche, ça marche de base ».
+
+**Fait** :
+- La cloche de l'église ne sonne plus (code retiré). La nuit, les grillons remplacent les oiseaux.
+- Au clavier, une flèche fait marcher (1,6 m/s) et Maj courir : avant, une touche valait la pleine vitesse, donc la course. La manette, analogique, reste dosée comme le doigt. L'aide de l'accueil le dit.
+- La nuit : l'heure avance (une minute toutes les 2 s, départ 17 h 40) ; le soir tombe de 18 h 40 à 19 h 50, pleine nuit vers 4 min 40 de jeu. Le soleil reste bas où il est (sa direction est inscrite dans les shaders : la déplacer aurait touché toute la chaîne de rendu) mais s'éteint et devient un clair de lune pâle et bleuté qui garde des ombres douces ; ciel, brume et nuages passent au bleu nuit, les étoiles paraissent (dans le dôme, sans coût : seuls ses pixels vides), fenêtres allumées et réverbères brillent plus fort, les reflets du ciel s'assombrissent. Une seule valeur partagée (`uNuit`) ; la lueur du soleil dans la brume s'éteint d'après la couleur de la brume elle-même (`cl_jour`), sans nouvelle variable pour les matières de three.js. Une première nuit était trop noire et trop bleue pour jouer : ambiance relevée, clair de lune.
+- Rentrer dormir : devant la porte de la maison du domaine (où l'on commence), « Rentrer dormir » ; fondu au noir, et l'on ressort dans la cour à 7 h le lendemain (le jour même si l'on rentre après minuit), à l'aube : « Bonjour ! ». La journée de travail continue où elle en était. Une première version faisait ressortir le personnage dos au mur : la caméra entrait dans la maison.
+
+**Vérifié** : nouveau banc `nuit` (dans `npm run verifie`, à 1280 x 800 : le clavier) ; captures du crépuscule, de la nuit dans le bourg, sur la place et devant la maison, et du réveil ; banc d'allègement de three.js : équivalent ; conduite assistée en tracteur et en van ; banc des personnages en jeu.

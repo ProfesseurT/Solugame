@@ -6,6 +6,7 @@
 //   parcours  joue toute la mission (3 commandes, 3 livraisons, 3 factures) et vérifie chaque étape ; VEHICULE=van : en van
 //   souple    la journée à la carte : le chèque seul, une tournée avec ce qui est déjà signé, un arrêt seul, chargement
 //             en deux fois (VEHICULE=van : en van)
+//   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe ; rentrer dormir, le matin revient
 //   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
@@ -363,6 +364,39 @@ if (scenario === 'voitures') {
   });
   for (const [msg, c] of r) ok(c, msg);
   await capture('fin');
+}
+
+if (scenario === 'nuit') {
+  // au clavier, les flèches font marcher et Maj courir ; la nuit tombe avec l'heure ; devant la maison du domaine, on rentre
+  // dormir et l'on ressort au matin
+  const r = await ev(async () => {
+    const J = CL.jeu, log = [], nuit = () => CL.monde.ciel.userData.dome.material.uniforms.uNuit.value;
+    const touche = (type, code, key = code) => dispatchEvent(new KeyboardEvent(type, { code, key }));
+    try {
+      CL.jouer(); CL.step(60);
+      CL.teleporter(-99, -50, 0); CL.step(5);
+      touche('keydown', 'ArrowUp'); CL.step(90);
+      const marche = CL.joueur.v;
+      touche('keydown', 'ShiftLeft', 'Shift'); CL.step(60);
+      const course = CL.joueur.v;
+      touche('keyup', 'ShiftLeft', 'Shift'); touche('keyup', 'ArrowUp'); CL.step(30);
+      log.push(['au clavier : la flèche fait marcher (' + marche.toFixed(1) + ' m/s), Maj courir (' + course.toFixed(1) + ' m/s)', Math.abs(marche - 1.6) < 0.15 && course > 5]);
+      log.push(['17 h 40 : la lumière dorée', nuit() === 0]);
+      J.minutes = 19 * 60 + 15; CL.step(5);
+      log.push(['19 h 15 : le soir tombe (' + nuit().toFixed(2) + ')', nuit() > 0.3 && nuit() < 0.9]);
+      J.minutes = 21 * 60; CL.step(5);
+      const f = CL.scene.fog.color;
+      log.push(['21 h : la nuit, la brume bleu nuit', nuit() === 1 && f.b > f.r && f.r < 0.1]);
+      CL.teleporter(-100, -56.8, Math.PI); CL.step(20);
+      log.push(['devant la maison : « Rentrer dormir »', [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Rentrer dormir'))]);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['on ressort au matin, 7 h, le lendemain', J.heureTxt === '07:00' && J.minutes >= 1440 + 420 && !J.gestes.actif]);
+      J.minutes += 40; CL.step(5);
+      log.push(['7 h 40 : le jour est revenu', nuit() === 0]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
 }
 
 if (scenario === 'conduite') {

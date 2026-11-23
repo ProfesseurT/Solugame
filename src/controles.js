@@ -165,6 +165,7 @@ export class Controles {
     this.kcam = borne(c.cx + p.cx, -1, 1); this.kcamY = borne(c.cy + p.cy, -1, 1);
     this.courir = c.courir || p.courir;
     this.fm = c.fm || p.fm;
+    this.fleches = c.x !== 0 || c.y !== 0; // les flèches (ou ZQSD) : on marche ; Maj : on court (main.js)
   }
 
   lancerManette() {

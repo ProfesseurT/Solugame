@@ -1,5 +1,5 @@
 // Sons composés en code (Web Audio), sans aucun fichier : moteur du tracteur en plusieurs couches,
-// roulement selon le sol, pas, ambiance du village (vent, oiseaux, cloche de l'église, rumeur de la place),
+// roulement selon le sol, pas, ambiance du village (vent, oiseaux le jour et grillons la nuit, rumeur de la place),
 // Radio Sarment (deux morceaux originaux et un indicatif), sons du téléphone, bruitages.
 // Léger pour un téléphone : peu de nœuds permanents (le moteur et la rumeur ne sont branchés que
 // quand ils servent), notes groupées dans un seul filtre, et tout le son est mis en pause quand il est
@@ -194,8 +194,8 @@ function creerMoteur() {
 
 /* ---------------------------------------------------------------- ambiance */
 let A = null;
-let tAmb = 0, tOiseau = 2, heurePrec = null, demiPrec = null;
-const EGLISE = { x: 118, z: -46 }, PLACE = { x: 95, z: -46 };
+let tAmb = 0, tOiseau = 2;
+const PLACE = { x: 95, z: -46 };
 function creerAmbiance() {
   // vent : souffle grave dont le timbre et le volume ondulent lentement
   const s = boucle(bruitBuf, 0.7), vf = filtre('lowpass', 420), vg = gain(0.018);
@@ -237,15 +237,10 @@ function oiseau(vol) {
     }
   }
 }
-// cloche de l'église : partiels inharmoniques qui s'éteignent chacun à leur rythme
-const PARTIELS = [[0.5, 0.45, 5], [1, 0.6, 3.6], [1.19, 0.4, 2.8], [1.5, 0.22, 2.2], [2, 0.5, 2], [2.74, 0.16, 1.1]];
-function cloche(coups, vol) {
-  const t0 = ctx.currentTime + 0.1, base = 349;
-  for (let c = 0; c < coups; c++) {
-    const t = t0 + c * 2.1;
-    for (const [r, a, d] of PARTIELS) note(base * r, t, d, 'sine', vol * a, amb, 0, true);
-    bruit(t, 0.05, 2500, vol * 0.25, 'bandpass', amb);
-  }
+// la nuit, les grillons : trois stridulations aiguës, rapides
+function grillon(vol) {
+  const t = ctx.currentTime + Math.random() * 0.3, f = hasard(4100, 4600);
+  for (let i = 0; i < 3; i++) for (let k = 0; k < 4; k++) note(f, t + i * 0.18 + k * 0.022, 0.016, 'sine', vol, amb);
 }
 
 /* ---------------------------------------------------------------- pas */
@@ -378,24 +373,18 @@ export const son = {
     if (tAmb > 0) return;
     tAmb = 0.25;
     const t = ctx.currentTime;
-    // la cloche sonne les heures (et un coup à la demie)
-    const heure = Math.floor(minutes / 60), demi = Math.floor(minutes / 30);
-    const de = Math.hypot(x - EGLISE.x, z - EGLISE.z), vc = 0.2 * Math.pow(Math.min(1, 30 / Math.max(30, de)), 0.8);
-    if (heurePrec !== null && heure !== heurePrec && actif) cloche(heure % 12 || 12, vc);
-    else if (demiPrec !== null && demi !== demiPrec && demi % 2 === 1 && actif) cloche(1, vc * 0.8);
-    heurePrec = heure; demiPrec = demi;
     // rumeur de la place, branchée seulement quand on est assez près
     const dp = Math.hypot(x - PLACE.x, z - PLACE.z), kr = borne(1 - (dp - 6) / 28, 0, 1);
     A.brancherRumeur(kr > 0);
     A.rg.gain.setTargetAtTime(0.035 * kr * kr, t, 0.6);
     // vent : un peu plus présent dans les vignes, loin du bourg
     A.vg.gain.setTargetAtTime(dp > 90 ? 0.026 : 0.016, t, 2);
-    // oiseaux, surtout à pied, et moins près de la route
+    // oiseaux, surtout à pied, et moins près de la route ; la nuit (de 19 h 30 à 6 h 40), les grillons
     tOiseau -= 0.25;
     if (tOiseau <= 0) {
       tOiseau = hasard(2.5, 8);
-      const route = Math.abs(z - 10) < 20 ? 0.5 : 1;
-      if (actif && (aPied || Math.random() < 0.35)) oiseau(0.022 * route * (aPied ? 1 : 0.7));
+      const route = Math.abs(z - 10) < 20 ? 0.5 : 1, m = ((minutes % 1440) + 1440) % 1440, nuit = m > 1170 || m < 400;
+      if (actif && (aPied || Math.random() < 0.35)) { if (nuit) grillon(0.012 * route); else oiseau(0.022 * route * (aPied ? 1 : 0.7)); }
     }
   },
   jouer(nom) {

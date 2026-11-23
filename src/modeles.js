@@ -37,7 +37,8 @@ const TYPES = new Map(Object.entries({
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
 // au-delà de laquelle le détail procédural passe en version allégée (réglée par la qualité).
-export const UNI = { uTemps: { value: 0 }, uLoin: { value: 140 } };
+// uNuit : 0 en plein jour (la lumière dorée), 1 en pleine nuit (main.js, d'après l'heure ; monde.js : nuit)
+export const UNI = { uTemps: { value: 0 }, uLoin: { value: 140 }, uNuit: { value: 0 } };
 
 // Bruit tuilable 128 x 128 : R grain fin, G grandes taches, B mouchetis, A plaques
 function bruitTuilable() {
@@ -118,9 +119,11 @@ const V2 = v => { const l = Math.hypot(v.x, v.z); return `vec2(${(v.x / l).toFix
 // k : cosinus entre la direction regardée et le soleil. Puissances par multiplications (moins chères que pow).
 export const GLSL_BRUME = `
 const vec3 SOLEIL_DIR = ${V3(SOLEIL)};
+// le jour, d'après la couleur de la brume (claire le jour, bleu nuit la nuit) : la lueur du soleil s'éteint avec lui
+float cl_jour(vec3 base) { return smoothstep(0.12, 0.55, max(base.r, max(base.g, base.b))); }
 vec3 cl_brumeLarge(vec3 base, float k) {
   float s = max(k, 0.0), s2 = s * s, s4 = s2 * s2;
-  return base * mix(vec3(0.86, 0.84, 0.98), vec3(1.0), smoothstep(-0.7, 0.2, k)) + vec3(1.0, 0.62, 0.3) * (s4 * s * 0.42);
+  return base * mix(vec3(0.86, 0.84, 0.98), vec3(1.0), smoothstep(-0.7, 0.2, k)) + vec3(1.0, 0.62, 0.3) * (s4 * s * 0.42 * cl_jour(base));
 }
 float cl_halo(float k) {
   float s = max(k, 0.0), s2 = s * s, s4 = s2 * s2, s8 = s4 * s4, s16 = s8 * s8;
@@ -128,7 +131,7 @@ float cl_halo(float k) {
 }
 vec3 cl_brume(vec3 base, vec3 d) {
   float k = dot(d, SOLEIL_DIR);
-  return cl_brumeLarge(base, k) + vec3(1.0, 0.62, 0.3) * cl_halo(k);
+  return cl_brumeLarge(base, k) + vec3(1.0, 0.62, 0.3) * cl_halo(k) * cl_jour(base);
 }`;
 {
   const C = THREE.ShaderChunk;
@@ -191,6 +194,7 @@ vec3 cl_brume(vec3 base, vec3 d) {
 const GLSL = `
 uniform sampler2D tBruit;
 uniform sampler2D tCailloux;
+uniform float uNuit;
 uniform float uTemps;
 uniform float uLoin;
 varying vec3 vPosM;
@@ -309,10 +313,10 @@ const GLSL_EMISSIF = `
     vec3 nW = normaleMonde(), vd = normalize(cameraPosition - vPosM);
     if (dot(nW, vd) < 0.0) nW = -nW;
     vec3 r = reflect(-vd, nW);
-    vec3 ciel = mix(vec3(1.0, 0.7, 0.48), vec3(0.3, 0.4, 0.7), clamp(r.y * 2.5, 0.0, 1.0));
+    vec3 ciel = mix(vec3(1.0, 0.7, 0.48), vec3(0.3, 0.4, 0.7), clamp(r.y * 2.5, 0.0, 1.0)) * mix(1.0, 0.12, uNuit); // la nuit, le ciel reflété s'assombrit
     float fr = pow(1.0 - max(dot(nW, vd), 0.0), 3.0);
     totalEmissiveRadiance += ciel * (me == 15 ? 0.06 + 0.3 * fr : 0.16 + 0.55 * fr);
-    if (me == 15) totalEmissiveRadiance += vec3(1.0, 0.58, 0.26) * (0.42 + 0.1 * sin(vPosM.y * 9.0 + vPosM.x * 3.0));
+    if (me == 15) totalEmissiveRadiance += vec3(1.0, 0.58, 0.26) * (0.42 + 0.1 * sin(vPosM.y * 9.0 + vPosM.x * 3.0)) * (1.0 + 0.8 * uNuit); // fenêtres allumées
   } else if (me == 11) {
     vec2 t = vec2(uTemps * 0.05, uTemps * 0.035), p = vPosM.xz * 0.35;
     float a = texture(tBruit, p + t).g, b = texture(tBruit, p + t + vec2(0.04, 0.0)).g, c = texture(tBruit, p + t + vec2(0.0, 0.04)).g;
@@ -320,9 +324,9 @@ const GLSL_EMISSIF = `
     vec3 r = reflect(-vd, n);
     vec3 ciel = mix(vec3(0.95, 0.62, 0.45), vec3(0.3, 0.4, 0.68), clamp(r.y * 1.6, 0.0, 1.0));
     float fr = 0.1 + 0.6 * pow(1.0 - max(dot(n, vd), 0.0), 5.0);
-    totalEmissiveRadiance += ciel * fr * 0.45 + vec3(1.0, 0.8, 0.5) * pow(max(dot(r, ${V3(SOLEIL)}), 0.0), 120.0) * 1.2;
+    totalEmissiveRadiance += (ciel * fr * 0.45 + vec3(1.0, 0.8, 0.5) * pow(max(dot(r, ${V3(SOLEIL)}), 0.0), 120.0) * 1.2) * mix(1.0, 0.12, uNuit);
   } else if (me == 14) {
-    totalEmissiveRadiance += vec3(1.0, 0.82, 0.5) * 1.1;
+    totalEmissiveRadiance += vec3(1.0, 0.82, 0.5) * (1.1 + 1.2 * uNuit); // réverbères : plus vifs la nuit
   } else if (me == 16) {
     // carrosserie : le vernis reflète le ciel (ou le sol, vers le bas), surtout en incidence rasante, et un petit éclat du soleil
     vec3 nW = normaleMonde(), vd = normalize(cameraPosition - vPosM);
@@ -331,7 +335,7 @@ const GLSL_EMISSIF = `
                           : mix(vec3(0.55, 0.45, 0.34), vec3(0.16, 0.15, 0.13), clamp(-r.y * 5.0, 0.0, 1.0));
     float c = 1.0 - max(dot(nW, vd), 0.0), c2 = c * c;
     float s = max(dot(r, ${V3(SOLEIL)}), 0.0), s2 = s * s, s4 = s2 * s2, s8 = s4 * s4, s16 = s8 * s8;
-    totalEmissiveRadiance += ciel * (0.035 + 0.42 * c2 * c2 * c) + vec3(1.0, 0.85, 0.6) * (s16 * s16 * 0.55);
+    totalEmissiveRadiance += (ciel * (0.035 + 0.42 * c2 * c2 * c) + vec3(1.0, 0.85, 0.6) * (s16 * s16 * 0.55)) * mix(1.0, 0.15, uNuit);
   }
 }`;
 // Vitres qu'on traverse du regard (matière MAT_VITRE) : plus opaques en incidence rasante, comme une vraie vitre
@@ -358,7 +362,7 @@ vec3 cl_vent(vec3 w, float t) {
 export function detailler(m, typeFixe, o = {}) {
   const attr = typeFixe === undefined, vent = o.vent, vs0 = !vent && attr && o.ventSommets;
   m.onBeforeCompile = sh => {
-    sh.uniforms.tBruit = { value: BRUIT }; sh.uniforms.tCailloux = { value: CAILLOUX };
+    sh.uniforms.tBruit = { value: BRUIT }; sh.uniforms.tCailloux = { value: CAILLOUX }; sh.uniforms.uNuit = UNI.uNuit;
     sh.uniforms.uTemps = UNI.uTemps; sh.uniforms.uLoin = UNI.uLoin;
     if (vent) sh.uniforms.uVent = { value: new THREE.Vector4(...vent) };
     const poids = vent ? 'float pv = clamp((position.y - uVent.y) / (uVent.z - uVent.y), 0.0, 1.0); pv *= pv * uVent.x; float tv = uTemps * uVent.w;' + (attr ? ' pv *= step(7.5, aMat) * step(aMat, 8.5);' : '')

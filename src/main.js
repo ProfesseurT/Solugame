@@ -14,7 +14,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { son } from './audio.js';
-import { hasard, $ } from './outils.js';
+import { hasard, lisse, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES } from './textes.js';
@@ -337,11 +337,11 @@ const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // mon
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
-const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture');
+const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
-const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre, etqPrendre]; // celles qui se touchent (toucher)
+const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -444,6 +444,7 @@ function agir() {
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (verres.servable) { verres.servir(verres.servable); return; }
+  if (presMaison()) { dormir(); return; }
   const v = vehiculeProche();
   if (v) { monter(v); return; }
   const vc = voitureProche();
@@ -557,6 +558,7 @@ function conduire(dt, dtm) {
 }
 
 // À pied : le manche (doigt, souris) et le clavier, dans le repère de la caméra ; immobile pendant qu'on sert un verre
+const MARCHE = 1.6; // m/s, au clavier sans Maj
 function marcher(dtm) {
   let ix = ctrl.jx + ctrl.kx, iy = ctrl.jy + ctrl.ky;
   if (tel.ouvert || pc.ouvert || !$('fin').hidden) ix = iy = 0;
@@ -564,8 +566,9 @@ function marcher(dtm) {
   const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
   let wx = fx * -iy - fz * ix, wz = fz * -iy + fx * ix;
   const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
+  // au clavier, les flèches font marcher et Maj courir ; au doigt et à la manette, on marche ou l'on court selon l'appui
   if (joueur.service) joueur.update(dtm, 0, 0, 0, false, col, temps);
-  else joueur.update(dtm, wx, wz, force, ctrl.courir, col, temps);
+  else joueur.update(dtm, wx, wz, force, ctrl.courir, col, temps, ctrl.fleches && !ctrl.courir ? MARCHE : undefined);
   horsDesVehicules(joueur.pos, joueur.r);
   horsDesVoitures();
   // un pas chaque fois qu'un pied se pose (la foulée, anim.js, fait deux pas par cycle)
@@ -626,7 +629,8 @@ function bourg(dtm, ego) {
   }
 }
 
-// l'horloge : une minute de jeu toutes les 2 secondes ; le texte n'est refait qu'une fois par minute de jeu
+// l'horloge : une minute de jeu toutes les 2 secondes ; le texte n'est refait qu'une fois par minute de jeu ; la nuit
+// tombe avec l'heure
 function horloge(dtm) {
   jeu.minutes += dtm / 2;
   const m = Math.floor(jeu.minutes);
@@ -634,6 +638,41 @@ function horloge(dtm) {
   minuteAff = m;
   jeu.heureTxt = String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
   hud.heure(jeu.heureTxt);
+  majNuit();
+}
+// La nuit d'après l'heure : 0 en plein jour (la lumière dorée), 1 en pleine nuit ; le soir tombe de 18 h 40 à 19 h 50, le
+// jour se lève de 6 h 20 à 7 h 30. Refaite une fois par minute de jeu.
+function nuitA(minutes) {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  if (m >= 450 && m <= 1120) return 0;
+  if (m > 1120 && m < 1190) return lisse((m - 1120) / 70);
+  if (m >= 380 && m < 450) return 1 - lisse((m - 380) / 70);
+  return 1;
+}
+function majNuit() { const n = nuitA(jeu.minutes); if (n !== UNI.uNuit.value) monde.nuit(n); }
+
+/* ------------------------------------------------------------------ rentrer dormir
+   Devant la porte de la maison du domaine, « Rentrer dormir » : on entre, fondu au noir, et l'on ressort au matin, 7 h, le
+   lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
+const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
+function dormir() {
+  const P = L.maison;
+  ctrl.relacher();
+  gestes.lancer([
+    ...gestes.allerA(() => P, () => Math.PI),
+    { action: () => { $('fondu').classList.add('noir'); son.jouer('portiere'); } },
+    { duree: 1.1, maj: (dt, t) => gestes.immobile(dt, t) },
+    {
+      action: () => {
+        const jour = Math.floor(jeu.minutes / 1440), h = jeu.minutes - jour * 1440;
+        jeu.minutes = (h >= 420 ? jour + 1 : jour) * 1440 + 420;
+        horloge(0);
+        joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
+      },
+    },
+    { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
+    { action: () => { $('fondu').classList.remove('noir'); son.jouer('claque'); hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3); } },
+  ]);
 }
 
 // La balise de la mission et son étiquette (nom, distance) ; les étiquettes d'action : le bureau du chai d'abord (les
@@ -653,7 +692,10 @@ function reperes(dt, ego, cible) {
   const pcPres = bureau.maj();
   verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
   const servable = verres.servable;
-  const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
+  // devant la porte de la maison du domaine : rentrer dormir
+  const dodo = !pcPres && !servable && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
+  hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
+  const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? { van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6 : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)

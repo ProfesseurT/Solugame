@@ -3,7 +3,7 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
 import { hasard, lisse, assombrir, bruit, hache } from './outils.js';
 
 export { SOLEIL };
@@ -168,31 +168,40 @@ export function construireMonde(scene, col, opts) {
   {
     // le dégradé se calcule aux sommets ; seuls les pixels proches du soleil font le halo serré et le disque
     const dome = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.ShaderMaterial({
-      uniforms: { uBrume: { value: brumeC }, uMilieu: { value: new THREE.Color('#e38a78') }, uZenith: { value: new THREE.Color('#2b4888') } },
+      uniforms: { uBrume: { value: brumeC }, uMilieu: { value: new THREE.Color('#e38a78') }, uZenith: { value: new THREE.Color('#2b4888') }, uNuit: { value: 0 } },
       vertexShader: `varying vec3 vDir;
 varying vec3 vCiel;
 uniform vec3 uBrume, uMilieu, uZenith;
+uniform float uNuit;
 ${GLSL_BRUME}
 void main() {
   vDir = position;
   vec3 d = normalize(position);
   float y = max(d.y, 0.0), k = dot(d, SOLEIL_DIR), s = max(k, 0.0), s2 = s * s, s4 = s2 * s2, s8 = s4 * s4;
   vec3 c = mix(cl_brumeLarge(uBrume, k), uMilieu, smoothstep(0.0, 0.22, y));
-  vCiel = mix(c, uZenith, smoothstep(0.12, 0.75, y)) + vec3(1.0, 0.68, 0.38) * (s8 * s2 * 0.3) * smoothstep(-0.04, 0.08, d.y);
+  vCiel = mix(c, uZenith, smoothstep(0.12, 0.75, y)) + vec3(1.0, 0.68, 0.38) * (s8 * s2 * 0.3) * smoothstep(-0.04, 0.08, d.y) * (1.0 - uNuit);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`,
       fragmentShader: `varying vec3 vDir;
 varying vec3 vCiel;
+uniform float uNuit;
 ${GLSL_BRUME}
 void main() {
   vec3 c = vCiel;
   vec3 d = normalize(vDir);
-  float k = dot(d, SOLEIL_DIR);
-  if (k > 0.72) {
+  float k = dot(d, SOLEIL_DIR), jour = 1.0 - uNuit;
+  if (k > 0.72 && jour > 0.0) {
+    // le soleil couché : halo et disque s'éteignent
     float y = max(d.y, 0.0);
-    c += vec3(1.0, 0.62, 0.3) * cl_halo(k) * (1.0 - smoothstep(0.0, 0.22, y)) * (1.0 - smoothstep(0.12, 0.75, y));
-    c += vec3(1.0, 0.68, 0.38) * pow(k, 120.0) * 0.9 * smoothstep(-0.04, 0.08, d.y);
-    c = mix(c, vec3(5.0, 4.0, 2.8), smoothstep(0.99885, 0.9992, k));
+    c += vec3(1.0, 0.62, 0.3) * cl_halo(k) * (1.0 - smoothstep(0.0, 0.22, y)) * (1.0 - smoothstep(0.12, 0.75, y)) * jour;
+    c += vec3(1.0, 0.68, 0.38) * pow(k, 120.0) * 0.9 * smoothstep(-0.04, 0.08, d.y) * jour;
+    c = mix(c, vec3(5.0, 4.0, 2.8), smoothstep(0.99885, 0.9992, k) * jour);
+  }
+  if (uNuit > 0.0 && d.y > 0.02) {
+    // les étoiles, quand la nuit tombe : une sur quelques centaines de cases du ciel, d'éclat inégal
+    vec3 q = floor(d * 260.0);
+    float h = fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    c += vec3(0.86, 0.9, 1.0) * step(0.9968, h) * (0.5 + 0.5 * fract(h * 131.0)) * smoothstep(0.02, 0.3, d.y) * uNuit * uNuit;
   }
   gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
@@ -200,7 +209,7 @@ void main() {
 }`,
       side: THREE.BackSide, depthWrite: false, fog: false,
     }));
-    dome.renderOrder = ORDRE.ciel; dome.frustumCulled = false; dome.name = 'ciel'; ciel.add(dome);
+    dome.renderOrder = ORDRE.ciel; dome.frustumCulled = false; dome.name = 'ciel'; ciel.add(dome); ciel.userData.dome = dome;
     // nuages roses, éclairés par en dessous (dégradé du dessous doré vers le dessus mauve)
     const nu = [];
     for (let i = 0; i < 12; i++) {
@@ -218,7 +227,7 @@ void main() {
       cc.setXYZ(i, c.r, c.g, c.b);
     }
     const nuages = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, depthWrite: false }));
-    nuages.renderOrder = ORDRE.nuages; nuages.frustumCulled = false; nuages.name = 'nuages'; ciel.add(nuages);
+    nuages.renderOrder = ORDRE.nuages; nuages.frustumCulled = false; nuages.name = 'nuages'; ciel.add(nuages); ciel.userData.nuages = nuages;
   }
   scene.add(ciel);
 
@@ -233,6 +242,22 @@ void main() {
   sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 220;
   soleilL.shadow.bias = -0.0006; soleilL.shadow.normalBias = 0.04;
   scene.add(soleilL, soleilL.target);
+
+  /* La nuit qui tombe : n de 0 (la lumière dorée du jeu) à 1 (pleine nuit), d'après l'heure (main.js). Le soleil bas reste
+     où il est (sa direction est dans les shaders) mais s'éteint ; le ciel, la brume et les nuages passent au bleu nuit,
+     les étoiles paraissent ; la lumière du soleil devient un clair de lune, pâle et bleuté (qui garde des ombres douces),
+     et l'ambiance reste assez claire pour jouer ; fenêtres et réverbères brillent plus fort (modeles.js, uNuit). */
+  const JOUR = { brume: new THREE.Color(BRUME), milieu: new THREE.Color('#e38a78'), zenith: new THREE.Color('#2b4888'), ciel: new THREE.Color('#d3cfe6'), sol: new THREE.Color('#9a6a45'), soleil: new THREE.Color('#ffb46e'), nuages: new THREE.Color('#ffffff') };
+  const NUIT = { brume: new THREE.Color('#2b3452'), milieu: new THREE.Color('#2a3354'), zenith: new THREE.Color('#0a1130'), ciel: new THREE.Color('#a3aed6'), sol: new THREE.Color('#45404c'), soleil: new THREE.Color('#9fb3ea'), nuages: new THREE.Color('#3a4262') };
+  function nuit(n) {
+    UNI.uNuit.value = n;
+    const D = ciel.userData.dome.material.uniforms, m = (k, c) => c.copy(JOUR[k]).lerp(NUIT[k], n);
+    D.uNuit.value = n; m('brume', D.uBrume.value); m('milieu', D.uMilieu.value); m('zenith', D.uZenith.value);
+    if (scene.fog) scene.fog.color.copy(D.uBrume.value);
+    m('nuages', ciel.userData.nuages.material.color);
+    m('ciel', hemi.color); m('sol', hemi.groundColor); hemi.intensity = 1.75 - 0.6 * n;
+    m('soleil', soleilL.color); soleilL.intensity = 3.15 - 2.45 * lisse(n); // le soleil, puis la lune
+  }
 
   /* ------------------------------------------------------------ terrain */
   {
@@ -531,7 +556,7 @@ void main() {
     for (const s of [-1, 1]) L.push(B(0.06, 1.45, 0.07, C, px + s * (pw / 2 - 0.03), 1.58, z0 + 0.22));
     L.push(B(0.04, 0.22, 0.05, '#c9a55a', px - pw / 2 + 0.14, 1.12, z0 + 0.27));
     V.push(B(pw, 1.85, 0.01, VERRE, px, 1.78, z0 + 0.21));
-    o.porte = facade(o, px, 0.35); // devant le seuil (les clients y rentrent : clients.js)
+    o.entree = facade(o, px, 0.35); // devant le seuil (les clients y rentrent : clients.js)
     // lanternes de part et d'autre du bandeau
     for (const x of [X0, X1]) L.push(B(0.05, 0.05, 0.28, '#2b2b30', x, 3.72, z0 + 0.3), B(0.18, 0.26, 0.18, '#2b2b30', x, 3.6, z0 + 0.46), B(0.13, 0.18, 0.13, LUEUR, x, 3.58, z0 + 0.46));
     // l'intérieur peint, éclairé : derrière la vitrine et derrière la porte
@@ -954,7 +979,7 @@ void main() {
     rnd = hasard(4242);
     // l'auberge, façade vers la placette (vitrine, store bordeaux, enseigne) ; terrasse
     const au = maison({ x: -44, z: 131, w: 14, d: 8, h: 5.8, rot: -Math.PI / 2, volets: '#7a8f6a', vitrine: '#5a6b2f', boutique: 'resto', banne: '#7d2333', porteC: '#4a3324' });
-    portes.auberge = au.porte;
+    portes.auberge = au.entree;
     enseigne('AUBERGE DU MOULIN', facade(au, -1.96, 0.37), 3.05, 5.2, 0.54, '#5a6b2f', '#f1e2c4');
     for (const z of [126.5, 129.5]) {
       bati.push(C(0.42, 0.42, 0.04, 10, '#efe7d6', -50.6, 0.74, z), C(0.04, 0.04, 0.72, 5, '#2b2b30', -50.6, 0.36, z), C(0.2, 0.2, 0.02, 8, '#2b2b30', -50.6, 0.01, z));
@@ -1052,8 +1077,8 @@ void main() {
   for (const [x, w, d, h, t] of nord) {
     const resto = t === 'resto';
     const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t === 'boul' ? '#6b2a2a' : t ? '#2f4a6b' : null, boutique: resto ? 'resto' : t === 'boul' ? 'boulangerie' : t, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
-    if (t === 'epicerie') portes.epicerie = o.porte;
-    if (resto) portes.treille = o.porte;
+    if (t === 'epicerie') portes.epicerie = o.entree;
+    if (resto) portes.treille = o.entree;
     if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.37), 3.05, 4.6, 0.54, '#efe0b4', '#6b3d1f');
     if (resto) enseigne('RESTAURANT LA TREILLE', facade(o, -w * 0.14, 0.37), 3.05, 5.6, 0.54, '#2f5d50', '#f3e7c9');
     if (t === 'epicerie') {
@@ -1094,12 +1119,12 @@ void main() {
   // la place : cave, bar, mairie, église
   const cave = maison({ x: 68, z: -46, w: 9, d: 8, h: 6.5, rot: Math.PI / 2, volets: '#8e2a3b', vitrine: '#6e1f2e', boutique: 'cave', banne: '#8e2a3b', porteC: '#6e1f2e' });
   enseigne('CAVE DU PRESSOIR', facade(cave, -9 * 0.14, 0.37), 3.05, 4.4, 0.54, '#7a2233', '#f5e6c8');
-  portes.cave = cave.porte;
+  portes.cave = cave.entree;
   maison({ x: 68, z: -36, w: 8, d: 8, h: 7, rot: Math.PI / 2, volets: pick(VOLETS) });
   maison({ x: 68, z: -56, w: 8, d: 8, h: 6.2, rot: Math.PI / 2, volets: pick(VOLETS) });
   const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', boutique: 'bar', banne: '#1f3b4d' });
   enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.37), 3.05, 4.4, 0.54, '#1f3b4d', '#f2d488');
-  portes.bar = bar.porte;
+  portes.bar = bar.entree;
   maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
   const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
   enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
@@ -1474,6 +1499,7 @@ void main() {
       [[-55, 10], [-55, 124], [-53.2, 134.5]],                             // le chemin des Grands Champs, jusqu'à l'auberge
     ],
     route0: [-82.8, -58.4], // où l'on part en tournée : la sortie du chai (main.js, cheminSortie)
+    maison: { x: -100, z: -58.3 }, // devant la porte de la maison du domaine : on y rentre dormir (main.js)
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
@@ -1517,5 +1543,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin };
 }
