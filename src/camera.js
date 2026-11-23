@@ -2,6 +2,7 @@
 // la halle du chai), tourne autour du personnage sur l'accueil.
 import * as THREE from 'three';
 import { angle, borne, amortir as lisser } from './outils.js';
+import { sol } from './relief.js';
 
 /* ---------------------------------------------------------------- caméra qui suit
    Suivi souple, avec un peu d'avance dans le sens de la marche ; plus loin, plus haut et plus large
@@ -13,7 +14,8 @@ export class Camera {
   constructor(cam) {
     this.c = cam; this.yaw = 0; this.pos = new THREE.Vector3(); this.regard = new THREE.Vector3();
     this.pret = false; this.secousse = 0; this.dist = 6.2; this.haut = 2.9;
-    this.cx = 0; this.cz = 0;       // point suivi, lissé
+    this.cx = 0; this.cz = 0; this.cy = 0; // point suivi, lissé (cy : la hauteur du sol, sur la colline du château)
+    this.plancher = 0;              // au-dessus du relief derrière soi (lissé)
     this.ax = 0; this.az = 0;       // avance dans le sens de la marche, lissée
     this.dCol = 99;                 // distance laissée libre par les bâtiments, lissée
     this.tMain = 99;                // temps depuis la dernière rotation à la main
@@ -29,7 +31,7 @@ export class Camera {
     this.tangage = borne(this.tangage + dtang, -0.32, 0.7);
     this.tMain = 0;
   }
-  suivre(dt, x, z, h, v, vehicule, col, engin = null) {
+  suivre(dt, x, z, h, v, vehicule, col, engin = null, y = 0) {
     /* -- à la main */
     const ct = this.ctrl;
     if (ct) {
@@ -70,7 +72,7 @@ export class Camera {
     const ka = pret ? lisser(dt, 2.4) : 1;
     this.ax += (fx * la - this.ax) * ka; this.az += (fz * la - this.az) * ka;
     const kc = pret ? lisser(dt, 11) : 1;
-    this.cx += (x + this.ax - this.cx) * kc; this.cz += (z + this.az - this.cz) * kc;
+    this.cx += (x + this.ax - this.cx) * kc; this.cz += (z + this.az - this.cz) * kc; this.cy += (y - this.cy) * (pret ? lisser(dt, 6) : 1);
     let px = this.cx, pz = this.cz;
     // lancé contre un bâtiment, l'avance peut faire entrer le point suivi dans le mur : on la raccourcit (sinon la caméra
     // bute dès le départ, se colle au point et monte dans le toit)
@@ -92,8 +94,11 @@ export class Camera {
     const d = Math.min(this.dist, this.dCol);
     const hh = Math.max(1.1, this.haut + this.tangage * this.dist) + (this.dist - d) * 0.45;
 
-    this.pos.set(px - yx * d, hh, pz - yz * d);
-    this.regard.set(px + yx * 3.2, (vehicule ? 1.8 : 1.6) + Math.max(0, -this.tangage) * 4, pz + yz * 3.2);
+    // en descente, le relief derrière soi monte : la caméra reste au-dessus (en douceur)
+    const camX = px - yx * d, camZ = pz - yz * d, sous = sol(camX, camZ) + 1.3 - this.cy;
+    this.plancher += (sous - this.plancher) * (pret ? lisser(dt, sous > this.plancher ? 9 : 3) : 1);
+    this.pos.set(camX, this.cy + Math.max(hh, this.plancher), camZ);
+    this.regard.set(px + yx * 3.2, this.cy + (vehicule ? 1.8 : 1.6) + Math.max(0, -this.tangage) * 4, pz + yz * 3.2);
     this.pret = true;
 
     /* -- secousses : choc (main règle secousse), cahots du tracteur, ronron du moteur ; bruit doux, pas de hasard */
@@ -117,7 +122,7 @@ export class Camera {
   // tournée à la main, elle reste où on la met un moment
   cadrer(dt, c, col) {
     if (this.tMain > 1.5) this.yaw = angle(this.yaw + angle(c.h - this.yaw) * lisser(dt, 1.6));
-    this.suivre(dt, c.x, c.z, c.h, 0, false, col);
+    this.suivre(dt, c.x, c.z, c.h, 0, false, col, null, sol(c.x, c.z));
   }
   // Dans le bureau du chai (B : lieux.bureau) : la caméra posée dans un coin suit le personnage (x, z) du regard ; au
   // portable (proche), elle passe derrière son épaule

@@ -692,7 +692,7 @@ export function fusion(liste) {
   for (const x of liste) x.dispose();
   return g;
 }
-// Place une liste de géométries locales (façade vers +z) à (x, z) avec une rotation
-export function poser(liste, x, z, rot, dest) {
-  for (const g of liste) { if (rot) tournerY(g, rot); deplacer(g, x, 0, z); dest.push(g); }
+// Place une liste de géométries locales (façade vers +z) à (x, z) avec une rotation (et à la hauteur y)
+export function poser(liste, x, z, rot, dest, y = 0) {
+  for (const g of liste) { if (rot) tournerY(g, rot); deplacer(g, x, y, z); dest.push(g); }
 }

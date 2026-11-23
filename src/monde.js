@@ -4,22 +4,18 @@
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
-import { hasard, lisse, assombrir, bruit, hache } from './outils.js';
+import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
+import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, reserve } from './relief.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
 export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
+export const CARTE0 = 380; // le fond de la mini-carte va de -380 à 200 m (x et z) : la zone de jeu, la route du château
 const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
 const FEUILLES_VIGNE = ['#b8642c', '#c9a23a', '#a6823a', '#8a8f3a'], VIGNE_VIERGE = ['#b0402c', '#c2562e', '#8e2a3b', '#d0702f', '#a8452f'];
 
-// Relief : plat dans la zone de jeu, collines autour, vallée pour la départementale
-export function hauteur(x, z) {
-  const r = Math.hypot(x, z);
-  if (r < 192) return 0;
-  const k = lisse((r - 192) / 150);
-  const h = k * (14 + 34 * bruit(x * 0.007 + 3, z * 0.007 - 2) + 7 * bruit(x * 0.03, z * 0.03));
-  return h * lisse((Math.abs(z - 10) - 9) / 50);
-}
+// Relief : relief.js (plat dans la zone de jeu, collines autour, la colline du château et sa route)
+export const hauteur = sol;
 
 // Ordre de dessin des objets opaques : du plus proche au plus couvrant, pour que le test de
 // profondeur écarte tôt les pixels cachés (sol dessiné après ce qui le recouvre, ciel en dernier).
@@ -264,10 +260,12 @@ void main() {
     let g = new THREE.PlaneGeometry(1700, 1700, 110, 110);
     g.rotateX(-Math.PI / 2);
     const pa = g.attributes.position.array;
-    for (let i = 0; i < pa.length; i += 3) pa[i + 1] = hauteur(pa[i], pa[i + 2]) - 0.02;
-    // les coins du carré ne sont jamais à portée de vue (zone de jeu de 186 m, vue limitée à 620 m) : retirés
+    for (let i = 0; i < pa.length; i += 3) pa[i + 1] = forme(pa[i], pa[i + 2]) - 0.02;
+    // les coins du carré ne sont jamais à portée de vue (zone de jeu de 186 m, vue limitée à 620 m) : retirés ; la zone
+    // retouchée autour du château a sa grille fine (plus bas)
     const ix = g.index.array, garde = [], proche = j => pa[j * 3] * pa[j * 3] + pa[j * 3 + 2] * pa[j * 3 + 2] < 830 * 830;
-    for (let i = 0; i < ix.length; i += 3) if (proche(ix[i]) || proche(ix[i + 1]) || proche(ix[i + 2])) garde.push(ix[i], ix[i + 1], ix[i + 2]);
+    const fine = (a, b, c) => { const x = (pa[a * 3] + pa[b * 3] + pa[c * 3]) / 3, z = (pa[a * 3 + 2] + pa[b * 3 + 2] + pa[c * 3 + 2]) / 3; return x > ZONE.x0 && x < ZONE.x1 && z > ZONE.z0 && z < ZONE.z1; };
+    for (let i = 0; i < ix.length; i += 3) if ((proche(ix[i]) || proche(ix[i + 1]) || proche(ix[i + 2])) && !fine(ix[i], ix[i + 1], ix[i + 2])) garde.push(ix[i], ix[i + 1], ix[i + 2]);
     // Découpé en morceaux : un disque au centre, puis deux couronnes de dix secteurs. Ce qui est derrière la caméra ou
     // au-delà de sa portée n'est plus dessiné (les deux tiers des triangles du terrain, en moyenne). Les triangles sont
     // rangés par morceau avant d'être dépliés : chaque morceau est une plage du même tampon (ni copie ni mémoire en plus).
@@ -317,6 +315,37 @@ void main() {
       sol.receiveShadow = true; sol.renderOrder = ORDRE.sol; sol.name = 'terrain';
       scene.add(sol);
       j = f;
+    }
+  }
+  // La zone retouchée autour du château (relief.js) : sa grille fine, les triangles mêmes du sol où l'on marche ; des
+  // prés le long de la route et autour du château, des champs ailleurs (comme le grand terrain). En blocs de 6 x 6
+  // mailles du grand terrain, élagués hors champ.
+  {
+    const Z = ZONE, L = Z.nx + 1, BLOC = 6 * FIN, c = new THREE.Color();
+    const herbes = ['#8ea04f', '#97a855', '#86994a', '#9aa95a'].map(h => new THREE.Color(h));
+    const champs = ['#c9b46a', '#93a84e', '#d8a83c', '#b86b32', '#7d9146', '#8a6a48', '#56713d', '#a9a24f'].map(h => new THREE.Color(h));
+    for (let b0 = 0; b0 < Z.nz; b0 += BLOC) for (let a0 = 0; a0 < Z.nx; a0 += BLOC) {
+      const a1 = Math.min(Z.nx, a0 + BLOC), b1 = Math.min(Z.nz, b0 + BLOC), n = (a1 - a0) * (b1 - b0) * 6;
+      const pos = new Float32Array(n * 3), cols = new Float32Array(n * 3), types = new Float32Array(n);
+      let k = 0;
+      const sommet = (a, b) => { pos[k * 3] = Z.x0 + a * Z.pas; pos[k * 3 + 1] = GRILLE[b * L + a] - 0.02; pos[k * 3 + 2] = Z.z0 + b * Z.pas; k++; };
+      for (let b = b0; b < b1; b++) for (let a = a0; a < a1; a++) for (let t = 0; t < 2; t++) {
+        const k0 = k;
+        if (t === 0) { sommet(a, b); sommet(a, b + 1); sommet(a + 1, b); } else { sommet(a, b + 1); sommet(a + 1, b + 1); sommet(a + 1, b); }
+        const x = (pos[k0 * 3] + pos[k0 * 3 + 3] + pos[k0 * 3 + 6]) / 3, z = (pos[k0 * 3 + 2] + pos[k0 * 3 + 5] + pos[k0 * 3 + 8]) / 3;
+        const pre = Math.hypot(x, z) < 200 || reserve(x, z, 8);
+        if (pre) c.copy(herbes[Math.floor(hache(Math.floor(x / 13), Math.floor(z / 13)) * herbes.length)]);
+        else c.copy(champs[Math.floor(hache(Math.floor(x / 55) + 7, Math.floor(z / 48) - 3) * champs.length)]);
+        for (let q = k0; q < k; q++) { cols[q * 3] = c.r; cols[q * 3 + 1] = c.g; cols[q * 3 + 2] = c.b; types[q] = pre ? T.herbe : T.champ; }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      g.setAttribute('aMat', new THREE.BufferAttribute(types, 1));
+      g.computeVertexNormals(); g.computeBoundingSphere();
+      const m = new THREE.Mesh(g, MAT);
+      m.receiveShadow = true; m.renderOrder = ORDRE.sol; m.name = 'terrain';
+      scene.add(m);
     }
   }
 
@@ -748,10 +777,38 @@ void main() {
       L.push(C(0.04, 0.04, 2.6, 5, '#ddd', 0, h - 0.5, d / 2 + 0.9, 'y'));
       L.push(B(0.05, 0.6, 0.3, '#2b4ea2', 0, h + 0.4, d / 2 + 1.0), B(0.05, 0.6, 0.3, '#f4f1ea', 0, h + 0.4, d / 2 + 1.3), B(0.05, 0.6, 0.3, '#d23a3a', 0, h + 0.4, d / 2 + 1.6));
     }
+    // une tourelle d'escalier ronde à l'angle de la façade, son toit en poivrière (le village du château)
+    if (o.tourelle) {
+      const sx = hm(9) < 0.5 ? 1 : -1, tx = sx * (w / 2 - 0.15), tz = d / 2 - 0.15, ht2 = h + 1.6;
+      L.push(C(1.3, 1.3, ht2, 12, mur, tx, ht2 / 2, tz), C(1.36, 1.36, 0.22, 12, APPUI, tx, ht2 - 0.1, tz), C(0, 1.6, 3.4, 12, ardoise, tx, ht2 + 1.7, tz));
+      L.push(C(0.04, 0.04, 0.9, 5, '#7a7f88', tx, ht2 + 3.7, tz));
+      for (const y of [2.6, 5.2]) if (y < ht2 - 0.8) L.push(B(0.42, 0.8, 0.12, '#2f3c4f', tx + sx * 0.65, y, tz + 1.12, sx * 0.5));
+    }
+    // colombages : pans de bois de l'étage (sablières, poteaux aux tableaux des fenêtres, croix de Saint-André entre elles)
+    if (o.colombages) {
+      const z = d / 2 + 0.03, y0 = 2.95, y1 = h - 0.32, BOIS = '#6b4a30';
+      L.push(B(w + 0.06, 0.22, 0.08, BOIS, 0, y0, z), B(w + 0.06, 0.2, 0.08, BOIS, 0, y1, z));
+      const xs = [-w / 2 + 0.12, w / 2 - 0.12];
+      for (let i = 0; i < nf; i++) xs.push(colX(i) - 0.62, colX(i) + 0.62);
+      xs.sort((a, b) => a - b);
+      for (const x of xs) L.push(B(0.16, y1 - y0, 0.08, BOIS, x, (y0 + y1) / 2, z));
+      for (let k = 0; k + 1 < xs.length; k++) {
+        const a = xs[k], b = xs[k + 1], lw = b - a;
+        if (lw < 0.9 || lw > 3) continue;
+        const ym = (y0 + y1) / 2, hh = y1 - y0, l = Math.hypot(lw, hh), ang = Math.atan2(hh, lw);
+        for (const s of [1, -1]) { const g = new THREE.BoxGeometry(l, 0.13, 0.07); g.rotateZ(s * ang); g.translate((a + b) / 2, ym, z + 0.005); L.push(teinter(g, BOIS)); }
+      }
+    }
     finirPlaques(L);
-    poser(L, o.x, o.z, o.rot || 0, bati);
-    if (V.length) poser(V, o.x, o.z, o.rot || 0, vitresB);
-    if (Pm.length) poser(Pm, o.x, o.z, o.rot || 0, proches);
+    poser(L, o.x, o.z, o.rot || 0, bati, o.y);
+    if (V.length) poser(V, o.x, o.z, o.rot || 0, vitresB, o.y);
+    if (Pm.length) poser(Pm, o.x, o.z, o.rot || 0, proches, o.y);
+    if (o.sansCol) {
+      // (le village du château : les maisons tournées vers lui, hors de ce qu'on peut atteindre) sur la mini-carte
+      const r0 = o.rot || 0, co = Math.cos(r0), si = Math.sin(r0);
+      plan.push({ t: 'p', pts: [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => [o.x + x * co + z * si, o.z + z * co - x * si]) });
+      return o;
+    }
     // collision : la maison, et sa devanture (36 cm devant la façade)
     const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5, av = o.vitrine ? 0.36 : 0, r0 = o.rot || 0;
     const bx = col.boiteC(o.x + Math.sin(r0) * av / 2, o.z + Math.cos(r0) * av / 2, tourne ? d + av : w, tourne ? w : d + av);
@@ -1213,20 +1270,272 @@ void main() {
   bati.push(teinter(new THREE.PlaneGeometry(2.1, 0.58).rotateY(Math.PI / 2).translate(23.98, 2.55, 4.2), '#8d9196'));
   col.boiteC(24, 4.2, 0.2, 0.2);
 
-  // château au loin, sur la colline (hors zone de jeu)
-  {
-    const cx = -240, cz = -225, y0 = hauteur(cx, cz) - 1;
-    const L = [B(30, 13, 12, '#efe6d3', 0, y0 + 6.5, 0), ...toit(30, 12, 7, ARD, 0, y0 + 13, 0, false, { mur: '#efe6d3' })];
-    for (const [x, z] of [[-15, -6], [15, -6], [-15, 6], [15, 6]]) L.push(C(3.2, 3.2, 17, 10, '#efe6d3', x, y0 + 8.5, z), C(0, 3.8, 8, 10, ARD, x, y0 + 21, z));
-    for (let i = -3; i <= 3; i++) for (const e of [0, 1]) L.push(B(1.1, 1.6, 0.1, '#2f3c4f', i * 3.6, y0 + 4 + e * 4.4, 6.04));
-    poser(L, cx, cz, 0.55, bati);
+  /* ------------------------------------------------------------ le château et sa colline (relief.js)
+     La route du château part de la départementale (x = -176) et monte en 520 m (11 % au plus) jusqu'au plateau du
+     sommet, parapets du côté du vide ; la route du tour, pavée, fait le tour du château ; les maisons du village la
+     bordent, tournées vers lui (manoirs à tourelle, pans de bois, tuffeau), un belvédère au sud-est. Le château : corps
+     de logis en tuffeau, grandes croisées, lucarnes à fronton, hautes cheminées, deux grosses tours rondes au sud
+     (mâchicoulis, toits en poivrière), deux ailes et leur cour d'honneur au nord, fermée par un châtelet d'entrée ;
+     jardins à la française, mur de clôture. Son propre tirage au sort (le reste du monde ne bouge pas). */
+  const arbresChateau = []; // [x, z, type, y] : versés avec les autres arbres
+  function chateau() {
+    const rndMonde = rnd;
+    rnd = hasard(7341);
+    const R = TRACE, CH = CHATEAU, Y = CH.y;
+    // un ruban le long de la route du château (décalages latéraux dg, dd ; à dy au-dessus de la chaussée)
+    const ruban = (i0, i1, dg, dd, dy, couleur) => {
+      const p = [];
+      let av = null;
+      for (let i = i0; ; i += 2) {
+        const k = Math.min(i, i1), a = Math.max(0, k - 2), b = Math.min(R.n - 1, k + 2);
+        let tx = R.x[b] - R.x[a], tz = R.z[b] - R.z[a];
+        const l = Math.hypot(tx, tz); tx /= l; tz /= l;
+        const y = R.y[k] + dy, cur = [R.x[k] - tz * dg, y, R.z[k] + tx * dg, R.x[k] - tz * dd, y, R.z[k] + tx * dd];
+        if (av) {
+          const A = av.slice(0, 3), Bb = av.slice(3), Cc = cur.slice(0, 3), D = cur.slice(3);
+          for (const [u, v, w] of [[A, Bb, Cc], [Bb, D, Cc]]) {
+            const ny = (v[2] - u[2]) * (w[0] - u[0]) - (v[0] - u[0]) * (w[2] - u[2]);
+            p.push(...u, ...(ny >= 0 ? v : w), ...(ny >= 0 ? w : v));
+          }
+        }
+        av = cur;
+        if (k === i1) break;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+      g.computeVertexNormals();
+      return teinter(g, couleur);
+    };
+    // la chaussée s'arrête au bord du tour (pavé)
+    let iFin = R.n - 1;
+    while (iFin > 0 && Math.hypot(R.x[iFin] - CH.x, R.z[iFin] - CH.z) < CH.tour + DEMI + 0.2) iFin--;
+    const surf = []; // (les surfaces du reste du monde sont déjà fusionnées : celles-ci ont leur maillage)
+    surf.push(ruban(0, iFin, -DEMI, DEMI, 0.045, VIEILLE), ruban(0, iFin, DEMI, DEMI + 0.55, 0.035, '#cfc1a0'), ruban(0, iFin, -DEMI - 0.55, -DEMI, 0.035, '#cfc1a0'));
+    plan.push({ t: 'l', pts: Array.from({ length: Math.ceil(R.n / 4) }, (_, k) => [R.x[Math.min(R.n - 1, k * 4)], R.z[Math.min(R.n - 1, k * 4)]]), c: '#8b857b', w: 6 });
+    // parapets du côté du vide (là où le relief d'origine tombe sous la chaussée), en murets d'au moins 24 m (les
+    // trous de moins de 16 m comblés) ; arbres du côté de la pente
+    const vides = [1, -1].map(s => {
+      const v = [];
+      for (let i = 0; i < R.n; i++) {
+        const a = Math.max(0, i - 2), b = Math.min(R.n - 1, i + 2), l = Math.hypot(R.x[b] - R.x[a], R.z[b] - R.z[a]);
+        v.push(R.y[i] > 1.2 && avantRoute(R.x[i] - (R.z[b] - R.z[a]) / l * s * 10, R.z[i] + (R.x[b] - R.x[a]) / l * s * 10) < R.y[i] - 1.4);
+      }
+      const runs = (val, f) => { for (let i = 0; i < R.n;) { if (v[i] !== val) { i++; continue; } let j = i; while (j < R.n && v[j] === val) j++; f(i, j); i = j; } };
+      runs(false, (i, j) => { if (i > 0 && j < R.n && j - i < 16) for (let k = i; k < j; k++) v[k] = true; });
+      runs(true, (i, j) => { if (j - i < 24) for (let k = i; k < j; k++) v[k] = false; });
+      return v;
+    });
+    let dernierArbre = -99;
+    for (let i = 4; i < iFin; i += 2) {
+      if (R.y[i] < 1.2) continue;
+      const a = i - 2, b = i + 2, tx = (R.x[b] - R.x[a]) / Math.hypot(R.x[b] - R.x[a], R.z[b] - R.z[a]), tz = (R.z[b] - R.z[a]) / Math.hypot(R.x[b] - R.x[a], R.z[b] - R.z[a]);
+      const cap = Math.atan2(tx, tz);
+      // des balises blanches à bande noire au bord de la chaussée, tous les 28 m, en quinconce
+      if (i % 28 === 0 && i > 80) for (const s of [1, -1]) {
+        const bx = R.x[i] - tz * s * (DEMI + 1.1), bz = R.z[i] + tx * s * (DEMI + 1.1), by = sol(bx, bz);
+        bati.push(B(0.14, 1.0, 0.14, '#f1ece2', bx, by + 0.5, bz, cap), B(0.15, 0.2, 0.15, '#1d1d1d', bx, by + 0.78, bz, cap));
+        col.boiteC(bx, bz, 0.2, 0.2);
+      }
+      for (const s of [1, -1]) {
+        const vide = vides[s > 0 ? 0 : 1][i];
+        const px = R.x[i] - tz * s * 6.6, pz = R.z[i] + tx * s * 6.6;
+        if (vide) bati.push(B(0.42, 0.78, 2.12, '#cdbf9f', px, R.y[i] + 0.33, pz, cap), B(0.52, 0.1, 2.12, APPUI, px, R.y[i] + 0.76, pz, cap));
+        else if (i - dernierArbre > 16 && R.y[i] > 3) {
+          dernierArbre = i;
+          const ax = R.x[i] - tz * s * 9.6, az = R.z[i] + tx * s * 9.6;
+          arbresChateau.push([ax, az, pick(['chene', 'platane', 'chene']), sol(ax, az)]);
+        }
+      }
+    }
+
+    // la route du tour : petits pavés entre deux bordures ; l'allée et la cour du château, en gravier
+    const anneau = (r0, r1, y, couleur, n = 96) => {
+      const p = [];
+      for (let k = 0; k < n; k++) {
+        const a0 = k / n * Math.PI * 2, a1 = (k + 1) / n * Math.PI * 2;
+        const P = (r, a) => [CH.x + Math.cos(a) * r, y, CH.z + Math.sin(a) * r];
+        p.push(...P(r0, a0), ...P(r1, a1), ...P(r1, a0), ...P(r0, a0), ...P(r0, a1), ...P(r1, a1));
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+      g.computeVertexNormals();
+      return teinter(g, couleur);
+    };
+    surf.push(anneau(CH.tour - DEMI, CH.tour + DEMI, Y + 0.045, PAVES), anneau(CH.tour - DEMI - 0.22, CH.tour - DEMI, Y + 0.11, BORDURE), anneau(CH.tour + DEMI, CH.tour + DEMI + 0.22, Y + 0.11, BORDURE));
+    plan.push({ t: 'o', x: CH.x, z: CH.z, r: CH.tour, c: '#b8ad98', w: 6 });
+    for (const [x0, z0, x1, z1] of COUR) {
+      const zz0 = Math.max(z0, -(CH.tour - DEMI - 0.1));
+      surf.push(B(x1 - x0, 0.07, z1 - zz0, '#cfc1a0', CH.x + (x0 + x1) / 2, Y + 0.005, CH.z + (zz0 + z1) / 2));
+      rect(CH.x + x0, CH.z + zz0, CH.x + x1, CH.z + z1, '#d9cba8');
+    }
+
+    /* -- le château (repère : x vers l'est, z vers le sud, y depuis le plateau) */
+    const L = [], cols = [];
+    const verre = () => (rnd() < 0.22 ? '#4a3a2a' : '#2f3c4f');
+    // une grande croisée (meneau et traverse de pierre) dans un mur de normale z (f = ±1) ou x (axe 'x')
+    const croisee = (x, y, z, f, w, h, axe = 'z') => {
+      const X = axe === 'x';
+      plaque(x + (X ? f * 0.006 : 0), y, z + (X ? 0 : f * 0.006), axe, f, w + 0.5, h + 0.5);
+      const b = (bw, bh, ep, c, o, dy = 0) => L.push(X ? B(ep, bh, bw, c, x + f * o, y + dy, z) : B(bw, bh, ep, c, x, y + dy, z + f * o));
+      b(w, h, 0.1, verre(), 0.03);
+      b(0.13, h, 0.14, TAILLE, 0.06); b(w, 0.13, 0.14, TAILLE, 0.06, h * 0.2);
+      b(w + 0.42, 0.13, 0.28, APPUI, 0.1, -h / 2 - 0.08);
+    };
+    // une tour ronde : fût, glacis, cordon de mâchicoulis, toit en poivrière, épi ; fenêtres tournées vers dirs
+    const tour = (x, z, r, h, toitH, dirs, fen = true) => {
+      L.push(C(r, r, h, 18, TUF, x, h / 2, z), C(r + 0.35, r + 0.55, 1.6, 18, '#b9a98b', x, 0.8, z));
+      L.push(C(r + 0.42, r + 0.12, 0.7, 18, TAILLE, x, h - 0.35, z), C(r + 0.45, r + 0.45, 0.9, 18, TUF, x, h + 0.45, z));
+      for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; L.push(B(0.22, 0.5, 0.3, TAILLE, x + Math.sin(a) * (r + 0.22), h - 0.85, z + Math.cos(a) * (r + 0.22), a)); }
+      L.push(C(0, r + 0.75, toitH, 18, ARD, x, h + 0.9 + toitH / 2, z), C(0.05, 0.07, 1.8, 6, '#7a7f88', x, h + 0.9 + toitH + 0.6, z), S(0.16, '#c9a23a', x, h + 0.9 + toitH + 1.5, z));
+      if (fen) for (const a of dirs) for (let y = 3.4; y < h - 2; y += 4) {
+        const sx = Math.sin(a), sz = Math.cos(a);
+        L.push(B(1.5, 2.2, 0.1, TAILLE, x + sx * (r + 0.02), y, z + sz * (r + 0.02), a), B(1.0, 1.7, 0.12, verre(), x + sx * (r + 0.05), y, z + sz * (r + 0.05), a));
+      }
+      cols.push([x - r, z - r, x + r, z + r]);
+    };
+    // corps de logis : 30 x 11 m, trois niveaux, toit d'ardoise à forte pente, bandeaux, croisées, lucarnes, cheminées
+    L.push(B(30, 12.2, 11, TUF, 0, 6.1, 6), B(30.3, 0.9, 11.3, '#b9a98b', 0, 0.45, 6));
+    for (const y of [4.3, 8.3]) L.push(B(30.16, 0.22, 11.16, APPUI, 0, y, 6));
+    L.push(B(30.3, 0.36, 11.3, TAILLE, 0, 12.0, 6));
+    L.push(...toit(30, 11, 9, ARD, 0, 12.2, 6, false, { mur: TUF, egout: 0.45 }));
+    for (const x of [-12, -8, -4, 0, 4, 8, 12]) {
+      croisee(x, 2.3, 11.5, 1, 1.35, 2.4); croisee(x, 6.3, 11.5, 1, 1.35, 2.3); croisee(x, 10.2, 11.5, 1, 1.25, 1.9);
+      if (Math.abs(x) > 3) { croisee(x, 2.3, 0.5, -1, 1.35, 2.4); croisee(x, 6.3, 0.5, -1, 1.35, 2.3); croisee(x, 10.2, 0.5, -1, 1.25, 1.9); }
+    }
+    for (const z of [3.5, 7.5]) for (const s of [1, -1]) { croisee(s * 15, 6.3, z, s, 1.3, 2.3, 'x'); croisee(s * 15, 10.2, z, s, 1.2, 1.9, 'x'); }
+    // lucarnes à fronton, montées dans le plan de la façade, et leurs pinacles
+    for (const [x, f] of [[-12, 1], [-4, 1], [4, 1], [12, 1], [-8, -1], [8, -1]]) {
+      const z = f > 0 ? 11.3 : 0.7, zc = z - f * 1.1;
+      L.push(B(2.1, 3.3, 2.2, TUF, x, 13.75, zc));
+      L.push(...toit(2.2, 2.4, 1.3, ARD, x, 15.4, zc, true, { mur: TUF, egout: 0.12, rive: 0.14, ep: 0.12 }));
+      L.push(B(1.2, 1.8, 0.1, verre(), x, 13.7, z + f * 0.06), B(1.7, 2.4, 0.08, TAILLE, x, 13.75, z + f * 0.035));
+      for (const s of [1, -1]) L.push(C(0.05, 0.13, 1.3, 6, TAILLE, x + s * 1.1, 16.1, z), S(0.09, TAILLE, x + s * 1.1, 16.8, z));
+    }
+    // hautes cheminées sculptées sur le faîtage et aux pignons
+    for (const [x, hc] of [[-9, 5.8], [9, 5.8], [-14, 4.6], [14, 4.6]]) {
+      const yb = 12.2 + 9 * (Math.abs(x) > 13 ? 0.75 : 1);
+      L.push(B(1.5, hc, 0.95, TUF, x, yb + hc / 2 - 1, 6), B(1.62, 0.18, 1.07, TAILLE, x, yb + hc * 0.55, 6), B(1.85, 0.3, 1.3, TAILLE, x, yb + hc - 0.85, 6));
+      for (const dx of [-0.36, 0.36]) L.push(C(0.17, 0.2, 0.55, 8, '#9a5a3e', x + dx, yb + hc - 0.45, 6));
+    }
+    cols.push([-15, 0.5, 15, 11.5]);
+    // les deux grosses tours du sud ; les ailes et leurs tours ; la tour d'escalier sur la cour
+    tour(-15, 11.5, 3.9, 17.5, 10, [Math.PI * 1.75, Math.PI, Math.PI * 1.5]);
+    tour(15, 11.5, 3.9, 17.5, 10, [Math.PI * 0.25, 0, Math.PI * 0.5]);
+    for (const s of [1, -1]) {
+      const xc = s * 12.5;
+      L.push(B(5, 9.6, 14.5, TUF, xc, 4.8, -6.75), B(5.3, 0.9, 14.8, '#b9a98b', xc, 0.45, -6.75), B(5.16, 0.22, 14.66, APPUI, xc, 4.3, -6.75), B(5.3, 0.32, 14.8, TAILLE, xc, 9.45, -6.75));
+      L.push(...toit(5, 14.5, 4.8, ARD, xc, 9.6, -6.75, true, { mur: TUF, egout: 0.35 }));
+      for (const z of [-11, -7, -3]) {
+        croisee(xc + s * 2.5, 2.3, z, s, 1.25, 2.3, 'x'); croisee(xc + s * 2.5, 6.4, z, s, 1.25, 2.2, 'x');
+        croisee(xc - s * 2.5, 2.3, z, -s, 1.25, 2.3, 'x'); croisee(xc - s * 2.5, 6.4, z, -s, 1.25, 2.2, 'x');
+      }
+      cols.push(s > 0 ? [10, -14, 15, 0.5] : [-15, -14, -10, 0.5]);
+      tour(xc, -14.5, 2.5, 12.5, 7, [Math.PI, s * Math.PI / 2]);
+      L.push(C(0.05, 0.05, 2.6, 5, '#ddd', xc, 21.2, -14.5));
+    }
+    L.push(B(0.05, 0.9, 1.4, '#2b4ea2', 12.5, 22.0, -13.75 + 0.05), B(0.05, 0.9, 0.0001, '#2b4ea2', 12.5, 22.0, -13.0)); // un fanion bleu au sommet
+    // tour d'escalier octogonale, au milieu de la façade sur cour ; sa porte
+    L.push(C(2.7, 2.7, 15.8, 8, TUF, 0, 7.9, 0.0), C(2.8, 2.8, 0.3, 8, TAILLE, 0, 15.8, 0.0), C(0, 3.15, 6, 8, ARD, 0, 18.95, 0.0), C(0.05, 0.07, 1.6, 6, '#7a7f88', 0, 22.6, 0));
+    for (const y of [4.6, 8.1, 11.6]) L.push(B(0.9, 1.5, 0.1, TAILLE, 0, y, -2.63), B(0.6, 1.2, 0.12, verre(), 0, y, -2.66));
+    L.push(B(1.9, 3.1, 0.12, TAILLE, 0, 1.55, -2.61), B(1.35, 2.6, 0.14, '#5b3a2a', 0, 1.3, -2.66));
+    cols.push([-2.7, -2.7, 2.7, 0.5]);
+    // le châtelet d'entrée et le mur qui ferme la cour
+    for (const s of [1, -1]) {
+      tour(s * 3.3, -14.8, 1.75, 8.2, 5, [Math.PI], false);
+      L.push(B(5.0, 3.3, 0.7, '#cdbf9f', s * 7.55, 1.65, -14.05), B(5.1, 0.18, 0.86, APPUI, s * 7.55, 3.38, -14.05));
+      cols.push(s > 0 ? [5.05, -14.4, 10, -13.7] : [-10, -14.4, -5.05, -13.7]);
+      L.push(B(0.14, 4.0, 1.4, '#5b3a2a', s * 1.5, 2.0, -14.1)); // les vantaux, ouverts contre le passage
+    }
+    L.push(B(4.8, 2.6, 1.7, TUF, 0, 5.9, -14.8), B(5.0, 0.3, 1.9, TAILLE, 0, 7.3, -14.8), B(3.3, 0.35, 1.5, TAILLE, 0, 4.55, -14.8));
+    L.push(...toit(4.8, 1.7, 1.2, ARD, 0, 7.2, -14.8, false, { mur: TUF, egout: 0.2 }));
+    // jardins à la française : un parterre de buis au sud (bassin rond, jet d'eau), deux à l'est et à l'ouest ; des ifs
+    // taillés en cône ; le mur de clôture le long de la route du tour, ouvert devant l'allée
+    const BUIS = '#4d6a34', IF = '#3f5c3c', haie = (x, z, w, d) => L.push(teinter(B(w, 0.55, d, BUIS, x, 0.27, z), BUIS, T.feuillage));
+    const parterre = (x0, z0, x1, z1) => {
+      const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      haie(cx, z0, w, 0.45); haie(cx, z1, w, 0.45); haie(x0, cz, 0.45, d); haie(x1, cz, 0.45, d);
+      haie(cx, cz, w - 3, 0.45); haie(cx, cz, 0.45, d - 3);
+      for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) L.push(teinter(C(0, 0.55, 2.3, 8, IF, x, 1.35, z), IF, T.feuillage), C(0.25, 0.3, 0.2, 8, '#6b4a30', x, 0.1, z));
+    };
+    parterre(-12, 17.5, -2, 25); parterre(2, 17.5, 12, 25); parterre(19.5, -8, 25.5, 8); parterre(-25.5, -8, -19.5, 8);
+    L.push(C(2.2, 2.3, 0.6, 20, APPUI, 0, 0.3, 21.2), C(1.95, 1.95, 0.1, 20, '#4f93b8', 0, 0.52, 21.2), C(0.18, 0.28, 1.6, 8, APPUI, 0, 1.0, 21.2), S(0.32, APPUI, 0, 1.9, 21.2));
+    cols.push([-2.3, 18.9, 2.3, 23.5]);
+    for (let k = 0; k < 64; k++) {
+      const a = (k + 0.5) / 64 * Math.PI * 2, x = Math.cos(a) * 28.4, z = Math.sin(a) * 28.4;
+      if (Math.abs(x) < 4.4 && z < 0) continue; // l'allée
+      L.push(B(2.85, 0.95, 0.45, '#cdbf9f', x, 0.47, z, Math.PI / 2 - a), B(2.9, 0.1, 0.55, APPUI, x, 1.0, z, Math.PI / 2 - a));
+    }
+    for (const s of [1, -1]) L.push(B(0.8, 2.2, 0.8, TUF, s * 4.4, 1.1, -28.2), S(0.32, TAILLE, s * 4.4, 2.45, -28.2)); // piliers du portail
+    finirPlaques(L);
+    poser(L, CH.x, CH.z, 0, bati, Y);
+    for (const [x0, z0, x1, z1] of cols) {
+      col.boite(CH.x + x0, CH.z + z0, CH.x + x1, CH.z + z1).haut = true;
+      plan.push({ t: 'b', x0: CH.x + x0, z0: CH.z + z0, x1: CH.x + x1, z1: CH.z + z1 });
+    }
+    contact.jupe(CH.x - 15.07, CH.z + 0.43, CH.x + 15.07, CH.z + 11.57, 1.7, 0.5, Y + 0.06);
+
+    /* -- le village : des maisons tout autour de la route du tour, tournées vers le château, sauf à l'arrivée de la
+       route et au belvédère ; entre elles, des murs de jardin ; des réverbères */
+    const RF = CH.tour + 6.8; // les façades
+    const libre = (a, demi) => {
+      for (const t of [-demi, 0, demi]) {
+        const x = CH.x + Math.cos(a + t / RF) * (RF + 2), z = CH.z + Math.sin(a + t / RF) * (RF + 2);
+        if (procheRoute(x, z, 12).d < 9.5) return false;
+      }
+      return Math.abs(angle(a - Math.PI / 4)) > 0.34; // le belvédère, au sud-est
+    };
+    let a = -Math.PI / 2 + 0.05, n = 0;
+    while (a < Math.PI * 1.5 - 0.05) {
+      const w = 8 + Math.floor(rnd() * 5), d = 7.5 + rnd() * 1.5, h = 5.8 + rnd() * 1.8, dem = w / 2 + 0.4;
+      const ac = a + dem / RF;
+      if (!libre(ac, dem)) { a += 0.06; continue; }
+      const r = RF + d / 2, x = CH.x + Math.cos(ac) * r, z = CH.z + Math.sin(ac) * r;
+      const genre = n % 3, rot = Math.atan2(-Math.cos(ac), -Math.sin(ac));
+      maison({
+        x, z, y: Y, w, d, h, rot, sansCol: true, volets: genre === 1 ? null : pick(VOLETS),
+        mur: genre === 1 ? pick(['#e6d4b0', '#ead9bb', '#e9d2a8']) : genre === 0 ? TUF : undefined,
+        tourelle: genre === 0 && w >= 9, colombages: genre === 1, lucarnes: true,
+      });
+      // mur de jardin jusqu'à la maison suivante
+      const ecart = 1.6 + rnd() * 2.2, a1 = ac + dem / RF, a2 = a1 + ecart / RF;
+      const am = (a1 + a2) / 2, xm = CH.x + Math.cos(am) * (RF + 0.6), zm = CH.z + Math.sin(am) * (RF + 0.6);
+      bati.push(B(ecart + 0.3, 1.9, 0.5, '#cdbf9f', xm, Y + 0.95, zm, Math.PI / 2 - am), B(ecart + 0.4, 0.12, 0.62, APPUI, xm, Y + 1.94, zm, Math.PI / 2 - am));
+      a = a2; n++;
+    }
+    // réverbères sur le bas-côté, du côté des maisons
+    for (let k = 0; k < 12; k++) {
+      const b = k / 12 * Math.PI * 2 + 0.2, x = CH.x + Math.cos(b) * (CH.tour + 4.6), z = CH.z + Math.sin(b) * (CH.tour + 4.6);
+      if (procheRoute(x, z, 8).d < 6.5) continue;
+      bati.push(C(0.07, 0.1, 4.2, 6, '#2d2d33', x, Y + 2.1, z), B(0.34, 0.44, 0.34, '#ffe1a0', x, Y + 4.35, z), B(0.42, 0.06, 0.42, '#2d2d33', x, Y + 4.6, z));
+      col.boiteC(x, z, 0.3, 0.3);
+    }
+    // le belvédère : une balustrade au bord du plateau, trois bancs tournés vers la vallée
+    for (let k = -6; k <= 6; k++) {
+      const b = Math.PI / 4 + k * 0.045, x = CH.x + Math.cos(b) * (CH.tour + 6.6), z = CH.z + Math.sin(b) * (CH.tour + 6.6);
+      bati.push(B(0.3, 0.9, 0.3, APPUI, x, Y + 0.45, z), B(1.75, 0.14, 0.34, APPUI, x, Y + 0.95, z, Math.PI / 2 - b));
+      if (k % 4 === 0) {
+        const xb = CH.x + Math.cos(b) * (CH.tour + 5.1), zb = CH.z + Math.sin(b) * (CH.tour + 5.1), rb = Math.PI / 2 - b;
+        bati.push(B(1.9, 0.1, 0.5, '#6b4a30', xb, Y + 0.48, zb, rb), B(0.1, 0.45, 0.5, '#2d2d33', xb + Math.cos(b + Math.PI / 2) * 0.8, Y + 0.22, zb + Math.sin(b + Math.PI / 2) * 0.8, rb), B(0.1, 0.45, 0.5, '#2d2d33', xb - Math.cos(b + Math.PI / 2) * 0.8, Y + 0.22, zb - Math.sin(b + Math.PI / 2) * 0.8, rb));
+        col.boiteC(xb, zb, 1.2, 1.2);
+      }
+    }
+    // quelques arbres dans les jardins, derrière les maisons
+    for (let k = 0; k < 10; k++) {
+      const b = rnd() * Math.PI * 2, r = CH.plateau + 2 + rnd() * 6, x = CH.x + Math.cos(b) * r, z = CH.z + Math.sin(b) * r;
+      if (procheRoute(x, z, 10).d > 8) arbresChateau.push([x, z, rnd() < 0.5 ? 'chene' : 'cedre', sol(x, z)]);
+    }
+    const ms = new THREE.Mesh(fusion(surf), MAT);
+    ms.receiveShadow = true; ms.renderOrder = ORDRE.sol; ms.name = 'surfaces';
+    scene.add(ms);
+    rnd = rndMonde;
   }
+  chateau();
 
   /* ------------------------------------------------------------ arbres
      Fusionnés avec le décor de leur quartier (aucun appel de dessin en plus) ; le feuillage porte
      un poids de vent par sommet, plus fort en haut. */
   {
-    const arbres = []; // [x, z, type]
+    const arbres = [...arbresChateau]; // [x, z, type, y]
     for (let x = -170; x < -14; x += 9) if (Math.abs(x + 90) > 6) arbres.push([x + rnd() * 2, -3.5, 'peuplier']);
     for (let x = 26; x <= 152; x += 12) if (x < 86 || x > 104) { arbres.push([x, 4.6, 'platane']); arbres.push([x + 6, 15.4, 'platane']); }
     for (const z of [-57, -35]) arbres.push([79.5, z, 'platane']);
@@ -1235,8 +1544,9 @@ void main() {
     arbres.push([-110, -45, 'cedre']);
     for (let i = 0; i < 300; i++) {
       const a = rnd() * Math.PI * 2, r = 205 + rnd() * 230, x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (Math.abs(z - 10) < 28 || hauteur(x, z) < 3) continue;
-      arbres.push([x, z, rnd() < 0.3 ? 'peuplier' : 'chene', hauteur(x, z)]);
+      if (Math.abs(z - 10) < 28 || naturelle(x, z) < 3) continue; // (mêmes tirages qu'avant la route du château)
+      const t = rnd() < 0.3 ? 'peuplier' : 'chene';
+      if (!reserve(x, z)) arbres.push([x, z, t, sol(x, z)]);
     }
     const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Vector3(), axe = new THREE.Vector3(0, 1, 0), cc = new THREE.Color();
     // modèles construits une fois, puis copiés, recolorés et placés (bien plus rapide que de tout regénérer)
@@ -1310,9 +1620,10 @@ void main() {
   }
   // balles de foin rondes sur les champs des collines
   for (let i = 0; i < 46; i++) {
-    const a = rnd() * Math.PI * 2, r = 215 + rnd() * 170, x = Math.cos(a) * r, z = Math.sin(a) * r, y = hauteur(x, z);
-    if (Math.abs(z - 10) < 30 || y < 2) continue;
-    bati.push(C(0.78, 0.78, 1.25, 12, '#d6b058', x, y + 0.72, z, 'z', rnd() * 6.28));
+    const a = rnd() * Math.PI * 2, r = 215 + rnd() * 170, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (Math.abs(z - 10) < 30 || naturelle(x, z) < 2) continue;
+    const rot = rnd() * 6.28;
+    if (!reserve(x, z, 4)) bati.push(C(0.78, 0.78, 1.25, 12, '#d6b058', x, sol(x, z) + 0.72, z, 'z', rot));
   }
 
   // panneaux routiers (dessinés en code dans l'atlas, transparents autour de la forme)
@@ -1332,6 +1643,7 @@ void main() {
   panneau((c, W, H) => { octo(c, W, H, '#fff'); c.save(); c.translate(W * 0.04, H * 0.04); c.scale(0.92, 0.92); octo(c, W, H, '#c8202a'); c.restore(); c.fillStyle = '#fff'; c.font = 'bold 78px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STOP', W / 2, H / 2 + 4); }, 0.8, 0.8, 91.7, 2.2, 5.2, Math.PI);
   panneau((c, W, H) => { c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.fillStyle = '#c8202a'; c.fill(); c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 30, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#111'; c.font = 'bold 110px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('50', W / 2, H / 2 + 6); }, 0.7, 0.7, 24, 2.2, 16.6, -Math.PI / 2);
   panneau(direction('Domaine du Clos Libre', 30), 2.2, 0.36, -86.2, 2.0, 5.6, 0);
+  panneau(direction('Château', 34), 1.5, 0.34, -172.2, 2.0, 5.6, 0); // à l'embranchement de la route du château
   const moulin = hameau();
   const enseignes = atlas.maillage();
   scene.add(enseignes);
@@ -1433,10 +1745,10 @@ void main() {
 
   /* ------------------------------------------------------------ mini-carte */
   const carte = document.createElement('canvas');
-  carte.width = carte.height = 400 * ECH;
+  carte.width = carte.height = (CARTE0 + 200) * ECH;
   {
     const c = carte.getContext('2d');
-    const X = x => (x + 200) * ECH, Z = z => (z + 200) * ECH;
+    const X = x => (x + CARTE0) * ECH, Z = z => (z + CARTE0) * ECH;
     c.fillStyle = '#86a04e'; c.fillRect(0, 0, carte.width, carte.height);
     for (const e of plan) {
       if (e.t === 'r') { c.fillStyle = e.c; c.fillRect(X(e.x0), Z(e.z0), (e.x1 - e.x0) * ECH, (e.z1 - e.z0) * ECH); }
@@ -1456,6 +1768,16 @@ void main() {
     const L = 186;
     c.fillRect(0, 0, carte.width, X(-L)); c.fillRect(0, X(L), carte.width, carte.height);
     c.fillRect(0, X(-L), X(-L), X(L) - X(-L)); c.fillRect(X(L), X(-L), carte.width, X(L) - X(-L));
+    // hors de la zone de jeu, ce qu'on peut atteindre reste clair : la route du château, la route du tour, le château, les
+    // maisons du village
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const e of plan) if (e.t === 'l') { c.strokeStyle = e.c; c.lineWidth = e.w * ECH; c.beginPath(); e.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.stroke(); }
+    for (const e of plan) if (e.t === 'o') { c.strokeStyle = e.c; c.lineWidth = e.w * ECH; c.beginPath(); c.arc(X(e.x), Z(e.z), e.r * ECH, 0, 7); c.stroke(); }
+    for (const e of plan) if (e.t === 'p' || (e.t === 'b' && (e.x1 < -L || e.z1 < -L))) {
+      const P = e.t === 'p' ? e.pts : [[e.x0, e.z0], [e.x1, e.z0], [e.x1, e.z1], [e.x0, e.z1]];
+      c.fillStyle = '#efe4cb'; c.strokeStyle = '#7d6e58'; c.lineWidth = 1.5;
+      c.beginPath(); P.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.closePath(); c.fill(); c.stroke();
+    }
   }
 
   const lieux = {

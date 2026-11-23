@@ -2,6 +2,7 @@
 // pneus, et ce que soulève un véhicule du domaine (EffetsVehicule).
 // Réserves fixes d'objets réutilisés : aucune allocation pendant le jeu. Couleurs en nombres (0xrrggbb).
 import * as THREE from 'three';
+import { sol as solEn } from './relief.js';
 
 const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), pp = new THREE.Vector3(), pe = new THREE.Vector3();
 const AXE_P = new THREE.Vector3(0.6, 1, 0.3).normalize(), AXE_Y = new THREE.Vector3(0, 1, 0);
@@ -79,10 +80,10 @@ export class Taches {
     this.im = im; this.max = max; this.n = 0;
   }
   debut() { this.n = 0; }
-  // une tache en (x, z), demi-axes (rx, rz), tournée de rot
-  poser(x, z, rx, rz, rot) {
+  // une tache en (x, z), demi-axes (rx, rz), tournée de rot ; à la hauteur y du sol (penchée comme q, un véhicule)
+  poser(x, z, rx, rz, rot, y = 0, q = null) {
     if (this.n >= this.max) return;
-    tm4.compose(tp.set(x, 0.075, z), tq.setFromAxisAngle(AXE_Y, rot), te.set(rx, 1, rz));
+    tm4.compose(tp.set(x, y + 0.075, z), q || tq.setFromAxisAngle(AXE_Y, rot), te.set(rx, 1, rz));
     this.im.setMatrixAt(this.n++, tm4);
   }
   fin() { this.im.count = this.n; this.im.instanceMatrix.needsUpdate = true; }
@@ -100,25 +101,25 @@ export class Traces {
     scene.add(im);
     this.im = im; this.max = max; this.n = 0; this.der = [null, null]; // dernier point de chaque roue
   }
-  // la roue k passe en (x, z) : une bande depuis son dernier point (largeur l)
-  marquer(k, x, z, l) {
+  // la roue k passe en (x, z), le sol à y : une bande depuis son dernier point (largeur l), penchée comme la pente
+  marquer(k, x, z, l, y = 0) {
     const d = this.der[k];
-    if (!d) { this.der[k] = { x, z }; return; }
+    if (!d) { this.der[k] = { x, z, y }; return; }
     const dx = x - d.x, dz = z - d.z, L = Math.hypot(dx, dz);
     if (L < 0.3) return;
     if (L < 3) {
       const i = this.n++ % this.max;
-      qm.compose(qp.set((x + d.x) / 2, 0.07, (z + d.z) / 2), qq.setFromAxisAngle(Y, Math.atan2(dx, dz)), qe.set(l, 1, L + 0.05));
+      qm.compose(qp.set((x + d.x) / 2, (y + d.y) / 2 + 0.07, (z + d.z) / 2), qq.setFromEuler(qeu.set(-Math.atan2(y - d.y, L), Math.atan2(dx, dz), 0, 'YXZ')), qe.set(l, 1, L + 0.05));
       this.im.setMatrixAt(i, qm);
       this.im.instanceMatrix.addUpdateRange(i * 16, 16);
       this.im.instanceMatrix.needsUpdate = true;
       this.im.count = Math.min(this.n, this.max);
     }
-    d.x = x; d.z = z;
+    d.x = x; d.z = z; d.y = y;
   }
   lever() { this.der[0] = this.der[1] = null; }
 }
-const Y = new THREE.Vector3(0, 1, 0);
+const qeu = new THREE.Euler();
 
 /* ---------------------------------------------------------------- ce que soulève un véhicule du domaine
    Fumée d'échappement (au démarrage, en roulant : la cheminée verticale du tracteur, le pot bas à l'arrière du van),
@@ -136,8 +137,8 @@ export class EffetsVehicule {
   // point de sortie des gaz du véhicule v (cap : sin sx, cos sz)
   echappement(v, sx, sz) {
     const p = v.p.pos;
-    if (v.genre !== 'tracteur') { const a = v.genre === 'van' ? 2.3 : 2.0; ECH.x = p.x - sx * a + sz * 0.45; ECH.y = 0.3; ECH.z = p.z - sz * a - sx * 0.45; }
-    else { ECH.x = p.x + sx * 1.45 + sz * 0.3; ECH.y = 2.55; ECH.z = p.z + sz * 1.45 - sx * 0.3; }
+    if (v.genre !== 'tracteur') { const a = v.genre === 'van' ? 2.3 : 2.0; ECH.x = p.x - sx * a + sz * 0.45; ECH.y = p.y + 0.3; ECH.z = p.z - sz * a - sx * 0.45; }
+    else { ECH.x = p.x + sx * 1.45 + sz * 0.3; ECH.y = p.y + 2.55; ECH.z = p.z + sz * 1.45 - sx * 0.3; }
     return ECH;
   }
   // le moteur démarre : une bouffée de fumée
@@ -158,13 +159,13 @@ export class EffetsVehicule {
       let c = null;
       for (const q of this.col.parcelles) if (tr.pos.x > q.x0 - 2 && tr.pos.x < q.x1 + 2 && tr.pos.z > q.z0 - 2 && tr.pos.z < q.z1 + 2) { c = q; break; }
       const teinte = this.choisir(c && c.cep === 'cabernet' ? FEUILLES.cabernet : FEUILLES.chenin);
-      this.emettre(tr.pos.x + (r() - 0.5) * 2, 1.2 + r(), tr.pos.z + (r() - 0.5) * 2, (r() - 0.5) * 3, 2 + r() * 2, (r() - 0.5) * 3, 2.2, teinte, 0.9, 5);
+      this.emettre(tr.pos.x + (r() - 0.5) * 2, tr.pos.y + 1.2 + r(), tr.pos.z + (r() - 0.5) * 2, (r() - 0.5) * 3, 2 + r() * 2, (r() - 0.5) * 3, 2.2, teinte, 0.9, 5);
     }
     const av = Math.abs(tr.v);
     if ((tr.sol === 'gravier' || tr.sol === 'vigne') && av > 1.5 && r() < dt * av * 1.2) {
       const cote = r() < 0.5 ? 0.98 : -0.98, bx = tr.pos.x - sx * 1.3 + sz * cote, bz = tr.pos.z - sz * 1.3 - sx * cote;
       const gr = tr.sol === 'gravier', k = gr ? 0.25 : 0.35;
-      this.emettre(bx, 0.3, bz, -sx * tr.v * k + (r() - 0.5), 1.2 + r() * 1.6, -sz * tr.v * k + (r() - 0.5), 0.9, this.choisir(gr ? GRAVIERS : MOTTES), gr ? 0.4 : 0.7, 9);
+      this.emettre(bx, tr.pos.y + 0.3, bz, -sx * tr.v * k + (r() - 0.5), 1.2 + r() * 1.6, -sz * tr.v * k + (r() - 0.5), 0.9, this.choisir(gr ? GRAVIERS : MOTTES), gr ? 0.4 : 0.7, 9, tr.pos.y + 0.05);
     }
   }
   // en dérapage : traces derrière les roues arrière, fumée des pneus sur le dur, poussière ailleurs
@@ -174,8 +175,9 @@ export class EffetsVehicule {
     const fx = Math.sin(tr.h), fz = Math.cos(tr.h), zr = D.zAr ?? -0.9, xr = D.xAr ?? 0.98, dur = tr.sol === 'asphalte' || tr.sol === 'paves';
     for (let k = 0; k < 2; k++) {
       const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
-      if (dur) this.traces.marquer(k, x, z, v.genre === 'tracteur' ? 0.4 : 0.22); else this.traces.lever();
-      if (r() < dt * 26 * g) this.emettre(x, 0.25, z, (r() - 0.5) * 0.8, 0.5 + r() * 0.6, (r() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
+      const y = solEn(x, z);
+      if (dur) this.traces.marquer(k, x, z, v.genre === 'tracteur' ? 0.4 : 0.22, y); else this.traces.lever();
+      if (r() < dt * 26 * g) this.emettre(x, y + 0.25, z, (r() - 0.5) * 0.8, 0.5 + r() * 0.6, (r() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
     }
   }
 }

@@ -1,7 +1,7 @@
 // Interface par-dessus le monde : mini-carte, argent, étoiles de retard, objectif,
 // sous-titres, bannières, étiquettes posées sur les objets du monde.
 import * as THREE from 'three';
-import { ECH } from './monde.js';
+import { ECH, CARTE0 } from './monde.js';
 import { $ } from './outils.js';
 
 const v3 = new THREE.Vector3();
@@ -36,7 +36,7 @@ export class Hud {
     c.save();
     c.translate(R, R); c.rotate(yaw - Math.PI);
     const k = zoom / ECH; c.scale(k, k);
-    c.drawImage(this.fond, -(px + 200) * ECH, -(pz + 200) * ECH);
+    c.drawImage(this.fond, -(px + CARTE0) * ECH, -(pz + CARTE0) * ECH);
     if (route) {
       // l'itinéraire de la tournée, dessiné par-dessus la carte
       c.strokeStyle = couleur; c.lineWidth = 5 / k; c.lineJoin = 'round'; c.lineCap = 'round';

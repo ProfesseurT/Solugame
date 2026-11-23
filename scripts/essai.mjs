@@ -8,6 +8,7 @@
 //             en deux fois (VEHICULE=van : en van)
 //   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe, les phares ; rentrer dormir, le matin revient
 //   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
+//   chateau   la route du château : monter en tracteur et en van, le tour, retenu au bord, à pied sur la pente ; la glisse
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
@@ -394,6 +395,92 @@ if (scenario === 'voitures') {
       log.push(['volée : il ne tombe qu\'une fois le personnage à sa portière (' + (ecart ?? -1).toFixed(2) + ' m)', ecart !== null && ecart < 0.3]);
       log.push(['volée : son conducteur est tombé (' + couche.toFixed(2) + '), s\'est relevé, s\'enfuit', J.auVolant && couche < -1.2 && CL.gens.length === nv + 1 && Math.abs(d.m.groupe.rotation.x) < 0.01]);
       log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('fin');
+}
+
+if (scenario === 'chateau') {
+  // la route du château (relief.js) : en tracteur puis en van, on monte jusqu'au tour sans quitter la chaussée, le
+  // véhicule posé sur le sol, la caméra jamais sous le relief ; on fait le tour du château ; hors de la route, on est
+  // retenu ; à pied, les pieds sur la pente ; en voiture, une glisse se tient à l'accélérateur et au volant
+  const r = await ev(async () => {
+    const J = CL.jeu, R = CL.relief.ROUTE, sol = CL.relief.sol, C = CL.relief.CHATEAU, log = [];
+    const angleDe = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+    const monter = genre => {
+      const v = CL.vehicule(genre);
+      for (let k = 0; k < 40 && !(J.auVolant && J.veh === v); k++) {
+        const a = k * 0.5; J.joueur.placer(v.p.pos.x + Math.cos(a) * 2.6, v.p.pos.z + Math.sin(a) * 2.6, 0); CL.step(2);
+        CL.agir(); CL.finirGeste(); CL.step(2);
+      }
+      return J.auVolant && J.veh === v;
+    };
+    const descendre = () => { CL.ctrl.kx = 0; CL.ctrl.ky = 1; for (let k = 0; k < 600 && Math.abs(CL.tr.v) > 0.3; k++) CL.step(1); CL.ctrl.ky = 0; CL.step(30); CL.agir(); CL.finirGeste(); CL.step(5); return !J.auVolant; };
+    // suivre des points (x, z) de près : 9 m devant, à vmax au plus ; m : mesures
+    const suivre = (P, vmax, maxT, m) => {
+      let i = 0, T = 0;
+      while (T < maxT) {
+        const p = CL.tr.pos;
+        let best = i, bd = 1e9;
+        for (let k = Math.max(0, i - 5); k < Math.min(P.length, i + 40); k++) { const d = Math.hypot(P[k][0] - p.x, P[k][1] - p.z); if (d < bd) { bd = d; best = k; } }
+        i = best;
+        if (i >= P.length - 12) return true;
+        const t = P[Math.min(P.length - 1, i + 9)], err = angleDe(Math.atan2(t[0] - p.x, t[1] - p.z) - CL.tr.h);
+        CL.ctrl.kx = -Math.max(-1, Math.min(1, err * 2.5)); CL.ctrl.ky = CL.tr.v < vmax ? -1 : 0;
+        CL.step(1); T += 1 / 60;
+        m.sol = Math.max(m.sol, Math.abs(CL.tr.pos.y - sol(p.x, p.z)));
+        if (CL.camera.position.y < sol(CL.camera.position.x, CL.camera.position.z) + 0.4) m.cam++;
+        if (CL.tr.frotte > 0.5) m.chocs++;
+        m.ecart = Math.max(m.ecart, bd);
+        if (T > 3 && R.y[Math.min(R.n - 1, i)] > 3) m.vmin = Math.min(m.vmin, CL.tr.v);
+      }
+      return false;
+    };
+    const route = Array.from({ length: R.n }, (_, k) => [R.x[k], R.z[k]]);
+    try {
+      CL.jouer(); CL.step(30);
+      for (const genre of ['tracteur', 'van']) {
+        if (!monter(genre)) { log.push([genre + ' : monté', false]); continue; }
+        CL.teleporter(-176, 2, Math.PI); CL.step(20);
+        const m = { sol: 0, cam: 0, chocs: 0, ecart: 0, vmin: 99 };
+        const ok = suivre(route, genre === 'tracteur' ? 12 : 16, 120, m);
+        log.push([genre + ' : monté au château (' + CL.tr.pos.y.toFixed(1) + ' m), sur la chaussée (écart ' + m.ecart.toFixed(1) + ' m), posé sur le sol (' + (m.sol * 100).toFixed(0) + ' cm), sans choc, la caméra au-dessus du relief ; au plus lent dans la montée ' + m.vmin.toFixed(1) + ' m/s',
+          ok && Math.abs(CL.tr.pos.y - C.y) < 0.3 && m.ecart < 4 && m.sol < 0.15 && m.chocs === 0 && m.cam === 0 && m.vmin > 6]);
+        if (genre === 'tracteur') {
+          // le tour du château, dans le sens des aiguilles d'une montre vu d'en haut, depuis l'arrivée de la route
+          CL.ctrl.ky = 1; for (let k = 0; k < 300 && Math.abs(CL.tr.v) > 0.3; k++) CL.step(1); CL.ctrl.ky = 0;
+          CL.teleporter(C.x, C.z - C.tour, Math.PI / 2); CL.step(10);
+          const a0 = Math.atan2(CL.tr.pos.z - C.z, CL.tr.pos.x - C.x), tour = Array.from({ length: 220 }, (_, k) => { const a = a0 + k / 200 * Math.PI * 2; return [C.x + Math.cos(a) * C.tour, C.z + Math.sin(a) * C.tour]; });
+          const mt = { sol: 0, cam: 0, chocs: 0, ecart: 0, vmin: 99 }, fini = suivre(tour, 9, 60, mt);
+          log.push(['le tour du château, sans choc ni sortie (écart ' + mt.ecart.toFixed(1) + ' m, ' + mt.chocs + ' images de frottement, fini ' + fini + ')', fini && mt.chocs === 0 && mt.ecart < 3.5 && mt.cam === 0]);
+          // hors de la route : on reste retenu au bord
+          const k = 300; CL.teleporter(R.x[k], R.z[k], Math.atan2(R.x[k + 1] - R.x[k], R.z[k + 1] - R.z[k]) + Math.PI / 2); CL.step(5);
+          CL.ctrl.kx = 0; CL.ctrl.ky = -1; CL.step(240); CL.ctrl.ky = 0; CL.step(30);
+          const q = CL.relief.procheRoute(CL.tr.pos.x, CL.tr.pos.z, 60);
+          log.push(['hors de la route, on est retenu au bord (' + q.d.toFixed(1) + ' m de l\'axe)', q.d < CL.relief.LARGE]);
+        }
+        log.push([genre + ' : descendu', descendre()]);
+      }
+      // à pied sur la pente : les pieds sur le sol
+      { const k = 250; J.joueur.placer(R.x[k], R.z[k], Math.atan2(R.x[k + 1] - R.x[k], R.z[k + 1] - R.z[k])); CL.step(3);
+        let e = 0; CL.ctrl.ky = -1; for (let n = 0; n < 180; n++) { CL.step(1); e = Math.max(e, Math.abs(J.joueur.m.groupe.position.y - sol(J.joueur.pos.x, J.joueur.pos.z))); } CL.ctrl.ky = 0;
+        log.push(['à pied dans la montée, les pieds sur le sol (' + (e * 100).toFixed(0) + ' cm), y compris en montant (' + J.joueur.pos.y.toFixed(1) + ' m)', e < 0.02 && J.joueur.pos.y > 5]); }
+      // une voiture (mode WTF : celle d'en face) : frein à main dans un virage, puis on tient la glisse au volant
+      { J.basculerWtf(); const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+        CL.teleporter(-160, 11.7, Math.PI / 2); CL.step(5);
+        CL.ctrl.ky = -1; for (let k = 0; k < 400 && CL.tr.v < 17; k++) CL.step(1);
+        let tenue = 0, bmax = 0, vmin = 99;
+        for (let k = 0; k < 300; k++) {
+          const tr = CL.tr, beta = Math.atan2(tr.vT, Math.max(1, Math.abs(tr.v))), T = k / 60;
+          if (T < 0.45) { CL.ctrl.kx = -1; CL.ctrl.fm = true; } else { CL.ctrl.fm = false; CL.ctrl.kx = Math.max(-1, Math.min(1, -(beta + 0.5) * 2)); }
+          CL.ctrl.ky = -1; CL.step(1);
+          if (T > 1.5) { if (Math.abs(beta) > 0.3) tenue += 1 / 60; vmin = Math.min(vmin, tr.v); }
+          bmax = Math.max(bmax, Math.abs(beta));
+        }
+        CL.ctrl.kx = 0; CL.ctrl.ky = 0;
+        log.push(['en voiture, la glisse se tient à l\'accélérateur (' + tenue.toFixed(1) + ' s sur 3,5, à ' + vmin.toFixed(1) + ' m/s au moins), sans tête-à-queue (' + (bmax * 57.3).toFixed(0) + ' degrés au plus)', tenue > 2.5 && vmin > 9 && bmax < 1.3]); }
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { Anim } from './anim.js';
 import { OS } from './perso.js';
+import { sol } from './relief.js';
 import { angle, versAngle, borne, mix } from './outils.js';
 
 const SAUT = 0.55; // durée d'un saut de côté (s)
@@ -101,6 +102,7 @@ export class Pieton {
         this.om = dt > 0 ? angle(this.hv - h0) / dt : 0;
         this.vr = 0;
       }
+      this.pos.y = sol(this.pos.x, this.pos.z); // les pieds sur le sol (relief.js : la colline du château)
       g.position.copy(this.pos); g.rotation.y = this.hv;
     }
     this.maj = false;

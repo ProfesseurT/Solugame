@@ -1,4 +1,5 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
+import * as relief from './relief.js';
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer } from './modeles.js';
@@ -731,13 +732,13 @@ function reperes(dt, ego, cible) {
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : 'Monter');
-  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? { van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6 : 0, vp ? vp.p.pos.z : 0, !!vp);
+  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
   const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
   hud.placer(etqPrendre, vc ? vc.x : 0, 2.3, vc ? vc.z : 0, !!vc);
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
-  hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
+  hud.placer(etqDescendre, tr.pos.x, tr.pos.y + 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 }
 
 function miseAJour(dt) {
@@ -772,14 +773,19 @@ function miseAJour(dt) {
   else if (jeu.dedans) bureau.camera(dt);
   else if (chai.camera(dt, ego)) { /* posée au fond de la halle */ }
   else if (gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
-  else cam.suivre(dt, ego.x, ego.z, cap, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
+  else {
+    // en dérive, la caméra suit à moitié la direction où l'on glisse (on voit le véhicule de trois quarts, en travers)
+    let capCam = cap;
+    if (jeu.auVolant && tr.v > 3 && Math.abs(tr.vT) > 0.8) capCam = cap + Math.atan2(tr.vT, tr.v) * 0.55 * Math.min(1, (Math.abs(tr.vT) - 0.8) / 2.5);
+    cam.suivre(dt, ego.x, ego.z, capCam, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null, ego.y);
+  }
   hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, mission.route, jeu.auVolant ? null : VEH_CARTE);
 }
 
 // Le cadre d'ombre suit le joueur, décalé vers l'avant de la caméra (rien de perdu derrière elle),
 // et se cale sur la grille de texels dans le repère de la lumière (pas de scintillement en marchant).
 // La matrice d'ombre ne change que lorsque la carte est recalculée : carte et matrice restent d'accord.
-function placerLumiere(x, z) {
+function placerLumiere(x, z, y = 0) {
   monde.ciel.position.copy(camera.position);
   const q = paliers.q;
   if (!q.ombres) return;
@@ -787,7 +793,7 @@ function placerLumiere(x, z) {
   const l = Math.hypot(DIR.x, DIR.z) || 1, av = q.boite * 0.26;
   const sc = monde.soleil.shadow.camera, px = (sc.right - sc.left) / q.ombreTaille, py = (sc.top - sc.bottom) / q.ombreTaille;
   const cx = x + DIR.x / l * av, cz = z + DIR.z / l * av;
-  const u = Math.round((cx * LX.x + cz * LX.z) / px) * px, v = Math.round((cx * LY.x + cz * LY.z) / py) * py, w = cx * SOLEIL.x + cz * SOLEIL.z;
+  const u = Math.round((cx * LX.x + cz * LX.z) / px) * px, v = Math.round((cx * LY.x + y * LY.y + cz * LY.z) / py) * py, w = cx * SOLEIL.x + y * SOLEIL.y + cz * SOLEIL.z;
   CIBLE.copy(LX).multiplyScalar(u).addScaledVector(LY, v).addScaledVector(SOLEIL, w);
   monde.soleil.target.position.copy(CIBLE);
   monde.soleil.position.copy(CIBLE).addScaledVector(SOLEIL, 100);
@@ -801,8 +807,8 @@ const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05] }
 function majTaches() {
   const t = taches;
   t.debut();
-  if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
-  for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre]; t.poser(v.m.groupe.position.x, v.m.groupe.position.z, lx, lz, v.m.groupe.rotation.y); }
+  if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0, joueur.pos.y);
+  for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre], g = v.m.groupe; t.poser(g.position.x, g.position.z, lx, lz, 0, g.position.y, g.quaternion); }
   for (const p of passants) { t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0); ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z); }
   for (const f of clients.liste) if (clients.dehors(f)) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
   for (const p of assis) { t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0); ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z); }
@@ -813,7 +819,7 @@ function majTaches() {
 function avantRendu(ego) {
   UNI.uTemps.value = temps;
   if (camLibre) ego = camera.position; // caméra posée à la main (captures) : l'ombre suit ce qu'on regarde
-  placerLumiere(ego.x, ego.z);
+  placerLumiere(ego.x, ego.z, camLibre ? 0 : ego.y);
   majTaches();
   monde.maj(camera.position.x, camera.position.z);
   // dans le bureau, la pièce ne reçoit pas d'ombre portée : on ne recalcule pas la carte d'ombre
@@ -903,7 +909,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam,
   get voitureProche() { return voitureProche(); },
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },

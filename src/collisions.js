@@ -1,5 +1,7 @@
 // Collisions au sol, en 2D : boîtes alignées (bâtiments, troncs, murets), rangs de vigne,
 // limites du monde. Grille de 8 m pour ne tester que les obstacles proches.
+import { permis, ramener, SORTIE } from './relief.js';
+
 const CASE = 8;
 export const LIMITE = 186;
 
@@ -69,10 +71,18 @@ export class Collisions {
         if (this.pousser(p, r, b)) touche = true;
       }
     }
-    if (p.x < -LIMITE) { p.x = -LIMITE; this.nx = 1; this.nz = 0; touche = true; }
-    if (p.x > LIMITE) { p.x = LIMITE; this.nx = -1; this.nz = 0; touche = true; }
-    if (p.z < -LIMITE) { p.z = -LIMITE; this.nx = 0; this.nz = 1; touche = true; }
-    if (p.z > LIMITE) { p.z = LIMITE; this.nx = 0; this.nz = -1; touche = true; }
+    // hors du carré de la zone de jeu, on ne va que sur la route du château, la route du tour et dans la cour du château
+    // (relief.js) : sinon on revient au plus près, dans le carré ou sur la route
+    if ((p.x < -LIMITE || p.x > LIMITE || p.z < -LIMITE || p.z > LIMITE) && !permis(p.x, p.z, r)) {
+      const dr = ramener(p.x, p.z, r);
+      const cx = Math.max(-LIMITE, Math.min(LIMITE, p.x)), cz = Math.max(-LIMITE, Math.min(LIMITE, p.z));
+      if (Math.hypot(cx - p.x, cz - p.z) <= dr) {
+        this.nx = cx > p.x ? 1 : cx < p.x ? -1 : 0; this.nz = cz > p.z ? 1 : cz < p.z ? -1 : 0;
+        if (this.nx && this.nz) this.nz = 0;
+        p.x = cx; p.z = cz;
+      } else { p.x = SORTIE.x; p.z = SORTIE.z; this.nx = SORTIE.nx; this.nz = SORTIE.nz; }
+      touche = true;
+    }
     return touche;
   }
 
