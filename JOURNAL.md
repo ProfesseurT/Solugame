@@ -521,3 +521,20 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Textes : notifications et bannières rangées dans `textes.js` (`NOTIFS`, `BANNIERES`) ; `eur` dans `outils.js`.
 
 **Vérifié** : nouveau banc `aides` (29 étapes, dans `npm run verifie`) qui joue exprès chaque cas : relance, aides au chai, à la cave, à l'épicerie, prospect quitté puis retrouvé à pied, chèque déposé et règlement saisi en pleine journée, bon refermé puis rouvert, signature qui arrive pendant le bon (rien ne s'efface), retour avec le chèque déjà déposé, fin. `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; arrivée chez le prospect et mini-carte en captures.
+
+## 23/11/2026 · Retours de Teddy (11), lot 2 : grand nettoyage du code
+
+**Demande** : un gros nettoyage de code.
+
+**Inventaire** (scripts jetables : exports jamais importés, imports et déclarations inutilisés, méthodes jamais appelées, textes jamais affichés, lignes longues en double) : presque pas de code mort (une entrée de `lieux` jamais lue) ; le vrai problème était `main.js`, 914 lignes dont une `miseAJour` de 200 lignes qui mêlait conduite, effets de particules, porte et caméra du chai, verres servis, étiquettes ; et quelques doublons recopiés d'un fichier à l'autre.
+
+**Fait** (aucun changement de comportement voulu) :
+- `chai.js` (nouveau, sur le modèle de `bureau.js`) : la grande porte, la halle dessinée de près, la bascule de caméra dedans et dehors, le chargement et ses chemins d'entrée et de sortie.
+- `verres.js` (nouveau) : servir un verre (qui peut-on servir, le geste, celui qui trinque et boit).
+- `particules.js` : `EffetsVehicule` (échappement au démarrage et en roulant, traces et fumée en dérapage, feuilles dans les vignes, gravillons), sorti de `main.js`. Même tirage au sort, dans le même ordre : les passants gardent leurs tenues et leurs trajets (la tournée en conduite assistée dure toujours 248 s en tracteur, 239 s en van).
+- `main.js` : `miseAJour` découpée en fonctions nommées (`lireEntrees`, `conduire`, `marcher`, `bourg`, `horloge`, `reperes`) ; 914 → 786 lignes.
+- `hud.js` : `action` (étiquette qui dit « (E) » au clavier, au lieu de cinq recopies du test), `libeller`, `bulle` (quatre recopies).
+- Doublons réunis : le bruit de valeur (relief des collines et bosses sous les roues, recopié à l'identique dans `monde.js` et `vehicules.js`) dans `outils.js` ; les panneaux de direction (`direction`, monde.js) ; le montage des quatre roues du tracteur et du van (`roues`, engins.js) ; les battants de porte (`battant`, gestes.js : portière du van, porte du bureau) ; la feuille du chèque (`geoCheque`, engins.js, partagée par la main et le bureau).
+- Couleur de la mission en un seul endroit (`COULEUR`, mission.js) ; `lieux.cave`, jamais lu, retiré ; en-têtes de fichiers et commentaires remis à jour.
+
+**Vérifié** : `npm run verifie` (tracteur, van, journée à la carte, cas limites) ; conduite assistée complète en tracteur et en van (mêmes durées à la seconde, aucun choc, aucune traversée) ; banc des personnages en jeu. Une première version oubliait que `hash` servait aussi aux maisons de `monde.js` : le jeu ne se chargeait plus, `verifie` l'a arrêtée.

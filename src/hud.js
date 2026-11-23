@@ -8,8 +8,9 @@ const v3 = new THREE.Vector3();
 const TIRETS = [9, 6], PLEIN = [], P = { x: 0, y: 0 };
 
 export class Hud {
-  constructor(fondCarte) {
-    this.fond = fondCarte;
+  // fondCarte : le fond de la mini-carte (monde.js) ; tactile : les étiquettes d'action ne disent pas la touche E
+  constructor(fondCarte, tactile) {
+    this.fond = fondCarte; this.tactile = tactile;
     this.cv = $('minimap'); this.ctx = this.cv.getContext('2d');
     this.file = []; this.ligne = null; this.tLigne = 0; this.finDialogue = null;
     this.tBan = 0; this.tRadio = 0;
@@ -130,7 +131,7 @@ export class Hud {
   }
 
   /* étiquettes accrochées à un point du monde */
-  etiquette(texte, classe, auToucher) {
+  etiquette(texte, classe) {
     // pas de bouton : un toucher court sur l'étiquette est traité par le canevas (main.js, toucher)
     const el = document.createElement('span');
     el.className = 'etiquette ' + (classe || ''); el.textContent = texte; el.hidden = true;
@@ -140,6 +141,11 @@ export class Hud {
     return o;
   }
   placer(o, x, y, z, vu) { o.x = x; o.y = y; o.z = z; o.vu = vu; }
+  // une étiquette d'action (elle se touche, ou touche E au clavier), et son texte
+  action(texte) { const o = this.etiquette('', 'action'); this.libeller(o, texte); return o; }
+  libeller(o, texte) { const t = this.tactile ? texte : texte + ' (E)'; if (o.el.textContent !== t) o.el.textContent = t; }
+  // une bulle qui parle (passant, automobiliste, celui qui trinque), montrée duree secondes
+  bulle(o, texte, duree) { o.el.textContent = texte; o.t = duree; o.vu = true; }
 
   update(dt, camera, w, h) {
     if (this.ligne) {

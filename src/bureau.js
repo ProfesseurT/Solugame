@@ -7,13 +7,13 @@ import { geoCheque } from './engins.js';
 import { $ } from './outils.js';
 
 export class Bureau {
-  // c : { jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, tactile, regarder(dedans) : jusqu'où la caméra
+  // c : { jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder(dedans) : jusqu'où la caméra
   // dessine (main.js) }
   constructor(c) {
     this.c = c; this.B = c.monde.lieux.bureau; this.auPortable = false;
     c.jeu.dedans = false;
-    const etq = t => c.hud.etiquette(c.tactile ? t : t + ' (E)', 'action');
-    this.etq = { depot: etq('Déposer le chèque'), entrer: etq('Entrer au bureau'), sortir: etq('Sortir'), portable: etq('S\'asseoir au portable') };
+    const h = c.hud;
+    this.etq = { depot: h.action('Déposer le chèque'), entrer: h.action('Entrer au bureau'), sortir: h.action('Sortir'), portable: h.action('S\'asseoir au portable') };
     this.etiquettes = Object.values(this.etq); // main.js : on peut les toucher
     // le chèque de l'épicerie, posé sur le bureau une fois déposé
     const B0 = this.B.depot;

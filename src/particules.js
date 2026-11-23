@@ -1,4 +1,5 @@
-// Particules (feuilles, fumée, gravillons, mottes, eau de la fontaine) et ombres de contact sous ce qui bouge.
+// Particules (feuilles, fumée, gravillons, mottes, eau de la fontaine), ombres de contact sous ce qui bouge, traces de
+// pneus, et ce que soulève un véhicule du domaine (EffetsVehicule).
 // Réserves fixes d'objets réutilisés : aucune allocation pendant le jeu. Couleurs en nombres (0xrrggbb).
 import * as THREE from 'three';
 
@@ -118,3 +119,63 @@ export class Traces {
   lever() { this.der[0] = this.der[1] = null; }
 }
 const Y = new THREE.Vector3(0, 1, 0);
+
+/* ---------------------------------------------------------------- ce que soulève un véhicule du domaine
+   Fumée d'échappement (au démarrage, en roulant : la cheminée verticale du tracteur, le pot bas à l'arrière du van),
+   traces de pneus sur l'asphalte et les pavés et fumée des pneus (ou poussière ailleurs) en dérapage, feuilles dans les
+   vignes, gravillons sur le gravier et mottes de terre derrière les roues arrière. */
+const FEUILLES = { cabernet: [0xc2562e, 0xb0402c, 0xd0702f], chenin: [0xe2b23a, 0xd9a832, 0xeac24a] };
+const GRAVIERS = [0xcfc1a0, 0xb9ab88, 0xe0d4b4], MOTTES = [0x6b4a30, 0x5a3e28, 0x7a5c3f];
+const POUSSIERE = { gravier: 0xcfc1a0, herbe: 0x9a8f6a, vigne: 0x7a5c3f };
+const ECH = { x: 0, y: 0, z: 0 };
+
+export class EffetsVehicule {
+  // particules : Particules ; traces : Traces ; col : Collisions (les parcelles de vigne) ; rnd : le tirage au sort du jeu
+  constructor(particules, traces, col, rnd) { this.emettre = particules.emettre; this.traces = traces; this.col = col; this.rnd = rnd; }
+  choisir(a) { return a[Math.floor(this.rnd() * a.length)]; }
+  // point de sortie des gaz du véhicule v (cap : sin sx, cos sz)
+  echappement(v, sx, sz) {
+    const p = v.p.pos;
+    if (v.genre === 'van') { ECH.x = p.x - sx * 2.3 + sz * 0.45; ECH.y = 0.35; ECH.z = p.z - sz * 2.3 - sx * 0.45; }
+    else { ECH.x = p.x + sx * 1.45 + sz * 0.3; ECH.y = 2.55; ECH.z = p.z + sz * 1.45 - sx * 0.3; }
+    return ECH;
+  }
+  // le moteur démarre : une bouffée de fumée
+  demarrer(v) {
+    const r = this.rnd, e = this.echappement(v, Math.sin(v.p.h), Math.cos(v.p.h));
+    for (let i = 0; i < 8; i++) this.emettre(e.x, e.y, e.z, (r() - 0.5) * 0.6, 1.2 + r(), (r() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
+  }
+  // en roulant (v : le véhicule conduit, { genre, p })
+  maj(dt, v) {
+    const tr = v.p, r = this.rnd, van = v.genre === 'van';
+    this.derapage(dt, v);
+    const sx = Math.sin(tr.h), sz = Math.cos(tr.h);
+    if (r() < dt * (3 + Math.abs(tr.v) * 0.4)) {
+      const e = this.echappement(v, sx, sz), k = van ? -0.3 : 0.8;
+      this.emettre(e.x, e.y, e.z, sx * tr.v * k + (r() - 0.5) * 0.4, (van ? 0.3 : 1) + r() * 0.6, sz * tr.v * k + (r() - 0.5) * 0.4, 0.7, 0x8a8790, van ? 0.5 : 0.75, -0.3);
+    }
+    if (tr.vignes && Math.abs(tr.v) > 0.8 && r() < dt * 30) {
+      let c = null;
+      for (const q of this.col.parcelles) if (tr.pos.x > q.x0 - 2 && tr.pos.x < q.x1 + 2 && tr.pos.z > q.z0 - 2 && tr.pos.z < q.z1 + 2) { c = q; break; }
+      const teinte = this.choisir(c && c.cep === 'cabernet' ? FEUILLES.cabernet : FEUILLES.chenin);
+      this.emettre(tr.pos.x + (r() - 0.5) * 2, 1.2 + r(), tr.pos.z + (r() - 0.5) * 2, (r() - 0.5) * 3, 2 + r() * 2, (r() - 0.5) * 3, 2.2, teinte, 0.9, 5);
+    }
+    const av = Math.abs(tr.v);
+    if ((tr.sol === 'gravier' || tr.sol === 'vigne') && av > 1.5 && r() < dt * av * 1.2) {
+      const cote = r() < 0.5 ? 0.98 : -0.98, bx = tr.pos.x - sx * 1.3 + sz * cote, bz = tr.pos.z - sz * 1.3 - sx * cote;
+      const gr = tr.sol === 'gravier', k = gr ? 0.25 : 0.35;
+      this.emettre(bx, 0.3, bz, -sx * tr.v * k + (r() - 0.5), 1.2 + r() * 1.6, -sz * tr.v * k + (r() - 0.5), 0.9, this.choisir(gr ? GRAVIERS : MOTTES), gr ? 0.4 : 0.7, 9);
+    }
+  }
+  // en dérapage : traces derrière les roues arrière, fumée des pneus sur le dur, poussière ailleurs
+  derapage(dt, v) {
+    const tr = v.p, g = tr.glisse, D = tr.d, r = this.rnd;
+    if (g < 0.18 || Math.abs(tr.v) + Math.abs(tr.vT) < 1.5) { this.traces.lever(); return; }
+    const fx = Math.sin(tr.h), fz = Math.cos(tr.h), zr = D.zAr ?? -0.9, xr = D.xAr ?? 0.98, dur = tr.sol === 'asphalte' || tr.sol === 'paves';
+    for (let k = 0; k < 2; k++) {
+      const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
+      if (dur) this.traces.marquer(k, x, z, v.genre === 'van' ? 0.22 : 0.4); else this.traces.lever();
+      if (r() < dt * 26 * g) this.emettre(x, 0.25, z, (r() - 0.5) * 0.8, 0.5 + r() * 0.6, (r() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
+    }
+  }
+}

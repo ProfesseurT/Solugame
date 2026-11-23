@@ -4,7 +4,7 @@
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
-import { hasard, lisse, assombrir } from './outils.js';
+import { hasard, lisse, assombrir, bruit, hache } from './outils.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
@@ -12,14 +12,6 @@ export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
 const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
 const FEUILLES_VIGNE = ['#b8642c', '#c9a23a', '#a6823a', '#8a8f3a'], VIGNE_VIERGE = ['#b0402c', '#c2562e', '#8e2a3b', '#d0702f', '#a8452f'];
 
-function hash(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
-function bruit(x, z) {
-  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
-  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
-  const a = hash(i, j) + (hash(i + 1, j) - hash(i, j)) * u;
-  const b = hash(i, j + 1) + (hash(i + 1, j + 1) - hash(i, j + 1)) * u;
-  return a + (b - a) * v;
-}
 // Relief : plat dans la zone de jeu, collines autour, vallée pour la départementale
 export function hauteur(x, z) {
   const r = Math.hypot(x, z);
@@ -275,8 +267,8 @@ void main() {
     for (let i = 0; i < q.count; i += 3) {
       const o = i * 3, x = (qa[o] + qa[o + 3] + qa[o + 6]) / 3, z = (qa[o + 2] + qa[o + 5] + qa[o + 8]) / 3;
       const r = Math.hypot(x, z);
-      if (r < 200) c.copy(herbes[Math.floor(hash(Math.floor(x / 13), Math.floor(z / 13)) * herbes.length)]);
-      else c.copy(champs[Math.floor(hash(Math.floor(x / 55) + 7, Math.floor(z / 48) - 3) * champs.length)]);
+      if (r < 200) c.copy(herbes[Math.floor(hache(Math.floor(x / 13), Math.floor(z / 13)) * herbes.length)]);
+      else c.copy(champs[Math.floor(hache(Math.floor(x / 55) + 7, Math.floor(z / 48) - 3) * champs.length)]);
       for (let k = 0; k < 3; k++) { cols[(i + k) * 3] = c.r; cols[(i + k) * 3 + 1] = c.g; cols[(i + k) * 3 + 2] = c.b; types[i + k] = r < 200 ? T.herbe : T.champ; }
     }
     g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
@@ -635,7 +627,7 @@ void main() {
   // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options (mur : couleur imposée)
   function maison(o) {
     const L = [], { w, d, h } = o, ht = o.ht ?? Math.min(w, d) * 0.55, surZ = d > w;
-    const hm = k => hash(o.x * 0.37 + k * 1.7, o.z * 0.71 - k * 2.3);
+    const hm = k => hache(o.x * 0.37 + k * 1.7, o.z * 0.71 - k * 2.3);
     const genre = o.mur ? 'taille' : hm(1) < 0.42 ? 'taille' : hm(1) < 0.72 ? 'enduit' : 'moellon';
     const mur = o.mur || (genre === 'taille' ? TUF : genre === 'enduit' ? ENDUITS[Math.floor(hm(2) * 4)] : MOELLONS[Math.floor(hm(2) * 3)]);
     const pierre = genre !== 'taille', ardoise = o.toit || [ARD, ARD2, '#62666f'][Math.floor(hm(8) * 3)];
@@ -693,7 +685,7 @@ void main() {
         const xt = colX(porte) + 0.85;
         L.push(C(0.05, 0.08, 2.75, 5, '#5e4a36', xt, 1.37, zv + 0.03), B(w - 0.9, 0.05, 0.05, '#5e4a36', 0, 2.78, zv + 0.06));
         for (let x = -w / 2 + 0.55, i = 0; x < w / 2 - 0.45; x += 0.23, i++) for (let r = 0; r < 3; r++) {
-          const j = hash(x * 4.1 + o.z, r + o.x);
+          const j = hache(x * 4.1 + o.z, r + o.x);
           items.push([x + (j - 0.5) * 0.12, 2.62 + r * 0.17 + (j - 0.5) * 0.12, zv + 0.03 + j * 0.06, 0.15 + 0.06 * j, j * 6.3, FEUILLES_VIGNE[Math.floor(j * 4)]]);
           if (r === 0 && i % 4 === 1) L.push(teinter(S(0.075, '#3b2340', x, 2.47, zv + 0.09, 1, 1.8, 1), '#3b2340'));
         }
@@ -703,13 +695,13 @@ void main() {
         // l'angle de la façade
         const sx = hm(6) < 0.5 ? 1 : -1, top = h * (0.55 + 0.35 * hm(7)), coin = [];
         for (let y = 0.25, r = 0; y < top; y += 0.2, r++) {
-          const t = y / top, large = 0.35 + 2.4 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.75 + 0.25 * hash(r, o.x));
+          const t = y / top, large = 0.35 + 2.4 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.75 + 0.25 * hache(r, o.x));
           for (let zz = d / 2 - 0.08; zz > d / 2 - large; zz -= 0.21) {
-            const j = hash(zz * 3.1 + o.x, y * 5.3 + o.z);
+            const j = hache(zz * 3.1 + o.x, y * 5.3 + o.z);
             items.push([sx * (w / 2 + 0.03 + j * 0.06), y + (j - 0.5) * 0.12, zz + (j - 0.5) * 0.12, 0.15 + 0.08 * j, j * 6.3, VIGNE_VIERGE[Math.floor(j * 5)]]);
           }
           if (t > 0.15 && t < 0.9) for (let k = 0; k < 3; k++) {
-            const j = hash(r * 1.3 + k, o.z + k);
+            const j = hache(r * 1.3 + k, o.z + k);
             if (j < 0.75) coin.push([sx * (w / 2 - 0.1 - k * 0.2 - j * 0.1), y + (j - 0.5) * 0.1, d / 2 + 0.03 + j * 0.05, 0.14 + 0.07 * j, j * 6.3, VIGNE_VIERGE[Math.floor(j * 5)]]);
           }
         }
@@ -1000,11 +992,7 @@ void main() {
     bati.push(C(0.9, 0.9, 0.8, 12, '#cfc3a8', -60, 0.4, 140.5), C(0.7, 0.7, 0.04, 12, '#2f3c4f', -60, 0.79, 140.5), B(0.1, 1.6, 0.1, '#5b3a2a', -60.8, 1.6, 140.5), B(0.1, 1.6, 0.1, '#5b3a2a', -59.2, 1.6, 140.5), B(1.8, 0.1, 0.12, '#5b3a2a', -60, 2.4, 140.5));
     col.boiteC(-60, 140.5, 1.8, 1.8);
     // panneau à l'entrée du chemin
-    panneau((c, W, H) => {
-      c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(H / 2, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(H / 2, H); c.closePath(); c.fill();
-      c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
-      c.fillStyle = '#1d1d1d'; c.font = 'bold 34px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Les Grands Champs', W / 2 + 18, H / 2 + 2);
-    }, 2.0, 0.34, -51.8, 2.0, 15.2, Math.PI / 2);
+    panneau(direction('Les Grands Champs', 34), 2.0, 0.34, -51.8, 2.0, 15.2, Math.PI / 2);
     rnd = rndMonde;
     return ailes;
   }
@@ -1076,7 +1064,7 @@ void main() {
     maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS) });
   // murs de clôture en moellons entre les maisons de la rue, chaperon de tuffeau, portail de bois dans les plus longs
   function cloture(x0, x1, z, portail) {
-    const H = 2.1, mc = MOELLONS[Math.floor(hash(x0, z) * 3)], seg = (u0, u1) => {
+    const H = 2.1, mc = MOELLONS[Math.floor(hache(x0, z) * 3)], seg = (u0, u1) => {
       if (u1 - u0 < 0.05) return;
       bati.push(B(u1 - u0, H, 0.45, mc, (u0 + u1) / 2, H / 2, z), B(u1 - u0 + 0.04, 0.14, 0.6, APPUI, (u0 + u1) / 2, H + 0.07, z));
     };
@@ -1302,14 +1290,16 @@ void main() {
     bati.push(teinter(new THREE.PlaneGeometry(w * 0.96, h * 0.96).rotateY(rot + Math.PI).translate(x - Math.sin(rot) * 0.02, y, z - Math.cos(rot) * 0.02), '#8d9196'));
     if (poteau) { bati.push(C(0.04, 0.04, y, 6, '#b9bcc2', x - Math.sin(rot) * 0.04, y / 2, z - Math.cos(rot) * 0.04)); col.boiteC(x, z, 0.15, 0.15); }
   }
+  // panneau de direction : une flèche blanche cerclée de noir, le nom du lieu (taille de la police en pixels)
+  const direction = (texte, px) => (c, W, H) => {
+    c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(H / 2, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(H / 2, H); c.closePath(); c.fill();
+    c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
+    c.fillStyle = '#1d1d1d'; c.font = `bold ${px}px Arial, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(texte, W / 2 + 18, H / 2 + 2);
+  };
   const octo = (c, W, H, fond) => { c.beginPath(); for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + k * Math.PI / 4; c.lineTo(W / 2 + Math.cos(a) * W / 2 * 0.98, H / 2 + Math.sin(a) * H / 2 * 0.98); } c.closePath(); c.fillStyle = fond; c.fill(); };
   panneau((c, W, H) => { octo(c, W, H, '#fff'); c.save(); c.translate(W * 0.04, H * 0.04); c.scale(0.92, 0.92); octo(c, W, H, '#c8202a'); c.restore(); c.fillStyle = '#fff'; c.font = 'bold 78px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STOP', W / 2, H / 2 + 4); }, 0.8, 0.8, 91.7, 2.2, 5.2, Math.PI);
   panneau((c, W, H) => { c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.fillStyle = '#c8202a'; c.fill(); c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 30, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#111'; c.font = 'bold 110px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('50', W / 2, H / 2 + 6); }, 0.7, 0.7, 24, 2.2, 16.6, -Math.PI / 2);
-  panneau((c, W, H) => {
-    c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(H / 2, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(H / 2, H); c.closePath(); c.fill();
-    c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
-    c.fillStyle = '#1d1d1d'; c.font = 'bold 30px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Domaine du Clos Libre', W / 2 + 18, H / 2 + 2);
-  }, 2.2, 0.36, -86.2, 2.0, 5.6, 0);
+  panneau(direction('Domaine du Clos Libre', 30), 2.2, 0.36, -86.2, 2.0, 5.6, 0);
   const moulin = hameau();
   const enseignes = atlas.maillage();
   scene.add(enseignes);
@@ -1410,8 +1400,7 @@ void main() {
     chai: { x: -82, z: -52 },
     // dans le chai : où le véhicule s'arrête pour charger, la sortie en marche arrière, la caméra de la halle
     chaiDedans: { x: -70.2, z: -52, h: Math.PI / 2 }, chaiSalle: { camera: { x: -70.6, y: 4.6, z: -40.6 }, centre: { x: -70.8, y: 1.0, z: -50.5 } },
-    cave: { x: 77.8, z: -46 },
-    // les trois clients : où ils attendent, où le tracteur s'arrête
+    // les clients (les trois commandes, l'épicerie, l'auberge) : où ils attendent, où le véhicule s'arrête
     figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 }, auberge: { x: -49, z: 135.6, h: -Math.PI / 2 } },
     arrets: { cave: { x: 77.8, z: -46 }, bar: { x: 81.5, z: -57.2 }, treille: { x: 110.5, z: 9.4 }, epicerie: { x: 83, z: 9.4 }, auberge: { x: -53.2, z: 134.5 } },
     // le bureau du chai (au bout sud du chai) : devant la porte, dehors et dedans ; la chaise du portable ; la caméra de

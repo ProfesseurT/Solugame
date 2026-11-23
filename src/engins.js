@@ -192,6 +192,19 @@ function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
   return g;
 }
 
+// Les quatre roues d'un véhicule du domaine : à l'arrière sur le châssis (groupe), à l'avant sur deux pivots de direction
+// portés par un essieu oscillant (il penche sur les bosses). g : géométries [arrière gauche, arrière droite, avant
+// gauche, avant droite] ; demi-voie, hauteur et position le long du véhicule de l'arrière, puis de l'avant.
+function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
+  const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  const rouesAr = [mk(g[0], groupe, xAr, yAr, zAr), mk(g[1], groupe, -xAr, yAr, zAr)];
+  const essieu = new THREE.Group(); essieu.position.set(0, yAv, zAv); groupe.add(essieu);
+  const pivots = [new THREE.Group(), new THREE.Group()];
+  pivots[0].position.set(xAv, 0, 0); pivots[1].position.set(-xAv, 0, 0);
+  essieu.add(pivots[0], pivots[1]);
+  return { rouesAr, rouesAv: [mk(g[2], pivots[0], 0, 0, 0), mk(g[3], pivots[1], 0, 0, 0)], pivots, essieu };
+}
+
 /* ---------------------------------------------------------------- carton de 6 bouteilles
    Un seul modèle pour tous : sur la palette du chai, dans les bras, dans le tracteur ou le van, devant les clients.
    Centré sur l'origine ; on les empile tous les PAS_CARTON mètres. */
@@ -412,14 +425,9 @@ export function tracteur() {
   volant.castShadow = true; support.add(volant);
 
   // roues : une géométrie par côté (jante vers l'extérieur), partagée par tous les tracteurs
-  const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-  const rouesAr = [mk(pneuAgricole(0.78, 0.44, 20, 1, 18), groupe, 0.98, 0.78, -0.9), mk(pneuAgricole(0.78, 0.44, 20, -1, 18), groupe, -0.98, 0.78, -0.9)];
-  // essieu avant oscillant (il penche sur les bosses), qui porte les deux pivots de direction
-  const essieu = new THREE.Group(); essieu.position.set(0, 0.45, 1.35); groupe.add(essieu);
-  const pivots = [new THREE.Group(), new THREE.Group()];
-  pivots[0].position.set(0.84, 0, 0); pivots[1].position.set(-0.84, 0, 0);
-  essieu.add(pivots[0], pivots[1]);
-  const rouesAv = [mk(pneuAgricole(0.45, 0.3, 16, 1, 13), pivots[0], 0, 0, 0), mk(pneuAgricole(0.45, 0.3, 16, -1, 13), pivots[1], 0, 0, 0)];
+  const { rouesAr, rouesAv, pivots, essieu } = roues(groupe,
+    [pneuAgricole(0.78, 0.44, 20, 1, 18), pneuAgricole(0.78, 0.44, 20, -1, 18), pneuAgricole(0.45, 0.3, 16, 1, 13), pneuAgricole(0.45, 0.3, 16, -1, 13)],
+    0.98, 0.78, -0.9, 0.84, 0.45, 1.35);
 
   // jusqu'à 18 cartons sur le plateau, en 6 colonnes de 3 (3 de large, 2 de profondeur) ; posés sur la caisse, ils
   // roulent et tanguent avec elle. On charge et on décharge par le côté ou par l'arrière (chargeur : où l'on se tient).
@@ -665,13 +673,7 @@ export function van() {
 
   // roues : une géométrie par côté (jante vers l'extérieur), partagée par l'avant et l'arrière (et par tous les vans)
   const rG = roue(R, 0.2, 12, 1, true, '#b9bec4'), rD = roue(R, 0.2, 12, -1, true, '#b9bec4');
-  const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-  const rouesAr = [mk(rG, groupe, X, R, ZAR), mk(rD, groupe, -X, R, ZAR)];
-  const essieu = new THREE.Group(); essieu.position.set(0, R, ZAV); groupe.add(essieu);
-  const pivots = [new THREE.Group(), new THREE.Group()];
-  pivots[0].position.set(X, 0, 0); pivots[1].position.set(-X, 0, 0);
-  essieu.add(pivots[0], pivots[1]);
-  const rouesAv = [mk(rG, pivots[0], 0, 0, 0), mk(rD, pivots[1], 0, 0, 0)];
+  const { rouesAr, rouesAv, pivots, essieu } = roues(groupe, [rG, rD, rG, rD], X, R, ZAR, X, R, ZAV);
 
   // 18 cartons dans l'espace de chargement, en 6 colonnes de 3 (3 de large, 2 de profondeur, en face de la porte
   // coulissante par où l'on charge) ; on les voit par les vitres. chargeur : où l'on se tient pour charger.

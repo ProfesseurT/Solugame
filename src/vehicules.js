@@ -1,6 +1,6 @@
 // Les véhicules du domaine (tracteur, van) et les voitures de la départementale.
 import * as THREE from 'three';
-import { angle, versAngle, borne, amortir as lisser } from './outils.js';
+import { angle, versAngle, borne, bruit, amortir as lisser } from './outils.js';
 
 /* ---------------------------------------------------------------- nature du sol
    D'après les surfaces dessinées dans monde.js (routes, place, cour, parcelles) : à reprendre
@@ -31,15 +31,8 @@ const SOLS = {
   vigne: { A: 0.05, f: 1.1, res: 1.15, grip: 0.75 },
 };
 
-function h2(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
-// bruit de valeur lissé, entre -0,5 et 0,5 : le relief invisible sous les roues
-function bosse(x, z) {
-  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
-  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
-  const a = h2(i, j) + (h2(i + 1, j) - h2(i, j)) * u;
-  const b = h2(i, j + 1) + (h2(i + 1, j + 1) - h2(i, j + 1)) * u;
-  return a + (b - a) * v - 0.5;
-}
+// le relief invisible sous les roues, entre -0,5 et 0,5
+const bosse = (x, z) => bruit(x, z) - 0.5;
 // ressort amorti : nouvelle vitesse de x vers la cible c (pulsation w, amortissement z)
 const ressort = (dt, x, v, c, w, z) => v + (w * w * (c - x) - 2 * z * w * v) * dt;
 

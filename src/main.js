@@ -15,13 +15,15 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { son } from './audio.js';
-import { versAngle, hasard, $, lisse } from './outils.js';
+import { hasard, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE } from './textes.js';
 import { Paliers } from './qualite.js';
-import { Particules, Taches, Traces } from './particules.js';
+import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
+import { Chai } from './chai.js';
+import { Verres } from './verres.js';
 import { Reseau, longueur } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -82,8 +84,6 @@ let nOmbre = 0;
 
 const rnd = hasard(7);
 const pick = a => a[Math.floor(rnd() * a.length)];
-const FEUILLES_CAB = [0xc2562e, 0xb0402c, 0xd0702f], FEUILLES_CHE = [0xe2b23a, 0xd9a832, 0xeac24a];
-const GRAVIERS = [0xcfc1a0, 0xb9ab88, 0xe0d4b4], MOTTES = [0x6b4a30, 0x5a3e28, 0x7a5c3f];
 
 /* ------------------------------------------------------------------ marque de mission */
 const marque = new THREE.Group();
@@ -103,6 +103,7 @@ const marque = new THREE.Group();
 const particules = new Particules(scene, camera, rnd), emettre = particules.emettre;
 const taches = new Taches(scene);
 const traces = new Traces(scene);
+const effets = new EffetsVehicule(particules, traces, col, rnd); // fumée, traces, feuilles, gravillons du véhicule conduit
 
 /* ------------------------------------------------------------------ personnages, tracteur, voitures */
 let choixHeros = stocke.lire('tournee-generale-heros') === 'vigneronne' ? 'vigneronne' : 'vigneron';
@@ -181,7 +182,7 @@ function peupler() {
   client3D('epicerie'); // créés en derniers : les autres gardent leurs tirages au sort (tenues)
   client3D('auberge');
 }
-// voitures garées (immobiles)
+// les modèles de toutes les voitures, garées et qui roulent (leur ombre de contact : majTaches)
 const voituresM = [];
 // voitures garées : immobiles, fusionnées par quartier de 64 m (carrosseries, vitres), chaque quartier élagué hors champ
 const garees = new Map();
@@ -221,7 +222,7 @@ const voitures = [];
 
 /* ------------------------------------------------------------------ jeu */
 const cam = new Camera(camera);
-const hud = new Hud(monde.carte);
+const hud = new Hud(monde.carte, tactile);
 const ctrl = new Controles(canvas, $('stick'));
 cam.lier(ctrl);
 
@@ -246,9 +247,8 @@ const jeu = {
   get choixHeros() { return choixHeros; },
   get joueur() { return joueur; },
   distance(p) { const o = this.auVolant ? tr.pos : joueur.pos; return Math.hypot(o.x - p.x, o.z - p.z); },
-  dansChai: false, // dans la halle du chai, ou sur son seuil : la caméra est posée au fond de la halle
   // devant la grande porte du chai, dans son axe, ou déjà dedans (mission.js : le chargement commence)
-  get devantChai() { const o = this.auVolant ? tr.pos : joueur.pos; return this.dansChai || (o.x > -84 && o.x < -64.3 && Math.abs(o.z + 52) < 3); },
+  get devantChai() { return chai.devant(this.auVolant ? tr.pos : joueur.pos); },
   changerHeros(h) {
     if (h === choixHeros || !HEROS[h] || gestes.actif) return;
     choixHeros = h; stocke.ecrire('tournee-generale-heros', h);
@@ -281,35 +281,17 @@ const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // mon
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
-const etqMonter = hud.etiquette(tactile ? 'Monter' : 'Monter (E)', 'action', () => agir());
-const etqServir = hud.etiquette(tactile ? 'Servir un verre' : 'Servir un verre (E)', 'action');
-const etqDescendre = hud.etiquette(tactile ? 'Descendre' : 'Descendre (E)', 'action', () => agir());
+const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre');
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
-const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, tactile, regarder });
+const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
 const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
 $('radio').addEventListener('click', e => { e.stopPropagation(); if (jeu.auVolant) { son.jouer('tap'); jeu.basculerRadio(); } });
 
-// point de sortie des gaz d'échappement : la cheminée verticale du tracteur, le pot bas à l'arrière du van
-function echappement(sx, sz) {
-  if (veh.genre === 'van') return [tr.pos.x - sx * 2.3 + sz * 0.45, 0.35, tr.pos.z - sz * 2.3 - sx * 0.45];
-  return [tr.pos.x + sx * 1.45 + sz * 0.3, 2.55, tr.pos.z + sz * 1.45 - sx * 0.3];
-}
-// En dérapage : traces de pneus sur l'asphalte et les pavés, fumée des pneus (ou poussière ailleurs) derrière les roues arrière
-const POUSSIERE = { gravier: 0xcfc1a0, herbe: 0x9a8f6a, vigne: 0x7a5c3f };
-function derapage(dt) {
-  const g = tr.glisse, D = tr.d;
-  if (g < 0.18 || Math.abs(tr.v) + Math.abs(tr.vT) < 1.5) { traces.lever(); return; }
-  const fx = Math.sin(tr.h), fz = Math.cos(tr.h), zr = D.zAr ?? -0.9, xr = D.xAr ?? 0.98, dur = tr.sol === 'asphalte' || tr.sol === 'paves';
-  for (let k = 0; k < 2; k++) {
-    const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
-    if (dur) traces.marquer(k, x, z, veh.genre === 'van' ? 0.22 : 0.4); else traces.lever();
-    if (rnd() < dt * 26 * g) emettre(x, 0.25, z, (rnd() - 0.5) * 0.8, 0.5 + rnd() * 0.6, (rnd() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
-  }
-}
+/* ------------------------------------------------------------------ monter, conduire, descendre ; les gestes de la mission */
 // le véhicule à portée de main (le plus proche, à moins de 5 m), ou null
 function vehiculeProche() {
   let best = null, dmin = 5;
@@ -323,8 +305,7 @@ function auVolant(v) {
   joueur.poste = v.poste; joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
   son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
   if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
-  const sx = Math.sin(tr.h), sz = Math.cos(tr.h), [ex, ey, ez] = echappement(sx, sz);
-  for (let i = 0; i < 8; i++) emettre(ex, ey, ez, (rnd() - 0.5) * 0.6, 1.2 + rnd(), (rnd() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
+  effets.demarrer(v);
 }
 // On monte (gestes.js : on va à la portière ou au marchepied, on s'installe), puis le moteur démarre
 function monter(v) {
@@ -342,39 +323,10 @@ function descendre() {
   couperMoteur(); ctrl.relacher();
   gestes.descendre(veh, aPied, () => {});
 }
-// Les cartons (mission.js) : charger ceux de la palette du chai, décharger ceux d'un client, puis remonter au volant
-let accelerVu = false;
-// Au chai : les portes s'ouvrent, le véhicule entre tout seul jusqu'à la palette, on charge dedans, il ressort en marche
-// arrière dans la cour, le nez vers le chemin du domaine (gestes.js : rouler). La caméra est posée dans la halle.
-function cheminEntree(x0, z0, h0, D) { // déjà sur le seuil ou dedans : droit vers la place, sans repasser par la porte
-  const P3 = x0 < -78.3 ? [-77.8, D.z] : [D.x, D.z], c = Math.max(1, Math.hypot(P3[0] - x0, P3[1] - z0) * 0.45);
-  const P1 = [x0 + Math.sin(h0) * c, z0 + Math.cos(h0) * c], P2 = [P3[0] - c, P3[1]], pts = [];
-  for (let i = 0; i <= 24; i++) {
-    const t = i / 24, a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, d = 3 * (1 - t) * t * t, e = t ** 3;
-    pts.push([a * x0 + b * P1[0] + d * P2[0] + e * P3[0], a * z0 + b * P1[1] + d * P2[1] + e * P3[1]]);
-  }
-  for (let x = P3[0] + 0.5; x < D.x; x += 0.5) pts.push([x, D.z]);
-  pts.push([D.x, D.z]);
-  return pts;
-}
-function cheminSortie(D) { // tout droit hors de la porte, puis en arc ; finit au départ de la tournée (lieux.route0)
-  const pts = [];
-  for (let x = D.x; x > -79.6; x -= 0.5) pts.push([x, D.z]);
-  for (let i = 0; i <= 20; i++) { const f = i / 20 * 2.2; pts.push([-79.6 - 4 * Math.sin(f), D.z - 4 * (1 - Math.cos(f))]); }
-  return pts;
-}
-jeu.auChai = false;
-jeu.charger = (piles, place, fin) => {
-  const v = veh, p = v.p, D = L.chaiDedans, x0 = p.pos.x, z0 = p.pos.z, h0 = p.h;
-  if (!accelerVu) { accelerVu = true; hud.dire(DIALOGUES.accelerer(tactile)); }
-  jeu.auChai = true; cam.pret = false;
-  const entree = cheminEntree(x0, z0, h0, D);
-  p.pos.set(D.x, 0, D.z); p.h = D.h; // les gestes se calculent le véhicule à sa place, dans le chai
-  gestes.charger(v, piles, { sorti: aPied, place, installe: () => auVolant(v) },
-    [gestes.rouler(v, entree, 4.4), { action: couperMoteur }],
-    [gestes.rouler(v, cheminSortie(D), 5.4, true), { action: () => { jeu.auChai = false; cam.pret = false; cam.yaw = p.h; fin(); } }]);
-  p.pos.set(x0, 0, z0); p.h = h0;
-};
+// Les cartons (mission.js) : charger ceux de la palette du chai (chai.js : le véhicule entre, on charge dedans, il
+// ressort), décharger ceux d'un client, puis remonter au volant
+const chai = new Chai({ jeu, monde, mission, gestes, cam, hud, tactile, conduite: { couperMoteur, auVolant, aPied } });
+jeu.charger = (piles, place, fin) => chai.charger(piles, place, fin);
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 // À l'épicerie : arrêté devant, on descend, on va au comptoir, l'épicier parle et donne le chèque, on remonte ; à pied, on
 // va seulement au comptoir (gestes.js : cheque)
@@ -401,7 +353,7 @@ function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
-  if (servable) { servir(servable); return; }
+  if (verres.servable) { verres.servir(verres.servable); return; }
   const v = vehiculeProche();
   if (v) monter(v);
 }
@@ -445,69 +397,19 @@ function horsDesVoitures() {
       const d = Math.sqrt(d2) || 0.001;
       j.pos.x = cx + dx / d * R; j.pos.z = v.z + dz / d * R;
       if (v.v > 1.5) { j.sauter(dx / d, dz / d); v.cogner(j, -dx / d, -dz / d, 0.3); }
-      else if (!v.klaxon) { v.klaxon = true; son.jouer('klaxon'); v.cri.el.textContent = 'Tût tût !'; v.cri.t = 1.6; v.cri.vu = true; }
+      else if (!v.klaxon) { v.klaxon = true; son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !', 1.6); }
     }
   }
 }
 
-/* ------------------------------------------------------------------ servir un verre de vin aux passants
-   À pied, près d'un passant (ou d'un figurant assis à la terrasse) : « Servir un verre ». On verse, on tend le verre,
-   il trinque et boit. Une fois par personne et par minute. */
-let servable = null;          // le Pieton qu'on peut servir, ou null
-let nVerres = 0;
-const SERVICE = 3.2;          // durée du geste (s)
-// les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js)
-function candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of figurants) if (x.p.servable) f(x.p, 2.4); }
+/* ------------------------------------------------------------------ servir un verre de vin (verres.js)
+   les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js) */
+const verres = new Verres({ jeu, hud, mission, hasard: rnd,
+  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of figurants) if (x.p.servable) f(x.p, 2.4); } });
 jeu.prospectServable = on => { for (const x of figurants) if (x.id === 'auberge') x.p.servable = on; };
-let dServable = 1e9;
-function essayerServable(p, portee) {
-  if (p.verre > 0 || p.sautT > 0 || (p.servi && temps - p.servi < 60)) return;
-  const d = Math.hypot(p.pos.x - joueur.pos.x, p.pos.z - joueur.pos.z);
-  if (d < portee && d < dServable) { dServable = d; servable = p; }
-}
-function chercherServable() {
-  servable = null;
-  if (jeu.auVolant || tel.ouvert || pc.ouvert || joueur.service || joueur.sautT > 0 || gestes.actif) return;
-  dServable = 1e9;
-  candidats(essayerServable);
-}
-function servir(p) {
-  joueur.service = { t: 0, duree: SERVICE, cible: p, donne: false };
-  p.aServir = true; p.servi = temps;
-  joueur.h = Math.atan2(p.pos.x - joueur.pos.x, p.pos.z - joueur.pos.z); joueur.v = 0;
-  son.jouer('bouchon');
-  if (nVerres === 0 && !p.servable) hud.dire(DIALOGUES.verre);
-}
-// le geste avance ; au bon moment le verre change de main ; celui qui boit le garde quelques secondes
-function majService(dt) {
-  const S = joueur.service;
-  if (S) {
-    S.t += dt;
-    const p = S.cible;
-    p.h = versAngle(p.h, Math.atan2(joueur.pos.x - p.pos.x, joueur.pos.z - p.pos.z), dt * 6);
-    if (S.t > SERVICE * 0.2 && !S.verse) { S.verse = true; son.jouer('verser'); }
-    if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; nVerres++; if (p.servable) mission.degustee(); }
-    if (S.t >= SERVICE) joueur.service = null;
-  }
-  dtVerre = dt;
-  candidats(boire);
-}
-// celui qui a reçu un verre le boit ; il trinque au bout de 0,6 s
-let dtVerre = 0;
-function boire(p) {
-  if (!(p.verre > 0)) return;
-  const avant = p.tVerre;
-  p.tVerre += dtVerre; p.verre -= dtVerre;
-  if (avant < 0.6 && p.tVerre >= 0.6) {
-    son.jouer('tchin');
-    const b = p.etq;
-    if (b) { b.el.textContent = pick(REPLIQUES_VERRE); b.t = 2.4; b.vu = true; }
-  }
-  if (p.verre <= 0) p.verre = 0;
-}
 
-function miseAJour(dt) {
-  const dtm = tel.ouvert || pc.ouvert ? dt * 0.3 : dt;
+// les actions (touche E, téléphone, son, radio, échap) et les touchers courts sur l'écran
+function lireEntrees() {
   for (const a of ctrl.actions) {
     if (a === 'agir') agir();
     else if (a === 'tel' && $('fin').hidden && !pc.ouvert) tel.basculer();
@@ -519,15 +421,130 @@ function miseAJour(dt) {
   ctrl.actions.length = 0;
   for (const tp of ctrl.touchers) toucher(tp);
   ctrl.touchers.length = 0;
+}
 
-  // entrées, dans le repère de la caméra
+// Au volant. Au doigt : doigt posé = on avance. Sur l'itinéraire de la mission, le véhicule le suit tout seul (vitesse
+// réglée, arrêt à destination : pilote.js). Glisser sur le côté : on tourne soi-même ; vers le bas : freiner, puis
+// reculer ; vers le bas et sur le côté, lancé : frein à main (dérapage) ; vers le haut : un peu plus vite ; doigt levé :
+// on s'arrête en douceur. Au clavier et à la manette : à la main.
+function conduire(dt, dtm) {
+  let gaz = 0, braq = 0, fm = false;
+  const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
+  pilote.prendre(mission.route);
+  jeu.pilote = false;
+  if (ctrl.clavier && libre) { gaz = -ctrl.ky; braq = -ctrl.kx; }
+  else if (ctrl.id !== null && libre) {
+    const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
+    const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
+    if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.35 && tr.v > 4) { fm = true; gaz *= 0.3; } }
+    else {
+      const auto = tourne ? null : pilote.commande(tr, veh.genre, mission.cible, voitures, col);
+      if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
+      else {
+        braq = volant;
+        const vc = croisiere(veh.genre) * (sy < -0.4 ? 1.35 : 1) * (1 - 0.45 * Math.abs(braq)) * (tr.vignes ? 0.45 : 1);
+        gaz = Math.max(-1, Math.min(1, (vc - tr.v) * 0.9));
+      }
+    }
+  } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0;
+  if (ctrl.fm && libre) fm = true;
+  tr.update(dtm, gaz, braq, col, voitures, temps, fm);
+  joueur.volant = tr.braq; // les mains suivent la direction
+  joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
+  if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
+  effets.maj(dtm, veh); // fumée, traces de dérapage, feuilles dans les vignes, gravillons
+  tSon -= dt;
+  if (tSon <= 0) { tSon = 0.1; son.moteur(true, tr.v, tr); }
+}
+
+// À pied : le manche (doigt, souris) et le clavier, dans le repère de la caméra ; immobile pendant qu'on sert un verre
+function marcher(dtm) {
   let ix = ctrl.jx + ctrl.kx, iy = ctrl.jy + ctrl.ky;
   if (tel.ouvert || pc.ouvert || !$('fin').hidden) ix = iy = 0;
   const force = Math.min(1, Math.hypot(ix, iy));
-  const a = cam.yaw, fx = Math.sin(a), fz = Math.cos(a);
+  const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
   let wx = fx * -iy - fz * ix, wz = fz * -iy + fx * ix;
   const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
+  if (joueur.service) joueur.update(dtm, 0, 0, 0, false, col, temps);
+  else joueur.update(dtm, wx, wz, force, ctrl.courir, col, temps);
+  horsDesVehicules(joueur.pos, joueur.r);
+  horsDesVoitures();
+  // un pas chaque fois qu'un pied se pose (la foulée, anim.js, fait deux pas par cycle)
+  const pp = Math.floor(joueur.anim.ph * 2);
+  if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
+}
 
+// La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients qui se tournent vers vous et font
+// signe, les figurants assis, les verres qu'on boit, les voitures de la départementale
+function bourg(dtm, ego) {
+  if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
+  const danger = jeu.auVolant ? DANGER : null;
+  for (const p of passants) {
+    if (p.update(dtm, danger, col, temps)) hud.bulle(p.cri, 'Hé !', 1.6);
+    horsDesVehicules(p.p.pos, 0.34);
+    if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
+  }
+  for (const { p, l } of figurants) {
+    const pres = Math.hypot(p.pos.x - ego.x, p.pos.z - ego.z) < 12;
+    p.h = pres ? Math.atan2(ego.x - p.pos.x, ego.z - p.pos.z) : l.h;
+    p.salut = pres; p.regard = pres ? VISAGE.set(ego.x, jeu.auVolant ? 2.4 : 1.6, ego.z) : null;
+    p.sync(dtm, temps);
+  }
+  for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
+  verres.maj(dtm, temps);
+  const obstacles = OBSTACLES; obstacles[0] = ego; obstacles[1] = vTracteur.p.pos; obstacles[2] = vVan.p.pos;
+  for (const v of voitures) {
+    if (v.update(dtm, obstacles, voitures) && Math.hypot(v.x - ego.x, v.z - ego.z) < 50) { son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !', 1.6); }
+    // touchée : secousse (vehicules.js), choc, éclats de carrosserie, le conducteur râle
+    if (v.cogne) {
+      v.cogne = false;
+      if (v.choc > 0.3) {
+        son.jouer('choc'); son.jouer('klaxon');
+        hud.bulle(v.cri, pick(CHOCS_VOITURE), 2.4);
+        for (let i = 0; i < 10; i++) emettre(v.x + (rnd() - 0.5) * 1.5, 0.6 + rnd() * 0.5, v.z + (rnd() - 0.5) * 1.5, (rnd() - 0.5) * 3, 1.5 + rnd() * 2, (rnd() - 0.5) * 3, 1.4, rnd() < 0.5 ? v.teinte : 0x2a2a2e, 0.5, 9);
+      }
+    }
+    if (v.cri.vu) hud.placer(v.cri, v.x, 2.4, v.z, true);
+  }
+}
+
+// l'horloge : une minute de jeu toutes les 2 secondes ; le texte n'est refait qu'une fois par minute de jeu
+function horloge(dtm) {
+  jeu.minutes += dtm / 2;
+  const m = Math.floor(jeu.minutes);
+  if (m === minuteAff) return;
+  minuteAff = m;
+  jeu.heureTxt = String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  hud.heure(jeu.heureTxt);
+}
+
+// La balise de la mission et son étiquette (nom, distance) ; les étiquettes d'action : le bureau du chai d'abord (les
+// autres s'effacent devant elles), servir un verre, monter, descendre
+function reperes(dt, ego, cible) {
+  marque.visible = !!cible && !jeu.dedans;
+  if (cible) {
+    marque.position.set(cible.x, 0, cible.z);
+    const u = marque.userData, k = 1 + Math.sin(temps * 4) * 0.06;
+    u.anneau.scale.set(k, 1, k); u.fleche.position.y = 3.2 + Math.sin(temps * 3) * 0.35; u.fleche.rotation.y = temps * 1.6;
+    if ((tEtq -= dt) <= 0) {
+      tEtq = 0.25;
+      etqCible.el.textContent = mission.nomCible + ' · ' + Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z)) + ' m';
+    }
+  }
+  hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
+  const pcPres = bureau.maj();
+  verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
+  const servable = verres.servable;
+  const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
+  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : 'Monter');
+  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp && vp.genre === 'van' ? 3.0 : 3.6, vp ? vp.p.pos.z : 0, !!vp);
+  hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
+  hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
+}
+
+function miseAJour(dt) {
+  const dtm = tel.ouvert || pc.ouvert ? dt * 0.3 : dt; // derrière le téléphone ou le portable, le monde ralentit
+  lireEntrees();
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
   bureau.avant(); // assis au portable : les mains sur le clavier ; après un appel passé depuis le portable, on y revient
   if (gestes.actif) {
@@ -536,173 +553,28 @@ function miseAJour(dt) {
     const vite = gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1;
     gestes.update(dtm * vite, temps);
     if (jeu.auVolant && !gestes.roule) tr.update(dtm, 0, 0, col, voitures, temps); // (le véhicule qui roule tout seul : gestes.js)
-  } else if (jeu.auVolant) {
-    let gaz = 0, braq = 0, fm = false;
-    const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
-    pilote.prendre(mission.route);
-    jeu.pilote = false;
-    if (ctrl.clavier && libre) { gaz = -ctrl.ky; braq = -ctrl.kx; }
-    else if (ctrl.id !== null && libre) {
-      // Au doigt : doigt posé = on avance. Sur l'itinéraire de la mission, le véhicule le suit tout seul (vitesse réglée,
-      // arrêt à destination). Glisser sur le côté : on tourne soi-même ; vers le bas : freiner, puis reculer ;
-      // vers le haut : un peu plus vite.
-      const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
-      const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
-      // vers le bas : freiner ; vers le bas et sur le côté, lancé : frein à main, le véhicule part en dérapage
-      if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.35 && tr.v > 4) { fm = true; gaz *= 0.3; } }
-      else {
-        const auto = tourne ? null : pilote.commande(tr, veh.genre, mission.cible, voitures, col);
-        if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
-        else {
-          braq = volant;
-          const vc = croisiere(veh.genre) * (sy < -0.4 ? 1.35 : 1) * (1 - 0.45 * Math.abs(braq)) * (tr.vignes ? 0.45 : 1);
-          gaz = Math.max(-1, Math.min(1, (vc - tr.v) * 0.9));
-        }
-      }
-    } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0; // doigt levé : on s'arrête en douceur
-    if (ctrl.fm && libre) fm = true;
-    tr.update(dtm, gaz, braq, col, voitures, temps, fm);
-    derapage(dtm);
-    joueur.volant = tr.braq; // les mains suivent la direction
-    joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
-    if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
-    // fumée d'échappement et feuilles quand on roule dans les vignes
-    const sx = Math.sin(tr.h), sz = Math.cos(tr.h);
-    if (rnd() < dtm * (3 + Math.abs(tr.v) * 0.4)) {
-      const [ex, ey, ez] = echappement(sx, sz), k = veh.genre === 'van' ? -0.3 : 0.8;
-      emettre(ex, ey, ez, sx * tr.v * k + (rnd() - 0.5) * 0.4, (veh.genre === 'van' ? 0.3 : 1) + rnd() * 0.6, sz * tr.v * k + (rnd() - 0.5) * 0.4, 0.7, 0x8a8790, veh.genre === 'van' ? 0.5 : 0.75, -0.3);
-    }
-    if (tr.vignes && Math.abs(tr.v) > 0.8 && rnd() < dtm * 30) {
-      let c = null;
-      for (const q of col.parcelles) if (tr.pos.x > q.x0 - 2 && tr.pos.x < q.x1 + 2 && tr.pos.z > q.z0 - 2 && tr.pos.z < q.z1 + 2) { c = q; break; }
-      const teinte = c && c.cep === 'cabernet' ? pick(FEUILLES_CAB) : pick(FEUILLES_CHE);
-      emettre(tr.pos.x + (rnd() - 0.5) * 2, 1.2 + rnd(), tr.pos.z + (rnd() - 0.5) * 2, (rnd() - 0.5) * 3, 2 + rnd() * 2, (rnd() - 0.5) * 3, 2.2, teinte, 0.9, 5);
-    }
-    tSon -= dt;
-    if (tSon <= 0) { tSon = 0.1; son.moteur(true, tr.v, tr); }
-    // gravillons projetés sur le gravier, mottes de terre dans les vignes, derrière les roues arrière
-    const avr = Math.abs(tr.v);
-    if ((tr.sol === 'gravier' || tr.sol === 'vigne') && avr > 1.5 && rnd() < dtm * avr * 1.2) {
-      const cote = rnd() < 0.5 ? 0.98 : -0.98, bx = tr.pos.x - sx * 1.3 + sz * cote, bz = tr.pos.z - sz * 1.3 - sx * cote;
-      const gr = tr.sol === 'gravier', k = gr ? 0.25 : 0.35;
-      emettre(bx, 0.3, bz, -sx * tr.v * k + (rnd() - 0.5), 1.2 + rnd() * 1.6, -sz * tr.v * k + (rnd() - 0.5), 0.9, gr ? pick(GRAVIERS) : pick(MOTTES), gr ? 0.4 : 0.7, 9);
-    }
-  } else {
-    // en train de servir : on ne bouge pas
-    if (joueur.service) joueur.update(dtm, 0, 0, 0, false, col, temps);
-    else joueur.update(dtm, wx, wz, force, ctrl.courir, col, temps);
-    horsDesVehicules(joueur.pos, joueur.r);
-    horsDesVoitures();
-    // un pas chaque fois qu'un pied se pose (jambe au bout de son balancement)
-    const pp = Math.floor(joueur.anim.ph * 2); // la foulée (anim.js) fait deux pas par cycle
-    if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
-  }
-  const ego = jeu.auVolant ? tr.pos : joueur.pos;
+  } else if (jeu.auVolant) conduire(dt, dtm);
+  else marcher(dtm);
+  const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
   son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant);
-
-  // la vie du bourg
-  if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
-  const danger = jeu.auVolant ? DANGER : null;
-  for (const p of passants) {
-    if (p.update(dtm, danger, col, temps)) { p.cri.el.textContent = 'Hé !'; p.cri.t = 1.6; p.cri.vu = true; }
-    horsDesVehicules(p.p.pos, 0.34);
-    if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
-  }
-  // les clients se tournent vers vous, vous regardent et font signe quand vous arrivez
-  for (const { p, l } of figurants) {
-    const pres = Math.hypot(p.pos.x - ego.x, p.pos.z - ego.z) < 12;
-    p.h = pres ? Math.atan2(ego.x - p.pos.x, ego.z - p.pos.z) : l.h;
-    p.salut = pres; p.regard = pres ? VISAGE.set(ego.x, jeu.auVolant ? 2.4 : 1.6, ego.z) : null;
-    p.sync(dtm, temps);
-  }
-  for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
-  majService(dtm);
-  const obstacles = OBSTACLES; obstacles[0] = ego; obstacles[1] = vTracteur.p.pos; obstacles[2] = vVan.p.pos;
-  for (const v of voitures) {
-    if (v.update(dtm, obstacles, voitures)) {
-      if (Math.hypot(v.x - ego.x, v.z - ego.z) < 50) { son.jouer('klaxon'); v.cri.el.textContent = 'Tût tût !'; v.cri.t = 1.6; v.cri.vu = true; }
-    }
-    // touchée : secousse (vehicules.js), choc, éclats de carrosserie, le conducteur râle
-    if (v.cogne) {
-      v.cogne = false;
-      if (v.choc > 0.3) {
-        son.jouer('choc'); son.jouer('klaxon');
-        v.cri.el.textContent = pick(CHOCS_VOITURE); v.cri.t = 2.4; v.cri.vu = true;
-        for (let i = 0; i < 10; i++) emettre(v.x + (rnd() - 0.5) * 1.5, 0.6 + rnd() * 0.5, v.z + (rnd() - 0.5) * 1.5, (rnd() - 0.5) * 3, 1.5 + rnd() * 2, (rnd() - 0.5) * 3, 1.4, rnd() < 0.5 ? v.teinte : 0x2a2a2e, 0.5, 9);
-      }
-    }
-    if (v.cri.vu) hud.placer(v.cri, v.x, 2.4, v.z, true);
-  }
-
+  bourg(dtm, ego);
   particules.fontaine(dtm, L.fontaine);
-
   mission.update(dt);
   tel.update(dt);
   pc.update(dt);
-
-  // horloge : une minute de jeu toutes les 2 secondes
-  jeu.minutes += dtm / 2;
-  const m = Math.floor(jeu.minutes);
-  if (m !== minuteAff) { // le texte n'est refait qu'une fois par minute de jeu
-    minuteAff = m;
-    jeu.heureTxt = String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-    hud.heure(jeu.heureTxt);
-  }
-
-  // marque de mission et étiquettes
+  horloge(dtm);
   const cible = mission.cible;
-  marque.visible = !!cible && !jeu.dedans;
-  if (cible) {
-    marque.position.set(cible.x, 0, cible.z);
-    const u = marque.userData, k = 1 + Math.sin(temps * 4) * 0.06;
-    u.anneau.scale.set(k, 1, k); u.fleche.position.y = 3.2 + Math.sin(temps * 3) * 0.35; u.fleche.rotation.y = temps * 1.6;
-    tEtq -= dt;
-    if (tEtq <= 0) {
-      tEtq = 0.25;
-      const d = Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z));
-      etqCible.el.textContent = mission.nomCible + ' · ' + d + ' m';
-    }
-  }
-  hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
-  // le bureau du chai : ses étiquettes (les autres s'effacent devant elles), la pièce dessinée seulement si on la voit
-  const pcPres = bureau.maj();
-  // la grande porte du chai : ouverte quand on vient charger, ou qu'on s'en approche ; la halle n'est dessinée que de près
-  {
-    const PC = monde.porteChai, etC = mission.aCharger.length > 0 || mission.etape === 'chargement';
-    const ouvrir = jeu.auChai || jeu.dansChai || (etC && jeu.distance(L.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
-    PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
-    const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a; PC.col.fantome = PC.k > 0.5; // ouverte, elle n'arrête personne, mais compte toujours pour la caméra du dehors (le linteau)
-    const cx = camera.position.x, cz = camera.position.z, dedansC = cx > -76 && cx < -64 && cz > -59.6 && cz < -39;
-    monde.halleChai.visible = jeu.auChai || dedansC || (PC.k > 0.02 && (cx + 70) * (cx + 70) + (cz + 49) * (cz + 49) < 2500);
-  }
-  chercherServable();
-  const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
-  if (vp) { const t = vp.genre === 'van' ? (tactile ? 'Monter dans le van' : 'Monter dans le van (E)') : (tactile ? 'Monter' : 'Monter (E)'); if (etqMonter.el.textContent !== t) etqMonter.el.textContent = t; }
-  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp && vp.genre === 'van' ? 3.0 : 3.6, vp ? vp.p.pos.z : 0, !!vp);
-  hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
-  hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
+  reperes(dt, ego, cible);
+  chai.maj(dt, ego, cap, camera.position); // la grande porte, la halle dessinée de près, dedans ou dehors (chai.js)
 
-  // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
-  // son cadre
-  // La halle du chai : dedans ou sur le seuil, la caméra est posée au fond de la halle (la caméra qui suit buterait sur les
-  // murs et monterait dans le toit). On passe de l'une à l'autre d'un coup, sans travelling à travers le mur ; il faut être
-  // bien entré pour basculer dedans, bien sorti pour revenir dehors (pas de va-et-vient sur le seuil).
-  if (!jeu.auChai) {
-    // en sortant le nez dehors, la caméra qui suit serait collée au mur : on garde celle de la halle quelques mètres de plus
-    const x = ego.x, z = ego.z, sortant = Math.sin(jeu.auVolant ? tr.h : joueur.h) < -0.3;
-    const seuil = jeu.dansChai ? (sortant ? (jeu.auVolant ? -82.5 : -80) : -78.6) : -76.4, large = jeu.dansChai ? 4 : 2.6;
-    const dans = z > -59.3 && z < -39.3 && x < -64.3 && (x > -75.6 || (x > seuil && Math.abs(z + 52) < large));
-    if (dans !== jeu.dansChai) { jeu.dansChai = dans; cam.pret = false; if (!dans) cam.yaw = jeu.auVolant ? tr.h : joueur.h; }
-  }
-  if (!camLibre && jeu.dedans) bureau.camera(dt);
-  else if (!camLibre && (jeu.auChai || jeu.dansChai)) { // dehors, le véhicule est derrière le mur : on regarde la porte
-    const S = L.chaiSalle;
-    cam.salle(dt, S, Math.max(ego.x, -73.5), ego.z, false);
-    cam.yaw = Math.atan2(S.centre.x - S.camera.x, S.centre.z - S.camera.z); // les commandes, dans le sens de la vue
-  }
-  else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
-  else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
-  hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, mission.route, jeu.auVolant ? null : VEH_CARTE);
+  // la caméra : dans le bureau du chai, celle de la pièce ; dans la halle du chai, celle de la halle ; un geste qui se
+  // regarde (charger, décharger, le chèque) a son cadre ; sinon, elle suit
+  if (camLibre) { /* posée à la main (captures) */ }
+  else if (jeu.dedans) bureau.camera(dt);
+  else if (chai.camera(dt, ego)) { /* posée au fond de la halle */ }
+  else if (gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
+  else cam.suivre(dt, ego.x, ego.z, cap, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
+  hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, mission.route, jeu.auVolant ? null : VEH_CARTE);
 }
 
 // Le cadre d'ombre suit le joueur, décalé vers l'avant de la caméra (rien de perdu derrière elle),

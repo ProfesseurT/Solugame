@@ -1,4 +1,5 @@
-// La caméra qui suit le personnage ou le tracteur.
+// La caméra : elle suit le personnage ou le véhicule, cadre une scène (gestes.js), se pose dans une pièce (le bureau et
+// la halle du chai), tourne autour du personnage sur l'accueil.
 import * as THREE from 'three';
 import { angle, borne, amortir as lisser } from './outils.js';
 

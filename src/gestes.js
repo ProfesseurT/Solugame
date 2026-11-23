@@ -102,7 +102,7 @@ export function pileCartons(n) {
 function montrer(pile, n) { pile.count = n; pile.userData.n = n; pile.computeBoundingSphere(); }
 
 export class Gestes {
-  // c : { jeu, scene, col }
+  // c : { jeu, scene, col, porte : la porte du bureau du chai (monde.js) }
   constructor(c) { this.c = c; this.g = null; this.cible = { x: 0, z: 0 }; this.cadre = null; this.roule = false; }
   get actif() { return this.g !== null; }
   get j() { return this.c.jeu.joueur; }
@@ -166,20 +166,22 @@ export class Gestes {
   }
   // aller à un point du repère du véhicule, tourné vers le cap (relatif au véhicule)
   allerVers(v, l, capRel) { return this.allerA(() => versMonde(v, l, this.cible), () => v.p.h + capRel); }
-  // la portière du van s'ouvre (sens 1) ou se referme (sens -1)
-  portiere(v, sens) {
-    const pt = v.m.porte;
+  // un battant (porte sur ses gonds, objet pt) s'ouvre jusqu'à l'angle ouverte (sens 1) ou se referme (sens -1), en
+  // duree secondes : grincement à l'ouverture, claquement à la fermeture
+  battant(pt, ouverte, sens, duree) {
     let claque = false;
     return {
-      duree: sens > 0 ? 0.45 : 0.35,
+      duree,
       debut: () => { if (sens > 0) son.jouer('portiere'); },
       maj: (dt, t, u) => {
-        pt.rotation.y = OUVERTE * (sens > 0 ? u : 1 - u);
+        pt.rotation.y = ouverte * (sens > 0 ? u : 1 - u);
         if (sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
         this.immobile(dt, t);
       },
     };
   }
+  // la portière du van
+  portiere(v, sens) { return this.battant(v.m.porte, OUVERTE, sens, sens > 0 ? 0.45 : 0.35); }
   // la porte coulissante du van : elle s'écarte du flanc puis glisse vers l'arrière (sens 1), ou l'inverse
   coulissante(v, sens) {
     const pt = v.m.coulissante;
@@ -463,20 +465,8 @@ export class Gestes {
   }
 
   /* ------------------------------------------------------------ le bureau du chai (monde.js : la pièce, sa porte) */
-  // la porte du bureau s'ouvre vers l'intérieur (sens 1) ou se referme (sens -1)
-  porteBureau(sens) {
-    const pt = this.c.porte;
-    let claque = false;
-    return {
-      duree: sens > 0 ? 0.5 : 0.45,
-      debut: () => { if (sens > 0) son.jouer('portiere'); },
-      maj: (dt, t, u) => {
-        pt.rotation.y = -1.45 * (sens > 0 ? u : 1 - u);
-        if (sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
-        this.immobile(dt, t);
-      },
-    };
-  }
+  // la porte du bureau, qui s'ouvre vers l'intérieur
+  porteBureau(sens) { return this.battant(this.c.porte, -1.45, sens, sens > 0 ? 0.5 : 0.45); }
   // Passer la porte : on y va, elle s'ouvre, on passe le seuil ; au seuil, fondu au noir et la caméra change de côté
   // (passe), puis on avance et elle se referme. B : lieux.bureau ; entrer : vers l'intérieur, sinon vers la cour.
   passer(B, entrer, { fondu, passe, fin }) {

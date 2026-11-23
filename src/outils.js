@@ -1,4 +1,4 @@
-// Petits outils partagés : angles, tirage au sort reproductible, bornes et transitions, couleurs, montants, page.
+// Petits outils partagés : angles, tirage au sort reproductible, bruit, bornes et transitions, couleurs, montants, page.
 import * as THREE from 'three';
 
 export const angle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -13,6 +13,16 @@ export function hasard(s) {
   };
 }
 export const borne = (x, a, b) => (x < a ? a : x > b ? b : x);
+// Hachage d'un point de la grille (entre 0 et 1) ; bruit de valeur lissé, entre 0 et 1, d'une maille de 1 : le relief
+// des collines (monde.js), les bosses sous les roues (vehicules.js). Toujours le même pour un même point.
+export const hache = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
+export function bruit(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hache(i, j) + (hache(i + 1, j) - hache(i, j)) * u;
+  const b = hache(i, j + 1) + (hache(i + 1, j + 1) - hache(i, j + 1)) * u;
+  return a + (b - a) * v;
+}
 export const mix = (a, b, t) => a + (b - a) * t;
 // transition douce de 0 à 1 quand t va de 0 à 1 (bornée) ; entre(a, b, x) : la même, quand x va de a à b
 export const lisse = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
