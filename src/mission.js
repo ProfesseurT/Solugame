@@ -123,10 +123,11 @@ export class Mission {
         if (this.compter('envoyee') + this.compter('signee') === this.clients.length && this.retardataire.statut !== 'a_planifier' && this.prospect.statut !== 'a_planifier') { this.aller('chai'); hud.objectif(OBJECTIFS.chai); }
         break;
       case 'chai': {
-        const d = j.distance(j.lieux.chai);
-        if (d > 5.5) break;
+        // arrêté devant le chai, ou engagé vers la grande porte (même lancé) : le chargement commence, le véhicule entre seul
+        const d = j.distance(j.lieux.chai), devant = j.devantChai;
+        if (d > 5.5 && !devant) break;
         const reste = this.clients.length - this.compter('signee');
-        if (j.auVolant && Math.abs(j.tr.v) < 2.5) {
+        if (j.auVolant && (Math.abs(j.tr.v) < 2.5 || (devant && !reste))) {
           if (!reste) {
             // on descend, on porte les piles de la palette dans le véhicule, on remonte (gestes.js)
             this.aller('chargement'); this.charge = j.veh; this.cartons = new Array(18).fill(null);

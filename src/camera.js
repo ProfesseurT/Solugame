@@ -70,7 +70,13 @@ export class Camera {
     this.ax += (fx * la - this.ax) * ka; this.az += (fz * la - this.az) * ka;
     const kc = pret ? lisser(dt, 11) : 1;
     this.cx += (x + this.ax - this.cx) * kc; this.cz += (z + this.az - this.cz) * kc;
-    const px = this.cx, pz = this.cz;
+    let px = this.cx, pz = this.cz;
+    // lancé contre un bâtiment, l'avance peut faire entrer le point suivi dans le mur : on la raccourcit (sinon la caméra
+    // bute dès le départ, se colle au point et monte dans le toit)
+    if (col.dedans(px, pz) && !col.dedans(x, z)) {
+      for (let k = 0; k < 4 && col.dedans(px, pz); k++) { px = x + (px - x) * 0.5; pz = z + (pz - z) * 0.5; }
+      if (col.dedans(px, pz)) { px = x; pz = z; }
+    }
 
     /* -- les bâtiments : on cherche le premier obstacle entre le point suivi et la caméra */
     const yx = Math.sin(this.yaw), yz = Math.cos(this.yaw);

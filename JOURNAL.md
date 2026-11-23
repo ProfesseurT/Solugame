@@ -466,3 +466,17 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** : la halle n'est dessinée que dedans, ou porte ouverte à moins de 50 m : ailleurs, rien de plus. Au chai pendant le chargement : 64 appels de dessin (65 avant), 84 000 triangles ombres comprises ; domaine 95 700, route 142 000, place 155 700, mêmes appels de dessin. Pas de programme de shader en plus.
 
 **Vérifié** : séquence filmée image par image en tracteur et en van (arrivée, entrée, chargement, sortie, départ) ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; banc d'allègement de three.js : équivalent.
+
+## 23/11/2026 · Retours de Teddy (9) : on se plantait dans le toit à l'entrée du chai
+
+**Demande** : « un gros bug d'affichage à l'entrée du chai, on se plante dans le toit ; faut user d'une stratégie à ce moment-là ».
+
+**Reproduit** (images d'un téléphone 390 x 844, toutes les 6 images) : en arrivant devant la porte à plus de 2,5 m/s, le chargement ne se déclenchait pas et l'on entrait soi-même. La caméra qui suit vise un point en avance sur le véhicule (jusqu'à 3,6 m) : ce point passait dans la porte, la caméra butait dès le premier relevé, se collait à lui et montait de 3,5 m, en plein dans le toit. En ressortant le nez dehors, elle traversait le linteau de la porte (les relevés, tous les 45 cm, sautaient la boîte de 20 cm de la porte).
+
+**Stratégie** :
+- Engagé vers la grande porte à l'étape du chargement, même lancé, le chargement commence : coupe sur la caméra de la halle, le véhicule entre tout seul (il prend le relais d'où il est, y compris déjà sur le seuil ou dedans).
+- En dehors du chargement, on peut entrer dans le chai à pied ou en véhicule : dès qu'on a passé la porte, la caméra est posée au fond de la halle, et elle y reste jusqu'à ce qu'on soit bien ressorti (6 m dehors si l'on sort en marche avant, pour que la caméra qui suit reprenne avec du recul). Coupes franches, pas de travelling à travers les murs. Dedans, les commandes suivent l'axe de la caméra de la halle.
+- La porte ouverte n'arrête personne mais reste un obstacle pour la caméra du dehors, et sa boîte a l'épaisseur du mur.
+- Partout : si l'avance de la caméra fait entrer le point visé dans un bâtiment, elle est raccourcie.
+
+**Vérifié** : arrivées filmées image par image au doigt (conduite assistée), lancé au clavier en tracteur et en van, entrée et sortie en marche avant et en marche arrière hors chargement, à pied ; aucune image dans un toit ou un mur. Chargement en van filmé ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée).

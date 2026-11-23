@@ -241,6 +241,9 @@ const jeu = {
   get choixHeros() { return choixHeros; },
   get joueur() { return joueur; },
   distance(p) { const o = this.auVolant ? tr.pos : joueur.pos; return Math.hypot(o.x - p.x, o.z - p.z); },
+  dansChai: false, // dans la halle du chai, ou sur son seuil : la caméra est posée au fond de la halle
+  // devant la grande porte du chai, dans son axe, ou déjà dedans (mission.js : le chargement commence)
+  get devantChai() { const o = this.auVolant ? tr.pos : joueur.pos; return this.dansChai || (o.x > -84 && o.x < -64.3 && Math.abs(o.z + 52) < 3); },
   changerHeros(h) {
     if (h === choixHeros || !HEROS[h] || gestes.actif) return;
     choixHeros = h; stocke.ecrire('tournee-generale-heros', h);
@@ -338,8 +341,8 @@ function descendre() {
 let accelerVu = false;
 // Au chai : les portes s'ouvrent, le véhicule entre tout seul jusqu'à la palette, on charge dedans, il ressort en marche
 // arrière dans la cour, le nez vers le chemin du domaine (gestes.js : rouler). La caméra est posée dans la halle.
-function cheminEntree(x0, z0, h0, D) {
-  const P3 = [-77.8, D.z], c = Math.max(1, Math.hypot(P3[0] - x0, P3[1] - z0) * 0.45);
+function cheminEntree(x0, z0, h0, D) { // déjà sur le seuil ou dedans : droit vers la place, sans repasser par la porte
+  const P3 = x0 < -78.3 ? [-77.8, D.z] : [D.x, D.z], c = Math.max(1, Math.hypot(P3[0] - x0, P3[1] - z0) * 0.45);
   const P1 = [x0 + Math.sin(h0) * c, z0 + Math.cos(h0) * c], P2 = [P3[0] - c, P3[1]], pts = [];
   for (let i = 0; i <= 24; i++) {
     const t = i / 24, a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, d = 3 * (1 - t) * t * t, e = t ** 3;
@@ -364,7 +367,7 @@ jeu.charger = (piles, place, fin) => {
   p.pos.set(D.x, 0, D.z); p.h = D.h; // les gestes se calculent le véhicule à sa place, dans le chai
   gestes.charger(v, piles, { sorti: aPied, place, installe: () => auVolant(v) },
     [gestes.rouler(v, entree, 4.4), { action: couperMoteur }],
-    [gestes.rouler(v, cheminSortie(D), 5.4, true), { action: () => { jeu.auChai = false; cam.pret = false; fin(); } }]);
+    [gestes.rouler(v, cheminSortie(D), 5.4, true), { action: () => { jeu.auChai = false; cam.pret = false; cam.yaw = p.h; fin(); } }]);
   p.pos.set(x0, 0, z0); p.h = h0;
 };
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
@@ -641,9 +644,9 @@ function miseAJour(dt) {
   // la grande porte du chai : ouverte quand on vient charger, ou qu'on s'en approche ; la halle n'est dessinée que de près
   {
     const PC = monde.porteChai, etC = mission.etape === 'chai' || mission.etape === 'chargement';
-    const ouvrir = jeu.auChai || (etC && jeu.distance(L.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
+    const ouvrir = jeu.auChai || jeu.dansChai || (etC && jeu.distance(L.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
     PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
-    const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a; PC.col.fantome = PC.k > 0.5;
+    const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a; PC.col.fantome = PC.k > 0.5; // ouverte, elle n'arrête personne, mais compte toujours pour la caméra du dehors (le linteau)
     const cx = camera.position.x, cz = camera.position.z, dedansC = cx > -76 && cx < -64 && cz > -59.6 && cz < -39;
     monde.halleChai.visible = jeu.auChai || dedansC || (PC.k > 0.02 && (cx + 70) * (cx + 70) + (cz + 49) * (cz + 49) < 2500);
   }
@@ -656,8 +659,22 @@ function miseAJour(dt) {
 
   // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
   // son cadre
+  // La halle du chai : dedans ou sur le seuil, la caméra est posée au fond de la halle (la caméra qui suit buterait sur les
+  // murs et monterait dans le toit). On passe de l'une à l'autre d'un coup, sans travelling à travers le mur ; il faut être
+  // bien entré pour basculer dedans, bien sorti pour revenir dehors (pas de va-et-vient sur le seuil).
+  if (!jeu.auChai) {
+    // en sortant le nez dehors, la caméra qui suit serait collée au mur : on garde celle de la halle quelques mètres de plus
+    const x = ego.x, z = ego.z, sortant = Math.sin(jeu.auVolant ? tr.h : joueur.h) < -0.3;
+    const seuil = jeu.dansChai ? (sortant ? (jeu.auVolant ? -82.5 : -80) : -78.6) : -76.4, large = jeu.dansChai ? 4 : 2.6;
+    const dans = z > -59.3 && z < -39.3 && x < -64.3 && (x > -75.6 || (x > seuil && Math.abs(z + 52) < large));
+    if (dans !== jeu.dansChai) { jeu.dansChai = dans; cam.pret = false; if (!dans) cam.yaw = jeu.auVolant ? tr.h : joueur.h; }
+  }
   if (!camLibre && jeu.dedans) bureau.camera(dt);
-  else if (!camLibre && jeu.auChai) { const c = jeu.auVolant ? tr.pos : joueur.pos; cam.salle(dt, L.chaiSalle, Math.max(c.x, -73.5), c.z, false); } // dehors, le véhicule est derrière le mur : on regarde la porte
+  else if (!camLibre && (jeu.auChai || jeu.dansChai)) { // dehors, le véhicule est derrière le mur : on regarde la porte
+    const S = L.chaiSalle;
+    cam.salle(dt, S, Math.max(ego.x, -73.5), ego.z, false);
+    cam.yaw = Math.atan2(S.centre.x - S.camera.x, S.centre.z - S.camera.z); // les commandes, dans le sens de la vue
+  }
   else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
   hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);

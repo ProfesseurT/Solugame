@@ -852,7 +852,7 @@ void main() {
       g.position.set(-76.02, 0, s > 0 ? -53.8 : -50.2); scene.add(g);
       return g;
     };
-    o.porteChai = { a: vantail(1), b: vantail(-1), k: 0, col: col.boite(-76.1, -53.8, -75.9, -50.2) };
+    o.porteChai = { a: vantail(1), b: vantail(-1), k: 0, col: col.boite(-76.4, -53.8, -75.6, -50.2) }; // épaisse comme le mur : la caméra du dehors ne passe pas entre deux relevés
     o.porteChai.col.haut = true;
     definirInterieur([-75.8, -1, -59.4], [-64.2, 6.3, -39.2], [-56.5, -51.5, -46.5, -41.5].map(z => [-70, 5.0, z]));
 
