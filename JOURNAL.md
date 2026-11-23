@@ -441,3 +441,13 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** : mêmes triangles qu'au lot 2 à peu de chose près (domaine 95 600, route 143 000, place 162 000), deux à trois appels de dessin de plus ; texture des enseignes 14,2 → 15,9 Mo (intérieurs peints à 320 px de large). Une première version fusionnait marchandises et voitures garées avec tout le décor : +33 000 triangles sur la route, dessinés même de loin ; d'où l'affichage de près et le regroupement par quartier.
 
 **Vérifié** : captures des cinq boutiques du bourg et des voitures garées ; `npm run verifie` ; conduite assistée en tracteur et en van.
+
+## 23/11/2026 · Retours de Teddy (8) : la barbe n'est plus une cagoule
+
+**Demande** : « la barbe du mec, on dirait une cagoule, fais ça bien ».
+
+**Constat** (gros plans de face, de trois quarts, de profil) : la barbe montait jusque sous les yeux, filait en ligne droite de l'oreille au nez, couvrait la bouche et débordait derrière la mâchoire jusqu'à la nuque ; la texture « mal rasé » dessous reprenait le même contour.
+
+**Fait** (`perso.js`, `atlas.js`) : du favori, juste devant l'oreille, la ligne des joues descend en courbe jusqu'aux commissures ; moustache de 1,5 cm sous le nez ; bouche dégagée, une ellipse calée sur les lèvres peintes ; rien derrière le plan de l'oreille, sauf en bas jusqu'à l'angle de la mâchoire ; bord irrégulier, comme des poils ; mince sur les joues, du volume au menton. L'ombre de barbe de la texture suit le nouveau contour, un peu au-dessus, et se fond dedans (elle sert aussi aux passants mal rasés).
+
+**Vérifié** : gros plans du vigneron et d'un passant chauve barbu ; `npm run verifie`.

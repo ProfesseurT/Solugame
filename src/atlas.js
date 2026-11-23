@@ -407,13 +407,14 @@ function visagePropre(buf, femme) {
   }
 }
 
-// Barbe de quelques jours : grisé piqueté sur le bas du visage, lèvres épargnées (visage « B »). Seulement la moitié
+// Barbe de quelques jours : grisé piqueté sur le bas du visage, lèvres épargnées (visage « B »). Sa lisière suit celle de la
+// barbe taillée (perso.js), un peu au-dessus : du favori aux commissures, la moustache sous le nez. Seulement la moitié
 // basse de la zone ; la lisière (selon x) est calculée une fois par colonne.
 function barbeCourte(px, z) {
   const bord = new Float32Array(z.w);
   for (let x = 0; x < z.w; x++) {
     const ax = Math.abs(((x + 0.5) / z.w * 2 - 1) * FX);
-    bord[x] = ax >= 0.075 ? 0.004 : ax >= 0.045 ? -0.035 + (ax - 0.045) / 0.03 * 0.039 : ax >= 0.02 ? -0.05 + (ax - 0.02) / 0.025 * 0.015 : -0.051;
+    bord[x] = ax >= 0.079 ? -0.002 : ax >= 0.053 ? -0.04 + (ax - 0.053) / 0.026 * 0.038 : ax >= 0.028 ? -0.052 + (ax - 0.028) / 0.025 * 0.012 : -0.0475;
   }
   for (let y = z.h >> 1; y < z.h; y++) {
     const my = (1 - (y + 0.5) / z.h * 2) * FY, ly = (my - YM) / 0.0095;

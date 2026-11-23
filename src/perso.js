@@ -665,13 +665,21 @@ export function perso(o0) {
     add(17, loft([[-0.025, 0.034, 0.034, -0.012], [0.005, 0.034, 0.034, -0.012]], 8, '#8e2a3b', Z.toile),
       loft([[-0.27, 0.012, 0.012, -0.05], [-0.18, 0.034, 0.03, -0.035], [-0.06, 0.044, 0.04, -0.02], [0.0, 0.036, 0.034, -0.01]], 7, ch, Z.cheveux));
   }
-  // barbe courte : épouse le bas du visage (au-dessous des pommettes), bouche dégagée, même lisière douce que les
-  // cheveux ; le visage « B » (barbe de quelques jours) est dessous, pour que le bord se fonde
+  // Barbe courte. Du favori, juste devant l'oreille, la ligne des joues descend en courbe jusqu'aux commissures ; la
+  // moustache sous le nez ; la bouche dégagée (les lèvres se voient) ; rien derrière l'oreille (avant : une cagoule). Bord irrégulier, comme
+  // des poils ; mince sur les joues, du volume au menton. Le visage « B » (barbe de quelques jours) est dessous : le bord
+  // se fond dans l'ombre de barbe.
   if (o.barbe) {
-    const bord = ax => (ax >= 0.85 ? 0.05 : ax >= 0.5 ? -0.3 + (ax - 0.5) / 0.35 * 0.35 : ax >= 0.22 ? -0.42 + (ax - 0.22) / 0.28 * 0.12 : -0.43);
-    const champ = (x, y, z) => Math.min(z + 0.25, bord(Math.abs(x)) - y, Math.max(Math.abs(x) - 0.26, -0.53 - y, y + 0.7, 0.4 - z));
-    const g = boule(rx * 1.03, ry * 1.03, rz * 1.03, 0, yc, zc, 3, (x, y, z) => rampe(1.03, champ(x, y, z), 0.07) / 1.03, jaw, 0.975 / 1.03, relief);
-    add(T, finir(g, fonce(ch, 1.15), Z.barbe, uvSphere(g, Z.barbe, 0, yc, zc, rx))); // un peu plus claire que les cheveux
+    const haut = ax => (ax >= 0.9 ? -0.04 : ax >= 0.6 ? -0.37 + (ax - 0.6) / 0.3 * 0.33 : ax >= 0.32 ? -0.47 + (ax - 0.32) / 0.28 * 0.1 : -0.425);
+    const champ = (x, y, z) => {
+      const ax = Math.abs(x), poils = 0.022 * Math.sin(x * 23 + y * 7) + 0.016 * Math.sin(y * 31 - x * 9);
+      // devant, sous la ligne, hors de la bouche (une ellipse autour des lèvres, de -0,56 à -0,70)
+      // vers l'arrière : jusqu'au plan de l'oreille en haut, jusqu'à l'angle de la mâchoire (sous l'oreille) en bas
+      return Math.min(haut(ax) + poils - y, z + 0.05 + 0.22 * lisse((-0.3 - y) / 0.4), Math.max((Math.hypot(ax / 0.31, (y + 0.635) / 0.1) - 1) * 0.1, 0.3 - z));
+    };
+    const KB = 1.065, epais = (y, z) => 1.016 + 0.045 * lisse((-0.74 - y) / 0.2) * lisse((z - 0.1) / 0.4); // épaisse au menton
+    const g = boule(rx * KB, ry * KB, rz * KB, 0, yc, zc, 3, (x, y, z) => rampe(epais(y, z), champ(x, y, z), 0.05) / KB, jaw, 0.985 / KB, relief);
+    add(T, finir(g, fonce(ch, 1.12), Z.barbe, uvSphere(g, Z.barbe, 0, yc, zc, rx))); // un peu plus claire que les cheveux
   }
   // lunettes : montures seules (les yeux restent visibles)
   if (o.lunettes) {
