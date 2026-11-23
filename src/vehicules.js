@@ -365,6 +365,9 @@ export class Voiture {
     this.cligno = this.dep === 1 || (this.dep === 2 && Math.abs(this.z - this.zAutre) > 0.3) ? 1 : this.dep === 3 ? -1 : 0;
 
     this.x += this.sens * this.v * dt;
+    // les roues tournent (un maillage par essieu, engins.js)
+    const ess = this.mesh.userData.essieux;
+    if (ess) { const a = this.v * dt / this.mesh.userData.rayon; for (const e of ess) e.rotation.x += a; }
     if (this.x * this.sens > 340) { this.x = -340 * this.sens; this.dep = 0; this.z = this.zVoie; }
     this.mesh.position.set(this.x, 0, this.z);
     // la voiture s'oriente un peu quand elle change de voie ; la caisse se secoue après un choc

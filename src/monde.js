@@ -301,8 +301,9 @@ void main() {
   surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
   rect(115, -64, 127, -55, '#cfc1a0');
   // chemin des Grands Champs et placette du hameau (le hameau lui-même : hameau())
-  surf.push(B(4.6, 0.06, 112, '#c9b993', -55, 0, 68.5), B(27, 0.062, 19, '#c9b993', -56, 0, 133));
-  rect(-57.3, 12.5, -52.7, 124.5, '#c9b993'); rect(-69.5, 123.5, -42.5, 142.5, '#c9b993');
+  // il commence au bord de la chaussée (z = 13,5) : il ne recouvre ni la route ni sa ligne de rive
+  surf.push(B(4.6, 0.06, 111, '#c9b993', -55, 0, 69), B(27, 0.062, 19, '#c9b993', -56, 0, 133));
+  rect(-57.3, 13.5, -52.7, 124.5, '#c9b993'); rect(-69.5, 123.5, -42.5, 142.5, '#c9b993');
 
   // vignes d'automne : chenin (jaune) et cabernet franc (rouge)
   const PAL = {

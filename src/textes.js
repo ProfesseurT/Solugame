@@ -129,6 +129,7 @@ export const CHOCS_VOITURE = ['Eh ! Mon pare-chocs !', 'Regardez devant vous !',
 // Pas de prix, pas de date, pas d'« IA ».
 export const BUREAU = {
   commande: 'Préparée pendant l\'appel, au tarif et aux remises du client.',
+  aucuneCommande: 'Pas encore de commande aujourd\'hui : elles se préparent pendant l\'appel, depuis Ma journée.',
   envoi: c => `${c.nom} reçoit un lien personnel, propre à cette commande : il la relit, la confirme et la signe sur son téléphone, sans créer de compte.`,
   signee: 'Signée. Elle part dans Vitisoft sans ressaisie, prête à préparer et à facturer.',
   message: 'Message préparé : vous le relisez et le modifiez avant d\'envoyer.',
@@ -161,7 +162,14 @@ export const VITISOFT = {
   drmFaite: 'DRM calculée, prête à valider dans CIEL.',
   // DRM du domaine fictif, en hectolitres : stock au début du mois, entrées, sorties, stock à la fin du mois
   drmLignes: [['Stock au début du mois', 412.4], ['Entrées', 0], ['Sorties', 21.15], ['Stock à la fin du mois', 391.25]],
-  taches: ['Saisir le règlement de l\'Épicerie du Bourg', 'Facturer les 3 commandes livrées', 'Calculer la DRM du mois dernier'],
+  // les tâches n'apparaissent qu'une fois leur raison d'être arrivée : le chèque déposé au bureau, les commandes livrées
+  tacheReglement: 'Saisir le règlement de l\'Épicerie du Bourg',
+  tacheFactures: n => `Facturer ${n > 1 ? `les ${n} commandes livrées` : 'la commande livrée'}`,
+  tacheDrm: 'Calculer la DRM du mois dernier',
+  rienAFaire: 'Rien d\'autre à faire pour l\'instant.',
+  // une commande arrive dans Vitisoft quand le client l'a signée en ligne, pas avant
+  aucuneCommande: 'Aucune commande arrivée pour l\'instant. Elles arrivent ici une fois signées en ligne par le client, sans ressaisie.',
+  chequeAttendu: 'Le règlement n\'est pas encore arrivé.',
 };
 
 export const VITICODE = {

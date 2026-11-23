@@ -668,17 +668,20 @@ function optiques(at, cr, M, e, f) {
   }
 }
 
+const ESSIEUX = new Map(); // géométrie d'un essieu de voiture qui roule, par modèle
 const VOITURES = new Map(), FEUX = new Map();
 // feux qui s'allument (stop, clignotants) : matières sans éclairage, partagées par toutes les voitures
 const MAT_STOP = new THREE.MeshBasicMaterial({ color: '#ff2a1f' });
 const MAT_CLIGNO = new THREE.MeshBasicMaterial({ color: '#ffa21a' });
 
-// voiture(couleur [, modele]) : modele 'citadine', 'berline' ou 'break' ; sinon choisi d'après la couleur.
+// voiture(couleur [, modele], roule) : modele 'citadine', 'berline' ou 'break' ; sinon choisi d'après la couleur. Une
+// voiture qui roule (roule = true) a ses roues à part, un maillage par essieu (m.userData.essieux), qui tournent ; garée,
+// elles sont fusionnées à la caisse (aucun appel de dessin de plus).
 // Repère : avant vers +z, +x à sa gauche. userData.feux = { stop, g, d } (éteints : sans coût de dessin).
-export function voiture(couleur, modele) {
+export function voiture(couleur, modele, roule = false) {
   const v = parseInt(String(couleur).replace('#', ''), 16) || 0;
   const nom = MODELES[modele] ? modele : NOMS[((v >> 16) + 2 * ((v >> 8) & 255) + (v & 255)) % 3];
-  const M = MODELES[nom], cle = nom + couleur;
+  const M = MODELES[nom], cle = nom + couleur + (roule ? ' roule' : '');
   let geo = VOITURES.get(cle);
   if (!geo) {
     const at = new Atelier(); at.couleur = couleur;
@@ -702,12 +705,19 @@ export function voiture(couleur, modele) {
       const yToit = M.gh[2][1] + 0.01;
       for (const s of [1, -1]) extra.push(B(0.035, 0.03, 1.6, '#2c2d31', s * 0.5, yToit + 0.045, -0.98), B(0.05, 0.04, 0.06, '#2c2d31', s * 0.5, yToit + 0.02, -1.74), B(0.05, 0.04, 0.06, '#2c2d31', s * 0.5, yToit + 0.02, -0.22));
     }
-    // roues (fusionnées : les voitures ne les font pas tourner)
-    for (const [x, z] of [[M.xr, M.zAv], [-M.xr, M.zAv], [M.xr, M.zAr], [-M.xr, M.zAr]]) extra.push(deplacer(roue(M.rr, 0.2, 10, x > 0 ? 1 : -1, false).clone(), x, M.rr, z));
+    // roues : fusionnées à la caisse pour une voiture garée ; à part pour une voiture qui roule (voir plus bas)
+    if (!roule) for (const [x, z] of [[M.xr, M.zAv], [-M.xr, M.zAv], [M.xr, M.zAr], [-M.xr, M.zAr]]) extra.push(deplacer(roue(M.rr, 0.2, 10, x > 0 ? 1 : -1, false).clone(), x, M.rr, z));
     geo = fusion([...at.geos(), ...extra]);
     VOITURES.set(cle, geo);
   }
   const m = new THREE.Mesh(geo, MAT); m.castShadow = true;
+  if (roule) {
+    // un essieu : ses deux roues, autour de son axe (géométrie partagée par modèle)
+    let ge = ESSIEUX.get(nom);
+    if (!ge) { ge = fusion([deplacer(roue(M.rr, 0.2, 10, 1, false).clone(), M.xr, 0, 0), deplacer(roue(M.rr, 0.2, 10, -1, false).clone(), -M.xr, 0, 0)]); ESSIEUX.set(nom, ge); }
+    m.userData.essieux = [M.zAv, M.zAr].map(z => { const e = new THREE.Mesh(ge, MAT); e.position.set(0, M.rr, z); e.castShadow = true; m.add(e); return e; });
+    m.userData.rayon = M.rr;
+  }
   // feux stop et clignotants, éteints (donc sans coût de dessin) tant qu'ils ne servent pas ; géométries partagées par modèle
   let gf = FEUX.get(nom);
   if (!gf) {

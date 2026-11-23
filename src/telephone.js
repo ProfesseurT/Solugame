@@ -219,13 +219,14 @@ export class Telephone {
       <div class="fc-ok"><span class="roue petite"></span><b>Commande ${c.numero} envoyée</b></div>
       <p class="ap-txt">${esc(BUREAU.envoi(c))}</p><span class="tag decroche">Signature en attente</span>
       <button class="ap-bt plein large" data-a="ouvrir:bureau">Retour à Ma journée</button></div>`;
-    const lignes = m.clients.map(x => {
+    // une commande n'existe qu'à partir de l'appel (ou de la réponse au message) : elle se prépare pendant
+    const lignes = m.clients.filter(x => !['a_traiter', 'proposee'].includes(x.statut)).map(x => {
       const [k, t] = STATUTS[x.statut];
       const act = x.statut === 'commande' ? `<button class="ap-bt plein" data-a="cmd:${x.id}">Préparer</button>` : `<span class="tag ${k}">${t}</span>`;
-      const qte = ['a_traiter', 'proposee', 'commande'].includes(x.statut) ? 'Quantité à saisir' : `${x.cartons} cartons`;
+      const qte = x.statut === 'commande' ? 'Quantité à saisir' : `${x.cartons} cartons`;
       return `<div class="arret"><span class="num" style="background:${x.coul}">${x.ini}</span><div class="rq"><b>${x.numero} · ${esc(x.nom)}</b><span>${qte} · ${esc(x.produit)}</span></div>${act}</div>`;
     }).join('');
-    return tete + `<div class="ap-corps"><p class="ap-sur">Commandes du jour</p>${lignes}${m.clients.some(x => x.statut === 'signee') ? `<p class="ap-note">${esc(BUREAU.signee)}</p>` : ''}</div>`;
+    return tete + `<div class="ap-corps"><p class="ap-sur">Commandes du jour</p>${lignes || `<p class="ap-txt">${esc(BUREAU.aucuneCommande)}</p>`}${m.clients.some(x => x.statut === 'signee') ? `<p class="ap-note">${esc(BUREAU.signee)}</p>` : ''}</div>`;
   }
   message() {
     const c = this.jeu.mission.client(this.client);

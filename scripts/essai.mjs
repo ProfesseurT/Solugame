@@ -51,7 +51,13 @@ if (scenario === 'parcours') {
     const q = s => document.querySelector(s), m = CL.mission, T = CL.jeu.tel, log = [];
     const clic = s => { const e = q(s); if (!e) throw new Error('absent : ' + s + ' (appli ' + T.app + ', étape ' + m.etape + ')'); if (e.disabled) throw new Error('désactivé : ' + s); e.click(); };
     const saisir = n => { for (let i = 0; i < n; i++) clic('[data-a="qte:1"]'); clic('[data-a="signer"]'); };
-    CL.jouer(); CL.step(260); q('#poche').click();
+    CL.jouer(); CL.step(260);
+    // pas d'anachronisme : avant tout appel, ni commande dans le bureau, ni dans Vitisoft ; rien à facturer, rien à encaisser
+    const P = CL.jeu.pc, vs = vue => { P.onglet = 'vitisoft'; P.vue = vue; P.afficher(); return q('#pc-ecran').textContent; };
+    log.push(['au départ, Vitisoft n\'a aucune commande, rien à facturer ni à encaisser', vs('commandes').includes('Aucune commande arrivée') && !vs('accueil').includes('Facturer') && !vs('accueil').includes('Saisir le règlement') && !q('#pc-ecran [data-a="regler"]')]);
+    q('#poche').click(); clic('[data-a="ouvrir:commande"]');
+    log.push(['au départ, le bureau n\'a pas encore de commande', q('#app').textContent.includes('Pas encore de commande')]);
+    clic('[data-a="ouvrir:bureau"]');
     clic('[data-a="rappel:cave"]'); CL.step(900);
     log.push(['quantité à zéro au départ, envoi impossible', m.client('cave').cartons === 0 && q('[data-a="signer"]').disabled]);
     saisir(1);
@@ -68,6 +74,8 @@ if (scenario === 'parcours') {
     log.push(['prospect ajouté à la tournée (5 tâches du jour sur 5)', m.prospect.statut === 'attendu' && m.nbTaches === 5 && m.etape === 'chai']);
     CL.step(1500);
     log.push(['3 commandes signées', m.clients.every(c => c.statut === 'signee')]);
+    log.push(['signées, elles sont arrivées dans Vitisoft ; pas encore à facturer', (vs('commandes').match(/C-119[456]/g) || []).length === 3 && !vs('accueil').includes('Facturer')]);
+    P.vue = 'accueil';
     // VEHICULE=van : la tournée en van au lieu du tracteur
     const genre = VEH;
     { const p = CL.vehicule(genre).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } // à côté du véhicule choisi

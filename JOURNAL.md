@@ -285,3 +285,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
   - les voitures voient l'emprise réelle d'un véhicule du domaine (ses deux cercles, dans son sens : en travers, il dépasse sur la route) et s'arrêtent à 6 m devant lui, pour lui laisser la place de manœuvrer ; pendant un demi-tour, on regarde aussi où seront les voitures dans 1,5 s.
 
 **Vérifié** : captures du hameau (du ciel, du chemin, de la placette), de la visite (arrivée, « Servir un verre », dégustation, bannière) et du bureau après la visite ; `npm run verifie` (33 étapes par parcours) ; conduite assistée complète, tracteur et van, avec 6 décalages de départ (0 à 8 s) : 12 tournées finies, aucun choc (le choc ancien du tracteur à +8 s a disparu aussi) ; banc d'allègement de three.js : équivalent, parcours complet aux trois paliers.
+
+## 23/11/2026 · Retours de Teddy (1) : anachronismes, chemin, roues
+
+**Demande de Teddy** : attention aux anachronismes (Vitisoft n'a rien tant qu'on n'a pas fait les commandes dans le bureau) ; le nouveau chemin déborde un peu sur la départementale ; le personnage traverse les véhicules ; des humains plus humains ; un tracteur plus réaliste ; les roues des voitures doivent tourner. En quatre lots : A (ce lot), B (mouvements), C (tracteur), D (humains).
+
+**Fait (lot A)** :
+- Vitisoft (`pc.js`) : une commande n'y arrive qu'une fois signée en ligne par le client (avant : « Aucune commande arrivée pour l'instant »). « À faire » ne montre que ce qui a une raison d'être : saisir le règlement une fois le chèque déposé au bureau, facturer une fois les commandes livrées (« Facturer les 2 commandes livrées »...) ; la DRM du mois dernier, quand on veut. Règlements : la facture en retard est là, mais sans « Saisir le règlement » ni mode de paiement tant que le chèque n'est pas arrivé.
+- Le bureau (`telephone.js`) : l'onglet Commandes ne montre une commande qu'à partir de l'appel (elle se prépare pendant) ; avant, « Pas encore de commande aujourd'hui ».
+- Le chemin des Grands Champs commence au bord de la chaussée (z = 13,5) : il recouvrait un mètre de route et la ligne de rive.
+- Les roues des voitures qui roulent tournent (un maillage par essieu, deux roues chacun : 2 appels de dessin par voiture visible ; les voitures garées gardent leurs roues fusionnées).
+
+**Vérifié** : banc `parcours` avec trois nouvelles vérifications (au départ, rien dans Vitisoft ni dans le bureau ; les 3 commandes signées arrivent dans Vitisoft, pas encore à facturer) ; capture du débouché du chemin ; vitesse de rotation des roues mesurée (35,5 rad/s à 11 m/s, rayon 0,31 m) ; conduite assistée complète en tracteur et en van.

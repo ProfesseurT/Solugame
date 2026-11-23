@@ -355,7 +355,7 @@ for (const [x, z, r, c] of L.garees) {
 }
 const voitures = [];
 [[-120, 1, 11], [60, -1, 10.5], [230, 1, 12], [-260, -1, 11.5]].forEach(([x, s, v], i) => {
-  const c = ['#d64541', '#f2efe6', '#3867a8', '#6c8f4e'][i], m = voiture(c);
+  const c = ['#d64541', '#f2efe6', '#3867a8', '#6c8f4e'][i], m = voiture(c, undefined, true);
   scene.add(m); voituresM.push(m);
   const vo = new Voiture(m, x, s, v); vo.teinte = new THREE.Color(c).getHex(); // éclats de carrosserie à sa couleur
   voitures.push(vo);

@@ -55,24 +55,35 @@ export class PC {
     }
   }
 
-  // l'écran d'accueil : les trois tâches du soir, chacune avec son état
+  // l'écran d'accueil : ce qu'il y a à faire, d'après ce qui est arrivé (rien d'avance : le chèque déposé au bureau, les
+  // commandes livrées), chacune avec son état ; la DRM du mois dernier se calcule quand on veut
   accueil(m) {
-    const etats = [m.retardataire.statut === 'saisi', m.toutTransmis, m.drm === 'faite'], vues = ['reglements', 'commandes', 'drm'];
-    const lignes = VITISOFT.taches.map((t, i) => `<tr><td data-l="À faire"><b>${esc(t)}</b></td>
-      <td data-l="État" class="a">${etats[i] ? '<span class="vs-ok">Fait ✓</span>' : `<button class="vs-bt" data-a="vue:${vues[i]}">Ouvrir</button>`}</td></tr>`).join('');
-    return `<h2>À faire ce soir</h2><table class="vs-table"><tbody>${lignes}</tbody></table>${this.fin(m)}`;
+    const r = m.retardataire.statut, livrees = m.ordre.filter(c => ['livree', 'facturee', 'transmise'].includes(c.statut));
+    const taches = [];
+    if (r === 'depose' || r === 'saisi') taches.push([VITISOFT.tacheReglement, r === 'saisi', 'reglements']);
+    if (livrees.length) taches.push([VITISOFT.tacheFactures(livrees.length), livrees.every(c => c.statut === 'transmise'), 'commandes']);
+    taches.push([VITISOFT.tacheDrm, m.drm === 'faite', 'drm']);
+    const lignes = taches.map(([t, fait, vue]) => `<tr><td data-l="À faire"><b>${esc(t)}</b></td>
+      <td data-l="État" class="a">${fait ? '<span class="vs-ok">Fait ✓</span>' : `<button class="vs-bt" data-a="vue:${vue}">Ouvrir</button>`}</td></tr>`).join('');
+    return `<h2>À faire</h2><table class="vs-table"><tbody>${lignes}</tbody></table>${taches.length < 3 ? `<p class="vs-note">${esc(VITISOFT.rienAFaire)}</p>` : ''}${this.fin(m)}`;
   }
   reglements(m) {
     const r = m.retardataire, saisi = r.statut === 'saisi';
-    const act = saisi ? '<span class="vs-ok">Réglée ✓</span>' : '<span class="vs-fx">En retard</span><button class="vs-bt vert" data-a="regler">Saisir le règlement</button>';
+    // on ne saisit le règlement qu'une fois le chèque déposé au bureau
+    const act = saisi ? '<span class="vs-ok">Réglée ✓</span>' : r.statut === 'depose' ? '<span class="vs-fx">En retard</span><button class="vs-bt vert" data-a="regler">Saisir le règlement</button>'
+      : `<span class="vs-fx">En retard</span><span class="vs-gris">${esc(VITISOFT.chequeAttendu)}</span>`;
     return `<h2>${esc(VITISOFT.reglements)}</h2>
       <table class="vs-table"><thead><tr><th>Facture</th><th>Client</th><th>Objet</th><th>Mode</th><th class="n">Montant TTC</th><th>Règlement</th></tr></thead><tbody>
       <tr><td data-l="Facture"><b>${r.facture}</b></td><td data-l="Client">${esc(r.nom)}</td><td data-l="Objet">${esc(r.detail)}</td>
-      <td data-l="Mode">Chèque</td><td data-l="Montant TTC" class="n">${eur(r.ttc)}</td><td data-l="Règlement" class="a">${act}</td></tr></tbody></table>
+      <td data-l="Mode">${['depose', 'saisi'].includes(r.statut) ? 'Chèque' : '·'}</td><td data-l="Montant TTC" class="n">${eur(r.ttc)}</td><td data-l="Règlement" class="a">${act}</td></tr></tbody></table>
       ${saisi ? `<p class="vs-note">${esc(VITISOFT.reglementSaisi)}</p>` : ''}${this.fin(m)}`;
   }
+  // les commandes arrivées du bureau : seulement celles que le client a signées en ligne
   commandes(m) {
-    const lignes = m.ordre.map(c => {
+    const arrivees = m.ordre.filter(c => !['a_traiter', 'proposee', 'commande', 'envoyee'].includes(c.statut));
+    if (!arrivees.length) return `<h2>${esc(VITISOFT.arrivees)}</h2><p class="vs-texte">${esc(VITISOFT.aucuneCommande)}</p>${this.fin(m)}`;
+    const total = arrivees.reduce((s, c) => s + m.htClient(c), 0), transmises = arrivees.filter(c => c.statut === 'transmise').length;
+    const lignes = arrivees.map(c => {
       const ht = m.htClient(c);
       let act;
       if (this.envoi === c.id) act = '<span class="vs-envoi"><i class="roue petite"></i>Pennylane transmet...</span>';
@@ -87,9 +98,9 @@ export class PC {
     }).join('');
     return `<h2>${esc(VITISOFT.arrivees)}</h2>
       <table class="vs-table"><thead><tr><th>Commande</th><th>Client</th><th class="c">Signée en ligne</th><th class="c">Livrée, BL signé</th><th class="n">Montant HT</th><th>Facture</th></tr></thead><tbody>${lignes}</tbody>
-      <tfoot><tr><td colspan="4">Total</td><td class="n">${eur(m.ht)}</td><td></td></tr></tfoot></table>
+      <tfoot><tr><td colspan="4">Total</td><td class="n">${eur(total)}</td><td></td></tr></tfoot></table>
       <p class="vs-note">${esc(VITISOFT.factureCreee)} ${esc(VITISOFT.transmise)}</p>
-      ${m.toutTransmis ? `<p class="vs-note"><b>3 factures transmises.</b> ${esc(VITISOFT.journal)}</p>` : ''}${this.fin(m)}`;
+      ${transmises ? `<p class="vs-note"><b>${transmises > 1 ? `${transmises} factures transmises` : '1 facture transmise'}.</b> ${esc(VITISOFT.journal)}</p>` : ''}${this.fin(m)}`;
   }
   drm(m) {
     const faite = m.drm === 'faite';
