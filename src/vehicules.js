@@ -1,4 +1,4 @@
-// Les véhicules du domaine (tracteur, van) et les voitures de la départementale.
+// Les véhicules du joueur (tracteur, van, voitures empruntées) et les voitures de la départementale.
 import * as THREE from 'three';
 import { angle, versAngle, borne, bruit, amortir as lisser } from './outils.js';
 
@@ -46,6 +46,9 @@ export const TEMPERAMENTS = {
   // le van : plus vif et plus rapide sur la route, mal à l'aise entre les rangs
   van: { vmax: 19, vmaxVigne: 2.8, vmaxAr: 4.5, vmaxArVigne: 1.8, acc: 4.6, accAr: 2.6, frein: 8, alat: 7.6, braqMax: 0.55, volant: 7,
     rapports: [0, 4.2, 8.6, 13.2, 99], resVigne: 1.6, ressorts: 0.7 },
+  // une voiture empruntée (ou volée, en mode WTF) : la plus vive, accrocheuse sur la route, perdue dans les vignes
+  voiture: { vmax: 23, vmaxVigne: 2.4, vmaxAr: 5, vmaxArVigne: 1.6, acc: 5.6, accAr: 3, frein: 9.5, alat: 8.6, braqMax: 0.58, volant: 8,
+    rapports: [0, 5, 10, 15.5, 99], resVigne: 2.2, ressorts: 0.55 },
 };
 const DIMS = { rAr: 0.78, rAv: 0.45, yAr: 0.78, yAv: 0.45, emp: 2.25, off: [1.05, -0.95], r: 1.12, pivot: new THREE.Vector3(0, 0.75, -0.35) };
 const DEUX = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
@@ -58,6 +61,7 @@ export class Tracteur {
     // dérive : vitesse de côté (m/s, positive vers la gauche du véhicule), frein à main lissé 0..1, glissement 0..1
     this.vT = 0; this.fm = 0; this.glisse = 0;
     this.rotR = 0; this.rotA = 0; this.vignes = false; this.choc = 0; this.chocVu = 0; this.charge = 0;
+    this.autres = []; // les autres véhicules du joueur (main.js), qu'on ne traverse pas
     this.sol = 'gravier';
     // commandes lissées
     this.pedale = 0; this.frein = 0; this.tRecul = 0; this.lacet = 0;
@@ -168,8 +172,8 @@ export class Tracteur {
           }
         }
       }
-      if (this.autre) { // l'autre véhicule garé (deux cercles lui aussi)
-        const a = this.autre, ax = Math.sin(a.h), az = Math.cos(a.h);
+      for (const a of this.autres) { // les autres véhicules du joueur, garés (deux cercles eux aussi)
+        const ax = Math.sin(a.h), az = Math.cos(a.h);
         for (const o of a.d.off) {
           const dx = c.x - (a.pos.x + ax * o), dz = c.z - (a.pos.z + az * o), d2 = dx * dx + dz * dz, R = RC + a.d.r;
           if (d2 < R * R && d2 > 1e-6) { const d = Math.sqrt(d2), p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d; }

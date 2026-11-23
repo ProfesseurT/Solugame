@@ -81,6 +81,7 @@ export class Telephone {
       case 'fil': this.fil = arg; break;
       case 'son': son.basculer(); break;
       case 'radio': this.jeu.basculerRadio(); break;
+      case 'wtf': this.jeu.basculerWtf(); break;
       case 'heros': this.jeu.changerHeros(arg); break;
       case 'bientot': this.toast('Dans le jeu complet.'); return;
     }
@@ -310,6 +311,8 @@ export class Telephone {
     return this.entete('Réglages', 'reglages') + `<div class="ap-corps">
       <button class="reg" data-a="son"><span>Son</span><b>${son.actif ? 'Activé' : 'Coupé'}</b></button>
       <button class="reg" data-a="radio"><span>Radio des véhicules</span><b>${son.radioAllumee ? 'Allumée' : 'Coupée'}</b></button>
+      <button class="reg" data-a="wtf"><span>Mode WTF</span><b>${this.jeu.wtf ? 'Activé' : 'Coupé'}</b></button>
+      <p class="ap-note">${this.jeu.wtf ? 'On vole les voitures, même garées, et l\'on aplatit les passants (ils se relèvent en râlant).' : 'On emprunte les voitures à leur conducteur : plantez-vous devant, elle s\'arrête. Le mode WTF permet de les voler et d\'aplatir les passants.'}</p>
       <p class="ap-h">Personnage</p>
       <div class="reg-choix"><button class="ap-bt${h === 'vigneron' ? ' plein' : ''}" data-a="heros:vigneron">Vigneron</button><button class="ap-bt${h === 'vigneronne' ? ' plein' : ''}" data-a="heros:vigneronne">Vigneronne</button></div>
       <p class="ap-note">Tournée générale · ${esc(VERSION)} · un jeu original de l'équipe Solumatic</p></div>`;

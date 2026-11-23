@@ -335,7 +335,7 @@ export const son = {
     if (!moteurOn) { moteurOn = true; rapportPrec = 0; M.brancher(true); if (tAllume < t) tAllume = t; }
     const reg = etat && etat.regime !== undefined ? etat.regime : Math.min(1, 0.15 + a / 14);
     const eff = etat && etat.effort !== undefined ? etat.effort : 0.4;
-    const t0 = Math.max(t, tAllume), van = !!etat && etat.genre === 'van';
+    const t0 = Math.max(t, tAllume), van = !!etat && etat.genre !== 'tracteur'; // le van et les voitures : un moteur à essence
     const f0 = van ? 36 + 64 * reg : 24 + 46 * reg;
     M.o1.frequency.setTargetAtTime(f0, t0, 0.06);
     M.lfo.frequency.setTargetAtTime(van ? 16 + 22 * reg : 5 + 10 * reg, t0, 0.06);
@@ -425,6 +425,10 @@ export const son = {
       case 'claque': bruit(t, 0.16, 280, 0.5); { const o = note(90, t, 0.14, 'sine', 0.22, sfx); o.frequency.exponentialRampToValueAtTime(50, t + 0.14); } break; // portière refermée
       case 'marche': bruit(t, 0.06, 1500, 0.2, 'bandpass'); note(310, t, 0.07, 'triangle', 0.04, sfx, 0, true); break; // pied sur le marchepied (tôle)
       case 'klaxon': note(392, t, 0.38, 'square', 0.05, sfx, 1600); note(494, t, 0.38, 'square', 0.05, sfx, 1600); break;
+      case 'pouet': { // mode WTF : un passant aplati, comme un jouet qui couine
+        const a = note(620, t, 0.15, 'square', 0.05, sfx, 2400); a.frequency.exponentialRampToValueAtTime(1500, t + 0.12);
+        const b = note(1150, t + 0.16, 0.16, 'square', 0.04, sfx, 2400); b.frequency.exponentialRampToValueAtTime(650, t + 0.3);
+      } break;
       case 'envoi': { const fl = bruit(t, 0.5, 600, 0.25, 'bandpass'); fl.frequency.exponentialRampToValueAtTime(4000, t + 0.45); } break;
       case 'envoye': // envoi réussi : deux notes claires qui montent
         note(f(88), t, 0.14, 'sine', 0.1, sfx, 0, true); note(f(95), t + 0.1, 0.35, 'sine', 0.1, sfx, 0, true);

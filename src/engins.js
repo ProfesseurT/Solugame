@@ -734,6 +734,36 @@ const MODELES = {
   },
 };
 const NOMS = ['break', 'citadine', 'berline'];
+
+// Le poste de conduite d'une voiture (son repère : avant vers +z, +x à gauche, le côté du conducteur) : où se tient le
+// personnage assis (siege), dessus du siège (assise), plancher, volant (centre, rayon ; jante verticale, comme au tracteur)
+function posteVoiture(M) {
+  const zPB = M.gh[M.gh.length - 1][0], zs = zPB - 0.98;
+  return { siege: new THREE.Vector3(0.37, 0, zs + 0.1), assise: 0.5, plancher: 0.36, volant: new THREE.Vector3(0.37, 0.88, zPB - 0.5), rayon: 0.17 };
+}
+
+/* Une voiture qu'on conduit (empruntée, ou volée en mode WTF) : la même carrosserie que celle qui roulait ou attendait,
+   avec l'interface du tracteur et du van (vehicules.js : quatre roues, deux pivots de direction, une caisse sur ressorts ;
+   gestes.js : la montée par la portière du conducteur). Pas de plateau : elle ne porte pas de cartons. */
+export function voitureConduite(couleur, nom) {
+  const M = MODELES[nom], corps = voiture(couleur, nom, true);
+  for (const e of corps.userData.essieux) corps.remove(e); // ses roues tournent et braquent à part
+  const groupe = new THREE.Group(), caisse = new THREE.Group();
+  groupe.add(caisse); caisse.add(corps);
+  const rG = compacter(roue(M.rr, 0.2, 10, 1, false)), rD = compacter(roue(M.rr, 0.2, 10, -1, false));
+  const { rouesAr, rouesAv, pivots, essieu } = roues(groupe, [rG, rD, rG, rD], M.xr, M.rr, M.zAr, M.xr, M.rr, M.zAv);
+  const P = posteVoiture(M), L = M.zs[M.zs.length - 1], W = Math.max(...M.W.map(w => w[1])), s = P.siege;
+  return {
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant: null, feux: corps.userData.feux, corps, siege: s,
+    dims: {
+      rAr: M.rr, rAv: M.rr, yAr: M.rr, yAv: M.rr, emp: M.zAv - M.zAr, off: [L * 0.48, -L * 0.48], r: W + 0.08, pivot: new THREE.Vector3(0, 0.55, 0),
+      zAr: M.zAr, zAv: M.zAv, xAr: M.xr, xAv: M.xr, assise: P.assise, plancher: P.plancher, emprise: [[-W, W, -L, L]],
+    },
+    volantCentre: P.volant, volantRayon: P.rayon,
+    // la montée : à côté de la portière, on s'assoit en se baissant (pieds au sol), on rentre les jambes
+    montee: { chemin: [[W + 0.45, 0, s.z - 0.25], [W + 0.3, 0, s.z], [W - 0.05, 0, s.z], [0.62, 0, s.z], [s.x, 0, s.z]], duree: 1.1, assis: 0.3, baisse: 0.75, son: 'portiere' },
+  };
+}
 const PLAST = '#232428', NOIR = '#141518', CHROME = '#cfd3d8', LAQUE = '#191a1e';
 
 // La carrosserie (et les feux) d'un modèle : coque basse, coque vitrée, décors. Renvoie les deux coques et les profils.
@@ -884,6 +914,7 @@ export function voiture(couleur, modele, roule = false) {
   const m = new THREE.Mesh(geo.corps, MAT); m.castShadow = true;
   const vitre = new THREE.Mesh(geo.vitres, MAT_VITRE); vitre.renderOrder = 3; m.add(vitre);
   m.userData.vitres = geo.vitres; m.userData.corps = geo.corps;
+  m.userData.nom = nom; m.userData.couleur = couleur; m.userData.poste = posteVoiture(M);
   if (roule) {
     // un essieu : ses deux roues, autour de son axe (géométrie partagée par modèle)
     let ge = ESSIEUX.get(nom);

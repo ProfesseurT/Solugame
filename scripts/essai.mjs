@@ -6,6 +6,7 @@
 //   parcours  joue toute la mission (3 commandes, 3 livraisons, 3 factures) et vérifie chaque étape ; VEHICULE=van : en van
 //   souple    la journée à la carte : le chèque seul, une tournée avec ce qui est déjà signé, un arrêt seul, chargement
 //             en deux fois (VEHICULE=van : en van)
+//   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
@@ -301,6 +302,62 @@ if (scenario === 'aides') {
     clic('.vs-fin [data-a="fermer"]'); CL.step(560);
     log.push(['carte de fin', !q('#fin').hidden]);
     log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('fin');
+}
+
+if (scenario === 'voitures') {
+  // les voitures des autres : un conducteur dans chacune ; sans le mode WTF, une voiture garée reste fermée ; plantée
+  // devant elle, une voiture s'arrête et son conducteur nous la prête (il devient un passant), une autre la remplace au
+  // loin ; une voiture ne charge pas de cartons au chai ; mode WTF : une voiture garée se vole, un passant s'aplatit puis
+  // se relève
+  const r = await ev(async () => {
+    const q = s => document.querySelector(s), m = CL.mission, T = CL.jeu.tel, J = CL.jeu, log = [];
+    const clic = s => { const e = q(s); if (!e) throw new Error('absent : ' + s); e.click(); };
+    const saisir = n => { for (let i = 0; i < n; i++) clic('[data-a="qte:1"]'); clic('[data-a="signer"]'); };
+    const dit = () => [J.hud.ligne, ...J.hud.file].filter(Boolean).map(l => l.txt).join(' ');
+    try {
+      CL.jouer(); CL.step(60);
+      log.push(['un conducteur dans chaque voiture de la départementale', CL.voitures().length === 4 && CL.voitures().every(v => v.conducteur)]);
+      { const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); }
+      log.push(['sans le mode WTF, une voiture garée reste fermée', !CL.voitureProche && !J.auVolant && !J.gestes.actif]);
+      const v = CL.voitures().find(x => x.sens > 0);
+      CL.teleporter(v.x + 30, v.zVoie, -Math.PI / 2);
+      for (let i = 0; i < 900 && Math.abs(v.v) > 0.3; i++) CL.step(1);
+      CL.step(30);
+      log.push(['plantée devant elle, la voiture s\'arrête', Math.abs(v.v) < 0.3]);
+      J.joueur.placer(v.x + 0.5, v.z - 2.3, Math.PI); CL.step(5);
+      log.push(['à côté : « Emprunter la voiture »', CL.voitureProche === v && [...document.querySelectorAll('.etiquette.action')].some(e => e.textContent.startsWith('Emprunter la voiture'))]);
+      const n0 = CL.gens.length;
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['empruntée : au volant, le conducteur est descendu, un passant de plus', J.auVolant && J.veh.genre === 'voiture' && CL.voitures().length === 3 && CL.gens.length === n0 + 1]);
+      CL.ctrl.ky = -1; CL.step(150); CL.ctrl.ky = 0;
+      log.push(['elle roule (' + CL.tr.v.toFixed(1) + ' m/s)', CL.tr.v > 8]);
+      CL.step(60 * 21);
+      log.push(['une autre voiture la remplace sur la départementale', CL.voitures().length === 4 && CL.voitures().every(x => x.conducteur)]);
+      // au chai en voiture, avec une commande signée sur la palette : rien ne se charge
+      T.ouvrir('bureau'); clic('[data-a="rappel:cave"]'); for (let n = 0; n < 3000 && T.app === 'appel'; n++) CL.step(1); CL.step(2); saisir(6); T.fermer();
+      CL.step(15 * 60); J.hud.vider(); CL.step(9 * 60);
+      CL.teleporter(-83.4, -47.4, 2.83); CL.step(30);
+      log.push(['au chai en voiture : rien ne se charge, l\'aide le dit', m.etape === 'journee' && m.client('cave').statut === 'signee' && dit().includes('Une voiture ne porte pas')]);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      // mode WTF : voler une voiture garée, aplatir un passant
+      J.basculerWtf();
+      const g = CL.GAREES[0], ng = CL.GAREES.length;
+      J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5);
+      log.push(['mode WTF : la voiture garée se vole', CL.voitureProche === g]);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['volée : au volant', J.auVolant && J.veh.genre === 'voiture' && CL.GAREES.length === ng - 1]);
+      const G = CL.gens[0];
+      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); G.attente = 99; G.p.placer(-91, -47, 0); // dans la cour : pas de circulation
+      CL.ctrl.ky = -1; for (let n = 0; n < 300 && G.ecrase <= 0; n++) CL.step(1); CL.ctrl.ky = 0; CL.step(10);
+      log.push(['un passant aplati comme une crêpe', G.ecrase > 0 && G.p.m.groupe.scale.y < 0.3]);
+      CL.step(200);
+      log.push(['il s\'est relevé', G.ecrase <= 0 && Math.abs(G.p.m.groupe.scale.y - G.p.m.echelle) < 0.01]);
+      log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });

@@ -5,7 +5,7 @@ import { borne } from './outils.js';
 
 const VOIE = 1.6;          // décalage vers la droite de l'itinéraire sur la départementale (on roule à droite)
 const surRoute = (a, b) => Math.abs(a[1] - 10) < 2.5 && Math.abs(b[1] - 10) < 2.5; // segment le long de la départementale (z = 10)
-const CROISIERE = { tracteur: 8.5, van: 12.5 }; // vitesse de croisière (m/s)
+const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14 }; // vitesse de croisière (m/s)
 const SONDE = { x: 0, z: 0 }; // point d'essai devant ou derrière le véhicule (demi-tour)
 const COINS = [0, 0.8, -0.8]; // milieu et coins du pare-chocs, sondés pendant un demi-tour
 
@@ -91,8 +91,7 @@ export class Pilote {
           const px = pos.x + sx * k + cz * c, pz = pos.z + cz * k - sx * c;
           SONDE.x = px; SONDE.z = pz;
           if (col && col.resoudre(SONDE, 0.6)) return false;
-          const a = tr.autre;
-          if (a) for (const ao of a.d.off) if (Math.hypot(px - (a.pos.x + Math.sin(a.h) * ao), pz - (a.pos.z + Math.cos(a.h) * ao)) < a.d.r + 0.6) return false;
+          for (const a of tr.autres) for (const ao of a.d.off) if (Math.hypot(px - (a.pos.x + Math.sin(a.h) * ao), pz - (a.pos.z + Math.cos(a.h) * ao)) < a.d.r + 0.6) return false;
           // les voitures : là où elles sont, et là où elles seront dans 1,5 s (une voiture lancée arrive vite)
           for (let j = 0; j < voitures.length; j++) {
             const v = voitures[j], dz = pz - v.z;
@@ -127,10 +126,10 @@ export class Pilote {
       const d = Math.hypot(cible.x - pos.x, cible.z - pos.z);
       vc = Math.min(vc, d < 4.2 ? 0 : Math.sqrt(2 * 2.4 * (d - 4.2)));
     }
-    // l'autre véhicule du domaine, garé sur le passage : on s'arrête avant (on le contourne à la main)
-    if (tr.autre) {
-      // mesuré le long de la direction du point visé (pas du capot : pendant un virage, il balaie à côté)
-      const ux = dx / Ld, uz = dz / Ld, a = tr.autre, ex = a.pos.x - pos.x, ez = a.pos.z - pos.z, lo = ex * ux + ez * uz, la = ex * uz - ez * ux;
+    // un autre véhicule du joueur, garé sur le passage : on s'arrête avant (on le contourne à la main) ; mesuré le long de
+    // la direction du point visé (pas du capot : pendant un virage, il balaie à côté)
+    for (const a of tr.autres) {
+      const ux = dx / Ld, uz = dz / Ld, ex = a.pos.x - pos.x, ez = a.pos.z - pos.z, lo = ex * ux + ez * uz, la = ex * uz - ez * ux;
       if (lo > 0 && lo < 9 && Math.abs(la) < a.d.r + tr.d.r * 0.85) vc = Math.min(vc, lo < 5.5 ? 0 : (lo - 5.5) * 1.2);
     }
     for (let k = 0; k < voitures.length; k++) {

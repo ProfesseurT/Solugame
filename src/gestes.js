@@ -244,7 +244,7 @@ export class Gestes {
 
   /* ------------------------------------------------------------ monter, descendre */
   etapesMonter(v, fin) {
-    const M = MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte;
+    const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte, sonMontee = M.son || 'marche';
     const etapes = this.allerVers(v, ch[0], -Math.PI / 2);
     if (porte) etapes.push(this.portiere(v, 1));
     let marche = false;
@@ -260,7 +260,7 @@ export class Gestes {
         surChemin(ch, u, g.position);
         g.rotation.set(0, mix(-Math.PI / 2, 0, lisse((u - 0.3) / 0.7)), 0);
         j.transition = lisse((u - M.assis) / (1 - M.assis));
-        if (!porte && !marche && u > 0.25) { marche = true; son.jouer('marche'); }
+        if (!porte && !marche && u > 0.25) { marche = true; son.jouer(sonMontee); }
         j.sync(dt, t);
         g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z; // la caméra suit
       },
@@ -277,7 +277,7 @@ export class Gestes {
     return etapes;
   }
   etapesDescendre(v, sorti) {
-    const M = MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte;
+    const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte;
     const etapes = [];
     if (porte) etapes.push(this.portiere(v, 1));
     let marche = false;
@@ -289,7 +289,7 @@ export class Gestes {
         surChemin(ch, 1 - u, g.position);
         g.rotation.set(0, mix(0, Math.PI / 2, lisse((u - 0.15) / 0.6)), 0);
         j.transition = 1 - lisse((1 - u - M.assis) / (1 - M.assis));
-        if (!porte && !marche && u > 0.7) { marche = true; son.jouer('marche'); }
+        if (!porte && !marche && u > 0.7) { marche = true; son.jouer(M.son || 'marche'); }
         j.sync(dt, t);
         g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z;
         if (u >= 1) {
@@ -544,7 +544,7 @@ export class Gestes {
 
   // Après la livraison : on referme la porte coulissante (van), on retourne au volant
   remonter(v, installe) {
-    const k = Object.keys(v.m.chargeur)[0];
-    this.lancer([...(v.m.coulissante && v.m.coulissante.position.z < -0.1 ? [...this.auVehicule(v, k), ...this.fermerCote(v)] : []), ...this.etapesMonter(v, installe)]);
+    const ouverte = v.m.coulissante && v.m.coulissante.position.z < -0.1;
+    this.lancer([...(ouverte ? [...this.auVehicule(v, Object.keys(v.m.chargeur)[0]), ...this.fermerCote(v)] : []), ...this.etapesMonter(v, installe)]);
   }
 }

@@ -568,3 +568,18 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** : +0,1 à +0,3 ms par image sur ordinateur ; domaine 129 → 134 appels de dessin, 158 000 → 170 000 triangles ; bourg 78 → 88 appels (les passants), 175 000 → 206 000 triangles.
 
 **Vérifié** : le client de la cave filmé (première pile rentrée, il ressort, la seconde) ; captures de la cour (près, au ras du sol, sur téléphone) et de la rue ; `npm run verifie` (nouvelle étape du parcours : les cinq clients rentrés, plus aucune pile dehors) ; conduite assistée en tracteur et en van ; banc des personnages en jeu ; banc d'allègement : équivalent.
+
+## 23/11/2026 · Retours de Teddy (13) : des gens dans les voitures, emprunter, et le mode WTF
+
+**Demande** : des gens dans les voitures ; pouvoir prendre n'importe quelle voiture ; « on va activer un mode dans les réglages : mode WTF où on peut voler des voitures et écraser les gens, et un mode sans ça, où on peut juste emprunter des voitures ».
+
+**Décision** : la règle « pas de crime dans le jeu » vient du client ; j'ai signalé le conflit et le risque pour l'image, Teddy a tranché : un mode WTF, coupé par défaut. Pour « écraser », un gag de dessin animé (le passant s'aplatit comme une crêpe et se relève en râlant), sans sang ni mort. Règle mise à jour dans `CLAUDE.md`.
+
+**Fait** :
+- Un conducteur au volant de chaque voiture de la départementale (poste de conduite de chaque modèle : `posteVoiture`, engins.js), vu par les vitres, animé seulement à moins de 80 m.
+- Prendre une voiture : on se plante dans sa voie, elle s'arrête ; à côté, « Emprunter la voiture ». Son conducteur descend côté conducteur, la prête avec une réplique (« Elle tire un peu à gauche, hein ! ») et devient un passant du bas-côté. Une jumelle qu'on conduit (`voitureConduite` : même carrosserie, quatre roues qui tournent et braquent, caisse sur ressorts, montée par la portière) prend sa place, avec son caractère (`TEMPERAMENTS.voiture` : la plus vive, perdue dans les vignes) et la conduite assistée. Une autre voiture, avec un nouveau conducteur, revient au loin 20 s plus tard.
+- Mode WTF (Réglages du téléphone, gardé d'une partie à l'autre) : « Voler la voiture », même garée (les voitures garées ne sont plus fusionnées : 2 appels de dessin de plus) ; son conducteur s'enfuit en criant au voleur. Les passants ne s'écartent plus : touchés par un véhicule lancé, ils s'aplatissent (« pouet », secousse, « Aïe ! »), restent par terre 2 s, se regonflent avec un rebond et s'en vont en râlant (« Chauffard ! »).
+- Plusieurs véhicules du joueur : ils ne se traversent pas (`autres` au lieu d'un seul « autre ») ; les voitures de la départementale les voient tous ; la conduite assistée les évite tous.
+- Une voiture ne porte pas de cartons : au chai, rien ne se charge, l'aide le dit.
+
+**Vérifié** : nouveau banc `voitures` (13 étapes, dans `npm run verifie`) ; conducteur, emprunt, crêpe et relevé filmés ; conduite assistée en tracteur et en van (mêmes durées, aucun choc) ; banc des personnages en jeu. Un premier essai n'aplatissait le passant qu'à grande vitesse : le pare-chocs le repoussait devant lui à chaque image ; tout contact avec un véhicule lancé l'aplatit désormais.

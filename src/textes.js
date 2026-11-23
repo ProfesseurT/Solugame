@@ -113,6 +113,8 @@ export const DIALOGUES = {
   signee: c => [{ qui: '', txt: `${c.nom} a signé la commande ${c.numero} sur son téléphone.` }],
   attenteSignature: n => [{ qui: '', txt: `Encore ${n} commande${s(n)} à signer. Patience, les clients relisent.` }],
   rienACharger: [{ qui: '', txt: 'Rien à charger pour l\'instant : les commandes se préparent dans le bureau, sur votre téléphone.' }],
+  voitureSansCartons: [{ qui: '', txt: 'Une voiture ne porte pas de cartons : prenez le tracteur ou le van.' }],
+  wtf: on => [{ qui: '', txt: on ? 'Mode WTF : volez les voitures, aplatissez les passants. Ils se relèvent, promis.' : 'Mode WTF coupé : on emprunte les voitures, les passants s\'écartent.' }],
   aPied: [{ qui: '', txt: 'Les cartons à pied ? Prenez plutôt le tracteur ou le van.' }],
   sansCartons: v => [{ qui: '', txt: v === 'van' ? 'Les cartons sont dans le van.' : 'Les cartons sont sur le tracteur.' }],
   // arrêté devant un client qui n'est pas encore prêt : ce qui manque, et où le faire
@@ -164,6 +166,14 @@ export const DIALOGUES = {
 // Ce que disent les passants à qui l'on sert un verre, et les automobilistes qu'on accroche (jamais méchant)
 export const REPLIQUES_VERRE = ['Santé !', 'À la vôtre !', 'Fameux, ce rouge !', 'Il a du fruit !', 'Je passerai au domaine !', 'Un vrai velours.', 'Merci, c\'est gentil !'];
 export const CHOCS_VOITURE = ['Eh ! Mon pare-chocs !', 'Regardez devant vous !', 'Ma voiture toute neuve !', 'Oh là là !', 'Doucement, le paysan !'];
+// Les voitures de la départementale : celui qui prête la sienne ; en mode WTF (Réglages : décision de Teddy du
+// 23/11/2026), celui à qui on la vole, et les passants qu'on aplatit (un gag de dessin animé : ils se relèvent en râlant)
+export const VOITURES = {
+  pretee: ['Prenez-la, mais ramenez-la-moi entière !', 'Les clés sont dessus. Doucement dans les virages !', 'Elle tire un peu à gauche, hein !', 'Pas de souci, je finis à pied.'],
+  volee: ['Au voleur !', 'Ma voiture !', 'Hé ! Rendez-la-moi !', 'Revenez ici !'],
+  ecrase: ['Aïe !', 'Ouille !', 'Ouch !'],
+  releve: ['Chauffard !', 'Ça va pas, non ?!', 'Regardez où vous roulez !', 'Mon dos…', 'Même pas mal !'],
+};
 
 // Le bureau (extension web de Vitisoft, sur ordinateur, tablette ou smartphone), sur le téléphone et sur le portable
 // du bureau du chai (« Au domaine sur l'ordinateur, au salon sur la tablette, en tournée sur le smartphone »).

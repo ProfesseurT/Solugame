@@ -1,10 +1,9 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, MAT, MAT_VITRE, compacter, indexer } from './modeles.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { UNI, compacter, indexer } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture } from './engins.js';
+import { tracteur, van, voiture, voitureConduite } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -18,7 +17,7 @@ import { son } from './audio.js';
 import { hasard, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -112,25 +111,27 @@ let joueur = new Pieton(perso(HEROS[choixHeros]));
 scene.add(joueur.m.groupe);
 joueur.placer(L.depart.x, L.depart.z, L.depart.h);
 
-// Les deux véhicules du domaine : le tracteur et le van. On livre avec l'un ou l'autre.
-// tr (physique) et tm (modèle) désignent le véhicule courant : celui qu'on conduit, ou le dernier conduit.
-const VEHICULES = [];
+// Les véhicules du joueur : le tracteur et le van du domaine (on livre avec l'un ou l'autre), et les voitures qu'il a
+// empruntées (ou volées, en mode WTF). tr (physique) et tm (modèle) désignent le véhicule courant : celui qu'on conduit,
+// ou le dernier conduit. VEH_CARTE : repérés sur la mini-carte quand on est à pied ; OBSTACLES : ce que voient les
+// voitures de la départementale (le joueur, puis chaque véhicule, avec son emprise).
+const VEHICULES = [], VEH_CARTE = [], OBSTACLES = [null];
 function creerVehicule(genre, modele, lieu, poste) {
   scene.add(modele.groupe);
   const p = new Tracteur(modele, genre);
   p.placer(lieu.x, lieu.z, lieu.h);
+  p.pos.veh = p;
   const v = { genre, m: modele, p, poste };
-  VEHICULES.push(v);
+  VEHICULES.push(v); VEH_CARTE.push(p); OBSTACLES.push(p.pos);
+  for (const a of VEHICULES) a.p.autres = VEHICULES.filter(b => b !== a).map(b => b.p); // on ne se traverse pas
   return v;
 }
+// poste de conduite pour l'animation (van, voitures) : assise, plancher, volant (centre, rayon, inclinaison de la jante)
+const posteDe = m => ({ assise: m.dims.assise, plancher: m.dims.plancher, volant: m.volantCentre, rayon: m.volantRayon, inclinaison: m.volantInclinaison });
 const vTracteur = creerVehicule('tracteur', tracteur(), L.tracteur, null);
 const mVan = van();
-// poste de conduite du van pour l'animation : assise, plancher, volant (centre, rayon, inclinaison de la jante)
-const vVan = creerVehicule('van', mVan, L.van, { assise: mVan.dims.assise, plancher: mVan.dims.plancher, volant: mVan.volantCentre, rayon: mVan.volantRayon, inclinaison: mVan.volantInclinaison });
-vTracteur.p.autre = vVan.p; vVan.p.autre = vTracteur.p;
-vTracteur.p.pos.veh = vTracteur.p; vVan.p.pos.veh = vVan.p; // les voitures voient leur emprise (vehicules.js, obstacles)
+creerVehicule('van', mVan, L.van, posteDe(mVan));
 let veh = vTracteur, tr = veh.p, tm = veh.m;
-const VEH_CARTE = VEHICULES.map(v => v.p); // repérés sur la mini-carte quand on est à pied
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
 const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
@@ -197,44 +198,73 @@ function peupler() {
     p.bulle = 0; p.cri = hud.etiquette('Hé !', 'bulle'); p.p.etq = p.cri;
     passants.push(p);
   }
+  // les conducteurs des voitures de la départementale
+  for (const vo of voitures) asseoirConducteur(vo);
+}
+// Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
+const rConducteurs = hasard(53), rPietons = hasard(59);
+function asseoirConducteur(vo) {
+  const p = new Pieton(unPassant({}, rConducteurs)), P = vo.mesh.userData.poste;
+  vo.mesh.add(p.m.groupe); p.m.groupe.position.copy(P.siege);
+  p.assis = true; p.poste = P; p.volant = 0; p.m.maillage.castShadow = false;
+  p.sync(0, 0);
+  vo.conducteur = p;
+}
+// Il descend de la voiture qu'on lui prend (h : son cap) et devient un passant, sur le bas-côté de sa voie : il nous la
+// prête de bon cœur, ou (mode WTF) il s'enfuit en criant au voleur
+function conducteurDescend(vo, h) {
+  const p = vo.conducteur, g = p.m.groupe;
+  vo.conducteur = null;
+  const s = g.position, c = Math.cos(h), sn = Math.sin(h);
+  const x = vo.x + c * 1.4 + sn * s.z, z = vo.z - sn * 1.4 + c * s.z; // côté conducteur : la gauche de la voiture (+x)
+  g.removeFromParent(); g.rotation.set(0, 0, 0); scene.add(g);
+  const zone = vo.z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
+  const pa = new Passant(p.m, zone, rPietons);
+  pa.p.placer(x, z, h + Math.PI / 2);
+  pa.cri = hud.etiquette('', 'bulle'); pa.p.etq = pa.cri; pa.bulle = 4;
+  if (jeu.wtf) {
+    const ex = x - joueur.pos.x, ez = z - joueur.pos.z, l = Math.hypot(ex, ez) || 1;
+    pa.fx = ex / l; pa.fz = ez / l; pa.fuite = 1.8;
+    hud.bulle(pa.cri, pick(REPLIQUES.volee), 2.4);
+  } else hud.bulle(pa.cri, pick(REPLIQUES.pretee), 3.2);
+  passants.push(pa);
 }
 // les modèles de toutes les voitures, garées et qui roulent (leur ombre de contact : majTaches)
 const voituresM = [];
-// voitures garées : immobiles, fusionnées par quartier de 64 m (carrosseries, vitres), chaque quartier élagué hors champ
-const garees = new Map();
+// voitures garées : immobiles, chacune son maillage (en mode WTF, on peut la voler), et sa boîte de collision
+const GAREES = [];
 for (const [x, z, r, c] of L.garees) {
-  const m = voiture(c); m.position.set(x, 0, z); m.rotation.y = r; m.updateMatrix(); voituresM.push(m);
-  const k = Math.floor(x / 64) + ',' + Math.floor(z / 64);
-  if (!garees.has(k)) garees.set(k, [[], []]);
-  garees.get(k)[0].push(m.userData.corps.clone().applyMatrix4(m.matrix)); garees.get(k)[1].push(m.userData.vitres.clone().applyMatrix4(m.matrix));
+  const m = voiture(c); m.position.set(x, 0, z); m.rotation.y = r; m.receiveShadow = true; m.name = 'voiture garée';
+  scene.add(m); voituresM.push(m);
   const tourne = Math.abs(Math.sin(r)) > 0.5;
   const b = col.boiteC(x, z, tourne ? 3.9 : 1.75, tourne ? 1.75 : 3.9); b.haut = false;
+  GAREES.push({ m, x, z, h: r, boite: b });
 }
-for (const [gc, gv] of garees.values()) {
-  const c = new THREE.Mesh(mergeGeometries(gc), MAT), v = new THREE.Mesh(mergeGeometries(gv), MAT_VITRE);
-  c.castShadow = true; c.receiveShadow = true; c.name = 'voitures garées'; v.renderOrder = 3; v.name = 'vitres garées';
-  scene.add(c, v);
-}
+// les voitures de la départementale, avec leur conducteur (assis à la première image : peupler)
 const voitures = [];
-[[-120, 1, 11], [60, -1, 10.5], [230, 1, 12], [-260, -1, 11.5]].forEach(([x, s, v], i) => {
-  const c = ['#d64541', '#f2efe6', '#3867a8', '#6c8f4e'][i], m = voiture(c, undefined, true);
+function creerVoiture(x, sens, vmax, c) {
+  const m = voiture(c, undefined, true);
   scene.add(m); voituresM.push(m);
-  const vo = new Voiture(m, x, s, v); vo.teinte = new THREE.Color(c).getHex(); // éclats de carrosserie à sa couleur
+  const vo = new Voiture(m, x, sens, vmax); vo.teinte = new THREE.Color(c).getHex(); // éclats de carrosserie à sa couleur
   voitures.push(vo);
-});
+  return vo;
+}
+[[-120, 1, 11], [60, -1, 10.5], [230, 1, 12], [-260, -1, 11.5]].forEach(([x, s, v], i) => creerVoiture(x, s, v, ['#d64541', '#f2efe6', '#3867a8', '#6c8f4e'][i]));
 
 // géométries finies : indexées (véhicules, voitures, cartons : chaque sommet calculé une fois), attributs compactés (deux
 // fois moins de mémoire et de lectures pour la carte graphique). Le terrain (morceaux d'un même tampon) reste tel quel.
-{
-  const vues = new Set();
-  scene.traverse(o => {
-    if (!o.geometry || vues.has(o.geometry)) return;
-    vues.add(o.geometry);
+// Aussi pour ce qui arrive en cours de partie (une voiture qu'on prend).
+const FINIES = new Set();
+function finir(racine) {
+  racine.traverse(o => {
+    if (!o.geometry || FINIES.has(o.geometry)) return;
+    FINIES.add(o.geometry);
     if (!o.geometry.index && !o.isSkinnedMesh && o.geometry.drawRange.count === Infinity && o.material && o.material.flatShading) indexer(o.geometry, true);
     compacter(o.geometry);
   });
-  mesures.persos = Math.round(performance.now() - T0);
 }
+finir(scene);
+mesures.persos = Math.round(performance.now() - T0);
 
 /* ------------------------------------------------------------------ jeu */
 const cam = new Camera(camera);
@@ -260,6 +290,15 @@ const jeu = {
     return on;
   },
   auVolant: false, ventes: 0, minutes: 17 * 60 + 40, heureTxt: '17:40',
+  // Mode WTF (Réglages ; décision de Teddy du 23/11/2026) : on vole les voitures, même garées, et l'on aplatit les
+  // passants (un gag : ils se relèvent en râlant). Sinon, on emprunte une voiture à son conducteur. Gardé d'une partie à
+  // l'autre.
+  wtf: stocke.lire('tournee-generale-wtf') === 'on',
+  basculerWtf() {
+    this.wtf = !this.wtf; stocke.ecrire('tournee-generale-wtf', this.wtf ? 'on' : 'off');
+    hud.dire(DIALOGUES.wtf(this.wtf));
+    return this.wtf;
+  },
   get choixHeros() { return choixHeros; },
   get joueur() { return joueur; },
   distance(p) { const o = this.auVolant ? tr.pos : joueur.pos; return Math.hypot(o.x - p.x, o.z - p.z); },
@@ -298,11 +337,11 @@ const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // mon
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
-const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre');
+const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture');
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
-const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre]; // celles qui se touchent (toucher)
+const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre, etqPrendre]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -366,13 +405,49 @@ jeu.remonter = v => {
   if (jeu.auVolant || gestes.actif || jeu.dedans || joueur.assis || Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z) > 15) return;
   gestes.remonter(v, () => auVolant(v));
 };
+/* ------------------------------------------------------------------ les voitures des autres
+   Une voiture de la départementale arrêtée (on s'est planté devant elle : elle attend), à portée de main : son conducteur
+   nous la prête (ou, en mode WTF, on la lui vole) ; en mode WTF, aussi une voiture garée. On prend sa place : une jumelle
+   qu'on conduit (engins.js : voitureConduite) remplace celle qui roulait ou attendait. La départementale retrouve une
+   voiture, au loin, 20 s plus tard. */
+const REMPLACER = [];
+function voitureProche() {
+  let best = null, dmin = 4.5;
+  for (const v of voitures) {
+    if (!v.conducteur || Math.abs(v.v) > 0.6) continue;
+    const d = Math.hypot(joueur.pos.x - v.x, joueur.pos.z - v.z);
+    if (d < dmin) { dmin = d; best = v; }
+  }
+  if (jeu.wtf) for (const g of GAREES) { const d = Math.hypot(joueur.pos.x - g.x, joueur.pos.z - g.z) - 0.8; if (d < dmin) { dmin = d; best = g; } }
+  return best;
+}
+function prendreVoiture(c) {
+  if (gestes.actif) return;
+  const ia = voitures.includes(c), mesh = ia ? c.mesh : c.m, h = ia ? c.mesh.rotation.y : c.h, { nom, couleur } = mesh.userData;
+  const m = voitureConduite(couleur, nom);
+  finir(m.groupe);
+  const v = creerVehicule('voiture', m, { x: c.x, z: c.z, h }, posteDe(m));
+  scene.remove(mesh); voituresM.splice(voituresM.indexOf(mesh), 1);
+  if (ia) {
+    voitures.splice(voitures.indexOf(c), 1);
+    c.cri.vu = false;
+    conducteurDescend(c, h);
+    REMPLACER.push({ t: temps + 20, sens: c.sens, vmax: c.vmax, couleur, cri: c.cri });
+  } else {
+    GAREES.splice(GAREES.indexOf(c), 1); col.retirer(c.boite);
+    son.jouer('portiere');
+  }
+  monter(v);
+}
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (verres.servable) { verres.servir(verres.servable); return; }
   const v = vehiculeProche();
-  if (v) monter(v);
+  if (v) { monter(v); return; }
+  const vc = voitureProche();
+  if (vc) prendreVoiture(vc);
 }
 const proj = new THREE.Vector3();
 function toucher(tp) {
@@ -392,8 +467,15 @@ function toucher(tp) {
 /* ------------------------------------------------------------------ boucle */
 let etat = 'accueil', temps = 0, tSon = 0, pasPrec = 0, tEtq = 0, largeur = 1, hauteurE = 1;
 let camLibre = false, minuteAff = -1;
-const DANGER = { x: 0, z: 0, v: 0 }, OBSTACLES = [null, null, null];
-// les véhicules du domaine, même garés, sont des obstacles : on repousse un cercle (x, z, r) hors de leurs deux cercles
+const DANGER = { x: 0, z: 0, v: 0, h: 0, wtf: false };
+// le passant en p touche-t-il le véhicule e (l'un de ses deux cercles, à la distance où l'on repousse un passant :
+// sinon le pare-chocs le pousserait devant lui sans jamais l'atteindre) ?
+function sousVehicule(e, p) {
+  const ax = Math.sin(e.h), az = Math.cos(e.h);
+  for (const off of e.d.off) if (Math.hypot(p.x - e.pos.x - ax * off, p.z - e.pos.z - az * off) < e.d.r + 0.36) return true;
+  return false;
+}
+// les véhicules du joueur, même garés, sont des obstacles : on repousse un cercle (x, z, r) hors de leurs deux cercles
 function horsDesVehicules(p, r) {
   for (const { p: e } of VEHICULES) {
     const ax = Math.sin(e.h), az = Math.cos(e.h);
@@ -496,18 +578,41 @@ function marcher(dtm) {
 // boit, les voitures de la départementale
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
-  const danger = jeu.auVolant ? DANGER : null;
+  DANGER.wtf = jeu.wtf;
+  const danger = jeu.auVolant ? DANGER : null, ecraseur = jeu.wtf && jeu.auVolant && Math.abs(tr.v) > 2.5;
   for (const p of passants) {
-    if (p.update(dtm, danger, col, temps)) hud.bulle(p.cri, 'Hé !', 1.6);
-    horsDesVehicules(p.p.pos, 0.34);
+    const r = p.update(dtm, danger, col, temps);
+    if (r === 'releve') hud.bulle(p.cri, pick(REPLIQUES.releve), 2.2);
+    else if (r) hud.bulle(p.cri, 'Hé !', 1.6);
+    // mode WTF : le véhicule lancé lui passe dessus, il s'aplatit (il se relève quelques secondes plus tard)
+    if (ecraseur && p.ecrase <= 0 && sousVehicule(tr, p.p.pos) && p.ecraser()) {
+      son.jouer('pouet'); son.jouer('choc'); cam.secousse = Math.max(cam.secousse, 0.3);
+      hud.bulle(p.cri, pick(REPLIQUES.ecrase), 1.4);
+    }
+    if (p.ecrase <= 0) horsDesVehicules(p.p.pos, 0.34);
     if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
   }
   clients.maj(dtm, temps, ego, jeu.auVolant);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
-  const obstacles = OBSTACLES; obstacles[0] = ego; obstacles[1] = vTracteur.p.pos; obstacles[2] = vVan.p.pos;
+  OBSTACLES[0] = ego;
+  // une voiture prise est remplacée au loin, avec un nouveau conducteur
+  for (let i = REMPLACER.length - 1; i >= 0; i--) {
+    const r = REMPLACER[i];
+    if (temps < r.t) continue;
+    REMPLACER.splice(i, 1);
+    const vo = creerVoiture(-340 * r.sens, r.sens, r.vmax, r.couleur); vo.cri = r.cri;
+    asseoirConducteur(vo);
+  }
   for (const v of voitures) {
-    if (v.update(dtm, obstacles, voitures) && Math.hypot(v.x - ego.x, v.z - ego.z) < 50) { son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !', 1.6); }
+    // son conducteur, vu par les vitres : animé de près seulement
+    const c = v.conducteur;
+    if (c) {
+      const dx = v.x - camera.position.x, dz = v.z - camera.position.z, pres = dx * dx + dz * dz < 6400;
+      if (c.m.groupe.visible !== pres) c.m.groupe.visible = pres;
+      if (pres) { c.pos.set(v.x, 0, v.z); c.sync(dtm, temps); }
+    }
+    if (v.update(dtm, OBSTACLES, voitures) && Math.hypot(v.x - ego.x, v.z - ego.z) < 50) { son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !', 1.6); }
     // touchée : secousse (vehicules.js), choc, éclats de carrosserie, le conducteur râle
     if (v.cogne) {
       v.cogne = false;
@@ -549,8 +654,12 @@ function reperes(dt, ego, cible) {
   verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
   const servable = verres.servable;
   const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
-  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : 'Monter');
-  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp && vp.genre === 'van' ? 3.0 : 3.6, vp ? vp.p.pos.z : 0, !!vp);
+  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : 'Monter');
+  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? { van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6 : 0, vp ? vp.p.pos.z : 0, !!vp);
+  // une voiture des autres, à emprunter (ou à voler, en mode WTF)
+  const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
+  if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
+  hud.placer(etqPrendre, vc ? vc.x : 0, 2.3, vc ? vc.z : 0, !!vc);
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 }
@@ -611,11 +720,12 @@ function placerLumiere(x, z) {
 // si loin, sa tache de contact suffit
 const OMBRE_PERSO2 = 32 * 32;
 const ombrePerso = (m, x, z) => { const dx = x - camera.position.x, dz = z - camera.position.z; m.maillage.castShadow = dx * dx + dz * dz < OMBRE_PERSO2; };
+const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05] }; // demi-largeur, demi-longueur
 function majTaches() {
   const t = taches;
   t.debut();
   if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
-  for (const v of VEHICULES) t.poser(v.m.groupe.position.x, v.m.groupe.position.z, v.genre === 'van' ? 1.15 : 1.2, v.genre === 'van' ? 2.5 : 2.1, v.m.groupe.rotation.y);
+  for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre]; t.poser(v.m.groupe.position.x, v.m.groupe.position.z, lx, lz, v.m.groupe.rotation.y); }
   for (const p of passants) { t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0); ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z); }
   for (const f of clients.liste) if (clients.dehors(f)) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
   for (const p of assis) { t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0); ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z); }
@@ -716,10 +826,12 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES,
+  get voitureProche() { return voitureProche(); },
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },
   passants() { return passants.map(p => p.p); },
+  get gens() { return passants; }, // les passants eux-mêmes (Passant : attente, ecrase...)
   get pilote() { return pilote; },
   voitures() { return voitures; },
   get qualite() { return paliers.q; },

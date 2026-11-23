@@ -2,9 +2,10 @@
 // recul contre un mur, saut de côté) ; la pose est calculée par anim.js.
 import * as THREE from 'three';
 import { Anim } from './anim.js';
-import { angle, versAngle, borne } from './outils.js';
+import { angle, versAngle, borne, mix } from './outils.js';
 
 const SAUT = 0.55; // durée d'un saut de côté (s)
+const ECRASE = 2.6, RELEVE = 0.45; // mode WTF : aplati (s), dont le temps de se regonfler
 
 /* ---------------------------------------------------------------- personnage à pied */
 export class Pieton {
@@ -114,6 +115,7 @@ export class Passant {
     // chacun son pas : flâneur, pressé
     this.allure = rnd() < 0.15 ? 1.9 + rnd() * 0.4 : 0.9 + rnd() * 0.65;
     this.vu = new THREE.Vector3(); this.tVu = 0; this.ux = 0; this.uz = 1; this.dx = NaN; this.dz = 0; this.fx = 0; this.fz = 0;
+    this.ecrase = 0; // mode WTF : aplati par un véhicule, secondes qui restent avant d'être tout à fait relevé
     this.nouvelleCible();
     this.p.placer(this.cible.x, this.cible.z, rnd() * 6.28);
     this.nouvelleCible();
@@ -122,11 +124,37 @@ export class Passant {
     const z = this.zone, r = this.rnd;
     this.cible.x = z.x0 + r() * (z.x1 - z.x0); this.cible.z = z.z0 + r() * (z.z1 - z.z0);
   }
-  // danger : véhicule {x, z, v} (h facultatif : son cap) ; renvoie true quand le passant vient de crier
+  // Mode WTF : un véhicule lui roule dessus. Il s'aplatit comme une crêpe, reste par terre, puis se regonfle d'un coup,
+  // avec un rebond (un gag de dessin animé : personne n'est blessé). Rend faux s'il l'est déjà.
+  ecraser() {
+    if (this.ecrase > 0) return false;
+    this.ecrase = ECRASE; this.fuite = 0; this.p.sautT = 0;
+    return true;
+  }
+  // danger : véhicule {x, z, v} (h facultatif : son cap ; wtf : mode WTF, il ne s'écarte pas) ; renvoie true quand le
+  // passant vient de crier, 'releve' quand il se relève après avoir été aplati
   update(dt, danger, col, t) {
     const p = this.p;
     let dx = 0, dz = 0, f = 0, cri = false, vit;
     this.bulle = Math.max(0, this.bulle - dt);
+    if (this.ecrase > 0) {
+      this.ecrase -= dt;
+      const g = p.m.groupe, E = p.m.echelle, u = ECRASE - this.ecrase;
+      let sy = 0.1, sxz = 1.5;
+      if (u < 0.06) { sy = mix(1, 0.1, u / 0.06); sxz = mix(1, 1.5, u / 0.06); }
+      else if (this.ecrase < RELEVE) {
+        const r = 1 - Math.max(0, this.ecrase) / RELEVE, k = Math.min(1, r * 1.6), b = Math.sin(Math.PI * r);
+        sy = 0.1 + 0.9 * k + 0.28 * b; sxz = 1.5 - 0.5 * k - 0.1 * b;
+      }
+      g.scale.set(E * sxz, E * sy, E * sxz);
+      p.update(dt, 0, 0, 0, false, col, t);
+      if (this.ecrase > 0) return false;
+      g.scale.setScalar(E);
+      // relevé : il s'en va en râlant, à l'écart de celui qui l'a aplati
+      if (danger) { const ex = p.pos.x - danger.x, ez = p.pos.z - danger.z, l = Math.hypot(ex, ez) || 1; this.fx = ex / l; this.fz = ez / l; this.fuite = 1.4; }
+      this.bulle = 4;
+      return 'releve';
+    }
     if (danger) {
       // direction du véhicule : son cap s'il est donné, sinon son dernier déplacement
       if (danger.h !== undefined) { const s = danger.v < 0 ? -1 : 1; this.ux = Math.sin(danger.h) * s; this.uz = Math.cos(danger.h) * s; }
@@ -136,7 +164,10 @@ export class Passant {
       }
       this.dx = danger.x; this.dz = danger.z;
       const ex = p.pos.x - danger.x, ez = p.pos.z - danger.z, d = Math.hypot(ex, ez);
-      if (Math.abs(danger.v) > 1.5) {
+      if (danger.wtf) {
+        // mode WTF : il ne s'écarte pas, il crie
+        if (Math.abs(danger.v) > 1.5 && d < 7 && this.bulle <= 0) { this.bulle = 4; cri = true; }
+      } else if (Math.abs(danger.v) > 1.5) {
         const devant = ex * this.ux + ez * this.uz, cote = ex * this.uz - ez * this.ux;
         if (devant > -0.5 && devant < 2.5 + Math.abs(danger.v) * 0.9 && Math.abs(cote) < 2.4 && p.sautT <= 0 && this.fuite < 0.3) {
           // il fonce droit dessus : saut de côté, hors de sa trajectoire

@@ -27,6 +27,12 @@ export class Collisions {
     return b;
   }
   boiteC(cx, cz, w, d) { return this.boite(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2); }
+  // retire une boîte (une voiture garée qu'on vient de prendre, main.js)
+  retirer(b) {
+    const i = this.boites.indexOf(b);
+    if (i >= 0) this.boites.splice(i, 1);
+    for (const l of this.cases.values()) { const k = l.indexOf(b); if (k >= 0) l.splice(k, 1); }
+  }
 
   // Pousse le cercle (p.x, p.z, r) hors d'une boîte. Renvoie true s'il y avait contact.
   pousser(p, r, b) {

@@ -136,7 +136,7 @@ export class EffetsVehicule {
   // point de sortie des gaz du véhicule v (cap : sin sx, cos sz)
   echappement(v, sx, sz) {
     const p = v.p.pos;
-    if (v.genre === 'van') { ECH.x = p.x - sx * 2.3 + sz * 0.45; ECH.y = 0.35; ECH.z = p.z - sz * 2.3 - sx * 0.45; }
+    if (v.genre !== 'tracteur') { const a = v.genre === 'van' ? 2.3 : 2.0; ECH.x = p.x - sx * a + sz * 0.45; ECH.y = 0.3; ECH.z = p.z - sz * a - sx * 0.45; }
     else { ECH.x = p.x + sx * 1.45 + sz * 0.3; ECH.y = 2.55; ECH.z = p.z + sz * 1.45 - sx * 0.3; }
     return ECH;
   }
@@ -147,7 +147,7 @@ export class EffetsVehicule {
   }
   // en roulant (v : le véhicule conduit, { genre, p })
   maj(dt, v) {
-    const tr = v.p, r = this.rnd, van = v.genre === 'van';
+    const tr = v.p, r = this.rnd, van = v.genre !== 'tracteur'; // (le van, une voiture : le pot en bas, derrière)
     this.derapage(dt, v);
     const sx = Math.sin(tr.h), sz = Math.cos(tr.h);
     if (r() < dt * (3 + Math.abs(tr.v) * 0.4)) {
@@ -174,7 +174,7 @@ export class EffetsVehicule {
     const fx = Math.sin(tr.h), fz = Math.cos(tr.h), zr = D.zAr ?? -0.9, xr = D.xAr ?? 0.98, dur = tr.sol === 'asphalte' || tr.sol === 'paves';
     for (let k = 0; k < 2; k++) {
       const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
-      if (dur) this.traces.marquer(k, x, z, v.genre === 'van' ? 0.22 : 0.4); else this.traces.lever();
+      if (dur) this.traces.marquer(k, x, z, v.genre === 'tracteur' ? 0.4 : 0.22); else this.traces.lever();
       if (r() < dt * 26 * g) this.emettre(x, 0.25, z, (r() - 0.5) * 0.8, 0.5 + r() * 0.6, (r() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
     }
   }

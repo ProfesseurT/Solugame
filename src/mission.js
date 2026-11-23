@@ -241,7 +241,10 @@ export class Mission {
       const d = j.distance(L.chai), devant = j.devantChai;
       if (d <= 5.5 || devant) {
         const piles = this.palette.filter(x => x.groupe.visible && this.client(x.client).statut === 'signee');
-        if (j.auVolant && piles.length && (lent || devant)) { this.charger(piles); return; }
+        if (j.auVolant && piles.length && (lent || devant)) {
+          if (j.veh.m.cartons) { this.charger(piles); return; }
+          this.aider(DIALOGUES.voitureSansCartons, 'chai'); // une voiture empruntée : pas de plateau
+        }
         if (j.auVolant && !piles.length && lent) {
           const n = this.compter('envoyee');
           if (n) this.aider(DIALOGUES.attenteSignature(n), 'chai');
