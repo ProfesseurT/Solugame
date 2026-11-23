@@ -4,9 +4,8 @@
 // commandes signées dans le bureau (Factur-X, transmises par Pennylane, plateforme agréée), calculer la DRM du
 // mois dernier (à valider ensuite dans CIEL). Le journal des ventes et les encaissements partent chez le comptable.
 import { VITISOFT } from './textes.js';
-import { eur } from './telephone.js';
 import { son } from './audio.js';
-import { $, esc } from './outils.js';
+import { $, esc, eur } from './outils.js';
 
 const hl = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' hl';
 const VUES = ['accueil', 'reglements', 'commandes', 'drm']; // les écrans où l'on agit ; les autres sont des fiches
@@ -24,8 +23,10 @@ export class PC {
       if (nom === 'onglet') { this.onglet = arg; this.afficher(); return; }
       if (nom === 'quitter' || nom === 'fermer') { this.fermer(); m.fermerPC(); this.jeu.leverPortable(); return; }
       if (this.onglet === 'bureau') {
-        // un appel part du téléphone ; le reste se fait ici, comme sur le téléphone
+        // un appel part du téléphone, le bon de livraison s'y signe (on revient ensuite au portable, bureau.js) ; le reste se
+        // fait ici, comme sur le téléphone
         if (nom === 'rappel' && m.client(arg)?.mode === 'appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); m.rappel(arg); return; }
+        if (nom === 'bl') { if (m.blPret) { this.fermer(); tel.ouvrir('bl'); } return; }
         tel.action(b.dataset.a);
         this.afficher();
         return;
@@ -57,7 +58,7 @@ export class PC {
   // l'écran d'accueil : ce qu'il y a à faire, d'après ce qui est arrivé (rien d'avance : le chèque déposé au bureau, les
   // commandes livrées), chacune avec son état ; la DRM du mois dernier se calcule quand on veut
   accueil(m) {
-    const r = m.retardataire.statut, livrees = m.ordre.filter(c => ['livree', 'facturee', 'transmise'].includes(c.statut));
+    const r = m.retardataire.statut, livrees = m.clients.filter(c => ['livree', 'facturee', 'transmise'].includes(c.statut));
     const taches = [];
     if (r === 'depose' || r === 'saisi') taches.push([VITISOFT.tacheReglement, r === 'saisi', 'reglements']);
     if (livrees.length) taches.push([VITISOFT.tacheFactures(livrees.length), livrees.every(c => c.statut === 'transmise'), 'commandes']);
@@ -79,7 +80,7 @@ export class PC {
   }
   // les commandes arrivées du bureau : seulement celles que le client a signées en ligne
   commandes(m) {
-    const arrivees = m.ordre.filter(c => !['a_traiter', 'proposee', 'commande', 'envoyee'].includes(c.statut));
+    const arrivees = m.clients.filter(c => !['a_traiter', 'proposee', 'commande', 'envoyee'].includes(c.statut));
     if (!arrivees.length) return `<h2>${esc(VITISOFT.arrivees)}</h2><p class="vs-texte">${esc(VITISOFT.aucuneCommande)}</p>${this.fin(m)}`;
     const total = arrivees.reduce((s, c) => s + m.htClient(c), 0), transmises = arrivees.filter(c => c.statut === 'transmise').length;
     const lignes = arrivees.map(c => {

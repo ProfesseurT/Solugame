@@ -2,11 +2,9 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, MESSAGE_MATIN as MESSAGE } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE } from './textes.js';
 import { son } from './audio.js';
-import { $, esc } from './outils.js';
-
-export const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+import { $, esc, eur } from './outils.js';
 
 const ICONES = {
   bureau: '<svg viewBox="0 0 24 24"><path d="M9 7V5.5h6V7" fill="none" stroke="#fff" stroke-width="2"/><rect x="3" y="7" width="18" height="12" rx="2.5" fill="#fff"/><rect x="3" y="11.5" width="18" height="1.6" fill="#8e2a3b" opacity=".35"/></svg>',
@@ -36,8 +34,11 @@ export class Telephone {
     $('voile').addEventListener('click', () => { if (this.jeu.mission.peutFermer()) this.fermer(); });
   }
 
+  // ouvrir sur une appli ; sinon sur le bon de livraison qui attend sa signature, la notification, ou là où on l'a laissé
   ouvrir(app) {
+    const m = this.jeu.mission;
     if (app) this.app = app;
+    else if (m.attenteBL && m.blPret) this.app = 'bl';
     else if (this.notif) this.app = this.notif;
     if (this.app === this.notif) this.notifier(null);
     this.ouvert = true;
@@ -65,7 +66,7 @@ export class Telephone {
       case 'accueil': this.app = 'accueil'; this.fil = null; break;
       case 'ouvrir': this.app = arg; this.fil = null; if (arg === this.notif) this.notifier(null); break;
       case 'rappel': m.rappel(arg); return;
-      case 'cmd': this.client = arg; this.app = 'commande'; m.saisir(arg); break;
+      case 'cmd': this.client = arg; this.app = 'commande'; break;
       case 'qte': m.quantite(this.client, Number(arg)); break;
       // mauvaise quantité : la commande ne part pas, le téléphone rappelle ce que le client a demandé
       case 'signer': if (!m.envoyerCommande(this.client)) { son.jouer('erreur'); this.toast(CONSIGNE_QTE(m.client(this.client))); return; } break;
@@ -181,6 +182,7 @@ export class Telephone {
     if (m.attenteBL && m.blPret) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
     else if (aCharger) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Commande${aCharger > 1 ? 's' : ''} signée${aCharger > 1 ? 's' : ''}</p><b>${aCharger} à charger au chai</b></div>`;
     else if (e === 'journee' && prets) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>${prets} arrêt${prets > 1 ? 's' : ''} prêt${prets > 1 ? 's' : ''}</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>`;
+    else if (m.pcDispo && !this.surPortable) carte = `<p class="consigne">${esc(CONSIGNE_RETOUR)}</p>`;
     // le règlement en retard : une tâche du jour, qu'on ajoute soi-même à la tournée
     const r = m.retardataire, planifie = r.statut !== 'a_planifier';
     const reglement = `<div class="rappel"><span class="av" style="background:${r.coul}">${r.ini}</span><div class="rq"><b>${esc(r.nom)} · ${esc(r.lieu)}</b>
@@ -260,6 +262,7 @@ export class Telephone {
     else if (libre && prets.length) bas = `<p class="ap-note">${esc(BUREAU.itineraire)} : ${Math.round(this.jeu.longueurTournee(prets) / 10) * 10} m.</p>
       <button class="ap-bt plein large" data-a="tournee">${tous ? 'Démarrer la tournée' : `Démarrer la tournée · ${prets.length} arrêt${prets.length > 1 ? 's' : ''} prêt${prets.length > 1 ? 's' : ''}`}</button>`;
     else if (!prets.length && !m.dehorsFini) bas = `<p class="ap-note">${esc(BUREAU.rienDePret)}</p>`;
+    else if (m.pcDispo && !this.surPortable) bas = `<p class="consigne">${esc(CONSIGNE_RETOUR)}</p>`;
     return tete + `<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-note">${esc(BUREAU.tournee)}</p>${arrets}${bas}</div>`;
   }
   bl() {

@@ -13,7 +13,7 @@ import { Controles } from './controles.js';
 import { Hud } from './hud.js';
 import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
-import { Mission } from './mission.js';
+import { Mission, COULEUR } from './mission.js';
 import { son } from './audio.js';
 import { versAngle, hasard, $, lisse } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
@@ -88,10 +88,9 @@ const GRAVIERS = [0xcfc1a0, 0xb9ab88, 0xe0d4b4], MOTTES = [0x6b4a30, 0x5a3e28, 0
 /* ------------------------------------------------------------------ marque de mission */
 const marque = new THREE.Group();
 {
-  const orange = '#ff7a2f';
-  const anneau = new THREE.Mesh(new THREE.RingGeometry(2.3, 2.85, 36).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: orange, transparent: true, opacity: 0.9, depthWrite: false }));
+  const anneau = new THREE.Mesh(new THREE.RingGeometry(2.3, 2.85, 36).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: COULEUR, transparent: true, opacity: 0.9, depthWrite: false }));
   anneau.position.y = 0.14;
-  const fleche = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: orange }));
+  const fleche = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: COULEUR }));
   const faisceau = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 70, 18, 1, true).translate(0, 35, 0),
     new THREE.MeshBasicMaterial({ color: '#ffb36b', transparent: true, opacity: 0.17, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
   marque.add(anneau, fleche, faisceau);
@@ -129,6 +128,7 @@ const vVan = creerVehicule('van', mVan, L.van, { assise: mVan.dims.assise, planc
 vTracteur.p.autre = vVan.p; vVan.p.autre = vTracteur.p;
 vTracteur.p.pos.veh = vTracteur.p; vVan.p.pos.veh = vVan.p; // les voitures voient leur emprise (vehicules.js, obstacles)
 let veh = vTracteur, tr = veh.p, tm = veh.m;
+const VEH_CARTE = VEHICULES.map(v => v.p); // repérés sur la mini-carte quand on est à pied
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
 const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
@@ -383,7 +383,20 @@ jeu.chercherCheque = (f, dialogue, recu) => {
   if (v) couperMoteur();
   gestes.cheque(v, f, { sorti: aPied, installe: () => auVolant(v), dire: fin => hud.dire(dialogue, fin), recu });
 };
-jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
+// Chez le prospect : arrêté devant, on descend et l'on va le voir ; à pied, on y va (gestes.js : aborder). Rend le
+// véhicule dont on est descendu (on y remonte après la dégustation), ou null.
+jeu.aborder = (f, dialogue) => {
+  const v = jeu.auVolant ? veh : null;
+  if (v) couperMoteur();
+  gestes.aborder(v, f, { sorti: aPied, dire: fin => hud.dire(dialogue, fin) });
+  return v;
+};
+// Retourner au volant après une livraison ou une visite : seulement si l'on est encore à côté du véhicule (le bon de
+// livraison peut se signer plus tard, ailleurs : au bureau du chai, assis au portable...)
+jeu.remonter = v => {
+  if (jeu.auVolant || gestes.actif || jeu.dedans || joueur.assis || Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z) > 15) return;
+  gestes.remonter(v, () => auVolant(v));
+};
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
@@ -689,7 +702,7 @@ function miseAJour(dt) {
   }
   else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
-  hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);
+  hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, mission.route, jeu.auVolant ? null : VEH_CARTE);
 }
 
 // Le cadre d'ombre suit le joueur, décalé vers l'avant de la caméra (rien de perdu derrière elle),

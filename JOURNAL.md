@@ -494,3 +494,30 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - La « fontaine » : c'était la rumeur de la place, du bruit filtré centré sur la fontaine, audible à 67 m, avec une bande aiguë qui sifflait comme un jet d'eau. Plus de bande aiguë, aigus coupés à 800 Hz, volume divisé par trois, entendue seulement à moins de 34 m.
 
 **Vérifié** : `npm run verifie` (parcours en tracteur et en van, et le nouveau banc `souple` : le chèque seul, deux commandes chargées pendant que la troisième n'est pas prise, tournée de ces deux-là, deuxième chargement, le bar seul, le prospect seul, retour) ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; le geste du chèque filmé image par image ; écrans Tournée et Ma journée en cours de journée.
+
+## 23/11/2026 · Retours de Teddy (11), lot 1 : la mission finit toujours
+
+**Demande** : revoir la logique des missions, voir si tous les cas sont gérés et si tous les messages et les aides existent pour garantir que le joueur termine.
+
+**Revue** (chaque état de la journée, chaque transition, ce que voit le joueur) : la journée ne pouvait pas se bloquer, mais plusieurs cas laissaient le joueur sans repère ou faisaient perdre du travail :
+- l'objectif affiché n'était écrit qu'à certains moments : il pouvait rester faux (« servez un verre » écrasé par une signature, « déposez le chèque » quand il l'était déjà) ;
+- une signature de client arrivant pendant qu'on faisait signer le bon de livraison redessinait l'écran et effaçait la signature en cours ;
+- chez le prospect en véhicule, rien n'arrêtait le véhicule (doigt posé, il repartait) ; parti sans servir le verre, plus de balise ; conduit à la main, on bute contre la maison voisine à 8 m de l'arrêt, trop loin pour que la visite commence ;
+- le bon de livraison refermé sans signer : en rouvrant le téléphone, on tombait ailleurs ; signé de loin, le personnage marchait seul jusqu'au véhicule, même assis au portable ;
+- le chèque en poche ne pouvait se déposer qu'au retour, et Vitisoft disait « le règlement n'est pas encore arrivé » ;
+- arrêté chez un client pas prêt (commande pas prise, pas signée, pas chargée ; passage pas ajouté), au chai sans rien à charger : aucun mot ;
+- le bureau ne relançait que certaines tâches ; une arrivée chez un client pouvait commencer téléphone ouvert, en plein appel.
+
+**Fait** :
+- `mission.js` : l'objectif est recalculé à chaque image d'après l'état (écrit seulement s'il change) ; plus aucun `hud.objectif` dispersé. Variantes ajoutées : bon de livraison à faire signer, retour avec le chèque déjà déposé, « Asseyez-vous au portable » une fois dedans, « Tout est fait : fermez Vitisoft ».
+- Aides dites sur place (pas plus d'une toutes les 8 s, la même pas avant 25 s) : au chai sans commande, devant un client pas prêt (ce qui manque et où le faire), devant l'épicerie ou l'auberge pas encore ajoutées à la tournée.
+- Relance du bureau : 8 s après avoir refermé le téléphone, la pastille revient tant qu'il reste une commande à préparer, des tâches du jour ou des arrêts prêts, avec l'aperçu qui dit quoi (« 5 tâches du jour à traiter. »).
+- Le prospect : arrivé (en véhicule ou à pied), on descend et l'on va le voir (`gestes.aborder`, la même brique que le chèque) ; après la dégustation, on remonte. Parti à plus de 25 m sans lui servir le verre, la visite est à refaire (l'arrêt redevient prêt).
+- Le téléphone rouvert va droit au bon de livraison qui attend ; sur le portable, « Faire signer le bon » ouvre le téléphone. On ne remonte au volant que si l'on est encore à côté du véhicule.
+- Le chèque se dépose dès qu'on passe au bureau du chai ; le portable s'ouvre sur Vitisoft s'il y a quelque chose à y faire.
+- Rien ne commence téléphone ou portable ouvert, ni pendant un appel ; une nouvelle du bureau met aussi le portable à jour.
+- Mini-carte : à pied, le tracteur et le van sont repérés (petits rectangles bleus, au bord de la carte s'ils sont loin) : on retrouve toujours le véhicule qui porte les cartons.
+- Tout fait dehors, l'écran Ma journée et l'écran Tournée disent où se passe la suite (consigne de jeu, pas texte produit).
+- Textes : notifications et bannières rangées dans `textes.js` (`NOTIFS`, `BANNIERES`) ; `eur` dans `outils.js`.
+
+**Vérifié** : nouveau banc `aides` (29 étapes, dans `npm run verifie`) qui joue exprès chaque cas : relance, aides au chai, à la cave, à l'épicerie, prospect quitté puis retrouvé à pied, chèque déposé et règlement saisi en pleine journée, bon refermé puis rouvert, signature qui arrive pendant le bon (rien ne s'efface), retour avec le chèque déjà déposé, fin. `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; arrivée chez le prospect et mini-carte en captures.

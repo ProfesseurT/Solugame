@@ -2,7 +2,8 @@
 // la pièce), déposer le chèque sur le bureau en bois, s'asseoir au portable (pc.js : Le bureau et Vitisoft), se lever.
 // La pièce est dans monde.js (chaiEtBureau), les gestes dans gestes.js (passer, asseoir, lever).
 import * as THREE from 'three';
-import { B, MAT, compacter } from './modeles.js';
+import { MAT } from './modeles.js';
+import { geoCheque } from './engins.js';
 import { $ } from './outils.js';
 
 export class Bureau {
@@ -16,7 +17,7 @@ export class Bureau {
     this.etiquettes = Object.values(this.etq); // main.js : on peut les toucher
     // le chèque de l'épicerie, posé sur le bureau une fois déposé
     const B0 = this.B.depot;
-    this.cheque = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT);
+    this.cheque = new THREE.Mesh(geoCheque(), MAT);
     this.cheque.position.set(B0.x, B0.y, B0.z); this.cheque.rotation.y = 0.3; this.cheque.visible = false;
     c.scene.add(this.cheque);
     c.jeu.leverPortable = () => this.lever();
@@ -52,7 +53,7 @@ export class Bureau {
   asseoir() {
     const c = this.c;
     c.ctrl.relacher();
-    c.gestes.asseoir(this.B, () => { this.auPortable = true; c.mission.ouvrirPC(); c.pc.ouvrir(c.mission.pcDispo ? 'vitisoft' : 'bureau'); });
+    c.gestes.asseoir(this.B, () => { this.auPortable = true; c.pc.ouvrir(c.mission.ouvrirPC()); });
   }
   lever() { if (!this.auPortable) return; this.auPortable = false; this.c.gestes.lever(this.B, () => {}); }
 

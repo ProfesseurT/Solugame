@@ -1,6 +1,6 @@
 // Modèles du tracteur, du van de livraison et des voitures (géométrie low poly, roues séparées pour tourner).
 import * as THREE from 'three';
-import { B, C, T, MAT, MAT_VITRE, fusion, teinter, deplacer } from './modeles.js';
+import { B, C, T, MAT, MAT_VITRE, fusion, teinter, deplacer, compacter } from './modeles.js';
 import { assombrir } from './outils.js';
 
 const TAU = Math.PI * 2;
@@ -201,6 +201,9 @@ export function geoCarton() {
   if (!geoCartonP) geoCartonP = fusion([B(0.36, 0.28, 0.32, '#b98a55'), B(0.37, 0.03, 0.06, '#e8d9b8', 0, 0.13, 0)]);
   return geoCartonP;
 }
+// Le chèque de l'épicerie, dans les mains puis posé sur le bureau du chai : une feuille (géométrie partagée)
+let geoChequeP = null;
+export function geoCheque() { return geoChequeP || (geoChequeP = compacter(B(0.17, 0.004, 0.08, '#f4efe2'))); }
 // Les cartons d'un véhicule : 6 colonnes de 3 (colonne c : cartons 3c, 3c + 1, 3c + 2, de bas en haut), cachés tant
 // qu'ils ne sont pas chargés. Dessinés d'un seul appel (instances : seulement les cartons visibles). Chaque carton est un
 // petit objet { position, visible } (repère de la caisse) : le montrer ou le cacher met les instances à jour.

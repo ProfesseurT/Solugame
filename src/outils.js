@@ -1,4 +1,4 @@
-// Petits outils partagés : angles, tirage au sort reproductible, bornes et transitions, couleurs, page.
+// Petits outils partagés : angles, tirage au sort reproductible, bornes et transitions, couleurs, montants, page.
 import * as THREE from 'three';
 
 export const angle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -21,6 +21,8 @@ export const entre = (a, b, x) => lisse((x - a) / (b - a));
 export const amortir = (dt, k) => 1 - Math.exp(-dt * k);
 // couleur assombrie (k < 1) ou éclaircie (k > 1)
 export const assombrir = (c, k) => '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
+// un montant en euros, à la française : 1 234,50 €
+export const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 // la page : un élément par son id ; un texte sûr dans du HTML
 export const $ = id => document.getElementById(id);
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

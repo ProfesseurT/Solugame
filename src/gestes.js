@@ -6,8 +6,8 @@
 import * as THREE from 'three';
 import { son } from './audio.js';
 import { versAngle, angle, lisse, mix } from './outils.js';
-import { MAT, B, compacter } from './modeles.js';
-import { geoCarton, PAS_CARTON } from './engins.js';
+import { MAT } from './modeles.js';
+import { geoCarton, geoCheque, PAS_CARTON } from './engins.js';
 
 const angleVers = (a, b) => angle(b - a); // le plus court chemin de l'angle a à l'angle b
 const OUVERTE = -1.15;  // angle de la portière du van grande ouverte (rad)
@@ -423,20 +423,27 @@ export class Gestes {
     this.lancer(etapes, fin);
   }
 
-  // Le chèque de l'épicerie : arrêté devant (v), on descend, on va au comptoir face à l'épicier (f : {x, z, h}) ; il
-  // parle (dire(fin) : le dialogue, fin() à la dernière réplique) et tend le chèque, qu'on regarde des deux mains avant de
-  // le ranger (recu()) ; on remonte. À pied (v nul) : seulement le comptoir. La caméra cadre la scène de côté.
-  cheque(v, f, { sorti, installe, dire, recu }) {
-    const fx = Math.sin(f.h), fz = Math.cos(f.h), devant = { x: f.x + fx * 1.05, z: f.z + fz * 1.05 };
+  // Aller parler à quelqu'un devant chez lui (f : {x, z, h}) : arrêté devant (v), on descend ; on se tient face à lui, à
+  // dist mètres ; il parle (dire(fin) : le dialogue, fin() à la dernière réplique). À pied (v nul), on y va. La caméra le
+  // regarde en face, un peu de biais, depuis la rue.
+  etapesAborder(v, f, dist, sorti, dire) {
+    const fx = Math.sin(f.h), fz = Math.cos(f.h), devant = { x: f.x + fx * dist, z: f.z + fz * dist };
     let parle = false;
-    // la caméra regarde l'épicier en face, un peu de biais, depuis la rue : on le voit tendre le chèque
     this.cadre = { x: (devant.x + f.x) / 2, z: (devant.z + f.z) / 2, h: f.h + Math.PI + 0.5 };
     const etapes = v ? [...this.etapesDescendre(v, sorti)] : [];
     etapes.push(...this.allerA(() => devant, () => f.h + Math.PI));
     etapes.push({ debut: () => { parle = false; dire(() => { parle = true; }); }, maj: (dt, t) => { this.immobile(dt, t); return parle; } });
+    return etapes;
+  }
+  // Le prospect : on va le voir, il nous accueille ; on reste devant lui, à portée pour lui servir un verre (main.js)
+  aborder(v, f, { sorti, dire }) { this.lancer(this.etapesAborder(v, f, 1.6, sorti, dire)); }
+  // Le chèque de l'épicerie : on va au comptoir face à l'épicier ; il parle et tend le chèque, qu'on regarde des deux
+  // mains avant de le ranger (recu()) ; on remonte (installe()). À pied : seulement le comptoir.
+  cheque(v, f, { sorti, installe, dire, recu }) {
+    const etapes = this.etapesAborder(v, f, 1.05, sorti, dire);
     const papier = () => {
       const m = this.j.m;
-      if (!m.cheque) { m.cheque = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT); m.cheque.userData.demi = 0.05; m.cheque.scale.setScalar(1 / m.echelle); m.groupe.add(m.cheque); }
+      if (!m.cheque) { m.cheque = new THREE.Mesh(geoCheque(), MAT); m.cheque.userData.demi = 0.05; m.cheque.scale.setScalar(1 / m.echelle); m.groupe.add(m.cheque); }
       return m.cheque;
     };
     etapes.push({
