@@ -337,8 +337,6 @@ export const matiere = (type, couleur, parSommet, o) => detailler(new THREE.Mesh
 export const MAT = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
 // La même, pour les quartiers du décor qui contiennent des feuillages agités par le vent (attribut aVent).
 export const MAT_VENT = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), undefined, { ventSommets: true });
-// Pour les objets répétés (instances) : la couleur vient de chaque instance.
-export const MAT_I = matiere(T.lisse);
 // Vitres qu'on traverse du regard (cabine du van) : la même matière, transparente, vue des deux côtés, en une passe.
 // Elle reflète le ciel comme les autres vitres et devient plus opaque en incidence rasante. Ne projette pas d'ombre.
 export const MAT_VITRE = detailler(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), undefined, { transparente: true });
@@ -503,11 +501,6 @@ export function fusion(liste) {
   const g = mergeGeometries(liste, false);
   for (const x of liste) x.dispose();
   return g;
-}
-export function maillage(liste, ombre = true) {
-  const m = new THREE.Mesh(fusion(liste), MAT);
-  m.castShadow = ombre; m.receiveShadow = true;
-  return m;
 }
 // Place une liste de géométries locales (façade vers +z) à (x, z) avec une rotation
 export function poser(liste, x, z, rot, dest) {

@@ -210,3 +210,19 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 ## 22/11/2026 · Mis en ligne sur GitHub Pages
 
 **Demande de Teddy** : pousser sur git et héberger le jeu sur GitHub. Premier commit sur `main` (le dépôt était vide), GitHub Pages activé sur `main`, à la racine. Adresse : https://professeurt.github.io/Solugame/ . Vérifié depuis l'adresse publique : la page se charge, l'image 3D est prête, aucune erreur. Le dépôt est public : `CLAUDE.md` et `JOURNAL.md` y sont lisibles.
+
+## 23/11/2026 · Audit de propreté, lot 1
+
+**Demande de Teddy** : un audit rapide de la propreté du code, puis du travail par lots poussés au fur et à mesure. Nouvelle règle : Claude pousse lui-même sur `main` quand tout est au vert (build, parcours, `index.html` à jour).
+
+**Constat** : code propre (aucun TODO, aucun `console.log`, aucun code en commentaire, build reproductible, rien de personnel dans le dépôt public). ESLint (lancé hors du projet) : 3 variables inutilisées dans `src/`.
+
+**Fait** :
+- Code mort retiré : `NOM_VEH` (main.js), `CR` (engins.js), import de `NB_PAVES` (perso.js : le shader a sa propre constante via `GLSL_ZONES`), `maillage()` et `MAT_I` (modeles.js, jamais utilisés), `t0Page` (essai.mjs).
+- Le tirage au sort reproductible (mulberry32) était copié dans main.js, monde.js et perso.js : une seule version, `hasard(graine)` dans outils.js.
+- `sonder()` réutilise `mesurer()` au lieu de la recopier (main.js).
+- CLAUDE.md : `hud.js` et `pilote.js` ajoutés au tableau ; rôle de `textes.js` décrit tel qu'il est (les libellés d'interface restent dans leur module) ; nouvelle règle de push.
+
+**Vérifié** : empreinte de la scène (toutes les géométries, instances et tenues, palier forcé « moyen ») identique avant et après (`527d0b7a`) : même monde, mêmes passants. Parcours en tracteur et en van : « Aucune erreur. ». ESLint : plus rien hors faux positifs des bancs d'essai.
+
+**Reste à décider** (lot 2) : sortir de main.js les paliers de qualité (environ 130 lignes) et les particules (environ 90) ; une commande `npm run verifie` (build, `index.html` à jour, parcours) avant chaque push.

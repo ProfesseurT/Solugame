@@ -9,7 +9,8 @@
 // Normales lissées (sauf aux arêtes vives : boîtes, bords des cheveux), pour des formes rondes sans plus de triangles.
 import * as THREE from 'three';
 import { B, C, S, MAT, teinter, fusion, icosa, compacter, deplacer } from './modeles.js';
-import { Z, ZONE, NB_PAVES, GLSL_ZONES, FX, FY, OEIL, LA, HA, texturePersos } from './atlas.js';
+import { Z, ZONE, GLSL_ZONES, FX, FY, OEIL, LA, HA, texturePersos } from './atlas.js';
+import { hasard } from './outils.js';
 
 /* ---------------------------------------------------------------- héros */
 
@@ -338,7 +339,6 @@ function lisser(g, ids = null, nb = 0) {
 /* ---------------------------------------------------------------- variété des passants */
 
 let compteur = 0;
-function hasard(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const clarte = c => { const k = new THREE.Color(c); return 0.3 * k.r + 0.59 * k.g + 0.11 * k.b; };
 // Complète les options manquantes (taille, corpulence, tenue, chaussures...) de façon déterministe
 function completer(o) {

@@ -33,7 +33,6 @@ page.on('pageerror', e => erreurs.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') erreurs.push(m.type() + ': ' + m.text()); });
 const LENT = Number(process.env.LENT || 1);
 if (LENT > 1) await page.emulateCPUThrottling(LENT);
-const t0Page = Date.now();
 await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load' });
 await page.waitForFunction(() => window.CL, { timeout: 20000 });
 const ev = (f, ...a) => page.evaluate(f, ...a);

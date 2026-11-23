@@ -18,15 +18,17 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 | `src/pieton.js` | Déplacement du personnage et des passants (accélération, virages, recul contre un mur). |
 | `src/engins.js` | Modèles du tracteur, du van de livraison (même interface, avec `dims`, `volantCentre`, `volantRayon`) et des voitures (feux stop, clignotants, détresse). |
 | `src/vehicules.js` | Conduite du tracteur et du van (une physique, réglée par `TEMPERAMENTS` et les `dims` du modèle), voitures de la départementale (choc : secousse, arrêt, feux de détresse), `natureSol`. |
+| `src/pilote.js` | Conduite assistée au doigt : suit l'itinéraire de la mission (file de droite), ralentit dans les virages et derrière une voiture, s'arrête à destination. |
 | `src/camera.js` | Caméra qui suit, anticipe, évite les murs, se tourne à la main. |
 | `src/controles.js` | Doigt (manche), deux doigts (caméra), souris, clavier, manette. |
 | `src/audio.js` | Sons synthétisés : moteur, pas selon le sol, ambiance, cloche, Radio Sarment. |
 | `src/collisions.js` | Collisions au sol en 2D (boîtes, rangs de vigne, limites). |
+| `src/hud.js` | Interface par-dessus le monde : mini-carte, argent, étoiles de retard, objectif, sous-titres, bannières, bandeau radio, étiquettes posées sur les objets du monde. |
 | `src/telephone.js` | Le téléphone : le bureau (rappels, commandes, signature en ligne, tournée, bon de livraison signé au doigt), Viticode, Registre phyto, Messages, Réglages. |
 | `src/pc.js` | Le PC du domaine, dans le chai : Vitisoft (À faire, règlements, commandes arrivées du bureau à facturer et envoyer avec Pennylane, DRM du mois dernier). |
 | `src/mission.js` | La mission de démo « La tournée de Noël » : 3 commandes saisies dans le bureau (quantité à zéro, à mettre à celle dite au téléphone), tournée de 4 arrêts dont le chèque de l'Épicerie du Bourg (retard de paiement), retour au bureau du chai (déposer le chèque), puis Vitisoft sur le PC : saisir le règlement, facturer les 3 commandes, calculer la DRM du mois dernier. |
-| `src/textes.js` | **Tous les textes affichés.** Règle de vérité : rien sans source. |
-| `src/outils.js` | Petits outils d'angles. |
+| `src/textes.js` | Dialogues, messages, carte de fin, textes produit et prévente (`EN_PREVENTE`). Règle de vérité : rien sans source. Les libellés d'interface (boutons, statuts, étiquettes) restent dans leur module (`main.js`, `telephone.js`, `pc.js`, `mission.js`, `hud.js`) : toute phrase sur un produit, où qu'elle soit, suit les règles du client ci-dessous. |
+| `src/outils.js` | Petits outils partagés : angles, tirage au sort reproductible (`hasard(graine)`). |
 | `scripts/build.mjs` | Assemble et minifie (esbuild, three.js inclus), refuse tout tiret cadratin ou demi-cadratin. |
 | `scripts/allege-three.mjs` | Plugin esbuild : retire de three.js ce que le jeu n'utilise jamais (shaders, GLSL, code mort), d'après ce que `src/` nomme. Dépend de three 0.170.0. |
 | `scripts/essai-allege.mjs` | Banc qui prouve que l'allègement ne change rien (programmes, GLSL, shaders traduits, images au bit près) : à relancer après une mise à jour de three ou un changement de matière. |
@@ -37,7 +39,7 @@ But business : faire découvrir nos outils et amener vers la prévente du regist
 
 Première fois : `npm install`. Après toute modification de `src/` : `npm run build`, puis `node scripts/essai.mjs parcours 390x844` (doit finir sur « Aucune erreur. »). Essai local dans un navigateur : `npm run serve` puis http://127.0.0.1:8642/. Forcer un palier : `?qualite=faible|moyen|haut`.
 
-Adresse publique : https://professeurt.github.io/Solugame/ (GitHub Pages, branche `main`, racine, `.nojekyll`). Chaque push sur `main` met le jeu en ligne en une minute environ : ne pousser qu'à la demande de Teddy.
+Adresse publique : https://professeurt.github.io/Solugame/ (GitHub Pages, branche `main`, racine, `.nojekyll`). Chaque push sur `main` met le jeu en ligne en une minute environ : ne pousser que lorsque tout est au vert (build, parcours « Aucune erreur. », `index.html` régénéré dans le commit).
 
 Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (republier depuis `dist/jeu.html`).
 
@@ -53,7 +55,7 @@ Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (rep
 - Le bureau (extension web de Vitisoft) : ni prix, ni date, ni « IA ». Il dit chaque jour qui rappeler, quoi proposer ; la commande se prépare pendant l'appel, le client la signe sur son téléphone via un lien personnel sans compte, elle arrive dans Vitisoft sans ressaisie ; écran Tournée (arrêts dans l'ordre, itinéraire au départ du domaine). Source : vitisoft.fr/fonctionnalites/le-bureau-application-commerciale.
 - Pas de crime dans le jeu : les bêtises restent comiques (rodéo en tracteur, raccourcis dans les vignes), jamais de fraude ni d'échappatoire aux douanes. Les passants s'écartent, personne n'est blessé.
 - Téléphone d'abord : plein écran, gestes, aucun bouton de commande à l'écran. Toucher le téléphone du personnage ou une étiquette posée sur un objet du monde, c'est toucher un objet du jeu.
-- Teddy pousse lui-même sur git ; rien n'est publié publiquement sans son accord. Le dépôt GitHub est public : tout push est visible.
+- Push sur `main` : Claude pousse lui-même, lot par lot, quand tout est au vert (accord de Teddy du 23/11/2026). Le reste (publication ailleurs, Artifact partagé, autre dépôt) reste soumis à son accord. Le dépôt GitHub est public : tout push est visible.
 
 ## Conception (pour reprendre le code)
 

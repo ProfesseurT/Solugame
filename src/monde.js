@@ -4,20 +4,13 @@
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { hasard } from './outils.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
 export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
 const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
 
-function hasard(s) {
-  return () => {
-    s |= 0; s = s + 0x6D2B79F5 | 0;
-    let t = Math.imul(s ^ s >>> 15, 1 | s);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
 const lisse = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 function hash(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
 function bruit(x, z) {

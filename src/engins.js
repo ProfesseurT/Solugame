@@ -307,7 +307,7 @@ export function van() {
   const groupe = new THREE.Group();
   const caisse = new THREE.Group(); groupe.add(caisse);
   const at = new Atelier(), atV = new Atelier();
-  const PEINT = T.carrosserie, CR = [CREME_V, PEINT];
+  const PEINT = T.carrosserie;
   const extra = []; // pièces faites avec B et C
 
   /* -- flancs : une dalle par côté, percée des passages de roue et des vitres, légèrement rentrée au-dessus de la ceinture */

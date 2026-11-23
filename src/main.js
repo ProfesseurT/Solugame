@@ -14,7 +14,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission } from './mission.js';
 import { son } from './audio.js';
-import { versAngle } from './outils.js';
+import { versAngle, hasard } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 
@@ -132,14 +132,8 @@ function changerRatio(r) {
 
 // Sonde : coût réel d'une image (rendu + attente de la carte graphique), mesuré pendant l'accueil
 const sonde = { n: 0, v: [], tours: 0, finie: !!forcee };
-const px1 = new Uint8Array(4);
 function sonder(rendre) {
-  const gl = renderer.getContext();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); // vide la file de la carte graphique
-  const t = performance.now();
-  rendre();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
-  sonde.v.push(performance.now() - t);
+  sonde.v.push(mesurer(rendre));
   if (sonde.v.length < 16) return;
   const v = sonde.v.sort((a, b) => a - b), ms = v[v.length >> 1], i = ORDRE_Q.indexOf(qualite.nom);
   sonde.v = []; sonde.n = 0; sonde.tours++;
@@ -156,9 +150,10 @@ function sonder(rendre) {
 // carte graphique). On ne se fie pas à l'intervalle entre deux images : un téléphone en économie d'énergie
 // bride l'affichage à 30 images/s sans que le jeu soit trop lourd, et la qualité tombait au minimum.
 const dyn = { n: 0, bon: 0, essai: 0, bloque: 0, lent: 0 };
+const px1 = new Uint8Array(4);
 function mesurer(rendre) {
   const gl = renderer.getContext();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); // vide la file de la carte graphique
   const t = performance.now();
   rendre();
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
@@ -181,7 +176,6 @@ function adapter(cout) {
   }
 }
 
-function hasard(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rnd = hasard(7);
 const pick = a => a[Math.floor(rnd() * a.length)];
 const FEUILLES_CAB = [0xc2562e, 0xb0402c, 0xd0702f], FEUILLES_CHE = [0xe2b23a, 0xd9a832, 0xeac24a];
@@ -299,7 +293,6 @@ const vVan = creerVehicule('van', mVan, L.van, { assise: mVan.dims.assise, planc
 vTracteur.p.autre = vVan.p; vVan.p.autre = vTracteur.p;
 let veh = vTracteur, tr = veh.p, tm = veh.m;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
-const NOM_VEH = { tracteur: 'le tracteur', van: 'le van' };
 
 const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
 const CHEV = ['#2b1d0e', '#6b4423', '#b55239', '#d9c08c', '#c9c9c9', '#151515'];
