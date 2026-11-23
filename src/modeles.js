@@ -31,6 +31,8 @@ const TYPES = new Map(Object.entries({
   '#cdbf9f': T.moellon, '#c7b593': T.moellon, '#d3c4a3': T.moellon,
   '#e6d4b0': T.enduit, '#ead9bb': T.enduit, '#dfcaa4': T.enduit, '#e9d2a8': T.enduit,
   '#a89c88': T.petitsPaves, '#b1a58f': T.petitsPaves, '#78736b': T.asphalte,
+  '#a3aab2': T.carrosserie, '#757c85': T.carrosserie, // inox des cuves et du pressoir : il brille
+  '#8f8a80': T.asphalte, // béton du chai
 }));
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
@@ -550,6 +552,27 @@ export function compacter(g) {
   remplacer('aVent', at => new THREE.BufferAttribute(octets(at.array, Uint8Array, 255), 1, true));
   remplacer('aMat', at => new THREE.BufferAttribute(Uint8Array.from(at.array), 1));
   return g;
+}
+
+// Intérieurs où le soleil n'entre pas (le chai) : dans la boîte (min, max), la lumière directe du soleil est coupée (la
+// carte d'ombre plongerait tout dans le noir sous le toit) et des suspensions éclairent (lampes : [x, y, z]) ; le ciel
+// n'y donne qu'un peu. Toutes les matières éclairées passent par ce morceau de shader de three.js : personnages, véhicules
+// et décor sont éclairés pareil. Fondu de 25 cm aux murs. À appeler avant la compilation des shaders.
+export function definirInterieur(min, max, lampes) {
+  const C = THREE.ShaderChunk, v = p => `vec3(${p.map(n => n.toFixed(2)).join(', ')})`;
+  C.lights_fragment_begin = C.lights_fragment_begin
+    .replace('vec3 geometryPosition = - vViewPosition;', `vec3 geometryPosition = - vViewPosition;
+vec3 cl_pm = ( vec4( geometryPosition - viewMatrix[ 3 ].xyz, 0.0 ) * viewMatrix ).xyz;
+vec3 cl_di = max( ${v(min)} - cl_pm, cl_pm - ${v(max)} );
+float cl_dehors = smoothstep( -0.12, 0.12, max( cl_di.x, max( cl_di.y, cl_di.z ) ) );`)
+    .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cl_dehors;') + `
+#if defined( RE_IndirectDiffuse )
+if ( cl_dehors < 1.0 ) {
+  vec3 cl_l = vec3( 0.0 );
+  ${lampes.map(p => `{ vec3 d = cl_pm - ${v(p)}; cl_l += vec3( 1.0, 0.86, 0.68 ) * 1.5 / ( 1.0 + dot( d, d ) * 0.05 ); }`).join('\n  ')}
+  irradiance = mix( vec3( 0.5, 0.49, 0.47 ) + cl_l, irradiance, cl_dehors ); // dedans : une pénombre neutre, pas le ciel
+}
+#endif`;
 }
 
 // Géométrie indexée : les sommets identiques (même position, mêmes attributs) ne sont gardés qu'une fois. Sans index, la

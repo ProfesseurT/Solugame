@@ -15,7 +15,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission } from './mission.js';
 import { son } from './audio.js';
-import { versAngle, hasard, $ } from './outils.js';
+import { versAngle, hasard, $, lisse } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
@@ -336,10 +336,36 @@ function descendre() {
 }
 // Les cartons (mission.js) : charger ceux de la palette du chai, décharger ceux d'un client, puis remonter au volant
 let accelerVu = false;
+// Au chai : les portes s'ouvrent, le véhicule entre tout seul jusqu'à la palette, on charge dedans, il ressort en marche
+// arrière dans la cour, le nez vers le chemin du domaine (gestes.js : rouler). La caméra est posée dans la halle.
+function cheminEntree(x0, z0, h0, D) {
+  const P3 = [-77.8, D.z], c = Math.max(1, Math.hypot(P3[0] - x0, P3[1] - z0) * 0.45);
+  const P1 = [x0 + Math.sin(h0) * c, z0 + Math.cos(h0) * c], P2 = [P3[0] - c, P3[1]], pts = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24, a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, d = 3 * (1 - t) * t * t, e = t ** 3;
+    pts.push([a * x0 + b * P1[0] + d * P2[0] + e * P3[0], a * z0 + b * P1[1] + d * P2[1] + e * P3[1]]);
+  }
+  for (let x = P3[0] + 0.5; x < D.x; x += 0.5) pts.push([x, D.z]);
+  pts.push([D.x, D.z]);
+  return pts;
+}
+function cheminSortie(D) { // tout droit hors de la porte, puis en arc ; finit au départ de la tournée (lieux.route)
+  const pts = [];
+  for (let x = D.x; x > -79.6; x -= 0.5) pts.push([x, D.z]);
+  for (let i = 0; i <= 20; i++) { const f = i / 20 * 2.2; pts.push([-79.6 - 4 * Math.sin(f), D.z - 4 * (1 - Math.cos(f))]); }
+  return pts;
+}
+jeu.auChai = false;
 jeu.charger = (piles, place, fin) => {
-  const v = veh; couperMoteur();
+  const v = veh, p = v.p, D = L.chaiDedans, x0 = p.pos.x, z0 = p.pos.z, h0 = p.h;
   if (!accelerVu) { accelerVu = true; hud.dire(DIALOGUES.accelerer(tactile)); }
-  gestes.charger(v, piles, { sorti: aPied, place, installe: () => { auVolant(v); fin(); } });
+  jeu.auChai = true; cam.pret = false;
+  const entree = cheminEntree(x0, z0, h0, D);
+  p.pos.set(D.x, 0, D.z); p.h = D.h; // les gestes se calculent le véhicule à sa place, dans le chai
+  gestes.charger(v, piles, { sorti: aPied, place, installe: () => auVolant(v) },
+    [gestes.rouler(v, entree, 4.4), { action: couperMoteur }],
+    [gestes.rouler(v, cheminSortie(D), 5.4, true), { action: () => { jeu.auChai = false; cam.pret = false; fin(); } }]);
+  p.pos.set(x0, 0, z0); p.h = h0;
 };
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
@@ -481,7 +507,7 @@ function miseAJour(dt) {
     // Doigt posé ou touche de direction enfoncée : une scène de cartons se joue trois fois plus vite.
     const vite = gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1;
     gestes.update(dtm * vite, temps);
-    if (jeu.auVolant) tr.update(dtm, 0, 0, col, voitures, temps);
+    if (jeu.auVolant && !gestes.roule) tr.update(dtm, 0, 0, col, voitures, temps); // (le véhicule qui roule tout seul : gestes.js)
   } else if (jeu.auVolant) {
     let gaz = 0, braq = 0, fm = false;
     const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
@@ -612,6 +638,15 @@ function miseAJour(dt) {
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
   // le bureau du chai : ses étiquettes (les autres s'effacent devant elles), la pièce dessinée seulement si on la voit
   const pcPres = bureau.maj();
+  // la grande porte du chai : ouverte quand on vient charger, ou qu'on s'en approche ; la halle n'est dessinée que de près
+  {
+    const PC = monde.porteChai, etC = mission.etape === 'chai' || mission.etape === 'chargement';
+    const ouvrir = jeu.auChai || (etC && jeu.distance(L.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
+    PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
+    const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a; PC.col.fantome = PC.k > 0.5;
+    const cx = camera.position.x, cz = camera.position.z, dedansC = cx > -76 && cx < -64 && cz > -59.6 && cz < -39;
+    monde.halleChai.visible = jeu.auChai || dedansC || (PC.k > 0.02 && (cx + 70) * (cx + 70) + (cz + 49) * (cz + 49) < 2500);
+  }
   chercherServable();
   const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) { const t = vp.genre === 'van' ? (tactile ? 'Monter dans le van' : 'Monter dans le van (E)') : (tactile ? 'Monter' : 'Monter (E)'); if (etqMonter.el.textContent !== t) etqMonter.el.textContent = t; }
@@ -622,6 +657,7 @@ function miseAJour(dt) {
   // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
   // son cadre
   if (!camLibre && jeu.dedans) bureau.camera(dt);
+  else if (!camLibre && jeu.auChai) { const c = jeu.auVolant ? tr.pos : joueur.pos; cam.salle(dt, L.chaiSalle, Math.max(c.x, -73.5), c.z, false); } // dehors, le véhicule est derrière le mur : on regarde la porte
   else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
   hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);

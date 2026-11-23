@@ -3,7 +3,7 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
 import { hasard, lisse, assombrir } from './outils.js';
 
 export { SOLEIL };
@@ -750,7 +750,10 @@ void main() {
   function chaiEtBureau() {
     const o = { x: -70, z: -52, w: 26, d: 12, h: 6.2, rot: -Math.PI / 2 }, { w, d, h } = o, L = [];
     const H = 2.8, PL = -9.1, PR = -8.1, PH = 2.15; // plafond de la pièce, porte (lx de PL à PR, hauteur PH)
-    L.push(B(20.6, h, 12, TUF, 2.7, h / 2, 0));                 // le chai, au nord de la pièce
+    // la halle du chai : quatre murs (40 cm), la façade ouverte à la grande porte (lx de -1,8 à 1,8, 4,2 m de haut)
+    L.push(B(20.6, h, 0.4, TUF, 2.7, h / 2, -5.8), B(0.4, h, 11.2, TUF, 12.8, h / 2, 0), B(0.4, h, 11.2, TUF, -7.4, h / 2, 0));
+    L.push(B(5.8, h, 0.4, TUF, -4.7, h / 2, 5.8), B(11.2, h, 0.4, TUF, 7.4, h / 2, 5.8), B(3.6, h - 4.2, 0.4, TUF, 0, 4.2 + (h - 4.2) / 2, 5.8));
+    L.push(B(0.36, 4.3, 0.16, '#d8cbb0', -1.98, 2.15, 6.06), B(0.36, 4.3, 0.16, '#d8cbb0', 1.98, 2.15, 6.06), B(4.32, 0.36, 0.16, '#d8cbb0', 0, 4.38, 6.06)); // encadrement de pierre
     L.push(B(5.4, h, 7.2, TUF, -10.3, h / 2, -2.4));            // derrière la pièce
     L.push(B(5.4, h - H, 4.8, TUF, -10.3, H + (h - H) / 2, 3.6)); // au-dessus d'elle
     L.push(B(0.3, H, 4.8, TUF, -12.85, H / 2, 3.6));            // pignon sud
@@ -758,13 +761,13 @@ void main() {
     L.push(B(PR - PL, H - PH, 0.3, TUF, (PL + PR) / 2, (PH + H) / 2, 5.85)); // linteau
     // soubassement : un rebord tout autour, ouvert à la porte
     const SO = '#b9a98b';
-    L.push(B(PL + 13.07, 0.6, 0.22, SO, (PL - 13.07) / 2, 0.3, 5.96), B(13.07 - PR, 0.6, 0.22, SO, (PR + 13.07) / 2, 0.3, 5.96));
+    L.push(B(PL + 13.07, 0.6, 0.22, SO, (PL - 13.07) / 2, 0.3, 5.96), B(-2.16 - PR, 0.6, 0.22, SO, (PR - 2.16) / 2, 0.3, 5.96), B(13.07 - 2.16, 0.6, 0.22, SO, (13.07 + 2.16) / 2, 0.3, 5.96));
     L.push(B(w + 0.14, 0.6, 0.22, SO, 0, 0.3, -5.96), B(0.22, 0.6, d + 0.14, SO, -12.96, 0.3, 0), B(0.22, 0.6, d + 0.14, SO, 12.96, 0.3, 0));
     L.push(...toit(w, d, Math.min(w, d) * 0.55, ARD2, 0, h, 0, false));
     for (let i = 0; i < 6; i++) {
       const x = -w / 2 + (i + 0.5) * w / 6;
       fenetre(L, x, 1.75, -d / 2, -1);
-      fenetre(L, x, 1.75, d / 2, 1);
+      if (i !== 2 && i !== 3) fenetre(L, x, 1.75, d / 2, 1); // pas devant la grande porte
     }
     // la fenêtre du bureau est éclairée ; la porte, son encadrement, son seuil, une applique
     L.push(B(0.74, 1.1, 0.1, '#4a3a2a', -10.83, 1.75, 6.04));
@@ -775,10 +778,84 @@ void main() {
     enseigne('BUREAU', facade(o, (PL + PR) / 2, 0.06), 2.5, 1.1, 0.3, '#5b3a2a', '#f1e2c4');
     // collisions : le chai, le bloc derrière la pièce, les murs de la pièce ; la pièce elle-même compte comme bâtiment
     // pour la caméra du dehors, sans arrêter personne (fantome)
-    for (const [x0, z0, x1, z1] of [[-76, -59.6, -64, -39], [-71.2, -65, -64, -59.6], [-76, -65, -75.7, -61.1], [-76, -60.1, -75.7, -59.6], [-76, -65, -71.2, -64.7]]) col.boite(x0, z0, x1, z1).haut = true;
+    for (const [x0, z0, x1, z1] of [[-76, -59.6, -75.6, -53.8], [-76, -50.2, -75.6, -39], [-64.4, -59.6, -64, -39], [-76, -39.4, -64, -39], [-76, -59.6, -64, -59.2], [-71.2, -65, -64, -59.6], [-76, -65, -75.7, -61.1], [-76, -60.1, -75.7, -59.6], [-76, -65, -71.2, -64.7]]) col.boite(x0, z0, x1, z1).haut = true;
     const ph = col.boite(-75.7, -64.7, -71.2, -59.6); ph.haut = true; ph.fantome = true;
     plan.push({ t: 'b', x0: -76, z0: -65, x1: -64, z1: -39 });
     contact.jupe(-76.07, -65.07, -63.93, -38.93, 1.7, 0.5);
+    /* -- le chai lui-même (coordonnées monde) : une halle de x -75,6 à -64,4 et de z -59,2 à -39,4, où l'on entre en véhicule
+       par la grande porte (z de -53,8 à -50,2). Sol de béton et sa rigole, fermes de la charpente, suspensions ; cuves
+       inox le long du mur du fond, barriques sur leurs chantiers, pressoir pneumatique, égrappoir, pompe et tuyaux,
+       établi, palettes. La palette des commandes du jour (lieux.palette) à droite de l'endroit où le véhicule s'arrête. */
+    const H2 = [], INOX = '#a3aab2', JOINT = '#757c85', CHENE = '#8a5a34', FER = '#2f3034', BETON = '#8f8a80';
+    // un plafond de planches sous la toiture (le comble n'est pas dans la zone éclairée de dedans)
+    H2.push(B(11.2, 0.04, 19.8, '#6e5a44', -70, 6.1, -49.3));
+    H2.push(B(11.2, 0.06, 19.8, BETON, -70, 0.03, -49.3), B(0.18, 0.065, 15, '#5f5b55', -66.8, 0.035, -50));
+    // murs enduits à la chaux, côté intérieur (l'enduit se salit et tombe en pied de mur : modeles.js)
+    for (const [x, z, lx, lz] of [[-75.58, -56.5, 0.02, 5.4], [-75.58, -44.8, 0.02, 10.8], [-64.42, -49.3, 0.02, 19.8], [-70, -59.18, 11.2, 0.02], [-70, -39.42, 11.2, 0.02]]) H2.push(B(lx, 6.15, lz, '#e6d4b0', x, 3.075, z));
+    H2.push(B(0.02, 1.95, 3.6, '#e6d4b0', -75.58, 5.175, -52));
+    for (const z of [-57, -52.5, -48, -43.5]) H2.push(B(11.2, 0.28, 0.24, '#6b4a30', -70, 5.85, z)); // entraits de la charpente
+    for (const z of [-56.5, -51.5, -46.5, -41.5]) H2.push(C(0.01, 0.01, 0.8, 4, FER, -70, 5.45, z), C(0.06, 0.32, 0.24, 10, FER, -70, 4.98, z), C(0.14, 0.14, 0.04, 8, '#ffe1a0', -70, 4.86, z));
+    // cuves inox : fût, chapeau conique, pieds, porte basse, vanne, échelle sur l'une
+    const cuves = [-57.6, -54.3, -51, -47.7, -44.4];
+    cuves.forEach((z, i) => {
+      H2.push(C(0.9, 0.9, 3.0, 14, INOX, -65.6, 2.0, z), C(0.12, 0.9, 0.45, 14, INOX, -65.6, 3.72, z), C(0.9, 0.55, 0.3, 14, INOX, -65.6, 0.35, z));
+      for (const y of [1.15, 2.55, 3.48]) H2.push(C(0.915, 0.915, 0.04, 14, JOINT, -65.6, y, z)); // cordons de soudure
+      for (const [dx, dz] of [[0.55, 0.55], [-0.55, 0.55], [0.55, -0.55], [-0.55, -0.55]]) H2.push(B(0.07, 0.5, 0.07, INOX, -65.6 + dx, 0.25, z + dz));
+      H2.push(B(0.06, 0.5, 0.42, '#8e959c', -66.48, 1.0, z), C(0.05, 0.05, 0.22, 6, '#8e959c', -66.6, 0.62, z, 'x'), C(0.07, 0.07, 0.03, 8, '#c0392b', -66.72, 0.62, z, 'x'));
+      H2.push(B(0.32, 0.16, 0.012, '#f1e8d2', -66.5, 2.4, z, Math.PI / 2)); // plaque : numéro de la cuve
+      if (i === 2) for (let y = 0.4; y < 3.6; y += 0.35) H2.push(B(0.04, 0.04, 0.45, FER, -66.62, y, z + 0.95));
+    });
+    // barriques sur leurs chantiers, deux rangs le long du pignon
+    for (let k = 0; k < 2; k++) {
+      H2.push(B(8.4, 0.12, 0.9, '#5a3f2b', -70.6, 0.06 + k * 0.72, -40.3));
+      for (let i = 0; i < 9; i++) { const x = -74.4 + i * 0.95; H2.push(C(0.34, 0.34, 0.88, 10, k ? '#7a5230' : CHENE, x, 0.48 + k * 0.72, -40.3, 'z'), C(0.08, 0.08, 0.02, 6, '#3a2a1e', x, 0.48 + k * 0.72, -40.75, 'z')); }
+    }
+    // pressoir pneumatique : la cuve couchée sur son bâti, sa porte, la trémie, le tableau de commande
+    const PX = -68.6, PZ = -42.7;
+    H2.push(C(0.82, 0.82, 2.9, 14, INOX, PX, 1.55, PZ, 'x'), B(3.2, 0.12, 1.3, FER, PX, 0.55, PZ));
+    for (const x of [PX - 1.1, PX + 1.1]) H2.push(C(0.835, 0.835, 0.05, 14, JOINT, x, 1.55, PZ, 'x'));
+    for (const dx of [-1.3, 1.3]) for (const dz of [-0.5, 0.5]) H2.push(B(0.1, 0.55, 0.1, FER, PX + dx, 0.27, PZ + dz));
+    H2.push(B(0.7, 0.5, 0.05, '#8e959c', PX, 2.1, PZ + 0.8), B(1.0, 0.5, 0.9, INOX, PX, 2.6, PZ), B(0.4, 0.6, 0.25, '#e8e4d8', PX + 1.9, 1.0, PZ + 1.0), B(0.3, 0.2, 0.02, '#2b2b30', PX + 1.9, 1.1, PZ + 1.13));
+    // égrappoir-fouloir sur roues, pompe, tuyaux couchés
+    H2.push(B(1.4, 0.6, 0.7, INOX, -73.6, 0.75, -41.9), B(1.5, 0.35, 0.9, INOX, -73.6, 1.2, -41.9));
+    for (const dx of [-0.55, 0.55]) H2.push(C(0.16, 0.16, 0.08, 8, FER, -73.6 + dx, 0.16, -41.45, 'z'));
+    H2.push(B(0.7, 0.45, 0.45, '#c0392b', -67.6, 0.4, -46.1), C(0.12, 0.12, 0.1, 8, FER, -67.6, 0.12, -45.85, 'z'));
+    for (const [x0, z0, x1, z1] of [[-67.6, -46.4, -66.5, -47.6], [-67.9, -45.8, -68.8, -44.1], [-68.8, -44.1, -71.4, -43.9]]) {
+      const l = Math.hypot(x1 - x0, z1 - z0); H2.push(C(0.06, 0.06, l, 6, '#2a2a2e', (x0 + x1) / 2, 0.07, (z0 + z1) / 2, 'z', Math.atan2(x1 - x0, z1 - z0)));
+    }
+    // établi et outils, seaux ; palettes de bouteilles vides filmées ; la palette des commandes du jour
+    H2.push(B(0.7, 0.06, 2.2, '#9a7b55', -75.15, 0.9, -57.2), B(0.06, 0.9, 0.06, '#6b4a30', -74.9, 0.45, -58.2), B(0.06, 0.9, 0.06, '#6b4a30', -74.9, 0.45, -56.2), B(0.04, 1.0, 2.2, '#8d7c66', -75.5, 1.55, -57.2));
+    for (let i = 0; i < 5; i++) H2.push(B(0.05, 0.25 + (i % 2) * 0.1, 0.05, ['#c0392b', '#2b2b30', '#c9a55a'][i % 3], -75.45, 1.6, -58 + i * 0.35));
+    for (const z of [-56.4, -57.6]) H2.push(C(0.15, 0.13, 0.3, 8, ['#2e86de', '#e0b13a'][z < -57 ? 1 : 0], -73.9, 0.15, z));
+    for (const [x, z] of [[-73.2, -58.2], [-71.8, -58.2]]) {
+      H2.push(B(1.2, 0.14, 1.0, '#9a7b55', x, 0.07, z)); // palette de cartons vides, pliés en piles
+      for (let k = 0; k < 3; k++) for (const dx of [-0.29, 0.29]) for (const dz of [-0.24, 0.24]) H2.push(B(0.56, 0.32, 0.46, (k + (dx > 0) + (dz > 0)) % 2 ? '#b98a55' : '#ad7f4c', x + dx, 0.31 + k * 0.33, z + dz));
+    }
+    H2.push(B(1.2, 0.14, 1.0, '#9a7b55', -71.4, 0.07, -48.1)); // la palette du jour (lieux.palette)
+    // les fenêtres, vues de dedans (le jour derrière)
+    for (const z of [-56.5, -45.5, -41.2]) H2.push(B(0.03, 1.1, 0.74, '#3d5f8e', -75.59, 1.75, z));
+    for (const z of [-58.3, -54, -49.7, -45.3, -41]) H2.push(B(0.03, 1.1, 0.74, '#3d5f8e', -64.41, 1.75, z));
+    const halle = new THREE.Mesh(fusion(H2), MAT);
+    halle.receiveShadow = true; halle.castShadow = false; halle.name = 'chai'; // dedans, le soleil est coupé (definirInterieur) : l'ombre du toit ne compte qu'au-dessus des murs
+    scene.add(halle);
+    o.halle = halle; // dessiné seulement de près, porte ouverte, ou quand on est dedans (main.js)
+    // ce qui arrête : cuves, chantiers, pressoir, égrappoir, pompe, établi, palettes
+    for (const z of cuves) col.boiteC(-65.6, z, 1.9, 1.9).haut = true;
+    for (const [x0, z0, x1, z1] of [[-75, -40.8, -66.1, -39.4], [-70.2, -43.4, -67.0, -42.0], [-74.4, -42.4, -72.8, -41.4], [-68, -46.4, -67.2, -45.8], [-75.6, -58.3, -74.8, -56.1], [-73.8, -58.7, -71.2, -57.7]]) col.boite(x0, z0, x1, z1);
+    // la grande porte : deux vantaux de planches sur leurs gonds, qui s'ouvrent vers la cour (main.js les anime)
+    const vantail = s => {
+      const g = new THREE.Group(), L2 = [];
+      L2.push(B(0.08, 4.1, 1.8, '#5b3a2a', 0, 2.05, s * 0.9));
+      for (const y of [0.5, 2.05, 3.6]) L2.push(B(0.1, 0.16, 1.7, '#4a3324', -0.02, y, s * 0.9));
+      L2.push(B(0.06, 0.06, 0.18, '#2b2b30', -0.06, 2.0, s * 1.6));
+      const m = new THREE.Mesh(fusion(L2), MAT); m.castShadow = true; m.receiveShadow = true; g.add(m);
+      g.position.set(-76.02, 0, s > 0 ? -53.8 : -50.2); scene.add(g);
+      return g;
+    };
+    o.porteChai = { a: vantail(1), b: vantail(-1), k: 0, col: col.boite(-76.1, -53.8, -75.9, -50.2) };
+    o.porteChai.col.haut = true;
+    definirInterieur([-75.8, -1, -59.4], [-64.2, 6.3, -39.2], [-56.5, -51.5, -46.5, -41.5].map(z => [-70, 5.0, z]));
+
 
     /* -- l'intérieur (coordonnées monde) */
     const I = [], PLATRE = '#efe4cc', LAMBRIS = '#8d7c66', BOIS = '#6b4a30', SOMBRE = '#5b3a2a';
@@ -958,8 +1035,6 @@ void main() {
   maison({ x: -100, z: -64, w: 16, d: 10, h: 7.2, rot: 0, volets: '#6b7f99', porteC: '#3e4f63' });
   const chai = chaiEtBureau();
   {
-    const L = [B(3.4, 3.8, 0.16, '#5b3a2a', 0, 1.9, 6.06), B(3.8, 0.3, 0.2, '#d8cbb0', 0, 3.95, 6.07)];
-    poser(L, chai.x, chai.z, chai.rot, bati);
     enseigne('CHAI', facade(chai, 0, 0.12), 4.65, 2.2, 0.7, '#5b3a2a', '#f1e2c4');
   }
   // fûts et cartons devant le chai
@@ -973,11 +1048,6 @@ void main() {
   for (let i = 0; i < 12; i++) bati.push(B(0.4, 0.28, 0.32, '#b98a55', -78.8 + (i % 3) * 0.41, 0.28 + Math.floor(i / 6) * 0.29, -57.75 + (Math.floor(i / 3) % 2) * 0.34));
   col.boiteC(-78.4, -57.5, 1.3, 1.1);
   contact.jupe(-79.0, -58.0, -77.8, -57.0, 0.5, 0.3);
-  // la palette des commandes du jour, à droite de l'endroit où l'on gare le véhicule pour charger (ses cartons sont
-  // posés par main.js : on les emporte un à un)
-  bati.push(B(1.2, 0.14, 1.0, '#9a7b55', -81.4, 0.07, -44.6));
-  col.boiteC(-81.4, -44.6, 1.25, 1.05);
-  contact.jupe(-82.0, -45.1, -80.8, -44.1, 0.5, 0.3);
   // muret et portail
   bati.push(B(21.6, 1.1, 0.5, '#d9cdb2', -104.2, 0.55, -33.5), B(24.6, 1.1, 0.5, '#d9cdb2', -74.4, 0.55, -33.5));
   col.boite(-115, -33.75, -93.4, -33.25); col.boite(-86.6, -33.75, -62, -33.25);
@@ -1337,7 +1407,9 @@ void main() {
     // on choisit l'un ou l'autre pour la tournée
     tracteur: { x: -100, z: -42, h: Math.PI / 2 },
     van: { x: -108, z: -37.5, h: Math.PI / 2 },
-    chai: { x: -80.6, z: -52 },
+    chai: { x: -82, z: -52 },
+    // dans le chai : où le véhicule s'arrête pour charger, la sortie en marche arrière, la caméra de la halle
+    chaiDedans: { x: -70.2, z: -52, h: Math.PI / 2 }, chaiSalle: { camera: { x: -70.6, y: 4.6, z: -40.6 }, centre: { x: -70.8, y: 1.0, z: -50.5 } },
     cave: { x: 77.8, z: -46 },
     // les trois clients : où ils attendent, où le tracteur s'arrête
     figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 }, auberge: { x: -49, z: 135.6, h: -Math.PI / 2 } },
@@ -1353,7 +1425,7 @@ void main() {
       prise: { x: -73.55, y: 1.55, z: -62.05 }, // la caméra derrière l'épaule, au portable
     },
     // la palette des commandes du jour (dessus à 0,14 m)
-    palette: { x: -81.4, z: -44.6, y: 0.14 },
+    palette: { x: -71.4, z: -48.1, y: 0.14 },
     banc: { x: 86, z: -58.35, h: 0 },
     terrasse: terrasse.map(([x, z]) => ({ x: x - 0.75, z, h: Math.PI / 2 })),
     place: { x0: 79, z0: -60, x1: 111, z1: -33 },
@@ -1361,10 +1433,10 @@ void main() {
     // itinéraire de la tournée, au départ du domaine (chai, portail, départementale, rue de la place)
     // la conduite assistée (pilote.js) le suit sur la file de droite : il évite la fontaine, le monument, les bancs
     // puis, pour finir, le chemin des Grands Champs jusqu'à l'auberge
-    route: [[-80.6, -52], [-84, -45], [-90, -38], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4],
+    route: [[-82.8, -58.4], [-87.5, -51.9], [-90, -44], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4],
       [-55, 10], [-55, 124], [-53.2, 134.5]],
     // du parking du domaine au chai (par le nord du tracteur garé)
-    versChai: [[-92, -38], [-84, -42], [-83, -52]],
+    versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
     retour: [[-53.2, 134.5], [-55, 124], [-55, 10], [-90, 10], [-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],
   };
   lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
@@ -1406,5 +1478,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, interieurBureau: chai.interieur, moulin };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin };
 }

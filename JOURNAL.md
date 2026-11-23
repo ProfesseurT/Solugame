@@ -451,3 +451,18 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Fait** (`perso.js`, `atlas.js`) : du favori, juste devant l'oreille, la ligne des joues descend en courbe jusqu'aux commissures ; moustache de 1,5 cm sous le nez ; bouche dégagée, une ellipse calée sur les lèvres peintes ; rien derrière le plan de l'oreille, sauf en bas jusqu'à l'angle de la mâchoire ; bord irrégulier, comme des poils ; mince sur les joues, du volume au menton. L'ombre de barbe de la texture suit le nouveau contour, un peu au-dessus, et se fond dedans (elle sert aussi aux passants mal rasés).
 
 **Vérifié** : gros plans du vigneron et d'un passant chauve barbu ; `npm run verifie`.
+
+## 23/11/2026 · Retours de Teddy (7), lot 4 : on charge dans le chai
+
+**Demande** : le chai peut être ouvert et le chargement se fait dedans ; modéliser l'intérieur d'un chai avec des machines, des cuves, etc. ; rester optimisé.
+
+**Fait** :
+- La halle du chai (`chaiEtBureau`, monde.js) : murs creux, façade percée d'une grande porte à encadrement de pierre, deux vantaux de planches sur leurs gonds qui s'ouvrent vers la cour (ils s'ouvrent quand on approche à l'étape du chargement, ou à pied tout près).
+- L'intérieur, un seul maillage (`halle`) : sol de béton et sa rigole, murs enduits à la chaux usés en pied, plafond de planches sous les entraits, quatre suspensions ; cinq cuves inox sur pieds (cordons de soudure, trappe, vanne, plaque, échelle de niveau sur l'une), deux rangs de barriques sur leurs chantiers, pressoir pneumatique (cuve couchée, trémie, tableau de commande), égrappoir sur roues, pompe et tuyaux, établi et outils, seaux, palettes de cartons, fenêtres vues de dedans. Chaque machine arrête le personnage.
+- La lumière de dedans (`definirInterieur`, modeles.js) : dans la boîte de la halle, le soleil est coupé et une pénombre chaude, plus quatre lampes, remplace le ciel ; une seule retouche du calcul de lumière commun à toutes les matières, sans lumière de plus dans la scène (une vraie lampe three.js recompilerait tout et coûterait à chaque pixel du monde).
+- La séquence (`jeu.charger`, main.js ; `rouler`, gestes.js) : devant la porte, les vantaux s'ouvrent, le véhicule entre tout seul jusqu'à la palette (roues qui tournent et braquent, moteur), on descend, on charge par le côté, on remonte, il ressort en marche arrière et se pose au départ de la tournée. Caméra au fond de la halle, qui regarde la porte tant que le véhicule est dehors.
+- La palette des commandes est dans la halle (`lieux.palette`) ; la collision de l'ancienne palette, restée dans la cour, est retirée.
+
+**Coût** : la halle n'est dessinée que dedans, ou porte ouverte à moins de 50 m : ailleurs, rien de plus. Au chai pendant le chargement : 64 appels de dessin (65 avant), 84 000 triangles ombres comprises ; domaine 95 700, route 142 000, place 155 700, mêmes appels de dessin. Pas de programme de shader en plus.
+
+**Vérifié** : séquence filmée image par image en tracteur et en van (arrivée, entrée, chargement, sortie, départ) ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; banc d'allègement de three.js : équivalent.

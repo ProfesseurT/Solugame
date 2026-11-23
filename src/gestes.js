@@ -103,7 +103,7 @@ function montrer(pile, n) { pile.count = n; pile.userData.n = n; pile.computeBou
 
 export class Gestes {
   // c : { jeu, scene, col }
-  constructor(c) { this.c = c; this.g = null; this.cible = { x: 0, z: 0 }; this.cadre = null; }
+  constructor(c) { this.c = c; this.g = null; this.cible = { x: 0, z: 0 }; this.cadre = null; this.roule = false; }
   get actif() { return this.g !== null; }
   get j() { return this.c.jeu.joueur; }
 
@@ -308,6 +308,36 @@ export class Gestes {
   // Descendre du véhicule v : sorti() quand on pose le pied au sol (main.js repasse à pied)
   descendre(v, sorti, fin) { this.lancer(this.etapesDescendre(v, sorti), fin); }
 
+  /* ------------------------------------------------------------ le véhicule roule tout seul (au chai)
+     Le long d'un chemin (points [x, z] serrés), en duree secondes, départ et arrivée en douceur ; recul : en marche
+     arrière (le véhicule regarde à l'opposé du sens de la marche). Les roues tournent et braquent, le moteur tourne ; la
+     physique est suspendue (main.js : roule). */
+  rouler(v, chemin, duree, recul = false) {
+    const p = v.p, n = chemin.length, cum = [0];
+    for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(chemin[i][0] - chemin[i - 1][0], chemin[i][1] - chemin[i - 1][1]));
+    const L = cum[n - 1];
+    let sAvant = 0, hAvant = 0, tSon = 0;
+    const cap = i => { const a = chemin[Math.max(0, i - 1)], b = chemin[Math.min(n - 1, i + 1)]; return Math.atan2(b[0] - a[0], b[1] - a[1]) + (recul ? Math.PI : 0); };
+    return {
+      duree,
+      debut: () => { this.roule = true; sAvant = 0; hAvant = cap(0); },
+      maj: (dt, t, u) => {
+        const s = u * L;
+        let i = 1; while (i < n - 1 && cum[i] < s) i++;
+        const a = chemin[i - 1], b = chemin[i], f = (s - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]);
+        const h = angle(cap(i - 1) + angle(cap(i) - cap(i - 1)) * f), ds = s - sAvant;
+        p.pos.set(a[0] + (b[0] - a[0]) * f, 0, a[1] + (b[1] - a[1]) * f);
+        p.v = dt > 0 ? (recul ? -ds : ds) / dt : 0; p.vT = 0;
+        p.braq = ds > 1e-4 ? Math.max(-0.55, Math.min(0.55, Math.atan(p.d.emp * angle(h - hAvant) / ds) * (recul ? -1 : 1))) : p.braq;
+        p.h = h; sAvant = s; hAvant = h;
+        p.sync(dt, t);
+        this.j.sync(dt, t);
+        if ((tSon -= dt) <= 0) { tSon = 0.1; son.moteur(true, p.v, p); }
+        if (u >= 1) { p.v = 0; p.braq = 0; this.roule = false; }
+      },
+    };
+  }
+
   /* ------------------------------------------------------------ les cartons */
   // le côté du véhicule où l'on se tient pour charger ou décharger : le plus proche du point (x, z) parmi ceux où l'on
   // peut se tenir (pas contre un mur, une table, une voiture garée) ; s'il n'y en a aucun, le plus proche
@@ -339,7 +369,7 @@ export class Gestes {
   // Au chai : on descend, on porte les piles de la palette jusqu'au véhicule (la plus proche d'abord), on remonte.
   // piles : [{ groupe, client, n }] posées sur la palette ; place(c, pile) : la pile est rangée dans la colonne c ;
   // fin() : tout est chargé et l'on est remonté au volant.
-  charger(v, piles, { sorti, place, installe }) {
+  charger(v, piles, { sorti, place, installe }, avant = [], apres = []) {
     const ptPal = { x: 0, z: 0 };
     const k = this.cote(v, piles[0].groupe.position.x, piles[0].groupe.position.z);
     const [lx, lz] = v.m.chargeur[k];
@@ -348,7 +378,7 @@ export class Gestes {
     const cols = ORDRE[v.genre][k];
     const pal = piles[0].groupe.parent;
     this.cadre = cadreEntre(spot, pal.position, v);
-    const etapes = [...this.etapesDescendre(v, sorti), ...this.ouvrirCote(v)];
+    const etapes = [...avant, ...this.etapesDescendre(v, sorti), ...this.ouvrirCote(v)];
     ordre.forEach((p, i) => {
       const c = cols[i], g = p.groupe;
       // devant la pile, du côté du véhicule
@@ -365,7 +395,7 @@ export class Gestes {
         place(c, p);
       }, v.m.ridelle || 0));
     });
-    etapes.push(...this.fermerCote(v), ...this.etapesMonter(v, installe));
+    etapes.push(...this.fermerCote(v), ...this.etapesMonter(v, installe), ...apres);
     this.lancer(etapes);
   }
 
