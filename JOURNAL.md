@@ -538,3 +538,19 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Couleur de la mission en un seul endroit (`COULEUR`, mission.js) ; `lieux.cave`, jamais lu, retiré ; en-têtes de fichiers et commentaires remis à jour.
 
 **Vérifié** : `npm run verifie` (tracteur, van, journée à la carte, cas limites) ; conduite assistée complète en tracteur et en van (mêmes durées à la seconde, aucun choc, aucune traversée) ; banc des personnages en jeu. Une première version oubliait que `hash` servait aussi aux maisons de `monde.js` : le jeu ne se chargeait plus, `verifie` l'a arrêtée.
+
+## 23/11/2026 · Retours de Teddy (11), lot 3 : la démarche
+
+**Demande** : améliorer la démarche des personnages.
+
+**Mesuré d'abord** (os des pieds suivis image par image sur une foulée, à 1,6 m/s) : à l'attaque du talon, la cheville était à 0,149 m au lieu de 0,078 (le pied arrivait 7 cm en l'air) et ne touchait le sol qu'au tiers de l'appui, en glissant de 5 cm ; derrière, il décollait 3 cm trop tôt. La semelle n'était au sol que 13 % du cycle, au lieu de 60 % : la marche « flottait ». Causes : le pied se pose à ±0,44 de la hanche quand la jambe (cuisse et tibia, 0,84) ne l'atteint pas à la hauteur où était le bassin ; le pied ne roulait pas (la cheville restait au ras du sol tout l'appui, sauf un talon levé de 5 cm) ; la foulée ignorait l'échelle du personnage (le pied reculait 4 % moins vite que le corps n'avançait) ; des pas trop longs pour des jambes stylisées, plus courtes que nature. En course, le pied décollait de 11 cm en une image et repartait d'un coup à la vitesse du corps.
+
+**Fait** (`anim.js`, `foulee`, `poseDebout`) :
+- Le pied roule : attaque du talon pointe relevée (le talon pivote au sol), pied à plat, puis le talon se lève et le pied pivote sur la pointe jusqu'au décollage ; il se pose un peu moins loin devant qu'il ne quitte le sol derrière (en courant, presque sous le corps). Dimensions prises sur la chaussure (perso.js).
+- Le bassin : sa hauteur est la plus haute que les jambes atteignent, le genou gardant une légère flexion (amortie juste après l'attaque du talon), raccordée sans cassure : il descend au double appui et remonte au passage, 5 cm à la marche, comme un vrai marcheur.
+- Cadence d'après la longueur des jambes (relation d'Alexander, un peu allongée) et foulée à l'échelle du personnage : plus de glissement.
+- Envol : une courbe d'Hermite, le pied immobile au sol à ses deux bouts (ni glissement au décollage, ni à l'atterrissage), levé plus tôt que tard (le talon remonte en courant) et sans à-coup.
+- Haut du corps : balancier des bras un peu plus ample et plus devant que derrière, la main vient vers le milieu en avançant, coude qui plie à l'aller ; tête qui reste droite quand le bassin bascule.
+- Sans allocation de plus : les pieds et les réglages de la foulée vivent dans des tableaux de nombres, les petits calculs sont faits sur place (sinon V8 met en boîte chaque nombre passé ou rendu : 81 octets par pose, ramenés à 9,5, contre 11 avant). Même coût : 0,045 ms pour 14 personnages.
+
+**Vérifié** : à la marche, la semelle est au sol 62 % du cycle, immobile pendant l'appui (pied à plat, puis pivot sur la pointe), atterrissage et décollage sans saut ; bassin 0,90 à 0,95 m. Bandes de profil et de face (marche, petite course, course), avant et après ; planches de l'arrêt et du demi-tour ; captures en jeu (le personnage qui marche et qui court, les passants de la place) ; `npm run verifie` ; conduite assistée en tracteur et en van ; banc des personnages en jeu (recul contre le mur, saut de côté, client qui se tourne).

@@ -1,11 +1,13 @@
 // Animation procédurale des personnages, sans fichier d'animation et sans allocation par image.
-// Marche, petite course et course se mélangent selon la vitesse ; les pieds suivent une foulée accordée à la vitesse
-// (posés au sol pendant l'appui, placés par cinématique inverse : ils ne glissent pas). Au repos : respiration,
+// Marche, petite course et course se mélangent selon la vitesse ; les pieds suivent une foulée accordée à la vitesse et à
+// la longueur des jambes (foulee) : au sol pendant l'appui, le pied roule du talon à la pointe sans glisser ; le bassin
+// descend quand les deux pieds sont au sol et remonte au passage, d'après ce que les jambes atteignent (cinématique
+// inverse : pied jamais en l'air pendant l'appui). Au repos : respiration,
 // transfert de poids, coups d'œil, parfois un regard au téléphone. Regard vers un point, téléphone en main,
 // signe de la main, pose assise, mains sur le volant, saut de côté, recul contre un mur.
 import * as THREE from 'three';
 import { OS, DIM, accessoires } from './perso.js';
-import { angle, borne, entre, mix, amortir } from './outils.js';
+import { angle, borne, entre, mix, lisse, amortir } from './outils.js';
 
 const PI = Math.PI, TAU = 2 * Math.PI;
 // lissage exponentiel indépendant de la cadence ; dt = 0 : on se place d'un coup
@@ -26,6 +28,50 @@ const POSTE_TRACTEUR = { assise: 1.5, plancher: 1.24, volant: new THREE.Vector3(
 const BRAS = [OS.brasG, OS.coudeG, OS.mainG, OS.brasD, OS.coudeD, OS.mainD];
 // pose debout gardée le temps de la mélanger à la pose au volant (monter, descendre)
 const MEMO = Array.from({ length: 32 }, () => new THREE.Quaternion()), vMemo = new THREE.Vector3();
+
+/* ---------------------------------------------------------------- la foulée
+   Repère du personnage : origine au sol sous le bassin, z vers l'avant. La chaussure (perso.js) : du talon à la
+   cheville, de la cheville à la pointe (là où le pied plie), hauteur de la cheville au-dessus du sol. */
+const TALON = 0.065, POINTE = 0.15, CH = DIM.cheville, L1 = DIM.cuisse, L2 = DIM.tibia;
+// (poseDebout calcule sur place, sans petite fonction qui rende un nombre : V8 le mettrait en boîte à chaque appel)
+// Les deux pieds, et les réglages de la foulée, rangés dans des tableaux de nombres : passés à une fonction ou rangés dans
+// un objet, les nombres à virgule seraient mis en boîte par V8, à chaque image. Pour le pied j, à partir de 6j : cheville
+// x, y, z, inclinaison du pied (positive : pointe en bas), lacet, pliure du genou. Foulée : phase du pied, part de l'appui,
+// chemin au sol, foulée, course (0 à 1), levée.
+const PIEDS = new Float64Array(12), X = 0, Y = 1, Z = 2, TG = 3, LACET = 4, F = 5;
+const FOU = new Float64Array(6), Q = 0, BETA = 1, PAS = 2, FS = 3, W = 4, LEVER = 5;
+// La cheville quand le talon pivote au sol, la pointe relevée de t ; quand la pointe pivote au sol, le talon levé de t.
+// zf : la cheville du pied à plat ; y : au-dessus de sa hauteur à plat
+function talon(zf, t, R, k) { R[k + Z] = zf - TALON + TALON * Math.cos(t) - CH * Math.sin(t); R[k + Y] = TALON * Math.sin(t) + CH * Math.cos(t) - CH; R[k + TG] = -t; }
+function pointe(zf, t, R, k) { R[k + Z] = zf + POINTE - POINTE * Math.cos(t) + CH * Math.sin(t); R[k + Y] = POINTE * Math.sin(t) + CH * Math.cos(t) - CH; R[k + TG] = t; }
+// Le pied à la phase q de sa foulée (0 : le talon touche le sol). Appui (q < beta) : il recule à la vitesse du corps
+// (immobile au sol) en roulant : le talon pivote au sol, pointe relevée, puis le pied est à plat, puis il pivote sur la
+// pointe, talon levé ; il se pose moins loin devant que là où il quitte le sol derrière (en courant, presque sous le
+// corps). Envol : de la pointe qui quitte le sol au talon qui le touche, immobile au sol aux deux bouts (courbe d'Hermite
+// dont les tangentes suivent le sol : il ne glisse ni au décollage ni à l'atterrissage), levé de « lever », plus tôt que
+// plus tard (le talon remonte en courant). La pliure du genou à garder à l'appui (amorti après l'attaque du talon) fixe la
+// hauteur du bassin. w : 0 marche, 1 course (on attaque par le milieu du pied, on pousse plus fort sur la pointe, le
+// genou plie davantage). Lit FOU, écrit dans PIEDS à partir de k.
+function foulee(k) {
+  const R = PIEDS, q = FOU[Q], beta = FOU[BETA], pas = FOU[PAS], S = FOU[FS], w = FOU[W], lever = FOU[LEVER];
+  const a0 = 0.44 - 0.04 * w, th0 = 0.3 * (1 - w), u1 = 0.14, u2 = 0.55 - 0.2 * w, ph1 = 0.75 + 0.2 * w;
+  if (q < beta) {
+    const u = q / beta, zf = pas * (a0 - u);
+    if (u < u1) talon(zf, th0 * (1 - u / u1) ** 2, R, k);
+    else if (u < u2) { R[k + Z] = zf; R[k + Y] = 0; R[k + TG] = 0; }
+    else pointe(zf, ph1 * ((u - u2) / (1 - u2)) ** 1.5, R, k);
+    R[k + F] = mix(0.08 + 0.18 * Math.exp(-(((u - 0.18) / 0.12) ** 2)), 0.35 + 0.35 * Math.sin(PI * u), w);
+    return;
+  }
+  const u = (q - beta) / (1 - beta), u2c = u * u, u3 = u2c * u;
+  pointe(pas * (a0 - 1), ph1, R, k); const z0 = R[k + Z], y0 = R[k + Y];
+  talon(pas * a0, th0, R, k); const z1 = R[k + Z], y1 = R[k + Y];
+  const c = 0.15 + 0.25 * w; // la levée penche vers le début de l'envol (sommet ramené à 1)
+  R[k + Z] = z0 + (z1 - z0) * (3 * u2c - 2 * u3) - (1 - beta) * S * (2 * u3 - 3 * u2c + u);
+  R[k + Y] = mix(y0, y1, lisse(u)) + lever * (Math.sin(PI * u) + c * Math.sin(TAU * u)) / (1 + 1.35 * c * c);
+  R[k + TG] = mix(ph1, -th0, entre(0.05, 0.8, u));
+  R[k + F] = mix(0.1, 0.35, w);
+}
 
 // Cinématique inverse à deux os. a : os haut, b : os bas (articulation en charnière sur son axe x).
 // cible et pole dans le repère du parent de a. sens +1 : bras (l'avant-bras plie vers l'avant) ; -1 : jambe.
@@ -208,65 +254,80 @@ export class Anim {
 
   /* ---------------------------------------------------------------- debout : repos, marche, course */
   poseDebout(dt, p, va, sens, br) {
-    const o = this.o, dm = this.m.dim;
-    // cadence (cycles de deux pas par seconde) : marche, petite course, course
-    const cad = va < 1.4 ? 0.62 + 0.24 * va : va < 3 ? 0.956 + (va - 1.4) * 0.27 : 1.388 + (va - 3) * 0.13;
+    const o = this.o, dm = this.m.dim, E = this.m.echelle;
     const tourne = borne(Math.abs(p.om) / 2.2, 0, 1) * (1 - entre(0.4, 1.2, va));
     this.wPas += ((tourne > 0.2 ? 1 : 0) - this.wPas) * kl(dt, 8);
     const wg = entre(0.03, 0.5, va), w = entre(2.4, 4.6, va);
+    // Cadence (cycles de deux pas par seconde). En marchant, la foulée suit la longueur des jambes (relation d'Alexander :
+    // foulée / jambe = 2,3 x (v² / g x jambe)^0,3, ici un peu allongée) : des jambes courtes font des pas plus courts et
+    // plus vifs ; en courant, la cadence monte doucement avec la vitesse. Foulée (S, repère du personnage : à son échelle,
+    // sinon les pieds glisseraient) ; part du cycle où le pied est au sol (beta), chemin qu'il y fait (pas).
+    const jw = (L1 + L2) * E, vw = Math.max(va, 0.03);
+    const cad = mix(vw / (2.45 * jw * Math.pow(vw * vw / (9.81 * jw), 0.3)), 1.3 + 0.1 * va, w);
     this.ph += dt * Math.max(va > 0.03 ? cad : 0, this.wPas * 1.7) * sens;
     this.ph -= Math.floor(this.ph);
-    const ph = this.ph, beta = 0.6 - 0.24 * w, S = va > 0.03 ? va / cad : 0, pas = Math.min(beta * S, 1.05);
-    const lever = ((0.045 + 0.075 * Math.min(1, va / 1.4)) * (1 - w) + 0.3 * w) * wg + 0.07 * this.wPas * (1 - wg);
+    const ph = this.ph, beta = 0.6 - 0.3 * w, S = va > 0.03 ? va / (cad * E) : 0, pas = Math.min(beta * S, 1.05);
+    const lever = ((0.03 + 0.06 * Math.min(1, va / 1.4)) * (1 - w) + 0.26 * w) * wg + 0.07 * this.wPas * (1 - wg);
     const c1 = Math.cos(TAU * ph), s1 = Math.sin(TAU * ph);
     const choc = p.choc * p.choc, sj = p.saut > 0 ? Math.sin(PI * p.saut) : 0, att = p.atterri / 0.28;
     this.bank += (-borne(p.om * va * 0.035, -0.22, 0.22) - this.bank) * kl(dt, 6);
     this.pench += (borne(p.acc * 0.03, -0.14, 0.2) - this.pench) * kl(dt, 5);
-
-    // bassin : rebond, rotation avec les jambes, bascule sur la jambe d'appui, inclinaison dans les virages
-    const bob = (0.02 * (1 - w) - 0.04 * w) * wg * Math.cos(2 * TAU * (ph - beta / 2));
-    const lacetB = -0.1 * wg * (1 - 0.4 * w) * c1;
-    const roulisB = 0.04 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
-    const b = o[OS.bassin];
     const cr = this.accroupi;
-    b.position.set(0.03 * this.poids * (1 - wg) + 0.016 * s1 * wg * (1 - w) - this.bank * 0.35,
-      DIM.yBassin - 0.014 - wg * (0.012 + 0.05 * w) + bob - 0.13 * att - 0.4 * cr, -0.06 * choc - 0.12 * cr);
-    b.rotation.set(0.03 + 0.05 * w + 0.35 * cr, lacetB, roulisB + this.bank * 0.5);
-    // buste : penché en courant et en accélérant, épaules en contre-rotation, respiration, regard ; penché pour ramasser
-    const pen = 0.025 + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj + 0.25 * cr;
-    o[OS.ventre].rotation.set(pen * 0.45 + br * 0.3, -lacetB * 0.45 + this.ry * 0.12, -roulisB * 0.7 + this.bank * 0.3);
-    o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12, -lacetB * 0.75 + this.ry * 0.22, -roulisB * 0.25 + this.bank * 0.2);
-    o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85, lacetB * 0.2 + this.ry * 0.66, -this.bank * 0.6);
-    this.reperes();
 
-    // pieds : appui (posé au sol, recule à la vitesse du corps) puis envol (cycloïde : vitesse nulle au départ et à l'arrivée)
+    // pieds : où est chaque cheville (repère du personnage), son inclinaison ; mélangés à la pose de repos à l'arrêt
+    const avance = sj * 0.2, monte = sj * 0.26, recule = -sj * 0.12, monteD = sj * 0.4;
+    FOU[BETA] = beta; FOU[PAS] = pas; FOU[FS] = S; FOU[W] = w; FOU[LEVER] = lever;
     for (let j = 0; j < 2; j++) {
-      const i = JAMBES[j][0], sg = JAMBES[j][1];
-      let q = ph + JAMBES[j][2]; q -= Math.floor(q);
-      let z, y, tg;
-      if (q < beta) {
-        const u = q / beta, talon = entre(0.5, 1, u) * (1 - 0.6 * w);
-        z = pas * (0.5 - u); y = 0.055 * talon; tg = 0.5 * talon - 0.25 * (1 - entre(0, 0.2, u)) * (1 - w);
-      } else {
-        const u = (q - beta) / (1 - beta), sn = Math.sin(TAU * u) / TAU;
-        z = mix(-pas / 2 + pas * u - (pas + (1 - beta) * S) * sn, -pas / 2 + pas * (u - sn), w);
-        y = lever * Math.sin(PI * Math.pow(u, 0.85 - 0.25 * w));
-        tg = mix(0.55 + 0.35 * w, -0.25, entre(0.05, 0.8, u));
-      }
+      const sg = JAMBES[j][1], P = PIEDS, k = 6 * j;
+      const q = ph + JAMBES[j][2];
+      FOU[Q] = q - Math.floor(q);
+      foulee(k);
       const libre = (1 - wg) * Math.max(0, -sg * this.poids); // le pied qui ne porte pas avance un peu
-      const avance = sj * (sg > 0 ? 0.2 : -0.12), monte = sj * (sg > 0 ? 0.26 : 0.4);
-      this.jambe(i, sg, sg * (dm.xh + 0.014 + 0.018 * (1 - wg) - 0.014 * w), DIM.cheville + y * Math.max(wg, this.wPas) + monte,
-        z * wg + 0.06 * libre + avance, tg * wg - 0.3 * sj, sg * (0.06 + 0.1 * (1 - wg) + 0.08 * libre));
+      P[k + X] = sg * (dm.xh + 0.014 + 0.018 * (1 - wg) - 0.014 * w);
+      P[k + Y] = DIM.cheville + P[k + Y] * Math.max(wg, this.wPas) + (sg > 0 ? monte : monteD);
+      P[k + Z] = P[k + Z] * wg + 0.06 * libre + (sg > 0 ? avance : recule);
+      P[k + TG] = P[k + TG] * wg - 0.3 * sj; P[k + LACET] = sg * (0.06 + 0.1 * (1 - wg) + 0.08 * libre);
     }
 
-    // bras : balancier opposé aux jambes, coudes pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un
-    // peu écartés du corps, coudes légèrement pliés (des bras tout droits collés au corps font mannequin)
-    const A = mix(0.32 * Math.min(1, va / 1.3), 0.75, w) * wg * sens;
-    const cG = Math.cos(TAU * (ph - 0.5)), cD = c1, flot = Math.sin(this.resp * 0.9) * 0.02;
-    o[OS.brasG].rotation.set(-A * cG - 0.04 - 0.9 * choc - 0.5 * sj + flot, 0, 0.115 + 0.1 * w + 1.9 * sj);
-    o[OS.brasD].rotation.set(-A * cD - 0.04 - 0.9 * choc - 0.5 * sj - flot, 0, -(0.115 + 0.1 * w + 1.9 * sj));
-    o[OS.coudeG].rotation.set(mix(-0.25 - 0.4 * Math.max(0, cG) * wg, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
-    o[OS.coudeD].rotation.set(mix(-0.25 - 0.4 * Math.max(0, cD) * wg, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    // bassin : rotation avec les jambes, bascule sur la jambe d'appui, inclinaison dans les virages. Sa hauteur suit ce
+    // que les jambes atteignent : bas quand les deux pieds sont au sol, haut quand la jambe d'appui passe sous lui
+    // (le balancement de la marche), jamais plus haut que la pose voulue ; en courant, il plonge à l'appui.
+    const lacetB = -0.1 * wg * (1 - 0.4 * w) * c1;
+    const roulisB = 0.05 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
+    const bx = 0.03 * this.poids * (1 - wg) + 0.02 * s1 * wg * (1 - w) - this.bank * 0.35, bz = -0.06 * choc - 0.12 * cr;
+    let yb = DIM.yBassin - 0.014 + wg * (0.011 * (1 - w) - 0.062 * w) - 0.04 * w * wg * Math.cos(2 * TAU * (ph - beta / 2));
+    if (wg > 0.001) {
+      for (let j = 0; j < 2; j++) {
+        // la hanche au plus haut pour que la jambe atteigne sa cheville, le genou plié de f (longueur de la jambe : Le²)
+        const sg = JAMBES[j][1], P = PIEDS, k = 6 * j, Le2 = L1 * L1 + L2 * L2 + 2 * L1 * L2 * Math.cos(P[k + F]);
+        const dx = P[k + X] - bx - sg * dm.xh, dz = P[k + Z] - bz + sg * dm.xh * Math.sin(lacetB);
+        const haut = P[k + Y] + Math.sqrt(Math.max(0.01, Le2 - dx * dx - dz * dz)) - DIM.yHanche - sg * dm.xh * roulisB + (1 - wg) * 0.3;
+        // le plus petit des deux, raccordé sans cassure sur 2 cm
+        const h = Math.max(0.02 - Math.abs(yb - haut), 0) / 0.02;
+        yb = Math.min(yb, haut) - h * h * 0.005;
+      }
+    }
+    const b = o[OS.bassin];
+    b.position.set(bx, yb - 0.13 * att - 0.4 * cr, bz);
+    b.rotation.set(0.03 + 0.05 * w + 0.35 * cr, lacetB, roulisB + this.bank * 0.5);
+    // buste : penché en courant et en accélérant, épaules en contre-rotation, respiration, regard ; penché pour ramasser
+    const pen = 0.025 + 0.02 * wg * (1 - w) + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj + 0.25 * cr;
+    o[OS.ventre].rotation.set(pen * 0.45 + br * 0.3, -lacetB * 0.45 + this.ry * 0.12, -roulisB * 0.7 + this.bank * 0.3);
+    o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12, -lacetB * 0.8 + this.ry * 0.22, -roulisB * 0.25 + this.bank * 0.2);
+    o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85, lacetB * 0.25 + this.ry * 0.66, -roulisB * 0.3 - this.bank * 0.6);
+    this.reperes();
+    for (let j = 0, k = 0; j < 2; j++, k += 6) this.jambe(JAMBES[j][0], JAMBES[j][1], PIEDS[k + X], PIEDS[k + Y], PIEDS[k + Z], PIEDS[k + TG], PIEDS[k + LACET]);
+
+    // bras : balancier opposé aux jambes, un peu plus devant que derrière, la main vient vers le milieu en avançant ; coudes
+    // pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un peu écartés du corps, coudes légèrement
+    // pliés (des bras tout droits collés au corps font mannequin)
+    const A = mix(0.36 * Math.min(1, va / 1.3), 0.75, w) * wg * sens;
+    const cG = Math.cos(TAU * (ph - 0.5)), cD = c1, flot = Math.sin(this.resp * 0.9) * 0.02, devant = 0.05 * wg * (1 - w);
+    const dedansG = 0.06 * wg * (1 - w) * Math.max(0, cG), dedansD = 0.06 * wg * (1 - w) * Math.max(0, cD);
+    o[OS.brasG].rotation.set(-A * cG - 0.04 - devant - 0.9 * choc - 0.5 * sj + flot, 0, 0.115 + 0.1 * w + 1.9 * sj - dedansG);
+    o[OS.brasD].rotation.set(-A * cD - 0.04 - devant - 0.9 * choc - 0.5 * sj - flot, 0, -(0.115 + 0.1 * w + 1.9 * sj - dedansD));
+    o[OS.coudeG].rotation.set(mix(-0.25 - 0.45 * Math.max(0, cG) * wg, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    o[OS.coudeD].rotation.set(mix(-0.25 - 0.45 * Math.max(0, cD) * wg, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
     o[OS.mainG].rotation.set(-0.12 - 0.2 * w, 0.1, 0.06);
     o[OS.mainD].rotation.set(-0.12 - 0.2 * w, -0.1, -0.06);
   }
