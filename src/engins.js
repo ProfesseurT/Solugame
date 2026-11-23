@@ -214,42 +214,177 @@ function colonnes(caisse, base) {
   return cartons;
 }
 
-/* ---------------------------------------------------------------- tracteur */
+/* ---------------------------------------------------------------- tracteur
+   Tracteur vigneron compact, orange, sans marque. Capot façonné (coque en sections) qui s'affine vers la calandre, masses
+   avant, garde-boue galbés sur de gros pneus agricoles à crampons en chevrons, poste de conduite ouvert (siège suspendu,
+   tableau de bord, leviers, pédales), arceau de sécurité à deux montants et toit pare-soleil en porte-à-faux (rien ne
+   gêne la montée par le marchepied gauche), relevage trois points et plateau arrière pour les cartons.
+   Repère : avant vers +z, +x à gauche, origine au sol au milieu de l'empattement. */
+
+// Pneu agricole : bande de roulement à crampons en chevrons, épaules arrondies, gros flanc, jante peinte en retrait à
+// voile (une facette sur deux plus sombre : on la voit tourner), moyeu et écrous. Centre à l'origine, axe x, face
+// extérieure du côté de `cote` ; nc crampons par moitié de bande.
+const PNEUS = new Map();
+function pneuAgricole(r, l, n, cote, nc) {
+  const cle = [r, l, n, cote, nc].join();
+  if (PNEUS.has(cle)) return PNEUS.get(cle);
+  const at = new Atelier(), h = l / 2, PN = '#1c1c20', FL = '#26262b', JA = '#efe3c6', MO = '#3b3d44';
+  const P = (x, rr, a) => [x * cote, Math.cos(a) * rr, Math.sin(a) * rr], X = [cote, 0, 0];
+  const rf = r * 0.9, rj = r * 0.6, rv = r * 0.44; // épaule, bord de jante, voile
+  for (let i = 0; i < n; i++) {
+    const a0 = i / n * TAU, a1 = (i + 1) / n * TAU, am = (a0 + a1) / 2, cy = Math.cos(am), sz = Math.sin(am);
+    at.quad(P(-h * 0.86, r, a0), P(h * 0.86, r, a0), P(h * 0.86, r, a1), P(-h * 0.86, r, a1), PN, 0, [0, cy, sz]);
+    for (const s of [1, -1]) {
+      at.quad(P(s * h * 0.86, r, a0), P(s * h, rf, a0), P(s * h, rf, a1), P(s * h * 0.86, r, a1), PN, 0, [s * cote * 0.7, cy, sz]);
+      at.quad(P(s * h, rf, a0), P(s * h * 0.95, rj, a0), P(s * h * 0.95, rj, a1), P(s * h, rf, a1), FL, 0, [s * cote, 0, 0]);
+    }
+    // jante : rebord, voile en retrait ; dedans, le flanc intérieur fermé
+    at.quad(P(h * 0.95, rj, a0), P(h * 0.5, rj, a0), P(h * 0.5, rj, a1), P(h * 0.95, rj, a1), JA, T.carrosserie, [0, -cy, -sz]);
+    at.quad(P(h * 0.5, rj, a0), P(h * 0.5, rv, a0), P(h * 0.5, rv, a1), P(h * 0.5, rj, a1), i % 2 ? nuance(JA, 0.8) : JA, T.carrosserie, X);
+    at.tri(P(h * 0.5, rv, a0), P(h * 0.5, rv, a1), P(h * 0.5, 0, 0), JA, T.carrosserie, X);
+    at.tri(P(-h * 0.95, rj, a0), P(-h * 0.95, rj, a1), P(-h * 0.95, 0, 0), FL, 0, [-cote, 0, 0]);
+  }
+  // moyeu (octogone en saillie) et six écrous
+  const rm = rv * 0.42, e = h * 0.5;
+  for (let i = 0; i < 8; i++) {
+    const a0 = i / 8 * TAU, a1 = (i + 1) / 8 * TAU;
+    at.quad(P(e, rm, a0), P(e + 0.05, rm, a0), P(e + 0.05, rm, a1), P(e, rm, a1), MO, T.carrosserie, [0, Math.cos((a0 + a1) / 2), Math.sin((a0 + a1) / 2)]);
+  }
+  at.poly(Array.from({ length: 8 }, (_, i) => P(e + 0.05, rm, i / 8 * TAU)), MO, T.carrosserie, X);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; barre(at, P(e, rv * 0.66, a), P(e + 0.035, rv * 0.66, a), 0.016, '#9a9da3', T.carrosserie); }
+  // crampons : sur chaque moitié de la bande, une barre en biais du milieu vers l'épaule ; les deux moitiés décalées,
+  // la pointe du chevron en avant quand la roue avance
+  const da = h * 0.9 / r;
+  for (let i = 0; i < nc; i++) for (const s of [1, -1]) {
+    const a = (i + (s > 0 ? 0 : 0.5)) / nc * TAU;
+    barre(at, P(s * h * 0.06, r + 0.022, a), P(s * h * 0.97, rf + 0.03, a - da), 0.026, PN, 0);
+  }
+  const g = fusion(at.geos());
+  PNEUS.set(cle, g);
+  return g;
+}
 
 export function tracteur() {
   const groupe = new THREE.Group();
   const caisse = new THREE.Group(); groupe.add(caisse);
-  const OR = '#ef7a2c', GRIS = '#3b3d44', CREME = '#efe3c6';
-  const corps = [
-    B(0.72, 0.36, 3.1, GRIS, 0, 0.78, 0.2),
-    B(0.86, 0.78, 1.6, OR, 0, 1.22, 1.02),
-    B(0.88, 0.1, 1.62, '#d9661f', 0, 1.64, 1.02),
-    B(0.72, 0.56, 0.05, '#25262b', 0, 1.18, 1.83),
-    B(0.16, 0.12, 0.06, CREME, 0.3, 1.5, 1.84), B(0.16, 0.12, 0.06, CREME, -0.3, 1.5, 1.84),
-    // garde-boue arrière
-    B(0.5, 0.08, 1.5, OR, 0.95, 1.66, -0.9), B(0.5, 0.08, 1.5, OR, -0.95, 1.66, -0.9),
-    B(0.06, 0.5, 1.5, OR, 0.71, 1.4, -0.9), B(0.06, 0.5, 1.5, OR, -0.71, 1.4, -0.9),
-    // plancher et siège ; marchepieds devant les roues arrière (on monte à gauche), pendus au plancher
-    B(1.3, 0.08, 1.2, GRIS, 0, 1.2, -0.6),
-    B(0.3, 0.04, 0.26, GRIS, 0.74, 0.66, 0.1), B(0.3, 0.04, 0.26, GRIS, -0.74, 0.66, 0.1),
-    B(0.03, 0.54, 0.03, '#2b2b30', 0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', 0.87, 0.93, 0.2),
-    B(0.03, 0.54, 0.03, '#2b2b30', -0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', -0.87, 0.93, 0.2),
-    B(0.5, 0.14, 0.46, '#2a2a2e', 0, 1.42, -0.62),
-    B(0.5, 0.55, 0.1, '#2a2a2e', 0, 1.72, -0.86),
-    // colonne de direction (le volant est à part, il tourne)
-    C(0.05, 0.05, 0.62, 5, '#222', 0, 1.56, -0.1, 'y'),
-    // arceau et toit pare-soleil
-    B(0.08, 1.55, 0.08, '#2b2b30', 0.74, 2.2, -1.3), B(0.08, 1.55, 0.08, '#2b2b30', -0.74, 2.2, -1.3),
-    B(0.08, 1.55, 0.08, '#2b2b30', 0.74, 2.2, 0.05), B(0.08, 1.55, 0.08, '#2b2b30', -0.74, 2.2, 0.05),
-    B(1.7, 0.09, 1.7, OR, 0, 3.0, -0.62),
-    B(1.72, 0.05, 1.72, '#d9661f', 0, 2.94, -0.62),
-    // échappement
-    C(0.06, 0.06, 0.9, 6, '#26272b', 0.3, 2.05, 1.45),
-    // plateau arrière (porte les cartons)
-    B(1.3, 0.08, 0.75, '#56585f', 0, 1.25, -1.85),
-    B(0.06, 0.3, 0.75, '#56585f', 0.62, 1.4, -1.85), B(0.06, 0.3, 0.75, '#56585f', -0.62, 1.4, -1.85),
-  ];
-  const c = new THREE.Mesh(fusion(corps), MAT); c.castShadow = true; c.receiveShadow = true; caisse.add(c);
+  const OR = '#e8742a', GRIS = '#3b3d44', FONCE = '#2b2c31', NOIR = '#1e1e22', CREME = '#efe3c6', PEINT = T.carrosserie;
+  const at = new Atelier(), corps = [];
+  const peint = (g, c = OR) => teinter(g, c, PEINT);
+
+  /* -- capot : sections de la planche de bord (z = 0,12) à la calandre (z = 1,86), il s'affine et s'abaisse vers l'avant */
+  const zs = [0.12, 0.35, 1.3, 1.55, 1.75, 1.86];
+  const capot = coque(at, zs, z => {
+    const t = Math.max(0, z - 1.3) / 0.56, w = 0.45 - 0.07 * t, yt = 1.66 - 0.1 * t, yb = 0.92;
+    return [[0, yt], [w - 0.12, yt], [w - 0.03, yt - 0.05], [w, yt - 0.15], [w, yb + 0.12], [w - 0.03, yb]];
+  }, (g, k) => [OR, PEINT], false);
+  // calandre : fond sombre, lamelles, cadre ; phares ronds de part et d'autre
+  const anneau = capot.A[capot.A.length - 1];
+  fond(at, anneau, '#232428', 0, 1);
+  const zc = zs[zs.length - 1] + 0.004;
+  for (let y = 1.0; y < 1.5; y += 0.065) plaque(at, -0.26, 0.26, y, y + 0.022, zc, 1, '#5a5d66', PEINT);
+  plaque(at, -0.3, 0.3, 0.97, 1.0, zc + 0.002, 1, OR, PEINT); plaque(at, -0.3, 0.3, 1.5, 1.53, zc + 0.002, 1, OR, PEINT);
+  for (const s of [1, -1]) {
+    const cx = s * 0.29, cy = 1.36, rond = (r, dz) => Array.from({ length: 10 }, (_, i) => [cx + Math.cos(i / 10 * TAU) * r, cy + Math.sin(i / 10 * TAU) * r, zc + dz]);
+    at.poly(rond(0.075, 0.004), '#c4c8cd', PEINT, [0, 0, 1]);
+    at.poly(rond(0.058, 0.008), '#f4efe2', T.vitre, [0, 0, 1]);
+  }
+  // ouïes sur les flancs, bande sombre en bas du capot, filet crème
+  decor(at, capot, 3, 1.32, 1.72, 0.12, 0.78, 0.004, '#232428', 0);
+  for (let z = 1.36; z < 1.7; z += 0.07) decor(at, capot, 3, z, z + 0.022, 0.12, 0.78, 0.007, '#4a4c54', PEINT);
+  decor(at, capot, 4, 0.12, 1.86, 0, 0.32, 0.003, FONCE, PEINT);
+  decor(at, capot, 3, 0.35, 1.28, 0.2, 0.26, 0.004, CREME, PEINT);
+  fond(at, capot.A[0], OR, PEINT, -1);
+  // bouchon de réservoir, préfiltre à air (à droite), échappement vertical (à gauche, avec son pare-chaleur et son chapeau)
+  corps.push(C(0.05, 0.05, 0.04, 8, FONCE, -0.16, 1.68, 0.3));
+  corps.push(C(0.07, 0.07, 0.34, 8, FONCE, -0.3, 1.82, 1.15), C(0.09, 0.07, 0.1, 8, '#4a4c54', -0.3, 2.03, 1.15));
+  corps.push(C(0.05, 0.05, 1.0, 8, '#26272b', 0.3, 2.06, 1.45), C(0.085, 0.085, 0.42, 10, '#5a5d66', 0.3, 1.86, 1.45));
+  { const ch = B(0.13, 0.012, 0.13, '#26272b'); ch.rotateX(0.5); corps.push(deplacer(ch, 0.3, 2.58, 1.43)); }
+
+  /* -- dessous : moteur, carter, support avant, essieu ; masses avant et crochet */
+  corps.push(B(0.66, 0.4, 1.8, GRIS, 0, 0.72, 0.9), B(0.5, 0.2, 0.9, GRIS, 0, 0.45, 0.95));
+  corps.push(B(0.52, 0.32, 0.36, GRIS, 0, 0.62, 1.62), B(1.42, 0.12, 0.14, FONCE, 0, 0.45, 1.35));
+  corps.push(B(0.64, 0.08, 0.3, GRIS, 0, 0.62, 1.98));
+  for (let i = 0; i < 6; i++) corps.push(B(0.1, 0.34, 0.26, i % 2 ? FONCE : '#33353b', -0.275 + i * 0.11, 0.84, 2.0));
+  corps.push(B(0.12, 0.06, 0.12, '#26272b', 0, 0.55, 2.16));
+
+  /* -- transmission, pont arrière ; plancher, marchepieds, poignée ; pédales, leviers */
+  corps.push(B(0.62, 0.52, 1.4, GRIS, 0, 0.86, -0.62), C(0.17, 0.17, 1.56, 10, GRIS, 0, 0.78, -0.9, 'x'));
+  corps.push(peint(B(1.34, 0.06, 1.3, FONCE, 0, 1.21, -0.6), FONCE));
+  for (let z = -1.15; z < 0.0; z += 0.13) corps.push(B(1.2, 0.012, 0.025, '#4a4c54', 0, 1.246, z));
+  for (const s of [1, -1]) {
+    corps.push(B(0.3, 0.04, 0.26, GRIS, s * 0.74, 0.66, 0.12), B(0.03, 0.54, 0.03, '#2b2b30', s * 0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', s * 0.87, 0.93, 0.24));
+    barre(at, [s * 0.74, 1.3, -0.13], [s * 0.74, 1.78, -0.4], 0.018, '#2b2b30', 0);
+  }
+  for (const s of [1, -1]) { const p = B(0.1, 0.02, 0.14, '#4a4c54'); p.rotateX(-0.6); corps.push(deplacer(p, s * 0.17, 1.33, -0.08)); }
+  for (const [x, z, c] of [[0.34, -0.5, '#d23a2a'], [0.3, -0.36, '#e0b13a'], [-0.32, -0.45, '#2b2b30']]) {
+    barre(at, [x, 1.24, z], [x + 0.02, 1.72, z + 0.06], 0.012, '#2b2b30', 0);
+    corps.push(C(0.032, 0.032, 0.05, 8, c, x + 0.02, 1.74, z + 0.06));
+  }
+
+  /* -- planche de bord : capot de colonne, compteurs tournés vers le conducteur, colonne de direction */
+  bloc(at, [[-0.3, 1.24, 0.0], [0.3, 1.24, 0.0], [0.3, 1.24, 0.3], [-0.3, 1.24, 0.3], [-0.21, 1.74, 0.03], [0.21, 1.74, 0.03], [0.21, 1.74, 0.24], [-0.21, 1.74, 0.24]], OR, PEINT);
+  {
+    const n = [0, 0.42, -1], q = (x, y, z) => [x, y, z];
+    at.quad(q(-0.2, 1.5, 0.0), q(0.2, 1.5, 0.0), q(0.2, 1.72, 0.02), q(-0.2, 1.72, 0.02), '#1d1f24', 0, n);
+    for (const x of [-0.09, 0.09]) at.poly(Array.from({ length: 8 }, (_, i) => [x + Math.cos(i / 8 * TAU) * 0.06, 1.61 + Math.sin(i / 8 * TAU) * 0.06, -0.004]), '#e8e4dc', 0, n);
+  }
+  barre(at, [0, 1.62, 0.04], [0, 1.87, -0.15], 0.03, '#222', 0);
+
+  /* -- garde-boue arrière : un arc au-dessus de chaque roue, son rebord, sa joue intérieure jusqu'au plancher ; feux */
+  const R = 0.88, xi = 0.72, xo = 1.28, arc = [];
+  for (let i = 0; i <= 12; i++) { const f = (30 + i * 145 / 12) * Math.PI / 180; arc.push([-0.9 + R * Math.cos(f), 0.78 + R * Math.sin(f), f]); }
+  for (const s of [1, -1]) {
+    for (let i = 0; i < arc.length - 1; i++) {
+      const [za, ya, fa] = arc[i], [zb, yb] = arc[i + 1], n = [0, Math.sin(fa), Math.cos(fa)];
+      at.quad([s * xi, ya, za], [s * xo, ya, za], [s * xo, yb, zb], [s * xi, yb, zb], OR, PEINT, n);
+      at.quad([s * xi, ya - 0.02, za], [s * xo, ya - 0.02, za], [s * xo, yb - 0.02, zb], [s * xi, yb - 0.02, zb], FONCE, 0, [0, -n[1], -n[2]]);
+      // rebord extérieur, un peu plus bas
+      const ra = (R - 0.07) / R;
+      at.quad([s * xo, ya, za], [s * xo, yb, zb], [s * xo, 0.78 + (yb - 0.78) * ra, -0.9 + (zb + 0.9) * ra], [s * xo, 0.78 + (ya - 0.78) * ra, -0.9 + (za + 0.9) * ra], OR, PEINT, [s, 0, 0]);
+    }
+    const joue = arc.filter(([, y]) => y > 1.19).map(([z, y]) => [s * xi, y, z]);
+    at.poly([...joue, [s * xi, 1.19, joue[joue.length - 1][2]], [s * xi, 1.19, joue[0][2]]], OR, PEINT, [-s, 0, 0]);
+    // feu arrière (rouge et orange) sur la joue extérieure du garde-boue, à l'arrière
+    corps.push(B(0.05, 0.1, 0.16, '#24262a', s * 1.26, 1.2, -1.62), B(0.02, 0.07, 0.06, '#9a1820', s * 1.29, 1.2, -1.66), B(0.02, 0.07, 0.06, '#d07a22', s * 1.29, 1.2, -1.58));
+  }
+
+  /* -- siège suspendu : soufflet, coussin, dossier incliné, accoudoirs */
+  corps.push(B(0.28, 0.16, 0.28, NOIR, 0, 1.32, -0.66), B(0.5, 0.1, 0.46, '#2a2a2e', 0, 1.46, -0.62));
+  bloc(at, [[-0.24, 1.5, -0.82], [0.24, 1.5, -0.82], [0.24, 1.5, -0.93], [-0.24, 1.5, -0.93], [-0.22, 2.02, -0.9], [0.22, 2.02, -0.9], [0.22, 2.02, -1.0], [-0.22, 2.02, -1.0]], '#2a2a2e', 0);
+  for (const s of [1, -1]) corps.push(B(0.06, 0.05, 0.32, '#2a2a2e', s * 0.27, 1.66, -0.66), B(0.03, 0.16, 0.03, '#2a2a2e', s * 0.27, 1.56, -0.8));
+
+  /* -- arceau à deux montants, derrière le siège ; toit pare-soleil en porte-à-faux, ses jambes de force ; phares de
+     travail, gyrophare, rétroviseurs */
+  const ZA = -1.2;
+  for (const s of [1, -1]) {
+    corps.push(C(0.045, 0.045, 1.76, 8, '#2b2b30', s * 0.6, 2.09, ZA), B(0.16, 0.05, 0.16, '#2b2b30', s * 0.6, 1.23, ZA));
+    barre(at, [s * 0.6, 2.55, ZA], [s * 0.6, 2.96, -0.55], 0.022, '#2b2b30', 0);
+    // rétroviseur : bras, coque, miroir
+    barre(at, [s * 0.6, 2.42, ZA], [s * 0.86, 2.48, -0.98], 0.012, '#2b2b30', 0);
+    corps.push(B(0.03, 0.2, 0.13, '#2b2b30', s * 0.88, 2.5, -0.96));
+    at.quad([s * 0.86, 2.42, -0.9], [s * 0.86, 2.58, -0.9], [s * 0.86, 2.58, -1.02], [s * 0.86, 2.42, -1.02], '#8ea2b4', T.vitre, [0, 0, 1]);
+    // phare de travail, à l'avant du toit
+    corps.push(B(0.12, 0.09, 0.08, '#2b2b30', s * 0.5, 2.92, 0.2), B(0.09, 0.065, 0.01, '#f4efe2', s * 0.5, 2.92, 0.245));
+  }
+  corps.push(C(0.045, 0.045, 1.24, 8, '#2b2b30', 0, 2.97, ZA, 'x'));
+  corps.push(B(1.56, 0.05, 1.68, '#2b2b30', 0, 2.99, -0.5), peint(B(1.62, 0.07, 1.74, OR, 0, 3.05, -0.5)), peint(B(1.5, 0.03, 1.6, OR, 0, 3.1, -0.5)));
+  corps.push(C(0.07, 0.08, 0.04, 10, '#2b2b30', 0.55, 3.14, -1.0), C(0.055, 0.06, 0.1, 10, '#e88a2a', 0.55, 3.21, -1.0));
+
+  /* -- arrière : relevage trois points (bras inférieurs, bielles, troisième point), protection de prise de force ;
+     plateau pour les cartons et ses ridelles, ses supports ; plaque */
+  for (const s of [1, -1]) {
+    barre(at, [s * 0.3, 0.62, -1.3], [s * 0.38, 0.56, -2.05], 0.028, FONCE, 0);
+    barre(at, [s * 0.3, 1.16, -1.36], [s * 0.33, 1.0, -1.78], 0.025, GRIS, 0);
+    barre(at, [s * 0.33, 1.0, -1.78], [s * 0.35, 0.6, -1.8], 0.018, FONCE, 0);
+    barre(at, [s * 0.42, 0.72, -1.4], [s * 0.5, 1.2, -1.85], 0.025, '#56585f', 0);
+  }
+  barre(at, [0, 1.12, -1.33], [0, 1.08, -1.98], 0.03, FONCE, 0);
+  corps.push(C(0.14, 0.14, 0.3, 8, FONCE, 0, 0.78, -1.42, 'z'));
+  corps.push(B(1.3, 0.08, 0.75, '#56585f', 0, 1.25, -1.85));
+  corps.push(B(0.06, 0.3, 0.75, '#56585f', 0.62, 1.4, -1.85), B(0.06, 0.3, 0.75, '#56585f', -0.62, 1.4, -1.85));
+  corps.push(B(0.34, 0.12, 0.02, '#2c2c2e', 0, 1.09, -2.23), B(0.32, 0.1, 0.02, '#ecebe3', 0, 1.09, -2.235));
+
+  const c = new THREE.Mesh(fusion([...at.geos(), ...corps]), MAT); c.castShadow = true; c.receiveShadow = true; caisse.add(c);
 
   // volant : incliné vers le conducteur, il tourne autour de sa colonne (tm.volant.rotation.y)
   const support = new THREE.Group(); support.position.set(0, 1.88, -0.16); support.rotation.x = -0.55; caisse.add(support);
@@ -257,30 +392,24 @@ export function tracteur() {
   const volant = new THREE.Mesh(fusion([
     jante,
     B(0.36, 0.025, 0.04, '#2a2a2e'), B(0.04, 0.025, 0.2, '#2a2a2e', 0, 0, -0.09),
-    C(0.045, 0.045, 0.05, 8, '#ef7a2c', 0, 0.01, 0),
+    C(0.045, 0.045, 0.05, 8, OR, 0, 0.01, 0),
   ]), MAT);
   volant.castShadow = true; support.add(volant);
 
-  const roueT = (r, l, jante) => fusion([
-    C(r, r, l, 14, '#1e1e22', 0, 0, 0, 'x'),
-    C(jante, jante, l + 0.02, 10, CREME, 0, 0, 0, 'x'),
-    B(l + 0.04, jante * 1.7, 0.12, '#c9b991'),
-    B(l + 0.04, 0.12, jante * 1.7, '#c9b991'),
-  ]);
-  const gR = roueT(0.78, 0.44, 0.44), gA = roueT(0.45, 0.3, 0.25);
+  // roues : une géométrie par côté (jante vers l'extérieur), partagée par tous les tracteurs
   const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-  const rouesAr = [mk(gR, groupe, 0.98, 0.78, -0.9), mk(gR, groupe, -0.98, 0.78, -0.9)];
+  const rouesAr = [mk(pneuAgricole(0.78, 0.44, 20, 1, 18), groupe, 0.98, 0.78, -0.9), mk(pneuAgricole(0.78, 0.44, 20, -1, 18), groupe, -0.98, 0.78, -0.9)];
   // essieu avant oscillant (il penche sur les bosses), qui porte les deux pivots de direction
   const essieu = new THREE.Group(); essieu.position.set(0, 0.45, 1.35); groupe.add(essieu);
   const pivots = [new THREE.Group(), new THREE.Group()];
   pivots[0].position.set(0.84, 0, 0); pivots[1].position.set(-0.84, 0, 0);
   essieu.add(pivots[0], pivots[1]);
-  const rouesAv = [mk(gA, pivots[0], 0, 0, 0), mk(gA, pivots[1], 0, 0, 0)];
+  const rouesAv = [mk(pneuAgricole(0.45, 0.3, 16, 1, 13), pivots[0], 0, 0, 0), mk(pneuAgricole(0.45, 0.3, 16, -1, 13), pivots[1], 0, 0, 0)];
 
   // jusqu'à 18 cartons sur le plateau, en 6 colonnes de 3 (3 de large, 2 de profondeur) ; posés sur la caisse, ils
-  // roulent et tanguent avec elle. On charge et on décharge par le côté (chargeur : où l'on se tient, à droite ou à gauche).
+  // roulent et tanguent avec elle. On charge et on décharge par le côté ou par l'arrière (chargeur : où l'on se tient).
   const cartons = colonnes(caisse, c => [-0.42 + (c % 3) * 0.42, 1.43, -1.68 - Math.floor(c / 3) * 0.34]);
-  const chargeur = { droite: [-1.45, -1.85], gauche: [1.45, -1.85], arriere: [0, -2.8] };
+  const chargeur = { droite: [-1.55, -1.85], gauche: [1.55, -1.85], arriere: [0, -2.8] };
   const ridelle = 0.36; // hauteur dont on soulève une pile pour passer par-dessus les ridelles du plateau (gestes.js)
   // siège : position du conducteur dans le repère de la caisse (qui coïncide avec celui du groupe au repos)
   // dims : rayons et hauteurs des roues, empattement, cercles de collision (centres le long de l'axe, rayon), point de
@@ -289,7 +418,7 @@ export function tracteur() {
     rAr: 0.78, rAv: 0.45, yAr: 0.78, yAv: 0.45, emp: 2.25, off: [1.05, -0.95], r: 1.12, pivot: new THREE.Vector3(0, 0.75, -0.35),
     zAr: -0.9, zAv: 1.35, xAr: 0.98, xAv: 0.84, assise: 1.5, plancher: 1.24,
     // emprise au sol (repère de la caisse) : des rectangles [x0, x1, z0, z1] que le personnage contourne (gestes.js)
-    emprise: [[-1.22, 1.22, -1.7, -0.1], [-0.5, 0.5, -2.25, 1.9], [-1.0, 1.0, 0.88, 1.82], [-0.68, 0.68, -2.25, -1.45]],
+    emprise: [[-1.28, 1.28, -1.77, -0.1], [-0.5, 0.5, -2.25, 2.18], [-1.0, 1.0, 0.88, 1.82], [-0.68, 0.68, -2.25, -1.45]],
   };
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62),

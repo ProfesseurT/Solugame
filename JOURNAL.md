@@ -307,3 +307,16 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Bancs d'essai : une sonde compte les images où le personnage, à pied pendant un geste, est dans l'emprise d'un véhicule (`CL.dansVehicule`, `CL.traversees`) ; vérifiée dans `parcours` et `conduite`.
 
 **Vérifié** : la sonde trouve le défaut sur l'ancien code (1 022 images en tracteur, 1 483 en van) ; 0 maintenant, en parcours comme en conduite assistée, tracteur et van ; captures du chargement (contournement par l'avant, piles par-dessus la ridelle).
+
+## 23/11/2026 · Retours de Teddy (3) : un tracteur plus réaliste
+
+**Fait (lot C)** : le tracteur refait (`engins.js`), mêmes mesures (roues, siège, volant, plateau, collisions), orange, sans marque :
+- capot façonné en sections, qui s'affine et s'abaisse vers l'avant ; calandre sombre à lamelles et cadre, phares ronds cerclés, ouïes, bande sombre et filet crème ; bouchon de réservoir, préfiltre à air, échappement vertical avec pare-chaleur et chapeau ;
+- dessous : moteur, carter, support et essieu avant, masses avant et crochet ; transmission et pont arrière ;
+- pneus agricoles : épaules arrondies, gros flancs, crampons en chevrons décalés (pointe en avant quand on avance), jante peinte en retrait à voile, moyeu et écrous ;
+- garde-boue galbés (arc, rebord, joue intérieure), feux arrière ;
+- poste de conduite : plancher strié, marchepieds et poignées, pédales, trois leviers à pommeau, planche de bord orange et ses deux compteurs, siège suspendu (soufflet, coussin, dossier incliné, accoudoirs) ;
+- arceau à deux montants derrière le siège, toit pare-soleil en porte-à-faux sur jambes de force (plus de montant avant : la montée par le marchepied gauche est dégagée), phares de travail, gyrophare, rétroviseurs ;
+- arrière : relevage trois points, protection de prise de force, plateau des cartons et ses supports, plaque.
+
+**Vérifié** : captures sous quatre angles, montée et descente image par image ; parcours et conduite assistée en tracteur, aucune traversée, aucun choc ; coût au domaine : 99 appels de dessin, 116 000 triangles ombres comprises (101 000 avant), 1,3 ms par image.
