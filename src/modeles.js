@@ -68,7 +68,48 @@ function bruitTuilable() {
 }
 export const BRUIT = bruitTuilable();
 
+// Cailloux tuilables, 256 x 256 pour 0,9 m de sol : des galets ronds de 2 à 6 cm, de taille et de teinte variées, semés
+// au hasard (un par case d'une grille, décalé), entre eux des gravillons plus petits et du sable. R : relief (0 au sable,
+// bombé au milieu des galets), G : teinte, B et A : la pente (normale en x et z, de 0 à 1), pour éclairer chaque galet de
+// biais dans le shader sans autre lecture.
+function caillouxTuilables() {
+  const N = 256, d = new Uint8Array(N * N * 4), h = new Float32Array(N * N), ton = new Float32Array(N * N);
+  const ha = (i, j, k) => { const s = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453; return s - Math.floor(s); };
+  // Une couche de cailloux : cases de C pixels (C divise N : la texture se raccorde), un caillou par case (sauf une sur
+  // « vide »), rayon de r0 à r1 cases. Chaque caillou est tiré une fois, puis peint sur les pixels qu'il couvre.
+  const couche = (C, r0, r1, vide, haut, graine) => {
+    const NC = N / C;
+    for (let my = 0; my < NC; my++) for (let mx = 0; mx < NC; mx++) {
+      if (ha(mx, my, graine) < vide) continue;
+      const px = (mx + 0.5 + 0.5 * (ha(mx, my, graine + 1) - 0.5)) * C, py = (my + 0.5 + 0.5 * (ha(mx, my, graine + 2) - 0.5)) * C;
+      const a = ha(mx, my, graine + 3) * Math.PI, ca = Math.cos(a), sa = Math.sin(a), e = 0.65 + 0.35 * ha(mx, my, graine + 4);
+      const r = C * (r0 + (r1 - r0) * ha(mx, my, graine + 5)), zh = haut * (0.75 + 0.25 * ha(mx, my, graine + 6)), tc = ha(mx, my, graine + 7);
+      for (let y = Math.floor(py - r) - 1; y <= py + r + 1; y++) for (let x = Math.floor(px - r) - 1; x <= px + r + 1; x++) {
+        const dx = x + 0.5 - px, dy = y + 0.5 - py, u = (dx * ca + dy * sa) / r, v = (-dx * sa + dy * ca) / (r * e), q = 1 - u * u - v * v;
+        if (q <= 0) continue;
+        const i = ((y + N) % N) * N + (x + N) % N, z = Math.sqrt(q) * zh; // un dôme ; de l'autre côté du bord, il revient (tuile)
+        if (z > h[i]) { h[i] = z; ton[i] = tc; }
+      }
+    }
+  };
+  ton.fill(0.35); // le sable
+  couche(8, 0.3, 0.55, 0.15, 0.55, 20);   // gravillons
+  couche(16, 0.32, 0.62, 0.3, 1, 10);     // galets
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x, gx = h[y * N + (x + 1) % N] - h[y * N + (x + N - 1) % N], gz = h[((y + 1) % N) * N + x] - h[((y + N - 1) % N) * N + x];
+    d[i * 4] = 255 * h[i]; d[i * 4 + 1] = 255 * ton[i];
+    d[i * 4 + 2] = 255 * Math.min(1, Math.max(0, 0.5 - gx * 1.2)); d[i * 4 + 3] = 255 * Math.min(1, Math.max(0, 0.5 - gz * 1.2));
+  }
+  const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.anisotropy = 4; t.needsUpdate = true;
+  return t;
+}
+export const CAILLOUX = caillouxTuilables();
+
 const V3 = v => `vec3(${v.x.toFixed(4)}, ${v.y.toFixed(4)}, ${v.z.toFixed(4)})`;
+const V2 = v => { const l = Math.hypot(v.x, v.z); return `vec2(${(v.x / l).toFixed(4)}, ${(v.z / l).toFixed(4)})`; };
 
 /* ---------------------------------------------------------------- ambiance commune à toutes les matières
    Brume qui s'éclaire du côté du soleil et s'allège en hauteur, étalonnage des couleurs dans la
@@ -149,12 +190,14 @@ vec3 cl_brume(vec3 base, vec3 d) {
 
 const GLSL = `
 uniform sampler2D tBruit;
+uniform sampler2D tCailloux;
 uniform float uTemps;
 uniform float uLoin;
 varying vec3 vPosM;
 varying float vMat;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec3 normaleMonde() { return normalize(cross(dFdx(vPosM), dFdy(vPosM))); }
+const vec2 SOLEIL_XZ = ${V2(SOLEIL)}; // vers le soleil, au sol
 // éclat moyen de chaque matière, pour la version allégée au loin
 const float KLOIN[20] = float[20](1.0, 0.92, 0.9, 0.96, 0.94, 1.0, 0.92, 0.88, 0.9, 1.0, 0.9, 1.0, 0.86, 0.96, 1.0, 1.0, 1.0, 0.9, 0.97, 0.84);
 vec3 cl_detail(vec3 col) {
@@ -195,7 +238,12 @@ vec3 cl_detail(vec3 col) {
     col *= mix(vec3(0.78, 0.9, 0.72), vec3(1.2, 1.08, 0.8), g * 0.7 + t2 * 0.3);
     k = 0.8 + 0.32 * s * f + 0.06;
   } else if (m == 5) {
-    k = 0.78 + 0.36 * texture(tBruit, uv * 3.7).b + 0.08 * g;
+    // cailloux (tCailloux : 0,9 m de côté) : chaque galet sa teinte et son relief, éclairé du côté du soleil ; le sable
+    // entre eux, plus sombre, grenu ; par-dessus, les grandes taches du sol
+    vec4 c = texture(tCailloux, uv / 0.9);
+    float relief = dot(c.ba * 2.0 - 1.0, SOLEIL_XZ), galet = smoothstep(0.0, 0.25, c.r);
+    k = mix(0.74 + 0.16 * f, 0.8 + 0.3 * c.r, galet) * (0.78 + 0.44 * c.g) * (1.0 + 0.45 * relief) * (0.92 + 0.12 * g);
+    col *= mix(vec3(0.94, 0.97, 1.04), vec3(1.07, 1.0, 0.88), c.g);
   } else if (m == 6) {
     // terre travaillée : mottes et sillons dans le sens des rangs (axe z)
     k = 0.8 + 0.24 * texture(tBruit, uv * 2.3).b + 0.06 * sin(vPosM.x * 9.0 + f * 4.0);
@@ -310,7 +358,7 @@ vec3 cl_vent(vec3 w, float t) {
 export function detailler(m, typeFixe, o = {}) {
   const attr = typeFixe === undefined, vent = o.vent, vs0 = !vent && attr && o.ventSommets;
   m.onBeforeCompile = sh => {
-    sh.uniforms.tBruit = { value: BRUIT };
+    sh.uniforms.tBruit = { value: BRUIT }; sh.uniforms.tCailloux = { value: CAILLOUX };
     sh.uniforms.uTemps = UNI.uTemps; sh.uniforms.uLoin = UNI.uLoin;
     if (vent) sh.uniforms.uVent = { value: new THREE.Vector4(...vent) };
     const poids = vent ? 'float pv = clamp((position.y - uVent.y) / (uVent.z - uVent.y), 0.0, 1.0); pv *= pv * uVent.x; float tv = uTemps * uVent.w;' + (attr ? ' pv *= step(7.5, aMat) * step(aMat, 8.5);' : '')

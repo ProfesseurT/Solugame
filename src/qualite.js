@@ -2,7 +2,7 @@
 // d'une image pendant l'accueil (rendu synchronisé), puis une résolution qui s'adapte en continu.
 // ?qualite=faible|moyen|haut force un palier (essais).
 import * as THREE from 'three';
-import { UNI, BRUIT } from './modeles.js';
+import { UNI, BRUIT, CAILLOUX } from './modeles.js';
 import { SOLEIL } from './monde.js';
 
 export const QUALITES = {
@@ -57,7 +57,7 @@ export class Paliers {
     scene.fog.near = q.brume[0]; scene.fog.far = q.brume[1];
     UNI.uLoin.value = q.loin;
     // filtrage anisotrope du bruit des matières (sol vu de biais) : jusqu'à 4 lectures de plus par texture, réservé aux appareils puissants
-    if (BRUIT.anisotropy !== q.aniso) { BRUIT.anisotropy = q.aniso; BRUIT.needsUpdate = true; }
+    for (const t of [BRUIT, CAILLOUX]) if (t.anisotropy !== q.aniso) { t.anisotropy = q.aniso; t.needsUpdate = true; }
     monde.regler(q);
     this.c.regler(q);
     this.ratioMaxEff = Math.min(this.dpr, q.ratioMax);

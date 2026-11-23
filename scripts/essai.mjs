@@ -141,6 +141,7 @@ if (scenario === 'parcours') {
     log.push(['DRM du mois dernier calculée', m.drm === 'faite']);
     clic('.vs-fin [data-a="fermer"]'); CL.step(560);
     log.push(['carte de fin', !q('#fin').hidden]);
+    log.push(['les clients ont rangé leurs cartons et sont rentrés dans leur boutique', CL.clients.liste.length === 5 && CL.clients.liste.every(f => f.etat === 'dedans' && !f.p.m.groupe.visible) && m.deposes.every(p => !p.visible)]);
     log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     return log;
   }, process.env.VEHICULE || 'tracteur').catch(e => [['scénario interrompu : ' + e.message, false]]);

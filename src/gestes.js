@@ -1,4 +1,4 @@
-// Gestes du personnage : de courtes séquences qui se jouent toutes seules, étape par étape. Monter dans le tracteur ou le
+// Gestes du personnage (et des clients : clients.js) : de courtes séquences qui se jouent toutes seules, étape par étape. Monter dans le tracteur ou le
 // van (on va à la portière ou au marchepied, on ouvre, on s'installe, on referme), en descendre ; charger les cartons de
 // la palette du chai dans le véhicule ; les décharger devant un client. Pendant un geste, le joueur ne commande plus le
 // personnage et le véhicule reste à l'arrêt (main.js) ; la caméra cadre la scène (cadre).
@@ -55,6 +55,7 @@ function coupe(a, b, r) {
   return t1 - t0 > 1e-4;
 }
 const MARGE = 0.24, TOUR = 0.62; // le corps contre l'emprise ; distance des coins du détour
+const SANS_MURS = { nx: 0, nz: 0, resoudre: () => false, rangs: () => false }; // passer une porte : rien n'arrête
 // point du monde dans le repère du véhicule, et l'inverse
 function versLocal(v, p) { const h = v.p.h, c = Math.cos(h), s = Math.sin(h), dx = p.x - v.p.pos.x, dz = p.z - v.p.pos.z; return { x: dx * c - dz * s, z: dx * s + dz * c }; }
 function depuisLocal(v, l) { const h = v.p.h, c = Math.cos(h), s = Math.sin(h); return { x: v.p.pos.x + l.x * c + l.z * s, z: v.p.pos.z - l.x * s + l.z * c }; }
@@ -102,10 +103,11 @@ export function pileCartons(n) {
 function montrer(pile, n) { pile.count = n; pile.userData.n = n; pile.computeBoundingSphere(); }
 
 export class Gestes {
-  // c : { jeu, scene, col, porte : la porte du bureau du chai (monde.js) }
+  // c : { jeu, scene, col, porte : la porte du bureau du chai (monde.js), acteur : celui qui fait les gestes (un client,
+  // clients.js ; par défaut le personnage du joueur) }
   constructor(c) { this.c = c; this.g = null; this.cible = { x: 0, z: 0 }; this.cadre = null; this.roule = false; }
   get actif() { return this.g !== null; }
-  get j() { return this.c.jeu.joueur; }
+  get j() { return this.c.acteur || this.c.jeu.joueur; }
 
   // enchaîne les étapes : { duree, debut(), maj(dt, t, u, T) } ; sans durée, l'étape dure tant que maj ne rend pas vrai ;
   // { action() } : fait tout de suite, sans attendre
@@ -462,6 +464,25 @@ export class Gestes {
     });
     if (v) etapes.push(...this.etapesMonter(v, installe));
     this.lancer(etapes);
+  }
+
+  /* ------------------------------------------------------------ entrer dans une boutique, en ressortir (clients.js) */
+  // porte : { x, z, rot } devant le seuil, la façade tournée de rot. On va devant la porte, on la passe (sans buter sur le
+  // mur : on traverse la vitre peinte, qui le cache peu à peu) et l'on disparaît dedans, avec ce qu'on porte
+  entrer(porte) {
+    const dedans = { x: porte.x - Math.sin(porte.rot) * 1.1, z: porte.z - Math.cos(porte.rot) * 1.1 };
+    return [...this.allerA(() => porte, () => porte.rot + Math.PI), {
+      maj: (dt, t, u, T) => {
+        const j = this.j, dx = dedans.x - j.pos.x, dz = dedans.z - j.pos.z, d = Math.hypot(dx, dz);
+        j.update(dt, dx, dz, 1, false, SANS_MURS, t, Math.min(1.3, 0.3 + d * 2));
+        return d < 0.15 || T > 3;
+      },
+    }, { action: () => { const j = this.j; j.m.groupe.visible = false; if (j.m.pile) j.m.pile.visible = false; j.porte = null; j.v = 0; } }];
+  }
+  // ressortir (après un voyage à l'intérieur), sur le seuil, tourné vers la rue ; attente : le temps passé dedans
+  sortir(porte, attente) {
+    return [{ duree: attente, maj: () => {} },
+      { action: () => { const j = this.j; j.placer(porte.x, porte.z, porte.rot); j.m.groupe.visible = true; } }];
   }
 
   /* ------------------------------------------------------------ le bureau du chai (monde.js : la pièce, sa porte) */

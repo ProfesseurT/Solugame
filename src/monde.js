@@ -158,6 +158,7 @@ export function construireMonde(scene, col, opts) {
   const plan = []; // dessin de la mini-carte
   const rect = (x0, z0, x1, z1, c) => plan.push({ t: 'r', x0, z0, x1, z1, c });
   const bati = new Grille(), proches = new Grille(), contact = new Contact(), atlas = new Atlas(), porteurs = [], vitresB = [];
+  const portes = {}; // la porte de chaque client (lieux.portes)
 
   /* ------------------------------------------------------------ ciel
      Dôme dessiné après le décor (seuls les pixels restés vides sont calculés). Son horizon a
@@ -530,6 +531,7 @@ void main() {
     for (const s of [-1, 1]) L.push(B(0.06, 1.45, 0.07, C, px + s * (pw / 2 - 0.03), 1.58, z0 + 0.22));
     L.push(B(0.04, 0.22, 0.05, '#c9a55a', px - pw / 2 + 0.14, 1.12, z0 + 0.27));
     V.push(B(pw, 1.85, 0.01, VERRE, px, 1.78, z0 + 0.21));
+    o.porte = facade(o, px, 0.35); // devant le seuil (les clients y rentrent : clients.js)
     // lanternes de part et d'autre du bandeau
     for (const x of [X0, X1]) L.push(B(0.05, 0.05, 0.28, '#2b2b30', x, 3.72, z0 + 0.3), B(0.18, 0.26, 0.18, '#2b2b30', x, 3.6, z0 + 0.46), B(0.13, 0.18, 0.13, LUEUR, x, 3.58, z0 + 0.46));
     // l'intérieur peint, éclairé : derrière la vitrine et derrière la porte
@@ -952,6 +954,7 @@ void main() {
     rnd = hasard(4242);
     // l'auberge, façade vers la placette (vitrine, store bordeaux, enseigne) ; terrasse
     const au = maison({ x: -44, z: 131, w: 14, d: 8, h: 5.8, rot: -Math.PI / 2, volets: '#7a8f6a', vitrine: '#5a6b2f', boutique: 'resto', banne: '#7d2333', porteC: '#4a3324' });
+    portes.auberge = au.porte;
     enseigne('AUBERGE DU MOULIN', facade(au, -1.96, 0.37), 3.05, 5.2, 0.54, '#5a6b2f', '#f1e2c4');
     for (const z of [126.5, 129.5]) {
       bati.push(C(0.42, 0.42, 0.04, 10, '#efe7d6', -50.6, 0.74, z), C(0.04, 0.04, 0.72, 5, '#2b2b30', -50.6, 0.36, z), C(0.2, 0.2, 0.02, 8, '#2b2b30', -50.6, 0.01, z));
@@ -1049,6 +1052,8 @@ void main() {
   for (const [x, w, d, h, t] of nord) {
     const resto = t === 'resto';
     const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t === 'boul' ? '#6b2a2a' : t ? '#2f4a6b' : null, boutique: resto ? 'resto' : t === 'boul' ? 'boulangerie' : t, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
+    if (t === 'epicerie') portes.epicerie = o.porte;
+    if (resto) portes.treille = o.porte;
     if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.37), 3.05, 4.6, 0.54, '#efe0b4', '#6b3d1f');
     if (resto) enseigne('RESTAURANT LA TREILLE', facade(o, -w * 0.14, 0.37), 3.05, 5.6, 0.54, '#2f5d50', '#f3e7c9');
     if (t === 'epicerie') {
@@ -1089,10 +1094,12 @@ void main() {
   // la place : cave, bar, mairie, église
   const cave = maison({ x: 68, z: -46, w: 9, d: 8, h: 6.5, rot: Math.PI / 2, volets: '#8e2a3b', vitrine: '#6e1f2e', boutique: 'cave', banne: '#8e2a3b', porteC: '#6e1f2e' });
   enseigne('CAVE DU PRESSOIR', facade(cave, -9 * 0.14, 0.37), 3.05, 4.4, 0.54, '#7a2233', '#f5e6c8');
+  portes.cave = cave.porte;
   maison({ x: 68, z: -36, w: 8, d: 8, h: 7, rot: Math.PI / 2, volets: pick(VOLETS) });
   maison({ x: 68, z: -56, w: 8, d: 8, h: 6.2, rot: Math.PI / 2, volets: pick(VOLETS) });
   const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', boutique: 'bar', banne: '#1f3b4d' });
   enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.37), 3.05, 4.4, 0.54, '#1f3b4d', '#f2d488');
+  portes.bar = bar.porte;
   maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
   const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
   enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
@@ -1364,6 +1371,41 @@ void main() {
     }
   }
 
+  // Cailloux en relief sur la cour et le chemin du domaine (le gravier est peint dans le shader : tCailloux) : de petits
+  // octaèdres aplatis, en instances rangées par cases de 48 m, comptés et affichés de près comme les herbes. Leur
+  // propre tirage au sort : le reste du monde ne bouge pas.
+  {
+    const r = hasard(97), gC = new THREE.OctahedronGeometry(1, 0), matC = matiere(T.gravier, null, false);
+    const TEINTES = ['#d4c7a8', '#e2d8c0', '#bfb092', '#ece4d0', '#a99c84', '#d8c49c'].map(h => new THREE.Color(h));
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), pv = new THREE.Vector3(), c = new THREE.Color();
+    const cases = new Map();
+    const semer = (x0, z0, x1, z1, n) => {
+      for (let i = 0; i < n; i++) {
+        const x = x0 + r() * (x1 - x0), z = z0 + r() * (z1 - z0);
+        if (col.dedans(x, z)) continue;
+        const k = Math.floor(x / 48) + ',' + Math.floor(z / 48);
+        if (!cases.has(k)) cases.set(k, []);
+        cases.get(k).push(x, z);
+      }
+    };
+    semer(-115, -72, -62, -34, 1700); // la cour
+    semer(-91.8, -34, -88.2, 6.5, 110); // le chemin du domaine
+    for (const l of cases.values()) {
+      const n = l.length / 2, im = new THREE.InstancedMesh(gC, matC, n);
+      let sx = 0, sz = 0;
+      for (let i = 0; i < n; i++) {
+        const x = l[i * 2], z = l[i * 2 + 1], t = 0.02 + 0.045 * r() * r();
+        sx += x; sz += z;
+        q.setFromEuler(e.set((r() - 0.5) * 0.5, r() * 6.28, (r() - 0.5) * 0.5));
+        m.compose(pv.set(x, 0.028, z), q, s.set(t * (0.8 + 0.6 * r()), t * (0.45 + 0.3 * r()), t * (0.8 + 0.6 * r())));
+        im.setMatrixAt(i, m); im.setColorAt(i, c.copy(TEINTES[Math.floor(r() * TEINTES.length)]));
+      }
+      im.receiveShadow = true; im.renderOrder = ORDRE.sol; im.name = 'cailloux'; im.computeBoundingSphere();
+      scene.add(im);
+      herbes.push({ im, n, x: sx / n, z: sz / n });
+    }
+  }
+
   /* ------------------------------------------------------------ mini-carte */
   const carte = document.createElement('canvas');
   carte.width = carte.height = 400 * ECH;
@@ -1435,6 +1477,7 @@ void main() {
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
+  lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
 
   /* ------------------------------------------------------------ réglages selon la qualité, mise à jour par image */

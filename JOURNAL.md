@@ -554,3 +554,17 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Sans allocation de plus : les pieds et les réglages de la foulée vivent dans des tableaux de nombres, les petits calculs sont faits sur place (sinon V8 met en boîte chaque nombre passé ou rendu : 81 octets par pose, ramenés à 9,5, contre 11 avant). Même coût : 0,045 ms pour 14 personnages.
 
 **Vérifié** : à la marche, la semelle est au sol 62 % du cycle, immobile pendant l'appui (pied à plat, puis pivot sur la pointe), atterrissage et décollage sans saut ; bassin 0,90 à 0,95 m. Bandes de profil et de face (marche, petite course, course), avant et après ; planches de l'arrêt et du demi-tour ; captures en jeu (le personnage qui marche et qui court, les passants de la place) ; `npm run verifie` ; conduite assistée en tracteur et en van ; banc des personnages en jeu (recul contre le mur, saut de côté, client qui se tourne).
+
+## 23/11/2026 · Retours de Teddy (12) : les clients rentrent, des gens dans la rue, la cour en cailloux
+
+**Demandes** : « quand les missions sont terminées, il faut que les mecs rangent les cartons et rentrent dans leur shop » ; « ajoute des gens dans la rue aussi » ; « le sol du domaine doit être en cailloux et pas tout lisse ».
+
+**Fait** :
+- `clients.js` (nouveau) : les cinq clients devant leur boutique. Leur affaire faite (commande livrée et bon signé, chèque donné, visite notée), 2,5 s plus tard ils vont devant chaque pile posée à leurs pieds, la soulèvent, la portent jusqu'à leur porte et rentrent (la vitre peinte de l'intérieur les cache peu à peu) ; ils ressortent chercher la pile suivante, puis restent dedans. Mêmes gestes que le personnage (`gestes.js` : un `acteur` autre que le joueur ; nouvelles étapes `entrer` et `sortir`). La porte de chaque boutique est notée par `devanture` (`lieux.portes`). Les piles livrées savent à qui elles sont (`userData.client`).
+- Huit passants de plus : trois sur chaque trottoir de la départementale dans le bourg, deux dans la rue de la place ; ils vont et viennent, s'arrêtent, s'écartent du véhicule comme les autres. Leur propre tirage au sort : ils n'ont rien changé aux autres (la tournée en conduite assistée dure toujours 248 s en tracteur, 239 s en van).
+- La cour et le chemin du domaine en cailloux : une texture tuilable (`CAILLOUX`, modeles.js, 256 px pour 0,9 m) de galets ronds de 2 à 6 cm, de tailles et de teintes variées, entre eux des gravillons et du sable ; elle porte aussi la pente de chaque galet, que le shader éclaire du côté du soleil (une seule lecture de texture). Calculée au démarrage en 8 ms. Une première version (pavage de Voronoï) faisait une calade, pas une cour de gravier. Par-dessus, 1 800 petits cailloux en relief, en instances, affichés de près et dosés selon le palier comme les herbes hautes.
+- Le banc d'allègement de three.js (`essai-allege.mjs`) avait un parcours périmé depuis le chèque au comptoir (il s'interrompait déjà avant ce lot) : réparé.
+
+**Coût** : +0,1 à +0,3 ms par image sur ordinateur ; domaine 129 → 134 appels de dessin, 158 000 → 170 000 triangles ; bourg 78 → 88 appels (les passants), 175 000 → 206 000 triangles.
+
+**Vérifié** : le client de la cave filmé (première pile rentrée, il ressort, la seconde) ; captures de la cour (près, au ras du sol, sur téléphone) et de la rue ; `npm run verifie` (nouvelle étape du parcours : les cinq clients rentrés, plus aucune pile dehors) ; conduite assistée en tracteur et en van ; banc des personnages en jeu ; banc d'allègement : équivalent.

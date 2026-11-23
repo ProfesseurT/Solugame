@@ -106,7 +106,8 @@ async function relever(fichier, palier) {
       CL.step(400); T.action('cmd:bar'); saisir(2); clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]'); clic('[data-a="prospect"]'); T.fermer(); CL.step(1500);
       { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.teleporter(-83.4, -47.4, 2.83); CL.step(30); CL.finirGeste(4000); CL.step(5); CL.bench(1);
       T.ouvrir('tournee'); clic('[data-a="tournee"]');
-      { const a = CL.jeu.lieux.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(930); CL.bench(1); }
+      // à l'épicerie, on descend chercher le chèque au comptoir, puis on remonte (le geste se joue jusqu'au bout)
+      { const a = CL.jeu.lieux.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30); for (let n = 0; n < 3000 && CL.jeu.gestes.actif; n++) CL.step(1); CL.step(5); CL.bench(1); }
       for (const id of ['cave', 'bar', 'treille']) {
         const a = CL.jeu.lieux.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); CL.finirGeste(4000); CL.step(10); CL.bench(1);
         T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10); CL.finirGeste(2000);

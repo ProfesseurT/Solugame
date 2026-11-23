@@ -45,7 +45,7 @@ export class Mission {
     this.tour = [];     // la tournée lancée : les arrêts qui restent, dans l'ordre (le premier est le prochain)
     this.places = {};   // genre du véhicule -> les 18 cartons qu'il peut porter (colonne i / 3) -> id du client
     this.palette = [];  // les piles de la palette du chai (main.js) : { client, n, groupe }, montrées une fois signées
-    this.deposes = [];  // les piles posées devant les clients
+    this.deposes = [];  // les piles posées devant les clients (userData.client : à qui ; ils les rentrent ensuite : clients.js)
     this.blPret = false; // les cartons sont posés : le client peut signer le bon de livraison
     this.itin = null; this.tItin = 0; // l'itinéraire du moment (route), et quand vérifier qu'on ne s'en est pas écarté
     this.objAff = null; // l'objectif affiché
@@ -288,7 +288,7 @@ export class Mission {
           this.attenteBL = c.id; this.blPret = false;
           hud.vider();
           hud.dire(DIALOGUES.arrivee[id]);
-          j.decharger(f, this.colonnesDe(c.id), x => this.deposes.push(x), () => {
+          j.decharger(f, this.colonnesDe(c.id), x => { x.userData.client = c.id; this.deposes.push(x); }, () => {
             this.blPret = true;
             if (this.attenteBL === c.id && !j.tel.ouvert) j.tel.ouvrir('bl');
           });

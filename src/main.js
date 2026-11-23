@@ -24,6 +24,7 @@ import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
 import { Chai } from './chai.js';
 import { Verres } from './verres.js';
+import { Clients } from './clients.js';
 import { Reseau, longueur } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -136,15 +137,23 @@ const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373']
 const CHEV = ['#2b1d0e', '#6b4423', '#b55239', '#d9c08c', '#c9c9c9', '#151515'];
 const HAUTS = ['#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#7f8c8d', '#e84393', '#34495e', '#f1ece2'];
 const BAS = ['#2c3e50', '#34495e', '#5d4037', '#455a64', '#1e272e', '#6d4c41', '#8a7f6a'];
-const unPassant = extra => perso({
-  peau: pick(PEAUX), cheveux: pick(CHEV), coiffure: pick(['court', 'court', 'chauve', 'chignon', 'queue']), barbe: rnd() < 0.25,
-  haut: pick(HAUTS), bas: pick(BAS), chapeau: rnd() < 0.2 ? 'beret' : rnd() < 0.12 ? 'casquette' : null, chapeauC: pick(['#1f2a44', '#3b3b3b', '#7a2233']),
-  lunettes: rnd() < 0.2, ...extra,
-});
+// un passant tiré au sort (r : le tirage au sort, celui du jeu par défaut)
+const unPassant = (extra, r = rnd) => {
+  const pk = a => a[Math.floor(r() * a.length)];
+  return perso({
+    peau: pk(PEAUX), cheveux: pk(CHEV), coiffure: pk(['court', 'court', 'chauve', 'chignon', 'queue']), barbe: r() < 0.25,
+    haut: pk(HAUTS), bas: pk(BAS), chapeau: r() < 0.2 ? 'beret' : r() < 0.12 ? 'casquette' : null, chapeauC: pk(['#1f2a44', '#3b3b3b', '#7a2233']),
+    lunettes: r() < 0.2, ...extra,
+  });
+};
 // Les habitants du bourg (passants, clients, figurants assis) ne se voient pas depuis l'accueil : ils sont créés juste
 // après la première image 3D, ou au plus tard au lancement de la partie. Le bouton Jouer s'allume d'autant plus tôt.
-// Même ordre de création qu'avant (mêmes tirages au sort, mêmes tenues).
-const passants = [], figurants = [], assis = [];
+// Même ordre de création qu'avant (mêmes tirages au sort, mêmes tenues) ; les gens de la rue, ajoutés ensuite, ont leur
+// propre tirage au sort (ils ne changent rien aux autres).
+const passants = [], assis = [];
+// les trottoirs de la départementale dans le bourg, la rue de la place : les gens de la rue y vont et viennent
+const RUES = [[28, 3.9, 152, 5.9], [28, 3.9, 152, 5.9], [28, 3.9, 152, 5.9], [28, 14.2, 152, 16.6], [28, 14.2, 152, 16.6], [28, 14.2, 152, 16.6],
+  [93.2, -27, 96.8, 1], [93.2, -27, 96.8, 1]].map(([x0, z0, x1, z1]) => ({ x0, z0, x1, z1 }));
 let peuple = false, peuplePrevu = false;
 // les clients, devant chez eux (ils se tournent vers vous quand vous approchez), et des figurants assis
 const CLIENTS_3D = {
@@ -156,7 +165,6 @@ const CLIENTS_3D = {
   // le patron de l'Auberge du Moulin, le prospect, en veste de cuisine
   auberge: { peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
 };
-const VISAGE = new THREE.Vector3();
 function peupler() {
   if (peuple) return;
   peuple = true;
@@ -169,7 +177,7 @@ function peupler() {
   const client3D = id => {
     const p = new Pieton(perso(CLIENTS_3D[id])), l = L.figurants[id];
     scene.add(p.m.groupe); p.placer(l.x, l.z, l.h);
-    figurants.push({ p, l, id });
+    clients.ajouter(p, l, id);
   };
   for (const id of ['cave', 'bar', 'treille']) client3D(id);
   for (const s of [L.banc, ...L.terrasse.slice(0, 2)]) {
@@ -181,6 +189,14 @@ function peupler() {
   }
   client3D('epicerie'); // créés en derniers : les autres gardent leurs tirages au sort (tenues)
   client3D('auberge');
+  // les gens de la rue
+  const rr = hasard(31);
+  for (const zone of RUES) {
+    const p = new Passant(unPassant({}, rr), zone, rr);
+    scene.add(p.p.m.groupe);
+    p.bulle = 0; p.cri = hud.etiquette('Hé !', 'bulle'); p.p.etq = p.cri;
+    passants.push(p);
+  }
 }
 // les modèles de toutes les voitures, garées et qui roulent (leur ombre de contact : majTaches)
 const voituresM = [];
@@ -267,6 +283,7 @@ const jeu = {
 };
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
+const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
 const pc = new PC(jeu);
 const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
 // la palette des commandes du jour dans le chai : les piles prévues par la mission, en carré (mission.js les montre signées)
@@ -405,8 +422,8 @@ function horsDesVoitures() {
 /* ------------------------------------------------------------------ servir un verre de vin (verres.js)
    les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js) */
 const verres = new Verres({ jeu, hud, mission, hasard: rnd,
-  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of figurants) if (x.p.servable) f(x.p, 2.4); } });
-jeu.prospectServable = on => { for (const x of figurants) if (x.id === 'auberge') x.p.servable = on; };
+  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of clients.liste) if (x.p.servable) f(x.p, 2.4); } });
+jeu.prospectServable = on => { for (const x of clients.liste) if (x.id === 'auberge') x.p.servable = on; };
 
 // les actions (touche E, téléphone, son, radio, échap) et les touchers courts sur l'écran
 function lireEntrees() {
@@ -474,8 +491,9 @@ function marcher(dtm) {
   if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
 }
 
-// La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients qui se tournent vers vous et font
-// signe, les figurants assis, les verres qu'on boit, les voitures de la départementale
+// La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients (ils se tournent vers vous et font
+// signe ; leur affaire faite, ils rangent leurs cartons et rentrent : clients.js), les figurants assis, les verres qu'on
+// boit, les voitures de la départementale
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
   const danger = jeu.auVolant ? DANGER : null;
@@ -484,12 +502,7 @@ function bourg(dtm, ego) {
     horsDesVehicules(p.p.pos, 0.34);
     if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
   }
-  for (const { p, l } of figurants) {
-    const pres = Math.hypot(p.pos.x - ego.x, p.pos.z - ego.z) < 12;
-    p.h = pres ? Math.atan2(ego.x - p.pos.x, ego.z - p.pos.z) : l.h;
-    p.salut = pres; p.regard = pres ? VISAGE.set(ego.x, jeu.auVolant ? 2.4 : 1.6, ego.z) : null;
-    p.sync(dtm, temps);
-  }
+  clients.maj(dtm, temps, ego, jeu.auVolant);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   const obstacles = OBSTACLES; obstacles[0] = ego; obstacles[1] = vTracteur.p.pos; obstacles[2] = vVan.p.pos;
@@ -604,7 +617,7 @@ function majTaches() {
   if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
   for (const v of VEHICULES) t.poser(v.m.groupe.position.x, v.m.groupe.position.z, v.genre === 'van' ? 1.15 : 1.2, v.genre === 'van' ? 2.5 : 2.1, v.m.groupe.rotation.y);
   for (const p of passants) { t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0); ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z); }
-  for (const f of figurants) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
+  for (const f of clients.liste) if (clients.dehors(f)) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
   for (const p of assis) { t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0); ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z); }
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
   t.fin();
@@ -644,7 +657,7 @@ function boucle(maintenant) {
   if (etat === 'accueil') {
     cam.orbite(temps, joueur.pos.x, joueur.pos.z, largeur > hauteurE * 1.15);
     joueur.sync(dt, temps);
-    for (const { p } of figurants) p.sync(dt, temps);
+    for (const { p } of clients.liste) p.sync(dt, temps);
   } else miseAJour(dt);
   particules.maj(dt);
   if (monde.nuages) monde.nuages.rotation.y += dt * 0.004; // les nuages dérivent
@@ -703,7 +716,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, ctrl, camera, renderer, scene, monde, mesures,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures,
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },
   passants() { return passants.map(p => p.p); },
