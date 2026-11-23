@@ -8,7 +8,7 @@
 
 import { eur } from './outils.js';
 
-export const VERSION = 'Démo 0.9';
+export const VERSION = 'Démo 1.0';
 
 // Prévente du registre phyto : 4,99 € HT/mois jusqu'au 31/12/2026, ensuite 9,99 € HT/mois.
 export const PREVENTE_FIN = Date.UTC(2026, 11, 31, 23, 0, 0); // 1er janvier 2027, 0 h, heure de Paris

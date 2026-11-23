@@ -41,7 +41,7 @@ export class Traitement {
     this.ouvert = 0;             // les rampes dépliées, de 0 à 1
     this.pulverise = false;      // les rampes traitent (dans les rangs d'une parcelle du jour, en roulant)
     this.guidage = false;        // le tracteur est dans une parcelle du jour : le guidage peut suivre les passages
-    this.tEnvoi = 0; this.tSon = 0; this.guideDit = false; this.dit = false;
+    this.tEnvoi = 0; this.tSon = 0; this.guideDit = false; this.dit = false; this.tObj = 0;
   }
   get actif() { return this.etape !== 'avant'; }
   get jour() { return this.parcelles.filter(p => p.jour); }
@@ -200,6 +200,7 @@ export class Traitement {
         const d = j.distance(j.lieux.aire);
         if (j.auVolant && j.veh.genre !== 'tracteur' && d < 8) this.aider(TX.dialogues.pasTracteur, 'aire');
         if (this.enTracteur && d < 3.6 && Math.abs(j.tr.v) < 1.2 && !j.gestes.actif && !j.tel.ouvert) this.remplir();
+        if (this.enTracteur && this.dans(2)) this.aider(TX.dialogues.pasPrete, 'parcelle'); // dans les vignes sans bouillie
         break;
       }
       case 'traiter': this.traiter(dt); break;
@@ -208,8 +209,12 @@ export class Traitement {
         break;
     }
     this.rampes(dt);
-    const o = this.objectif;
-    if (o && o !== this.objAff) { this.objAff = o; hud.objectif(o); }
+    // l'objectif : recalculé dix fois par seconde (il fabrique des textes), tout de suite après un changement d'étape
+    if ((this.tObj -= dt) <= 0 || this.t === dt) {
+      this.tObj = 0.1;
+      const o = this.objectif;
+      if (o && o !== this.objAff) { this.objAff = o; hud.objectif(o); }
+    }
   }
 
   // À l'aire : on descend, on remplit la cuve (eau, bouillie bordelaise, soufre mouillable), on remonte
@@ -238,8 +243,9 @@ export class Traitement {
       else if (this.aTraiter.some(x => x.reseau)) hud.dire(TX.dialogues.parcelleFinie(p.nom));
       else hud.dire(TX.dialogues.noter);
     }
-    // arrivé dans une parcelle du jour avec la bouillie : le guidage
+    // arrivé dans une parcelle du jour avec la bouillie : le guidage ; avec un autre véhicule : il faut le tracteur
     if (this.guidage && !this.guideDit) { this.guideDit = true; hud.dire(TX.dialogues.guidage(j.tactile)); }
+    if (j.auVolant && j.veh.genre !== 'tracteur' && this.dans(2)) this.aider(TX.dialogues.pasTracteur, 'parcelle');
     // au bout des passages sans avoir tout traité (on en a sauté, à la main), ou loin d'eux : on refait le plan depuis ici
     if (this.itin && this.itin.p && j.auVolant && (this.tItin -= dt) <= 0) {
       this.tItin = 0.5;

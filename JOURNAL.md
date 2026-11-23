@@ -658,3 +658,20 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Corrigé en route** : une méthode `cible()` de la saisie écrasait le getter `cible` de la balise (itinéraire impossible) ; le guidage prenait le passage le plus proche du tracteur et sautait les premiers (la serpentine part maintenant du tracteur, et le plan se refait au bout) ; « Enregistrer » enregistrait sans revérifier.
 
 **Vérifié** : nouveau banc `traitement` (13 étapes, dans `npm run verifie`) : réveil, message, bouillie, les trois parcelles au guidage (75, 87 et 97 s), refus de l'appli, enregistrement, sans réseau puis envoyé, carte de fin. Images : le printemps, le pulvérisateur à l'aire et en passe, les rangs traités, l'appli dans le téléphone. Banc d'allègement : équivalent.
+
+## 24/11/2026 · Audit et optimisation après la mission 2
+
+**Demande** : « Tu vas t'auditer et améliorer le jeu quand tu auras fini, pour toujours optimiser encore plus le rendu et la taille, les ressources. Optimiser est le maître mot. »
+
+**Mesuré d'abord** (Chrome sans fenêtre sur Mac ; et processeur ralenti 4 fois, comme un téléphone modeste) :
+- Poids : 744 Ko, 246 Ko compressé. Notre code fait 388 Ko minifié, three.js allégé 325 Ko. Il ne reste que 4 Ko de blancs et de commentaires dans les chaînes (HTML des écrans, GLSL) : le reste est du vrai code (le monde, les véhicules, les personnages, construits en code, sans aucun fichier à télécharger). Rien d'utile à gagner sans risque.
+- Démarrage (ralenti 4 fois) : accueil affiché à 176 ms, image 3D prête à 1,26 s. Au profileur, les plus gros postes de notre code : l'indexation des géométries fusionnées (62 ms sur Mac, déjà au plus serré : 83 ns par sommet), la construction des personnages (4 ms chacun, l'atlas une fois 25 ms ; la foule se construit pendant l'accueil), la construction du monde.
+- Une image : la logique du jeu coûte 0,1 ms ; tout le reste est le rendu (2 ms de préparation, 4 ms de carte graphique, ralenti 4 fois). Mémoire : 7,6 Mo de géométries, 282 000 sommets ; textures 16,6 Mo à l'accueil (la carte d'ombre 2048 en palier haut, l'essentiel).
+
+**Corrigé ou allégé** :
+- Les passants, les clients et les figurants plus loin que 100, 140 ou 200 m (selon le palier) ne sont plus dessinés, ni leur tache : à cette distance, une dizaine de pixels dans la brume. Au palier moyen des téléphones, vue de la route vers le bourg : 164 500 → 151 800 triangles, 79 → 75 appels de dessin, 0,83 → 0,69 ms par image.
+- Mission 2 : pendant la pulvérisation accélérée, le personnage, les effets et le son étaient recalculés trois fois par image (un par pas de physique) : une seule fois maintenant. Une travée traitée envoyait tout le tampon de couleurs de son bloc et de sa parcelle à la carte graphique : seule sa couleur part. L'objectif, qui fabrique des textes, se recalcule dix fois par seconde au lieu de soixante.
+- Mission 2 : deux aides manquaient (dans une parcelle en van, ou en tracteur avant d'avoir préparé la bouillie).
+- L'accueil propose aussi la mission 2 directement (la tournée prend un bon quart d'heure ; la mission 2 montre le Registre phyto). Version : Démo 1.0.
+
+**Vérifié** : `npm run verifie` (9 bancs, dont la mission 2), conduite assistée de la tournée (248 s, aucun choc), comparaison avant et après au palier moyen.

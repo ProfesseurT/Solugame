@@ -585,7 +585,9 @@ function lireEntrees() {
 // réglée, arrêt à destination : pilote.js). Glisser sur le côté : on tourne soi-même ; vers le bas : freiner, puis
 // reculer ; vers le bas et sur le côté, lancé : frein à main (dérapage) ; vers le haut : un peu plus vite ; doigt levé :
 // on s'arrête en douceur. Au clavier et à la manette : à la main.
-function conduire(dt, dtm) {
+// (dernier : faux pour les pas de conduite en plus d'une image accélérée : le personnage, les effets et le son ne se
+// calculent qu'une fois par image)
+function conduire(dt, dtm, dernier = true) {
   let gaz = 0, braq = 0, fm = false;
   const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
   const M = enCours();
@@ -613,6 +615,7 @@ function conduire(dt, dtm) {
   if (ctrl.fm && libre) fm = true;
   tr.update(dtm, gaz, braq, col, voitures, temps, fm);
   if (traitement.actif) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
+  if (!dernier) return;
   joueur.volant = tr.braq; // les mains suivent la direction
   joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
   if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
@@ -813,7 +816,7 @@ function miseAJour(dt) {
     // en traitant les rangs (mission2.js), doigt posé ou touche enfoncée : la scène va trois fois plus vite (trois pas de
     // conduite par image)
     const k = traitement.pulverise && (ctrl.id !== null || ctrl.ky < 0) ? 3 : 1;
-    for (let i = 0; i < k; i++) conduire(dt, dtm);
+    for (let i = 0; i < k; i++) conduire(dt, dtm, i === k - 1);
   }
   else marcher(dtm);
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
@@ -866,16 +869,23 @@ function placerLumiere(x, z, y = 0) {
 // Un personnage à plus de 32 m de la caméra n'est plus dessiné dans la carte d'ombre (ses os, deux fois par image) : de
 // si loin, sa tache de contact suffit
 const OMBRE_PERSO2 = 32 * 32;
-const ombrePerso = (m, x, z) => { const dx = x - camera.position.x, dz = z - camera.position.z; m.maillage.castShadow = dx * dx + dz * dz < OMBRE_PERSO2; };
+// Plus loin que q.persos (100 à 200 m selon le palier : une dizaine de pixels, déjà dans la brume), il n'est plus dessiné
+// du tout, ni sa tache. Rend vrai s'il l'est.
+const ombrePerso = (m, x, z) => {
+  const dx = x - camera.position.x, dz = z - camera.position.z, d2 = dx * dx + dz * dz, L = paliers.q.persos, vu = d2 < L * L;
+  m.maillage.castShadow = d2 < OMBRE_PERSO2;
+  if (m.maillage.visible !== vu) m.maillage.visible = vu;
+  return vu;
+};
 const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05] }; // demi-largeur, demi-longueur
 function majTaches() {
   const t = taches;
   t.debut();
   if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0, joueur.pos.y);
   for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre], g = v.m.groupe; t.poser(g.position.x, g.position.z, lx, lz, 0, g.position.y, g.quaternion); }
-  for (const p of passants) { t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0); ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z); }
-  for (const f of clients.liste) if (clients.dehors(f)) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
-  for (const p of assis) { t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0); ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z); }
+  for (const p of passants) if (ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z)) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0, p.p.pos.y);
+  for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
+  for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
   t.fin();
 }
@@ -949,7 +959,8 @@ for (const b of document.querySelectorAll('.perso')) {
   b.setAttribute('aria-pressed', String(b.dataset.h === choixHeros));
   b.addEventListener('click', () => jeu.changerHeros(b.dataset.h));
 }
-$('jouer').addEventListener('click', () => {
+// Jouer : la mission 1 ; ou directement la mission 2 (l'accueil propose les deux : la tournée prend un bon quart d'heure)
+function lancer(m2) {
   peupler();
   ctrl.actions.length = 0; ctrl.touchers.length = 0; // rien de ce qui a été tapé sur l'accueil n'est rejoué
   son.demarrer();
@@ -957,16 +968,19 @@ $('jouer').addEventListener('click', () => {
   $('accueil').hidden = true; $('hud').hidden = false;
   etat = 'jeu';
   cam.yaw = joueur.h; cam.pret = false;
-  mission.demarrer();
+  if (m2) { printemps(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, en mai, 7 h
+  else mission.demarrer();
   dernier = performance.now();
-});
+}
+$('jouer').addEventListener('click', () => lancer(false));
+$('jouer2').addEventListener('click', () => lancer(true));
 $('poche').addEventListener('click', () => { if (etat === 'jeu' && $('fin').hidden && !pc.ouvert) { son.jouer('tap'); tel.basculer(); } });
 // (la carte de fin se remplit quand elle s'affiche : montrerFin)
 $('continuer').addEventListener('click', () => { $('fin').hidden = true; jeu.finVue = false; ctrl.actions.length = 0; });
 
 document.addEventListener('gesturestart', e => e.preventDefault());
 requestAnimationFrame(boucle);
-$('jouer').disabled = false;
+$('jouer').disabled = false; $('jouer2').disabled = false;
 mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)

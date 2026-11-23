@@ -7,11 +7,11 @@ import { SOLEIL } from './monde.js';
 
 export const QUALITES = {
   // téléphone modeste : pas de carte d'ombre (ombres de contact à la place), herbe proche et clairsemée
-  faible: { nom: 'faible', ratioMax: 1.25, ratioMin: 0.6, ombres: null, ombreTaille: 0, boite: 0, ombrePas: 0, herbe: 36, herbeN: 0.5, vigne: 20, parcelle: 45, brume: [55, 260], loin: 90, tache: 0.62, aniso: 1 },
+  faible: { nom: 'faible', ratioMax: 1.25, ratioMin: 0.6, ombres: null, ombreTaille: 0, boite: 0, ombrePas: 0, herbe: 36, herbeN: 0.5, vigne: 20, parcelle: 45, brume: [55, 260], loin: 90, tache: 0.62, aniso: 1, persos: 100 },
   // téléphone moyen : ombres 1024 filtrées à 4 lectures, recalculées une image sur deux
-  moyen: { nom: 'moyen', ratioMax: 1.6, ratioMin: 0.75, ombres: 'pcf', ombreTaille: 1024, boite: 72, ombrePas: 2, herbe: 58, herbeN: 0.85, vigne: 55, parcelle: 75, brume: [60, 290], loin: 130, tache: 0.45, aniso: 2 },
+  moyen: { nom: 'moyen', ratioMax: 1.6, ratioMin: 0.75, ombres: 'pcf', ombreTaille: 1024, boite: 72, ombrePas: 2, herbe: 58, herbeN: 0.85, vigne: 55, parcelle: 75, brume: [60, 290], loin: 130, tache: 0.45, aniso: 2, persos: 140 },
   // ordinateur ou téléphone puissant : ombres 2048 à chaque image (douces sur ordinateur), herbe jusqu'à 95 m
-  haut: { nom: 'haut', ratioMax: 2, ratioMin: 1, ombres: 'soft', ombreTaille: 2048, boite: 96, ombrePas: 1, herbe: 95, herbeN: 1, vigne: 95, parcelle: 120, brume: [75, 350], loin: 200, tache: 0.36, aniso: 4 },
+  haut: { nom: 'haut', ratioMax: 2, ratioMin: 1, ombres: 'soft', ombreTaille: 2048, boite: 96, ombrePas: 1, herbe: 95, herbeN: 1, vigne: 95, parcelle: 120, brume: [75, 350], loin: 200, tache: 0.36, aniso: 4, persos: 200 },
 };
 const ORDRE_Q = ['faible', 'moyen', 'haut'];
 

@@ -561,7 +561,9 @@ void main() {
         const o = k * 8;
         if (b.traite[k] || Math.abs(T[o] - x) > demi || Math.abs(T[o + 1] - z) > T[o + 2] / 2 + 0.3) continue;
         b.traite[k] = 1; teinteTravee(v, b, k); n++;
-        b.im.instanceColor.needsUpdate = true; v.loin.instanceColor.needsUpdate = true;
+        // seule la couleur de cette travée part vers la carte graphique (pas tout le tampon)
+        const ci = b.im.instanceColor, cl = v.loin.instanceColor;
+        ci.addUpdateRange(k * 3, 3); ci.needsUpdate = true; cl.addUpdateRange((b.i0 + k) * 3, 3); cl.needsUpdate = true;
       }
     }
     return n;

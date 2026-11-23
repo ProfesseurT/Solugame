@@ -100,6 +100,7 @@ Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (rep
 
 ## Légèreté (à préserver)
 
+- Accueil : « Jouer » (la mission 1), ou directement la mission 2 (`jouer2`, main.js `lancer(true)` : le lendemain d'une tournée faite, en mai).
 - Démarrage : l'accueil s'affiche avant que le jeu ne se construise (build.mjs lance le script après la première image) ; le bouton Jouer s'allume quand tout est prêt. La feuille Google Fonts est préchargée sans bloquer (`#polices`).
 - Formes de base (`B`, `C`, `S`, `icosa` dans modeles.js) copiées depuis des gabarits calculés une fois ; `deplacer` et `tournerY` au lieu de `translate` et `rotateY` de three.js (qui passent par des matrices et recalculent les normales).
 - Géométries indexées (`indexer`, modeles.js) : décor fusionné, personnages, véhicules, voitures. Les doublons d'une géométrie dépliée sont fusionnés (hachage des bits, sans arrondi) ; pour les matières à facettes, les normales (qui ne servent qu'au décalage des ombres) sont ignorées puis recalculées en moyennes. 479 000 → 190 000 sommets.
@@ -108,5 +109,7 @@ Artifact privé de test : https://claude.ai/artifact/4ajbpvSSK4StrtXKRcdWJ6 (rep
 - Géométries finies compactées (`compacter`) : normale sur 3 octets, couleur sur 3 ou 4, type de matière et vent sur 1. À appeler sur toute nouvelle géométrie ajoutée après la construction (main.js le fait pour la scène au démarrage, perso.js pour chaque personnage).
 - Décor immobile : matrices calculées une fois (`matrixAutoUpdate = false`). Terrain découpé en 21 morceaux (élagués hors champ), vignes lointaines sans piquet ni dessous, cheveux et barbe sans les facettes cachées sous la peau, atlas des enseignes coupé à sa partie remplie.
 - Atlas des personnages peint une fois au démarrage (environ 24 ms sur ordinateur), copie libérée une fois envoyée à la carte graphique (2,7 Mo avec mipmaps).
+- Personnages plus loin que `q.persos` (100, 140 ou 200 m selon le palier, qualite.js) : ni dessinés ni leur tache (main.js `ombrePerso`) ; à cette distance, une dizaine de pixels dans la brume.
+- Mission 2 : pendant la pulvérisation accélérée, trois pas de physique par image mais un seul calcul du personnage, des effets et du son (main.js `conduire(dt, dtm, dernier)`) ; une travée traitée n'envoie que sa couleur à la carte graphique (`addUpdateRange`) ; l'objectif se recalcule dix fois par seconde.
 - Cadence : 60 images/s au plus (écrans 90 ou 120 Hz), 30 sur l'accueil et derrière le téléphone, 15 derrière le portable et la carte de fin.
 - Ombres : 4 lectures par pixel (PCF maison, modeles.js) sur téléphone à tous les paliers, 16 (douces) seulement sur ordinateur ; ainsi la sonde peut monter de « moyen » à « haut » sans recompiler les shaders. Filtrage anisotrope du bruit : 1, 2 ou 4 selon le palier.
