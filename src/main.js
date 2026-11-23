@@ -1,7 +1,7 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, compacter } from './modeles.js';
+import { UNI, compacter, indexer } from './modeles.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture } from './engins.js';
 import { perso, HEROS } from './perso.js';
@@ -34,7 +34,9 @@ const stocke = { lire(k) { try { return localStorage.getItem(k); } catch (_) { r
 const canvas = $('vue');
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: !tactile, stencil: false, powerPreference: 'high-performance' });
+  // anticrénelage (MSAA) sur ordinateur seulement, et pas sur un écran haute densité : l'image y est déjà calculée en double
+  // résolution, le MSAA quadruplerait encore le travail de la carte graphique pour un gain invisible
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: !tactile && (window.devicePixelRatio || 1) < 1.5, stencil: false, powerPreference: 'high-performance' });
 } catch (e) {
   $('erreur').hidden = false;
   throw e;
@@ -192,10 +194,16 @@ const voitures = [];
   voitures.push(vo);
 });
 
-// géométries finies : attributs compactés (deux fois moins de mémoire et de lectures pour la carte graphique)
+// géométries finies : indexées (véhicules, voitures, cartons : chaque sommet calculé une fois), attributs compactés (deux
+// fois moins de mémoire et de lectures pour la carte graphique). Le terrain (morceaux d'un même tampon) reste tel quel.
 {
   const vues = new Set();
-  scene.traverse(o => { if (o.geometry && !vues.has(o.geometry)) { vues.add(o.geometry); compacter(o.geometry); } });
+  scene.traverse(o => {
+    if (!o.geometry || vues.has(o.geometry)) return;
+    vues.add(o.geometry);
+    if (!o.geometry.index && !o.isSkinnedMesh && o.geometry.drawRange.count === Infinity && o.material && o.material.flatShading) indexer(o.geometry, true);
+    compacter(o.geometry);
+  });
   mesures.persos = Math.round(performance.now() - T0);
 }
 
@@ -625,14 +633,18 @@ function placerLumiere(x, z) {
   monde.soleil.position.copy(CIBLE).addScaledVector(SOLEIL, 100);
 }
 // Taches de contact de tout ce qui bouge (et des voitures garées)
+// Un personnage à plus de 32 m de la caméra n'est plus dessiné dans la carte d'ombre (ses os, deux fois par image) : de
+// si loin, sa tache de contact suffit
+const OMBRE_PERSO2 = 32 * 32;
+const ombrePerso = (m, x, z) => { const dx = x - camera.position.x, dz = z - camera.position.z; m.maillage.castShadow = dx * dx + dz * dz < OMBRE_PERSO2; };
 function majTaches() {
   const t = taches;
   t.debut();
   if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0);
   for (const v of VEHICULES) t.poser(v.m.groupe.position.x, v.m.groupe.position.z, v.genre === 'van' ? 1.15 : 1.2, v.genre === 'van' ? 2.5 : 2.1, v.m.groupe.rotation.y);
-  for (const p of passants) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0);
-  for (const f of figurants) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
-  for (const p of assis) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
+  for (const p of passants) { t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0); ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z); }
+  for (const f of figurants) { t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0); ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z); }
+  for (const p of assis) { t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0); ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z); }
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
   t.fin();
 }

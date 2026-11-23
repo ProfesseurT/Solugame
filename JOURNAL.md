@@ -414,3 +414,18 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Effets : traces de pneus sur l'asphalte et les pavés (instances dans une réserve tournante, seule la bande ajoutée est envoyée à la carte graphique), fumée des pneus ou poussière selon le sol, crissement synthétisé (sifflement qui ondule et souffle serré), roues arrière qui ne tournent plus.
 
 **Vérifié** : van lancé à 15 m/s puis frein à main à gauche : demi-tour en glissant (jusqu'à 8 m/s de côté), traces visibles ; le tracteur, plus lent, de même ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée).
+
+## 23/11/2026 · Retours de Teddy (7), lot 2 : le moteur au régime sec
+
+**Demande** : optimiser le moteur de manière ultra sévère, le jeu le plus fluide possible, dans le navigateur, avec les dernières techniques.
+
+**Mesures d'abord** (en coupant une à une les parties de l'image) : en qualité haute, la passe d'ombre faisait 40 à 50 % du coût d'une image ; ensuite les personnages (dessinés deux fois, image et ombre, avec leur squelette), puis décor, vignes, herbe et terrain. Et presque toute la géométrie était « dépliée » : chaque triangle a ses trois sommets à lui, un coin de pavé est calculé six fois.
+
+**Fait** :
+- Géométrie indexée (`indexer`, modeles.js) pour le décor fusionné, les personnages, les véhicules et les voitures : 479 000 → 190 000 sommets (−60 %), mémoire de la géométrie 10,5 → 4,8 Mo. Chaque sommet n'est plus calculé (ni déformé par les os) qu'une fois. Le hachage travaille sur les bits des nombres, avec un brassage (les flottants « ronds » ont leurs bits de poids faible à zéro) : environ 8 ms pour 216 000 sommets.
+- Passe d'ombre : dans chaque quartier, les petits détails (cadres, volets, vitres, appuis, portes plaquées, pots) sont rangés en dernier et la passe d'ombre s'arrête avant eux ; leur ombre ne ferait pas un texel. Les personnages à plus de 32 m ne sont plus dans la carte d'ombre (leur tache de contact suffit).
+- Pas de MSAA sur un écran haute densité (l'image y est déjà calculée en double résolution).
+
+**Essai écarté** : garder le décor fixe de la carte d'ombre en cache (copie de tampon à tampon) et n'y redessiner que ce qui bouge. La copie elle-même est négligeable (0,03 ms), mais ne pas effacer la carte avant d'y dessiner force un GPU à tuiles (tous les téléphones, les Mac) à recharger toute l'image précédente : 2,6 à 3 ms par image au lieu de 1,8. Sur ces GPU, effacer puis tout redessiner reste le chemin rapide ; on allège plutôt ce qu'on y dessine.
+
+**Vérifié** : mêmes images (captures du bourg, ombres propres) ; `npm run verifie` ; conduite assistée en tracteur et en van ; banc des personnages en jeu ; banc d'allègement de three.js : équivalent. Les temps par image n'ont pas pu être départagés finement : la machine de test était chargée par d'autres processus (charge 7), et ce Mac dessine une image en moins de 2 ms ; les comptes (sommets, triangles, appels de dessin) font foi.

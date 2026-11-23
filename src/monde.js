@@ -3,7 +3,7 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
 import { hasard, lisse } from './outils.js';
 
 export { SOLEIL };
@@ -38,6 +38,13 @@ export const ORDRE = { bati: 1, vegetal: 2, herbe: 3, sol: 4, ciel: 10, nuages: 
 // Boîte englobante (centre et demi-tailles) d'un objet qui projette une ombre, pour l'élagage fin de la passe d'ombre
 const porteur = (obj, b) => ({ obj, cx: (b.min.x + b.max.x) / 2, cy: (b.min.y + b.max.y) / 2, cz: (b.min.z + b.max.z) / 2, hx: (b.max.x - b.min.x) / 2, hy: (b.max.y - b.min.y) / 2, hz: (b.max.z - b.min.z) / 2 });
 
+// Un détail trop petit pour que son ombre se voie dans la carte d'ombre (7 cm par texel au mieux) : moins de 80 cm en
+// tout sens, ou plaqué (moins de 13 cm d'épaisseur) et moins de 2,6 m de long
+function petit(g) {
+  const b = g.boundingBox, x = b.max.x - b.min.x, y = b.max.y - b.min.y, z = b.max.z - b.min.z;
+  const grand = Math.max(x, y, z), mince = Math.min(x, y, z);
+  return grand < 0.8 || (mince < 0.13 && grand < 2.6);
+}
 class Grille {
   constructor() { this.cases = new Map(); }
   push(...gs) {
@@ -52,11 +59,24 @@ class Grille {
     return this.cases.size;
   }
   ajouter(scene, ombre, porteurs) {
-    for (const l of this.cases.values()) {
+    for (let l of this.cases.values()) {
       // le vent n'existe que sur certaines géométries (feuillages) : les autres reçoivent un poids nul
       const vent = l.some(g => g.attributes.aVent);
       if (vent) for (const g of l) if (!g.attributes.aVent) g.setAttribute('aVent', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
-      const m = new THREE.Mesh(fusion(l), vent ? MAT_VENT : MAT);
+      // Les petits détails (cadres, volets, vitres, appuis, portes plaquées, pots) sont rangés en dernier : leur ombre
+      // ne fait pas un texel de la carte d'ombre, la passe d'ombre s'arrête avant eux (même maillage, rien de copié).
+      let nOmbre = 0;
+      if (ombre) {
+        const gros = [], petits = [];
+        for (const g of l) (petit(g) ? petits : gros).push(g);
+        l = gros.concat(petits);
+        for (const g of gros) nOmbre += g.attributes.position.count;
+      }
+      const geo = indexer(fusion(l), true), m = new THREE.Mesh(geo, vent ? MAT_VENT : MAT);
+      if (ombre && nOmbre < geo.attributes.position.count) {
+        m.onBeforeShadow = () => geo.setDrawRange(0, nOmbre);
+        m.onAfterShadow = () => geo.setDrawRange(0, Infinity);
+      }
       m.castShadow = ombre; m.receiveShadow = true; m.renderOrder = ORDRE.bati; m.name = 'décor';
       scene.add(m);
       if (ombre) { m.geometry.computeBoundingBox(); porteurs.push(porteur(m, m.geometry.boundingBox)); }

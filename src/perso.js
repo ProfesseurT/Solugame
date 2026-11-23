@@ -8,7 +8,7 @@
 // de la pièce (teint, couleur de la veste) reste portée par les sommets : la texture la module.
 // Normales lissées (sauf aux arêtes vives : boîtes, bords des cheveux), pour des formes rondes sans plus de triangles.
 import * as THREE from 'three';
-import { B, C, S, MAT, teinter, fusion, icosa, compacter, deplacer } from './modeles.js';
+import { B, C, S, MAT, teinter, fusion, icosa, compacter, deplacer, indexer } from './modeles.js';
 import { Z, ZONE, GLSL_ZONES, FX, FY, OEIL, LA, HA, texturePersos } from './atlas.js';
 import { hasard, lisse, assombrir } from './outils.js';
 
@@ -760,7 +760,7 @@ export function perso(o0) {
     g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4, true));
     parts.push(g);
   }
-  const geo = compacter(fusion(parts));
+  const geo = compacter(indexer(fusion(parts))); // indexée : chaque sommet n'est calculé (et déformé par les os) qu'une fois
   // coordonnées de texture sur 16 bits (uv / UVK)
   {
     const a = geo.attributes.uv.array, q = new Int16Array(a.length), k = 32767 / UVK;

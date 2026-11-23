@@ -547,6 +547,66 @@ export function compacter(g) {
   return g;
 }
 
+// Géométrie indexée : les sommets identiques (même position, mêmes attributs) ne sont gardés qu'une fois. Sans index, la
+// carte graphique calcule chaque sommet autant de fois qu'il touche de triangles (un coin de pavé : six fois) ; avec,
+// elle réutilise le calcul. sansNormale : les normales ne servent qu'au décalage des ombres (l'éclairage à facettes est
+// calculé par pixel) ; on fusionne donc les sommets des faces voisines d'une même pièce, puis on recalcule des normales
+// moyennes. Les doublons d'une géométrie dépliée sont des copies exactes : on compare les bits des nombres (vue entière
+// des tableaux), par hachage à adressage ouvert, sans arrondi, sans chaîne ni objet par sommet.
+let TAB = new Int32Array(0);
+export function indexer(g, sansNormale = false) {
+  if (g.index) return g;
+  if (sansNormale) g.deleteAttribute('normal');
+  const noms = Object.keys(g.attributes), A = noms.map(n => g.attributes[n]), na = A.length, nv = g.attributes.position.count;
+  // tous les attributs vus comme des entiers 32 bits (bits des flottants ; octets recopiés) : un seul type de tableau,
+  // le compilateur JavaScript spécialise la boucle
+  const V = A.map(a => (a.array instanceof Float32Array ? new Uint32Array(a.array.buffer, a.array.byteOffset, a.array.length) : Uint32Array.from(a.array))), S = A.map(a => a.itemSize);
+  const P = V[noms.indexOf('position')];
+  let taille = 1024; while (taille < nv * 2) taille <<= 1;
+  if (TAB.length < taille) TAB = new Int32Array(taille);
+  TAB.fill(-1, 0, taille);
+  const masque = taille - 1, uniques = new Int32Array(nv), index = new Uint32Array(nv);
+  let nu = 0;
+  for (let i = 0; i < nv; i++) {
+    const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
+    // les flottants « ronds » ont leurs bits de poids faible à zéro : on brasse (finaliseur de murmur) avant de garder ceux-là
+    let h = Math.imul(x ^ (x >>> 16), 0x2c1b3c6d) ^ Math.imul(y ^ (y >>> 15), 0x297a2d39) ^ Math.imul(z ^ (z >>> 13), 0x5bd1e995), u;
+    h ^= h >>> 15; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h &= masque;
+    for (;;) {
+      u = TAB[h];
+      if (u < 0) break;
+      const j = uniques[u];
+      let ok = P[j * 3] === x && P[j * 3 + 1] === y && P[j * 3 + 2] === z;
+      for (let k = 0; ok && k < na; k++) {
+        const v = V[k], s = S[k], a = i * s, b = j * s;
+        for (let c = 0; c < s; c++) if (v[a + c] !== v[b + c]) { ok = false; break; }
+      }
+      if (ok) break;
+      h = (h + 1) & masque;
+    }
+    if (u < 0) { u = nu++; uniques[u] = i; TAB[h] = u; }
+    index[i] = u;
+  }
+  for (let k = 0; k < na; k++) {
+    const a = A[k], s = a.itemSize, src = a.array, dst = new src.constructor(nu * s);
+    for (let u = 0; u < nu; u++) { const o = uniques[u] * s; for (let j = 0; j < s; j++) dst[u * s + j] = src[o + j]; }
+    g.setAttribute(noms[k], new THREE.BufferAttribute(dst, s, a.normalized));
+  }
+  g.setIndex(new THREE.BufferAttribute(nu < 65536 ? Uint16Array.from(index) : index, 1));
+  if (sansNormale) {
+    // normales moyennes (somme des normales des faces, pondérées par leur aire), directement sur les tableaux
+    const p = g.attributes.position.array, n = new Float32Array(nu * 3);
+    for (let t = 0; t < nv; t += 3) {
+      const a = index[t] * 3, b = index[t + 1] * 3, c = index[t + 2] * 3;
+      const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      n[a] += nx; n[a + 1] += ny; n[a + 2] += nz; n[b] += nx; n[b + 1] += ny; n[b + 2] += nz; n[c] += nx; n[c + 1] += ny; n[c + 2] += nz;
+    }
+    for (let i = 0; i < n.length; i += 3) { const l = Math.hypot(n[i], n[i + 1], n[i + 2]) || 1; n[i] /= l; n[i + 1] /= l; n[i + 2] /= l; }
+    g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  }
+  return g;
+}
 export function fusion(liste) {
   const g = mergeGeometries(liste, false);
   for (const x of liste) x.dispose();
