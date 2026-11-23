@@ -369,3 +369,19 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 `main.js` passe à 800 lignes.
 
 **Vérifié** : empreinte de la scène identique à celle du lot précédent ; mêmes appels de dessin et triangles aux six endroits mesurés ; `npm run verifie` ; conduite assistée en tracteur et en van (aucun choc, aucune traversée) ; accueil (la sonde monte bien à « haut » sur ordinateur) ; banc des personnages en jeu ; banc d'allègement de three.js : équivalent.
+
+## 23/11/2026 · Retours de Teddy (5) : des cous humains
+
+**Demande** : « les cous sont trop longs, trop bizarre » ; rendre les personnages beaucoup plus humains.
+
+**Constat** (portraits de face, de profil, de trois quarts et de dos) : le cou était une tige fine et droite sous une tête en œuf ; le haut du buste, une étagère plate d'où sortaient des épaules en boules coiffées d'un disque ; la nuque nue jusqu'au milieu du crâne (les cheveux courts s'arrêtaient trop haut) ; des pointes de col en nœud papillon ; des lunettes plus larges que le visage, branches dans le vide.
+
+**Fait** (`perso.js`) :
+- Cou : plus épais (environ 13 cm chez l'homme, 11 chez la femme, selon la corpulence), un peu penché vers l'avant et plus profond sous la mâchoire ; la nuque remonte jusqu'à l'occiput. La tête est 1 cm plus bas et un peu plus en avant (port de tête naturel).
+- Trapèzes : le haut du buste monte en pente douce des épaules à la base du cou, plus haut derrière que devant ; poitrine un peu en avant, haut du dos arrondi.
+- Épaules : le haut du bras s'arrondit en dôme (deltoïde) dans le prolongement de la pente, au lieu d'une boule posée sur un tube.
+- Cols inclinés autour de la base du cou, à sa taille (`col`) : col montant des vestes, col rond des pulls, encolure des robes, pied de col et pointes rabattues des chemises.
+- Bretelles de salopette et cordons de tablier qui passent sur les épaules en suivant leur forme (`sangle`).
+- Cheveux courts jusqu'à la nuque ; oreilles plus bas (du sourcil au bas du nez), arrondies ; mâchoire d'homme moins pointue ; lunettes à la largeur du visage, branches qui longent la tête jusqu'aux oreilles.
+
+**Vérifié** : portraits avant et après sous quatre angles, en pied ; poses (téléphone, salut, assis, au volant), port des cartons, personnages dans le bourg ; `npm run verifie` ; conduite assistée en tracteur et en van (aucun choc, aucune traversée). Coût : même calcul des poses ; environ 270 triangles de plus par personnage (+4 % sur la place, la plus peuplée) ; démarrage inchangé.
