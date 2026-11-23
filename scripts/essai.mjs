@@ -62,8 +62,10 @@ if (scenario === 'parcours') {
     clic('[data-a="ouvrir:bureau"]'); clic('[data-a="rappel:bar"]'); clic('[data-a="msg"]');
     CL.step(400); T.action('cmd:bar'); saisir(2);
     log.push(['3 commandes envoyées, on attend encore la tâche du règlement', m.nbEnvoyees === 3 && m.etape === 'rappels']);
-    clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]'); T.fermer(); CL.step(2);
-    log.push(['règlement en retard ajouté à la tournée (tâche du jour)', m.retardataire.statut === 'attendu' && m.etape === 'chai']);
+    clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]'); CL.step(2);
+    log.push(['règlement en retard ajouté à la tournée, on attend encore le prospect', m.retardataire.statut === 'attendu' && m.etape === 'rappels']);
+    clic('[data-a="prospect"]'); T.fermer(); CL.step(2);
+    log.push(['prospect ajouté à la tournée (5 tâches du jour sur 5)', m.prospect.statut === 'attendu' && m.nbTaches === 5 && m.etape === 'chai']);
     CL.step(1500);
     log.push(['3 commandes signées', m.clients.every(c => c.statut === 'signee')]);
     // VEHICULE=van : la tournée en van au lieu du tracteur
@@ -77,7 +79,7 @@ if (scenario === 'parcours') {
     CL.finirGeste(4000); CL.step(5);
     log.push(['chargement fait (' + CL.tr.charge + ' cartons), palette vide, de nouveau au volant', m.etape === 'tournee' && CL.tr.charge === 11 && m.palette.every(p => !p.groupe.visible) && CL.jeu.auVolant]);
     T.ouvrir('tournee');
-    log.push(['tournée à 4 arrêts', document.querySelectorAll('#app .arret').length === 4]);
+    log.push(['tournée à 5 arrêts', document.querySelectorAll('#app .arret').length === 5]);
     clic('[data-a="tournee"]');
     { const a = CL.jeu.lieux.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30); CL.step(900); }
     log.push(['chèque récupéré à l\'épicerie', m.retardataire.statut === 'recupere' && m.arret === 1]);
@@ -90,6 +92,16 @@ if (scenario === 'parcours') {
       log.push(['de nouveau au volant après ' + id, CL.jeu.auVolant]);
     }
     log.push(['véhicule vide, 11 cartons posés devant les clients', CL.jeu.tm.cartons.every(c => !c.visible) && m.deposes.reduce((s, p) => s + p.userData.n, 0) === 11]);
+    // le prospect, aux Grands Champs : on descend, on lui sert un verre, il goûte, la visite est notée dans le bureau
+    { const a = CL.jeu.lieux.arrets.auberge; CL.teleporter(a.x, a.z - 4, 0); CL.step(30); }
+    log.push(['chez le prospect, Auberge du Moulin', m.prospect.statut === 'visite' && m.cible === null]);
+    CL.agir(); CL.finirGeste(); CL.step(5);
+    { const f = CL.jeu.lieux.figurants.auberge; CL.jeu.joueur.placer(f.x - 1.6, f.z, Math.PI / 2); } CL.step(5); CL.agir();
+    for (let n = 0; n < 2400 && m.prospect.statut !== 'a_rappeler'; n++) CL.step(1);
+    T.ouvrir('bureau');
+    log.push(['dégustation, visite notée dans le bureau, à rappeler', m.prospect.statut === 'a_rappeler' && m.etape === 'retour' && document.querySelector('#app').textContent.includes('À rappeler')]);
+    T.fermer();
+    { const p = CL.tr.pos; CL.jeu.joueur.placer(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
     // retour : garé devant le bureau du chai, on descend, on entre (porte, fondu), on dépose le chèque, on s'assoit au portable
     const BU = CL.jeu.lieux.bureau;
     CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
@@ -126,12 +138,19 @@ if (scenario === 'conduite') {
     CL.jouer(); CL.step(260); q('#poche').click(); q('[data-a="rappel:cave"]').click(); CL.step(900); saisir(6);
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="rappel:treille"]').click(); CL.step(700); saisir(3);
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="rappel:bar"]').click(); q('[data-a="msg"]').click(); CL.step(400); T.action('cmd:bar'); saisir(2);
-    q('[data-a="ouvrir:bureau"]').click(); q('[data-a="cheque"]').click(); T.fermer(); CL.step(1500);
+    q('[data-a="ouvrir:bureau"]').click(); q('[data-a="cheque"]').click(); q('[data-a="prospect"]').click(); T.fermer(); CL.step(1500);
     { const p = CL.vehicule(VEH).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
     const C = CL.ctrl; C.id = 1; C.jx = 0; C.jy = 0;
     let t = 0, chocs = 0, arret = 0, bloque = false;
     for (let k = 0; k < 60 * 400 && m.etape !== 'pc'; k++) {
       if (T.ouvert && T.app === 'bl') { T.encre = 200; q('#bt-livrer').disabled = false; q('#bt-livrer').click(); }
+      // chez le prospect : descendre, lui servir un verre, attendre qu'il ait goûté, remonter et reposer le doigt
+      if (m.prospect.statut === 'visite' && !J.gestes.actif && !T.ouvert) {
+        if (J.auVolant) { CL.agir(); CL.finirGeste(); }
+        const f = J.lieux.figurants.auberge; J.joueur.placer(f.x - 1.6, f.z, Math.PI / 2); CL.step(5); CL.agir();
+        for (let n = 0; n < 2400 && m.prospect.statut !== 'a_rappeler'; n++) CL.step(1);
+        { const p = CL.tr.pos; J.joueur.placer(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); C.id = 1;
+      }
       if (m.etape === 'tournee' && !T.ouvert) { T.ouvrir('tournee'); q('[data-a="tournee"]').click(); }
       if (m.etape === 'retour' && J.distance(J.lieux.pc) < 6.5 && Math.abs(CL.tr.v) < 0.5) break;
       CL.step(1); t += 1 / 60;

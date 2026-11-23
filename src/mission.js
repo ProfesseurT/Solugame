@@ -5,16 +5,22 @@
 // 3. Au chai, on charge les commandes signées sur le tracteur.
 //    Parmi les tâches du jour, un règlement en retard (l'Épicerie du Bourg) : on ajoute soi-même le passage à la tournée.
 // 4. On lance la tournée dans le bureau : d'abord l'Épicerie du Bourg, qui nous remet un chèque ; puis, à chaque
-//    livraison, le client signe le bon de livraison sur notre téléphone.
+//    livraison, le client signe le bon de livraison sur notre téléphone. Pour finir, le prospect du jour (ajouté à la
+//    tournée parmi les tâches du jour) : l'Auberge du Moulin, aux Grands Champs ; on lui fait goûter le rouge, la visite
+//    est notée dans le bureau, qui dira quand le rappeler.
 // 5. Retour au bureau du chai : on dépose le chèque sur le bureau, puis sur le portable, dans Vitisoft (pas d'appli téléphone),
 //    on saisit le règlement, on facture les 3 commandes (Factur-X, transmises par Pennylane) et on calcule la DRM.
-import { DIALOGUES, OBJECTIFS, CLIENTS, RETARD } from './textes.js';
+import { DIALOGUES, OBJECTIFS, CLIENTS, RETARD, PROSPECT, MESSAGE_MATIN as MESSAGE } from './textes.js';
 import { son } from './audio.js';
 
 const RETARD_ETOILE = 40; // secondes avant chaque nouvelle étoile de retard
 const ATTENTE = ['chai', 'chargement', 'tournee', 'livraisons'];
-const ORDRE = ['epicerie', 'cave', 'bar', 'treille']; // ordre des arrêts de la tournée
+const ORDRE = ['epicerie', 'cave', 'bar', 'treille', 'auberge']; // ordre des arrêts de la tournée
 const LIVRAISONS = ['cave', 'bar', 'treille'];        // les commandes, dans l'ordre de la tournée
+// Pour aller à l'arrêt i, l'itinéraire repart du point de l'arrêt précédent dans lieux.route (cave : 7, bar : 8, La
+// Treille : 14). Sinon, garé un peu avant un arrêt, la conduite assistée voulait encore l'atteindre avant de repartir
+// (et, au bout de la départementale, fonçait dans les voitures qui l'attendaient).
+const DEPART = [0, 0, 7, 8, 14];
 
 export class Mission {
   constructor(jeu) {
@@ -23,8 +29,10 @@ export class Mission {
     // le règlement en retard de l'épicerie : a_planifier (tâche du jour), attendu (dans la tournée), recupere (le chèque),
     // depose (au bureau), saisi (dans Vitisoft)
     this.retardataire = { ...RETARD, statut: 'a_planifier' };
+    // le prospect : a_planifier (tâche du jour), attendu (dans la tournée), visite (sur place), deguste, a_rappeler
+    this.prospect = { ...PROSPECT, statut: 'a_planifier' }; this.tDeg = 0;
     this.attenteCheque = false; this.drm = 'a_faire'; // a_faire, calcul, faite
-    this.appelEnCours = null; this.arret = 0; this.attenteBL = null; this.message = '3 rappels et 1 règlement en retard aujourd\'hui.';
+    this.appelEnCours = null; this.arret = 0; this.attenteBL = null; this.message = MESSAGE;
     this.cartons = []; // carton i du véhicule chargé (colonne i / 3) -> id du client
     this.palette = []; // les piles de la palette du chai (main.js) : { client, n, groupe }
     this.deposes = []; // les piles posées devant les clients
@@ -35,11 +43,11 @@ export class Mission {
   compter(statut) { let n = 0; for (const c of this.clients) if (c.statut === statut) n++; return n; }
   get ordre() { return LIVRAISONS.map(id => this.client(id)); }
   // les arrêts de la tournée : le chèque à récupérer, puis les livraisons
-  get arrets() { return ORDRE.map(id => id === RETARD.id ? this.retardataire : this.client(id)); }
-  arretEn(i) { const id = ORDRE[i]; return id === RETARD.id ? this.retardataire : this.client(id); }
+  get arrets() { return ORDRE.map((_, i) => this.arretEn(i)); }
+  arretEn(i) { const id = ORDRE[i]; return id === RETARD.id ? this.retardataire : id === PROSPECT.id ? this.prospect : this.client(id); }
   get nbEnvoyees() { return this.clients.filter(c => ['envoyee', 'signee'].includes(c.statut)).length; }
   // tâches du jour faites : commandes envoyées, et le passage à l'épicerie ajouté à la tournée
-  get nbTaches() { return this.nbEnvoyees + (this.retardataire.statut === 'a_planifier' ? 0 : 1); }
+  get nbTaches() { return this.nbEnvoyees + (this.retardataire.statut === 'a_planifier' ? 0 : 1) + (this.prospect.statut === 'a_planifier' ? 0 : 1); }
   get ht() { return this.clients.reduce((s, c) => s + c.cartons * 6 * c.pu, 0); }
   htClient(c) { return c.cartons * 6 * c.pu; }
   // les piles de la palette du chai : celles de chaque client, 3 cartons au plus (une colonne du véhicule chacune)
@@ -63,7 +71,10 @@ export class Mission {
   get cible() {
     const L = this.j.lieux;
     if (this.etape === 'chai') return L.chai;
-    if (this.etape === 'livraisons') return this.attenteBL ? null : L.arrets[ORDRE[this.arret]]; // on y est : plus de balise
+    if (this.etape === 'livraisons') { // on y est : plus de balise
+      const c = this.arretEn(this.arret);
+      return this.attenteBL || (c === this.prospect && c.statut !== 'attendu') ? null : L.arrets[ORDRE[this.arret]];
+    }
     if (this.etape === 'retour' || (this.etape === 'pc' && this.retardataire.statut === 'recupere')) return L.pc;
     if (this.etape === 'retour' || this.etape === 'pc') return L.pc;
     return null;
@@ -75,7 +86,10 @@ export class Mission {
   }
   get route() {
     if (this.etape === 'chai' || this.etape === 'chargement') return this.j.lieux.versChai;
-    if (this.etape === 'livraisons') return this.j.lieux.route;
+    if (this.etape === 'livraisons') {
+      if (!this.troncons) this.troncons = DEPART.map(k => this.j.lieux.route.slice(k));
+      return this.troncons[this.arret];
+    }
     if (this.etape === 'retour') return this.j.lieux.retour;
     return null;
   }
@@ -103,10 +117,10 @@ export class Mission {
     switch (this.etape) {
       case 'debut':
         if (this.t > 0.8 && !this.dit) { this.dit = true; hud.dire(DIALOGUES.intro); }
-        if (this.t > 3.6) { this.aller('rappels'); this.notifier('3 rappels et 1 règlement en retard aujourd\'hui.'); hud.objectif(OBJECTIFS.tel); }
+        if (this.t > 3.6) { this.aller('rappels'); this.notifier(MESSAGE); hud.objectif(OBJECTIFS.tel); }
         break;
       case 'rappels':
-        if (this.compter('envoyee') + this.compter('signee') === this.clients.length && this.retardataire.statut !== 'a_planifier') { this.aller('chai'); hud.objectif(OBJECTIFS.chai); }
+        if (this.compter('envoyee') + this.compter('signee') === this.clients.length && this.retardataire.statut !== 'a_planifier' && this.prospect.statut !== 'a_planifier') { this.aller('chai'); hud.objectif(OBJECTIFS.chai); }
         break;
       case 'chai': {
         const d = j.distance(j.lieux.chai);
@@ -123,7 +137,7 @@ export class Mission {
             }, () => {
               for (const c of this.clients) c.statut = 'chargee';
               this.aller('tournee');
-              this.notifier('Tournée du jour prête : 4 arrêts.', false);
+              this.notifier(`Tournée du jour prête : ${ORDRE.length} arrêts.`, false);
               hud.dire(DIALOGUES.charge); hud.objectif(OBJECTIFS.tournee);
             });
           }
@@ -134,6 +148,22 @@ export class Mission {
       case 'livraisons': {
         const c = this.arretEn(this.arret), d = j.distance(j.lieux.arrets[c.id]);
         if (this.attenteBL || this.attenteCheque || j.gestes.actif) break;
+        if (c === this.prospect) {
+          // le prospect : on arrive (en véhicule ou à pied), il nous accueille ; on lui sert un verre (main.js), il goûte
+          if (c.statut === 'attendu') {
+            const f = j.lieux.figurants[c.id], dPied = j.auVolant ? 1e9 : j.distance(f);
+            if ((j.auVolant && d < 7 && Math.abs(j.tr.v) < 2.5) || (!j.auVolant && (d < 5 || dPied < 4))) {
+              c.statut = 'visite'; if (j.auVolant) j.tr.v *= 0.3;
+              hud.vider(); hud.dire(DIALOGUES.arrivee[c.id]);
+              hud.objectif(OBJECTIFS.deguster(c.du));
+              j.prospectServable(true);
+            }
+          } else if (c.statut === 'deguste' && (this.tDeg += dt) > 2.2 && !this.degDit) {
+            this.degDit = true;
+            hud.dire(DIALOGUES.degustation, () => this.noterProspect());
+          }
+          break;
+        }
         if (c === this.retardataire) {
           // le chèque : en tracteur arrêté devant, ou à pied au comptoir
           const f = j.lieux.figurants[c.id], dPied = j.auVolant ? 1e9 : j.distance(f);
@@ -219,6 +249,32 @@ export class Mission {
     j.hud.dire(DIALOGUES.chequePlanifie);
     if (this.etape === 'rappels' || this.etape === 'debut') j.hud.objectif(OBJECTIFS.rappels(this.nbTaches));
   }
+  // tâche du jour : le prospect ; on ajoute la visite à la tournée
+  planifierProspect() {
+    const p = this.prospect, j = this.j;
+    if (p.statut !== 'a_planifier') return;
+    p.statut = 'attendu';
+    son.jouer('notif');
+    j.hud.dire(DIALOGUES.prospectPlanifie);
+    if (this.etape === 'rappels' || this.etape === 'debut') j.hud.objectif(OBJECTIFS.rappels(this.nbTaches));
+  }
+  // on vient de lui servir un verre (main.js) : il goûte, il dit ce qu'il en pense (update)
+  degustee() {
+    const p = this.prospect;
+    if (p.statut !== 'visite') return;
+    p.statut = 'deguste'; this.tDeg = 0; this.degDit = false;
+    this.j.prospectServable(false);
+  }
+  // la visite est notée dans le fil du client, le bureau dira quand le rappeler ; arrêt suivant (le retour)
+  noterProspect() {
+    const p = this.prospect, j = this.j;
+    if (p.statut !== 'deguste') return;
+    p.statut = 'a_rappeler';
+    this.notifier(`${p.nom} : visite notée, à rappeler.`, false);
+    son.jouer('succes');
+    j.hud.banniere('Prospect rencontré', 'Visite notée dans le bureau, à rappeler', 3.2);
+    this.suivant();
+  }
   // le formulaire d'une commande s'ouvre : l'objectif donne la quantité dite au téléphone
   saisir(id) { const c = this.client(id); if (c && c.statut === 'commande') this.j.hud.objectif(OBJECTIFS.saisie(c)); }
   demarrerTournee() {
@@ -231,7 +287,7 @@ export class Mission {
   }
   objectifArret() {
     const c = this.arretEn(this.arret);
-    this.j.hud.objectif(c === this.retardataire ? OBJECTIFS.cheque(c.du) : OBJECTIFS.livrer(c.du));
+    this.j.hud.objectif(c === this.retardataire ? OBJECTIFS.cheque(c.du) : c === this.prospect ? OBJECTIFS.prospect(c.du) : OBJECTIFS.livrer(c.du));
   }
   // arrêt suivant, ou retour au domaine
   suivant() {
@@ -304,7 +360,7 @@ export class Mission {
     if (this.etape !== 'pc' || !this.toutFait) return;
     const j = this.j;
     this.aller('fin'); this.dec = 0;
-    j.hud.banniere('C\'est réglé', `3 commandes livrées et facturées, 1 chèque saisi, la DRM calculée. +${this.ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT`, 4.5);
+    j.hud.banniere('C\'est réglé', `3 commandes livrées et facturées, 1 chèque saisi, 1 prospect à rappeler, la DRM calculée. +${this.ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT`, 4.5);
     j.hud.objectif(OBJECTIFS.libre);
     setTimeout(() => j.hud.dire(DIALOGUES.merci), 900);
   }

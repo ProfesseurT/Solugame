@@ -292,7 +292,7 @@ const mVan = van();
 // poste de conduite du van pour l'animation : assise, plancher, volant (centre, rayon, inclinaison de la jante)
 const vVan = creerVehicule('van', mVan, L.van, { assise: mVan.dims.assise, plancher: mVan.dims.plancher, volant: mVan.volantCentre, rayon: mVan.volantRayon, inclinaison: mVan.volantInclinaison });
 vTracteur.p.autre = vVan.p; vVan.p.autre = vTracteur.p;
-vTracteur.p.pos.demiLarg = 1.2; vVan.p.pos.demiLarg = 0.9; // pour les voitures qui les croisent (vehicules.js)
+vTracteur.p.pos.veh = vTracteur.p; vVan.p.pos.veh = vVan.p; // les voitures voient leur emprise (vehicules.js, obstacles)
 let veh = vTracteur, tr = veh.p, tm = veh.m;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
@@ -317,6 +317,8 @@ const CLIENTS_3D = {
   treille: { peau: '#f1c27d', cheveux: '#6b4423', coiffure: 'chignon', haut: '#f4f1ea', col: '#f4f1ea', bas: '#34343a', tablier: '#f4f1ea' },
   // l'épicier en retard de paiement, devant sa boutique, le chèque prêt
   epicerie: { peau: '#d9a27e', cheveux: '#5a4a3a', coiffure: 'court', barbe: true, haut: '#7a5c3f', col: '#e9e1cf', bas: '#2f3440', tablier: '#2f4a6b' },
+  // le patron de l'Auberge du Moulin, le prospect, en veste de cuisine
+  auberge: { peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
 };
 const VISAGE = new THREE.Vector3();
 function peupler() {
@@ -331,7 +333,7 @@ function peupler() {
   const client3D = id => {
     const p = new Pieton(perso(CLIENTS_3D[id])), l = L.figurants[id];
     scene.add(p.m.groupe); p.placer(l.x, l.z, l.h);
-    figurants.push({ p, l });
+    figurants.push({ p, l, id });
   };
   for (const id of ['cave', 'bar', 'treille']) client3D(id);
   for (const s of [L.banc, ...L.terrasse.slice(0, 2)]) {
@@ -341,7 +343,8 @@ function peupler() {
     p.sync(0, 0); p.pos.copy(p.m.groupe.position); p.etq = hud.etiquette('', 'bulle');
     scene.add(p.m.groupe); assis.push(p);
   }
-  client3D('epicerie'); // créé en dernier : les autres gardent leurs tirages au sort (tenues)
+  client3D('epicerie'); // créés en derniers : les autres gardent leurs tirages au sort (tenues)
+  client3D('auberge');
 }
 // voitures garées (immobiles)
 const voituresM = [];
@@ -570,7 +573,9 @@ function horsDesVoitures() {
 let servable = null;          // le Pieton qu'on peut servir, ou null
 let nVerres = 0;
 const SERVICE = 3.2;          // durée du geste (s)
-function candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); }
+// les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js)
+function candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of figurants) if (x.p.servable) f(x.p, 2.4); }
+jeu.prospectServable = on => { for (const x of figurants) if (x.id === 'auberge') x.p.servable = on; };
 function chercherServable() {
   servable = null;
   if (jeu.auVolant || tel.ouvert || pc.ouvert || joueur.service || joueur.sautT > 0 || gestes.actif) return;
@@ -586,7 +591,7 @@ function servir(p) {
   p.aServir = true; p.servi = temps;
   joueur.h = Math.atan2(p.pos.x - joueur.pos.x, p.pos.z - joueur.pos.z); joueur.v = 0;
   son.jouer('bouchon');
-  if (nVerres === 0) hud.dire(DIALOGUES.verre);
+  if (nVerres === 0 && !p.servable) hud.dire(DIALOGUES.verre);
 }
 // le geste avance ; au bon moment le verre change de main ; celui qui boit le garde quelques secondes
 function majService(dt) {
@@ -596,7 +601,7 @@ function majService(dt) {
     const p = S.cible;
     p.h = versAngle(p.h, Math.atan2(joueur.pos.x - p.pos.x, joueur.pos.z - p.pos.z), dt * 6);
     if (S.t > SERVICE * 0.2 && !S.verse) { S.verse = true; son.jouer('verser'); }
-    if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; nVerres++; }
+    if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; nVerres++; if (p.servable) mission.degustee(); }
     if (S.t >= SERVICE) joueur.service = null;
   }
   candidats(p => {
@@ -855,6 +860,7 @@ function boucle(maintenant) {
   } else miseAJour(dt);
   majParticules(dt);
   if (monde.nuages) monde.nuages.rotation.y += dt * 0.004; // les nuages dérivent
+  monde.moulin.rotation.x -= dt * 0.35; // les ailes du moulin des Grands Champs
   const ego = etat === 'jeu' && jeu.auVolant ? tr.pos : joueur.pos;
   avantRendu(ego);
   hud.update(dt, camera, largeur, hauteurE);

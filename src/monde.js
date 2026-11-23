@@ -133,7 +133,9 @@ class Atlas {
 }
 
 export function construireMonde(scene, col, opts) {
-  const rnd = hasard(20261122);
+  // un seul tirage au sort pour tout le monde (même graine : même monde) ; le hameau a le sien (voir hameau()), pour que
+  // l'ajouter n'ait rien déplacé ailleurs
+  let rnd = hasard(20261122);
   const pick = a => a[Math.floor(rnd() * a.length)];
   const plan = []; // dessin de la mini-carte
   const rect = (x0, z0, x1, z1, c) => plan.push({ t: 'r', x0, z0, x1, z1, c });
@@ -298,6 +300,9 @@ void main() {
   // parking de l'église
   surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
   rect(115, -64, 127, -55, '#cfc1a0');
+  // chemin des Grands Champs et placette du hameau (le hameau lui-même : hameau())
+  surf.push(B(4.6, 0.06, 112, '#c9b993', -55, 0, 68.5), B(27, 0.062, 19, '#c9b993', -56, 0, 133));
+  rect(-57.3, 12.5, -52.7, 124.5, '#c9b993'); rect(-69.5, 123.5, -42.5, 142.5, '#c9b993');
 
   // vignes d'automne : chenin (jaune) et cabernet franc (rouge)
   const PAL = {
@@ -607,6 +612,62 @@ void main() {
     o.porte = porte;
     return o;
   }
+  /* Les Grands Champs : un hameau au sud des vignes, au bout d'un chemin qui part de la départementale (x = -55, entre
+     deux parcelles). Une placette, l'Auberge du Moulin (le prospect de la tournée), un moulin dont les ailes tournent
+     (main.js), trois maisons, quelques arbres. Construit avec son propre tirage au sort (le reste du monde ne bouge pas). */
+  function hameau() {
+    const rndMonde = rnd;
+    rnd = hasard(4242);
+    // l'auberge, façade vers la placette (vitrine, store bordeaux, enseigne) ; terrasse
+    const au = maison({ x: -44, z: 131, w: 14, d: 8, h: 5.8, rot: -Math.PI / 2, volets: '#7a8f6a', vitrine: '#5a6b2f', banne: '#7d2333', porteC: '#4a3324' });
+    enseigne('AUBERGE DU MOULIN', facade(au, -1.96, 0.12), 4.15, 5.2, 0.62, '#5a6b2f', '#f1e2c4');
+    for (const z of [126.5, 129.5]) {
+      bati.push(C(0.42, 0.42, 0.04, 10, '#efe7d6', -50.6, 0.74, z), C(0.04, 0.04, 0.72, 5, '#2b2b30', -50.6, 0.36, z), C(0.2, 0.2, 0.02, 8, '#2b2b30', -50.6, 0.01, z));
+      for (const dz of [-0.7, 0.7]) bati.push(B(0.4, 0.04, 0.4, '#5b3a2a', -50.6, 0.45, z + dz), B(0.04, 0.45, 0.4, '#5b3a2a', -50.6 + (dz < 0 ? -0.2 : 0.2), 0.68, z + dz));
+      col.boiteC(-50.6, z, 1.0, 2.1);
+    }
+    // l'ardoise de l'auberge, devant la porte
+    bati.push(B(0.06, 0.9, 0.6, '#2b2b30', -49.2, 0.75, 137.6), B(0.07, 0.04, 0.66, '#6b4a30', -49.2, 1.2, 137.6), B(0.4, 0.5, 0.04, '#6b4a30', -49.05, 0.25, 137.6, 0));
+    col.boiteC(-49.2, 137.6, 0.5, 0.8);
+    // le moulin : tour de tuffeau, toit d'ardoise, ailes (à part : elles tournent)
+    const MX = -36, MZ = 147;
+    bati.push(C(2.3, 2.7, 9, 14, TUF, MX, 4.5, MZ), C(0.3, 2.6, 2.6, 14, ARD, MX, 10.3, MZ), B(1.0, 1.9, 0.12, '#5b3a2a', MX - 2.55, 0.95, MZ, Math.PI / 2));
+    for (const y of [3.6, 6.6]) bati.push(B(0.7, 0.9, 0.1, '#2f3c4f', MX - 2.45, y, MZ, Math.PI / 2));
+    col.boiteC(MX, MZ, 5, 5).haut = true;
+    plan.push({ t: 'b', x0: MX - 2.5, z0: MZ - 2.5, x1: MX + 2.5, z1: MZ + 2.5 });
+    const ailes = new THREE.Group(); ailes.position.set(MX - 2.9, 8.6, MZ);
+    {
+      const L = [C(0.35, 0.35, 0.5, 8, '#3a3a3e', 0, 0, 0, 'x')];
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2, bras = B(0.08, 4.4, 0.16, '#5b3a2a'), toile = B(0.03, 3.4, 1.0, '#efe7d6');
+        deplacer(bras, 0, 2.3, 0); deplacer(toile, -0.05, 2.6, 0.55);
+        for (const g of [bras, toile]) { g.rotateX(a); L.push(g); }
+      }
+      const m = new THREE.Mesh(fusion(L), MAT); m.castShadow = true; m.receiveShadow = true; ailes.add(m);
+    }
+    scene.add(ailes);
+    // les maisons du hameau
+    maison({ x: -68, z: 128, w: 10, d: 8, h: 6.2, rot: Math.PI / 2, volets: '#6b7f99' });
+    maison({ x: -57, z: 149, w: 12, d: 8, h: 6.6, rot: Math.PI, volets: '#9aa3ad' });
+    maison({ x: -74, z: 146, w: 8, d: 7, h: 5.6, rot: Math.PI / 2, volets: '#8e6f5a' });
+    // quelques arbres, un banc, un puits
+    for (const [x, z, r] of [[-62.5, 119.5, 2.1], [-47.5, 120.5, 1.8], [-30, 136, 2.4], [-79, 136, 2.2], [-45, 152, 2.0]]) {
+      bati.push(C(0.2, 0.28, 2.6, 6, '#5e4a36', x, 1.3, z), S(r, pick(['#c9a23a', '#b8642c', '#7f9046']), x, 3.4 + r * 0.6, z, 1, 0.9, 1, 1));
+      col.boiteC(x, z, 0.6, 0.6);
+    }
+    bati.push(B(1.6, 0.08, 0.4, '#6b4a30', -63.5, 0.45, 137, Math.PI / 2), B(0.1, 0.45, 0.4, '#3a3a3e', -63.5, 0.22, 136.4), B(0.1, 0.45, 0.4, '#3a3a3e', -63.5, 0.22, 137.6));
+    col.boiteC(-63.5, 137, 0.5, 1.7);
+    bati.push(C(0.9, 0.9, 0.8, 12, '#cfc3a8', -60, 0.4, 140.5), C(0.7, 0.7, 0.04, 12, '#2f3c4f', -60, 0.79, 140.5), B(0.1, 1.6, 0.1, '#5b3a2a', -60.8, 1.6, 140.5), B(0.1, 1.6, 0.1, '#5b3a2a', -59.2, 1.6, 140.5), B(1.8, 0.1, 0.12, '#5b3a2a', -60, 2.4, 140.5));
+    col.boiteC(-60, 140.5, 1.8, 1.8);
+    // panneau à l'entrée du chemin
+    panneau((c, W, H) => {
+      c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(H / 2, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(H / 2, H); c.closePath(); c.fill();
+      c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
+      c.fillStyle = '#1d1d1d'; c.font = 'bold 34px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Les Grands Champs', W / 2 + 18, H / 2 + 2);
+    }, 2.0, 0.34, -51.8, 2.0, 15.2, Math.PI / 2);
+    rnd = rndMonde;
+    return ailes;
+  }
   // point sur la façade (coordonnées monde) : lx le long de la façade, avance devant
   const facade = (o, lx, avance) => {
     const r = o.rot || 0, a = o.d / 2 + avance;
@@ -858,6 +919,7 @@ void main() {
     c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
     c.fillStyle = '#1d1d1d'; c.font = 'bold 30px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Domaine du Clos Libre', W / 2 + 18, H / 2 + 2);
   }, 2.2, 0.36, -86.2, 2.0, 5.6, 0);
+  const moulin = hameau();
   const enseignes = atlas.maillage();
   scene.add(enseignes);
 
@@ -896,6 +958,8 @@ void main() {
     const matH = matiere(T.feuillage, null, false, { vent: [0.1, 0.0, 0.52, 2.4] });
     matH.side = THREE.DoubleSide;
     const cases = new Map();
+    // pas d'herbe sur le chemin des Grands Champs ni sur leur placette (filtrées après coup : le tirage reste le même)
+    for (let i = pos.length - 1; i >= 0; i--) { const [x, z] = pos[i]; if ((Math.abs(x + 55) < 3 && z > 11 && z < 126) || (x > -70 && x < -42 && z > 123 && z < 143)) pos.splice(i, 1); }
     for (const [x, z] of pos) { const k = Math.floor(x / 48) + ',' + Math.floor(z / 48); if (!cases.has(k)) cases.set(k, []); cases.get(k).push(x, z); }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Vector3(), pv = new THREE.Vector3(), c = new THREE.Color(), axe = new THREE.Vector3(0, 1, 0);
     const TEINTES = ['#7f9a3e', '#94a845', '#a9a24a', '#6f8a3a', '#b8a050', '#c2a85a'].map(h => new THREE.Color(h));
@@ -951,8 +1015,8 @@ void main() {
     chai: { x: -80.6, z: -52 },
     cave: { x: 77.8, z: -46 },
     // les trois clients : où ils attendent, où le tracteur s'arrête
-    figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 } },
-    arrets: { cave: { x: 77.8, z: -46 }, bar: { x: 81.5, z: -57.2 }, treille: { x: 110.5, z: 9.4 }, epicerie: { x: 83, z: 9.4 } },
+    figurants: { cave: { x: 74.2, z: -43.6, h: Math.PI / 2 }, bar: { x: 84.5, z: -61.3, h: 0 }, treille: { x: 112.6, z: 3.1, h: 0 }, epicerie: { x: 83.6, z: 3.1, h: 0 }, auberge: { x: -49, z: 135.6, h: -Math.PI / 2 } },
+    arrets: { cave: { x: 77.8, z: -46 }, bar: { x: 81.5, z: -57.2 }, treille: { x: 110.5, z: 9.4 }, epicerie: { x: 83, z: 9.4 }, auberge: { x: -53.2, z: 134.5 } },
     // le bureau du chai (au bout sud du chai) : devant la porte, dehors et dedans ; la chaise du portable ; la caméra de
     // la pièce. pc : là où l'on va au retour de tournée (devant la porte)
     pc: { x: -77.3, z: -60.6 },
@@ -971,12 +1035,14 @@ void main() {
     fontaine: { x: 95, y: 2.62, z: -46 },
     // itinéraire de la tournée, au départ du domaine (chai, portail, départementale, rue de la place)
     // la conduite assistée (pilote.js) le suit sur la file de droite : il évite la fontaine, le monument, les bancs
-    route: [[-80.6, -52], [-84, -45], [-90, -38], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4]],
+    // puis, pour finir, le chemin des Grands Champs jusqu'à l'auberge
+    route: [[-80.6, -52], [-84, -45], [-90, -38], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4],
+      [-55, 10], [-55, 124], [-53.2, 134.5]],
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-84, -42], [-83, -52]],
-    retour: [[110.5, 9.4], [-90, 10], [-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],
+    retour: [[-53.2, 134.5], [-55, 124], [-55, 10], [-90, 10], [-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],
   };
-  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6']];
+  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
 
   /* ------------------------------------------------------------ réglages selon la qualité, mise à jour par image */
   let herbeLoin = 70, vigneLoin = 60, parcelleLoin = 90, dernierX = 1e9, dernierZ = 1e9;
@@ -1014,5 +1080,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, moulin };
 }

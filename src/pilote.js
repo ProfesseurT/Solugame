@@ -92,7 +92,14 @@ export class Pilote {
           if (col && col.resoudre(SONDE, 0.6)) return false;
           const a = tr.autre;
           if (a) for (const ao of a.d.off) if (Math.hypot(px - (a.pos.x + Math.sin(a.h) * ao), pz - (a.pos.z + Math.cos(a.h) * ao)) < a.d.r + 0.6) return false;
-          for (let j = 0; j < voitures.length; j++) { const v = voitures[j]; for (let q = -1; q <= 1; q += 2) if (Math.hypot(px - (v.x + q * 1.1 * v.sens), pz - v.z) < 1.6) return false; }
+          // les voitures : là où elles sont, et là où elles seront dans 1,5 s (une voiture lancée arrive vite)
+          for (let j = 0; j < voitures.length; j++) {
+            const v = voitures[j], dz = pz - v.z;
+            if (Math.abs(dz) > 2.2) continue;
+            const a0 = v.x - 1.1, a1 = v.x + 1.1 + Math.abs(v.v) * 1.5 * (v.sens > 0 ? 1 : 0), b0 = v.x - 1.1 - Math.abs(v.v) * 1.5 * (v.sens < 0 ? 1 : 0), b1 = v.x + 1.1;
+            const x0 = Math.min(a0, b0), x1 = Math.max(a1, b1), ex = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
+            if (Math.hypot(ex, dz) < 1.6) return false;
+          }
         }
         return true;
       };
@@ -128,6 +135,19 @@ export class Pilote {
     for (let k = 0; k < voitures.length; k++) {
       const v = voitures[k], ex = v.x - pos.x, ez = v.z - pos.z, lo = ex * sx + ez * cz, la = ex * cz - ez * sx;
       if (lo > 0 && lo < 20 && Math.abs(la) < 2.2) vc = Math.min(vc, lo < 8 ? 0 : v.v * 0.9);
+    }
+    // céder le passage : au bout d'un chemin ou d'une rue (on roule vers la départementale), on arrive assez lentement
+    // pour pouvoir s'arrêter au bord ; on s'y arrête tant qu'une voiture arrive, d'un côté ou de l'autre (environ 4 s
+    // d'avance)
+    const bord = Math.abs(pos.z - 10) - 6.2;
+    if (bord > -1.5 && bord < 40 && Math.sign(10 - pos.z) * cz > 0.5) {
+      let arrive = false;
+      for (let k = 0; k < voitures.length; k++) {
+        const v = voitures[k], ex = (pos.x - v.x) * v.sens; // > 0 : elle vient vers nous
+        if (ex > -7 && ex < 7 + v.v * 3.6) { arrive = true; break; }
+      }
+      const vs = Math.sqrt(2 * 2.4 * Math.max(0, bord));
+      vc = Math.min(vc, arrive ? vs : vs + 3);
     }
     const gaz = vc < 0.05 && tr.v < 0.3 ? 0 : borne((vc - tr.v) * 0.9, -1, 1);
     this.actif = true;

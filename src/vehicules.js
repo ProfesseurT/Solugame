@@ -248,11 +248,19 @@ export class Tracteur {
 
 /* ---------------------------------------------------------------- voitures sur la départementale */
 const LONG = 4.2; // longueur d'une voiture (m)
-// Un obstacle (tracteur, van, personnage) est dans une voie si son centre en est plus près que la demi-largeur d'une
-// voiture (0,86 m), plus la sienne (o.demiLarg, 0,9 m par défaut), plus 25 cm de marge. Au-delà, on se croise sans se
-// toucher : un véhicule arrêté entre deux voies, pour livrer côté nord, ne bloque plus les deux sens à la fois (chacun
-// attendait l'autre).
-const dansVoie = (o, z) => Math.abs(o.z - z) < 1.11 + (o.demiLarg ?? 0.9);
+// Un obstacle : un véhicule du domaine (o.veh) compte par ses deux cercles de collision, dans le sens où il est tourné (en
+// travers au bout d'un chemin, il dépasse sur la route) ; un personnage, par un cercle de 0,9 m. Il est dans une voie si
+// l'un de ses cercles en est plus près que la demi-largeur d'une voiture (0,86 m), plus son rayon, plus 25 cm de marge.
+// Au-delà, on se croise sans se toucher : un véhicule arrêté entre deux voies, pour livrer côté nord, ne bloque plus les
+// deux sens à la fois (chacun attendait l'autre). cercles(o) remplit CER ([x, z, rayon, demi-longueur]) et rend leur nombre.
+const CER = [[0, 0, 0, 0], [0, 0, 0, 0]];
+function cercles(o) {
+  const p = o.veh;
+  if (!p) { const c = CER[0]; c[0] = o.x; c[1] = o.z; c[2] = 0.9; c[3] = 2.4; return 1; }
+  const sx = Math.sin(p.h), cz = Math.cos(p.h);
+  for (let k = 0; k < 2; k++) { const c = CER[k], off = p.d.off[k]; c[0] = o.x + sx * off; c[1] = o.z + cz * off; c[2] = p.d.r; c[3] = p.d.r; }
+  return 2;
+}
 export class Voiture {
   constructor(mesh, x, sens, vmax) {
     this.mesh = mesh; this.x = x; this.sens = sens; this.vmax = vmax; this.v = vmax; this.a = 0;
@@ -271,8 +279,11 @@ export class Voiture {
   ecart(obstacles, voitures, z) {
     let libre = 1e9, obst = null;
     for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i], dx = (o.x - this.x) * this.sens - 4.5;
-      if (dx > -5 && dx < libre && dansVoie(o, z)) { libre = dx; obst = o; }
+      const o = obstacles[i], n = cercles(o);
+      for (let k = 0; k < n; k++) {
+        const [cx, cz, r, l] = CER[k], dx = (cx - this.x) * this.sens - LONG / 2 - l;
+        if (dx > -5 && dx < libre && Math.abs(cz - z) < 1.11 + r) { libre = dx; obst = o; }
+      }
     }
     for (let i = 0; i < voitures.length; i++) {
       const o = voitures[i];
@@ -286,8 +297,11 @@ export class Voiture {
   // la voie d'en face est-elle libre pour doubler ?
   voieLibre(obstacles, voitures) {
     for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i], dx = (o.x - this.x) * this.sens;
-      if (dx > -6 && dx < 40 && dansVoie(o, this.zAutre)) return false;
+      const o = obstacles[i], n = cercles(o);
+      for (let k = 0; k < n; k++) {
+        const [cx, cz, r] = CER[k], dx = (cx - this.x) * this.sens;
+        if (dx > -6 && dx < 40 && Math.abs(cz - this.zAutre) < 1.11 + r) return false;
+      }
     }
     for (let i = 0; i < voitures.length; i++) {
       const o = voitures[i];
@@ -320,7 +334,8 @@ export class Voiture {
     const libre = this.ecart(obstacles, voitures, this.dep === 2 ? this.zAutre : this.z);
     // vitesse voulue : garder 1,2 s d'écart et pouvoir s'arrêter à 2 m en freinant à 2,5 m/s² ;
     // accélération et freinage progressifs (à-coups bornés)
-    const marge = Math.max(0, libre - 2);
+    // devant le tracteur ou le van, on s'arrête plus loin : il doit pouvoir manœuvrer (demi-tour en trois temps)
+    const marge = Math.max(0, libre - (this.obst && this.obst.veh ? 6 : 2));
     let cible = Math.min(this.vmax, marge / 1.2, Math.sqrt(5 * marge));
     if (this.detresse > 0) cible = 0; // arrêtée le temps de reprendre ses esprits
     if (this.dep === 2 && Math.abs(this.z - this.zVoie) < 2.2) cible = Math.min(cible, 1.5); // déboîte au pas

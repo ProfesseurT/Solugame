@@ -2,7 +2,7 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, MESSAGE_MATIN as MESSAGE } from './textes.js';
 import { son } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -73,6 +73,7 @@ export class Telephone {
       case 'msg': m.envoyerMessage(this.client); this.app = 'bureau'; this.afficher(); this.toast('Message envoyé à Bar Le Cep.'); return;
       case 'tournee': m.demarrerTournee(); return;
       case 'cheque': m.planifierCheque(); break;
+      case 'prospect': m.planifierProspect(); break;
       case 'bl': if (!m.blPret) return; this.app = 'bl'; break;
       case 'effacer': this.afficher(); return;
       case 'livrer': if (this.encre > 120) { m.livrer(); this.fermer(); } return;
@@ -176,7 +177,7 @@ export class Telephone {
       return `<div class="rappel"><span class="av" style="background:${c.coul}">${c.ini}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(c.note)}</span><div class="rl">${tag}${bt}</div></div></div>`;
     }).join('');
     let carte = '';
-    if (e === 'tournee') carte = '<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>4 arrêts, tout est chargé</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>';
+    if (e === 'tournee') carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>${m.arrets.length} arrêts, tout est chargé</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>`;
     else if (m.attenteBL && m.blPret) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
     else if (e === 'chai') carte = '<div class="carte-a-faire bureau"><p class="ap-sur">Commandes envoyées</p><b>Chargez-les au chai dès qu\'elles sont signées</b></div>';
     // le règlement en retard : une tâche du jour, qu'on ajoute soi-même à la tournée
@@ -184,11 +185,18 @@ export class Telephone {
     const reglement = `<div class="rappel"><span class="av" style="background:${r.coul}">${r.ini}</span><div class="rq"><b>${esc(r.nom)} · ${esc(r.lieu)}</b>
       <span>Facture ${r.facture}, ${eur(r.ttc)} : passer récupérer le règlement</span><div class="rl">${planifie
         ? '<span class="tag ok">Dans la tournée</span>' : `<span class="tag retard">En retard</span><button class="ap-bt plein" data-a="cheque">Ajouter à la tournée</button>`}</div></div></div>`;
+    // le prospect : une tâche du jour, qu'on ajoute à la tournée ; après la visite, à rappeler (note dans son fil)
+    const p = m.prospect;
+    const etatP = p.statut === 'a_rappeler' ? '<span class="tag jour">À rappeler</span>' : p.statut !== 'a_planifier' ? '<span class="tag ok">Dans la tournée</span>'
+      : '<span class="tag decroche">Prospect</span><button class="ap-bt plein" data-a="prospect">Ajouter à la tournée</button>';
+    const prospect = `<div class="rappel"><span class="av" style="background:${p.coul}">${p.ini}</span><div class="rq"><b>${esc(p.nom)} · ${esc(p.lieu)}</b>
+      <span>${esc(p.statut === 'a_rappeler' ? p.fil : p.note)}</span><div class="rl">${etatP}</div></div></div><p class="ap-note">${esc(BUREAU.prospect)}</p>`;
     return this.entete('Le bureau', 'bureau') + this.onglets('bureau') + `<div class="ap-corps">${carte}
-      <p class="ap-sur">Ma journée</p><h3>Bonjour.</h3><p class="ap-sous">3 rappels et 1 règlement en retard aujourd'hui.</p>
+      <p class="ap-sur">Ma journée</p><h3>Bonjour.</h3><p class="ap-sous">${esc(MESSAGE)}</p>
       <div class="tuiles"><div class="tu rouge"><b>1</b>Rappel en retard</div><div class="tu bleu"><b>2</b>Rappels du jour</div><div class="tu rouge"><b>1</b>Règlement en retard</div></div>
       <p class="ap-h">À faire aujourd'hui</p>${lignes}
-      <p class="ap-h">Règlement en retard</p>${reglement}</div>`;
+      <p class="ap-h">Règlement en retard</p>${reglement}
+      <p class="ap-h">Prospect</p>${prospect}</div>`;
   }
   // Commandes : le formulaire du client en cours, la confirmation d'envoi, ou la liste
   commande() {
@@ -232,10 +240,10 @@ export class Telephone {
     if (!['tournee', 'livraisons', 'retour', 'pc', 'fin', 'libre'].includes(e)) return tete + '<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-txt">Pas encore de tournée : préparez les commandes, puis chargez au chai celles qui sont signées.</p></div>';
     const dist = Math.round(this.jeu.longueurTournee / 10) * 10 + ' m';
     const arrets = m.arrets.map((c, i) => {
-      const cheque = c === m.retardataire;
-      const fait = cheque ? ['recupere', 'depose', 'saisi'].includes(c.statut) : ['livree', 'facturee', 'transmise'].includes(c.statut), enCours = e === 'livraisons' && i === m.arret;
-      const etat = fait ? `<span class="tag ok">${cheque ? 'Récupéré' : 'Livré'}</span>` : enCours ? '<span class="tag jour">En cours</span>' : '';
-      const quoi = cheque ? `Récupérer le chèque de la facture ${c.facture} (${eur(c.ttc)})` : `Livrer ${c.cartons} cartons, faire signer le bon de livraison`;
+      const cheque = c === m.retardataire, prospect = c === m.prospect;
+      const fait = cheque ? ['recupere', 'depose', 'saisi'].includes(c.statut) : prospect ? c.statut === 'a_rappeler' : ['livree', 'facturee', 'transmise'].includes(c.statut), enCours = e === 'livraisons' && i === m.arret;
+      const etat = fait ? `<span class="tag ok">${cheque ? 'Récupéré' : prospect ? 'Rencontré' : 'Livré'}</span>` : enCours ? '<span class="tag jour">En cours</span>' : '';
+      const quoi = cheque ? `Récupérer le chèque de la facture ${c.facture} (${eur(c.ttc)})` : prospect ? 'Prospect : passer le voir, lui faire goûter le rouge' : `Livrer ${c.cartons} cartons, faire signer le bon de livraison`;
       return `<div class="arret"><span class="num">${i + 1}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(quoi)}</span></div>${etat}</div>`;
     }).join('');
     const bas = e === 'tournee' ? '<button class="ap-bt plein large" data-a="tournee">Démarrer la tournée</button>'

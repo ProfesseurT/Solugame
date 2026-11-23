@@ -6,21 +6,26 @@
 // est une tâche du jour, que le vigneron ajoute lui-même à sa tournée (et non un client qui appelle) : Teddy, 22/11/2026 ; « Vitisoft exporte
 // factures et encaissements vers le logiciel du comptable » et « calcule la DRM, validée dans CIEL » : fiche de faits.
 
-export const VERSION = 'Démo 0.8';
+export const VERSION = 'Démo 0.9';
 
 // Prévente du registre phyto : 4,99 € HT/mois jusqu'au 31/12/2026, ensuite 9,99 € HT/mois.
 export const PREVENTE_FIN = Date.UTC(2026, 11, 31, 23, 0, 0); // 1er janvier 2027, 0 h, heure de Paris
 export const EN_PREVENTE = Date.now() < PREVENTE_FIN;
 export const LP_URL = 'https://doc.solumatic.fr/registre-phyto-numerique-a-vous-de-jouer-qjxR-F.html?source=jeu-tournee-generale';
 
+// la notification du matin, et le sous-titre de Ma journée
+export const MESSAGE_MATIN = '3 rappels, 1 règlement en retard et 1 prospect aujourd\'hui.';
+
 export const OBJECTIFS = {
   tel: 'Regardez votre téléphone',
-  rappels: n => `Le bureau : traitez les tâches du jour (${n} sur 4)`,
+  rappels: n => `Le bureau : traitez les tâches du jour (${n} sur 5)`,
   saisie: c => `Commande ${c.du} : saisissez ${c.demande} carton${c.demande > 1 ? 's' : ''}`,
   chai: 'Chargez les commandes signées au chai, en tracteur ou en van',
   tournee: 'Lancez la tournée dans le bureau',
   livrer: nom => `Tournée : livrez ${nom}`,
   cheque: nom => `Tournée : récupérez le chèque de ${nom}`,
+  prospect: nom => `Tournée : passez voir ${nom}, aux Grands Champs`,
+  deguster: nom => `Faites goûter le rouge : servez un verre à ${nom}`,
   retour: 'Rentrez au bureau du chai : déposez le chèque sur le bureau',
   pcOuvrir: 'Asseyez-vous au portable : tout se fait dans Vitisoft',
   pc: n => `Vitisoft : règlement, factures, DRM (${n} sur 3)`,
@@ -48,6 +53,17 @@ export const RETARD = {
   id: 'epicerie', ini: 'EB', coul: '#2f4a6b', nom: 'Épicerie du Bourg', du: 'l\'Épicerie du Bourg', lieu: 'Le Bourg',
   facture: 'F-2026-0098', ttc: 273.6, detail: '4 cartons de Cuvée du Clos, rouge',
 };
+// Le prospect de la tournée (données fictives) : un restaurant du hameau des Grands Champs, pas encore client. On ajoute
+// la visite à sa tournée, on lui fait goûter le rouge (un geste du jeu : servir un verre), le bureau garde la visite dans
+// le fil du client et dira quand le rappeler. Source, page du bureau (vitisoft.fr, lue le 23/11/2026) : « Prospection :
+// Cavistes, restaurants, importateurs : suivis jusqu'à la commande. » ; « Le fil du client : appels, notes, factures,
+// commandes signées en ligne. » ; « Chaque matin, il vous dit qui rappeler, quoi proposer et pourquoi ». Choix de Teddy
+// (23/11/2026) : dégustation puis rappel, pas de commande.
+export const PROSPECT = {
+  id: 'auberge', ini: 'AM', coul: '#5a6b2f', nom: 'Auberge du Moulin', du: 'l\'Auberge du Moulin', lieu: 'Les Grands Champs',
+  note: 'Restaurant, pas encore client : passer le voir, lui faire goûter le rouge',
+  fil: 'Visite : a goûté la Cuvée du Clos, rouge, pour sa carte d\'hiver. À rappeler.',
+};
 // Consigne de mission dans le formulaire de commande (la quantité dite au téléphone)
 export const CONSIGNE_QTE = c => `${c.nom} a demandé ${c.demande} carton${c.demande > 1 ? 's' : ''}.`;
 
@@ -72,12 +88,17 @@ export const DIALOGUES = {
   charge: [{ qui: '', txt: 'Tout est chargé. Lancez la tournée dans le bureau.' }],
   accelerer: tactile => [{ qui: '', txt: tactile ? 'Gardez le doigt posé : les cartons vont trois fois plus vite.' : 'Gardez une flèche enfoncée : les cartons vont trois fois plus vite.' }],
   chequePlanifie: [{ qui: '', txt: 'Passage à l\'Épicerie du Bourg ajouté à la tournée : vous y récupérerez le règlement.' }],
+  prospectPlanifie: [{ qui: '', txt: 'Passage à l\'Auberge du Moulin ajouté à la tournée : vous lui ferez goûter le rouge.' }],
   tournee: [{ qui: '', txt: 'Tournée lancée. L\'itinéraire est sur la carte.' }],
   conduite: [{ qui: '', txt: 'Doigt posé : on avance. En mission, le véhicule suit l\'itinéraire tout seul.' }, { qui: '', txt: 'Glissez sur le côté pour tourner vous-même, vers le bas pour freiner et reculer.' }],
   arrivee: {
     cave: [{ qui: 'Cave du Pressoir', txt: 'Parfait ! Et la facture ? Depuis le 1er septembre, je reçois les factures électroniques.' }],
     bar: [{ qui: 'Bar Le Cep', txt: 'Juste à temps pour le réveillon. Je signe où ?' }],
     treille: [{ qui: 'La Treille', txt: 'Merci ! Posez-les en cuisine, je signe le bon.' }],
+    auberge: [
+      { qui: 'Auberge du Moulin', txt: 'Bonsoir ! Vous êtes du Clos Libre ? On m\'a parlé de votre rouge.' },
+      { qui: 'Vous', txt: 'Je vous le fais goûter ?' },
+    ],
     epicerie: [
       { qui: 'Vous', txt: 'Bonjour ! Je passe pour la facture en retard.' },
       { qui: 'Épicerie du Bourg', txt: 'Ah oui, pardon, je l\'avais oubliée ! Voici le chèque : 273,60 €.' },
@@ -85,12 +106,17 @@ export const DIALOGUES = {
     ],
   },
   chequePied: [{ qui: '', txt: 'Le chèque se récupère au comptoir de l\'épicerie.' }],
+  degustation: [
+    { qui: 'Auberge du Moulin', txt: 'Il a du fruit, et pas trop de bois. Il irait bien avec ma carte d\'hiver.' },
+    { qui: 'Auberge du Moulin', txt: 'Rappelez-moi quand je refais ma carte, d\'ici quelques semaines.' },
+    { qui: 'Vous', txt: 'C\'est noté dans le bureau : je vous rappelle.' },
+  ],
   chequeDepose: [{ qui: '', txt: 'Chèque posé sur le bureau. Reste à saisir le règlement dans Vitisoft.' }],
   livre: c => [{ qui: '', txt: `Bon de livraison ${c.bl} signé par ${c.du}.` }, ...(c.id === 'cave' ? [{ qui: 'Vous', txt: 'La facture part ce soir, depuis Vitisoft.' }] : [])],
   pcTracteur: [{ qui: '', txt: 'Descendez : le bureau du chai est là, sa porte donne sur la cour.' }],
   verre: [{ qui: 'Vous', txt: 'Un verre de Cuvée du Clos ? C\'est la maison qui offre.' }],
   retour: [{ qui: '', txt: 'Tournée terminée. Retour au bureau du chai : le chèque sur le bureau, puis Vitisoft, sur le portable.' }],
-  merci: [{ qui: '', txt: 'Trois livraisons, trois factures, un chèque saisi et la DRM prête pour CIEL. Bonne soirée !' }],
+  merci: [{ qui: '', txt: 'Trois livraisons, trois factures, un chèque saisi, un prospect à rappeler et la DRM prête pour CIEL. Bonne soirée !' }],
 };
 
 // Ce que disent les passants à qui l'on sert un verre, et les automobilistes qu'on accroche (jamais méchant)
@@ -110,6 +136,7 @@ export const BUREAU = {
   tournee: 'Les arrêts dans l\'ordre, et ce qu\'il y a à faire chez chacun.',
   itineraire: 'Itinéraire suggéré, au départ du domaine',
   bl: 'Le client signe le bon de livraison, du doigt, sur votre téléphone.',
+  prospect: 'Prospection : suivie jusqu\'à la commande. Ce que vous notez reste dans le fil du client.',
 };
 
 // Vitisoft, sur le portable du bureau du chai (Vitisoft n'a pas d'appli téléphone : arbitrage de Teddy, 22/11/2026).
