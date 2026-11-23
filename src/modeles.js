@@ -12,11 +12,11 @@ export const SOLEIL = new THREE.Vector3(-0.75, 0.42, 0.55).normalize();
    refléter le ciel aux vitres et à l'eau. Le type de matière vient de la couleur (table TYPES). */
 // carrosserie : peinture vernie des véhicules (reflet du ciel, éclat du soleil), appliquée à toute couleur par
 // teinter(g, couleur, T.carrosserie) : elle n'a pas de couleur réservée dans TYPES.
-export const T = { lisse: 0, pierre: 1, ardoise: 2, asphalte: 3, herbe: 4, gravier: 5, terre: 6, bois: 7, feuillage: 8, vitre: 9, paves: 10, eau: 11, peinture: 12, champ: 13, lampe: 14, allumee: 15, carrosserie: 16 };
+export const T = { lisse: 0, pierre: 1, ardoise: 2, asphalte: 3, herbe: 4, gravier: 5, terre: 6, bois: 7, feuillage: 8, vitre: 9, paves: 10, eau: 11, peinture: 12, champ: 13, lampe: 14, allumee: 15, carrosserie: 16, moellon: 17, enduit: 18, petitsPaves: 19 };
 const TYPES = new Map(Object.entries({
   '#ebe0c6': T.pierre, '#b9a98b': T.pierre, '#d9cdb2': T.pierre, '#efe6d3': T.pierre, '#a99a82': T.pierre,
   '#cfc3a8': T.pierre, '#e3dac6': T.pierre, '#cbbf9f': T.pierre, '#d8cbb0': T.pierre,
-  '#5d626e': T.ardoise, '#686d78': T.ardoise,
+  '#5d626e': T.ardoise, '#686d78': T.ardoise, '#62666f': T.ardoise,
   '#55575f': T.asphalte, '#ece6d4': T.peinture,
   '#c9b993': T.gravier, '#cfc1a0': T.gravier,
   '#cdb998': T.paves, '#bdb19b': T.paves,
@@ -27,6 +27,10 @@ const TYPES = new Map(Object.entries({
   '#5a3f2b': T.bois, '#8d7c66': T.bois, '#7d6b55': T.bois,
   '#2f3c4f': T.vitre, '#3a5068': T.vitre, '#3d5f8e': T.vitre, '#2d3846': T.vitre,
   '#4f93b8': T.eau, '#ffe1a0': T.lampe, '#4a3a2a': T.allumee,
+  // vieilles bâtisses : murs en moellons, enduits à la chaux ; petits pavés des rues, vieille chaussée du bourg
+  '#cdbf9f': T.moellon, '#c7b593': T.moellon, '#d3c4a3': T.moellon,
+  '#e6d4b0': T.enduit, '#ead9bb': T.enduit, '#dfcaa4': T.enduit, '#e9d2a8': T.enduit,
+  '#a89c88': T.petitsPaves, '#b1a58f': T.petitsPaves, '#78736b': T.asphalte,
 }));
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
@@ -150,7 +154,7 @@ varying float vMat;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec3 normaleMonde() { return normalize(cross(dFdx(vPosM), dFdy(vPosM))); }
 // éclat moyen de chaque matière, pour la version allégée au loin
-const float KLOIN[17] = float[17](1.0, 0.92, 0.9, 0.96, 0.94, 1.0, 0.92, 0.88, 0.9, 1.0, 0.9, 1.0, 0.86, 0.96, 1.0, 1.0, 1.0);
+const float KLOIN[20] = float[20](1.0, 0.92, 0.9, 0.96, 0.94, 1.0, 0.92, 0.88, 0.9, 1.0, 0.9, 1.0, 0.86, 0.96, 1.0, 1.0, 1.0, 0.9, 0.97, 0.84);
 vec3 cl_detail(vec3 col) {
   vec3 an = abs(normaleMonde());
   bool sol = an.y > 0.7;
@@ -214,6 +218,34 @@ vec3 cl_detail(vec3 col) {
     k = 0.9 + 0.06 * sin(dot(vPosM.xz, vec2(0.5, 0.3))) + 0.12 * g;
   } else if (m == 16) {
     k = 0.98 + 0.04 * g; // peinture lisse : pas de grain
+  } else if (m == 17 || m == 18) {
+    // moellons : rangs, pierres de longueur inégale, joints de mortier clair ; l'enduit à la chaux (18) les couvre,
+    // sauf là où il est tombé (plaques), et se salit par endroits
+    float hr = 0.27, r = floor(uv.y / hr), lx = 0.32 + 0.3 * h21(vec2(r, 5.0)), xx = uv.x / lx + h21(vec2(r, 2.0)) * 3.0;
+    vec2 c = vec2(floor(xx), r), fr = vec2(fract(xx), fract(uv.y / hr)), ed = min(fr, 1.0 - fr) * vec2(lx, hr);
+    // chaque pierre ne remplit pas toute sa case : hauteur et longueur propres, le reste est du mortier et des cales
+    float hs = 0.6 + 0.4 * h21(c + 4.0), ws = 0.72 + 0.28 * h21(c + 7.0);
+    float j = max(1.0 - smoothstep(0.01, 0.035, min(ed.x, ed.y) + 0.02 * (f - 0.5)), max(smoothstep(hs - 0.08, hs, fr.y), smoothstep(ws - 0.06, ws, fr.x)) * 0.8);
+    float km = mix((0.8 + 0.28 * h21(c)) * (0.92 + 0.14 * g) * mix(1.0, 0.9, 1.0 - smoothstep(0.0, 0.25, fr.y)), 1.04, j); // le bas de chaque pierre un peu dans l'ombre
+    vec3 cm = mix(col * mix(vec3(1.0), vec3(1.06, 1.0, 0.9), h21(c + 9.0) * 0.6), col * vec3(1.08, 1.06, 1.0), j);
+    if (m == 17) { col = cm; k = km * (0.96 + 0.08 * f); }
+    else {
+      // l'enduit tombe surtout en pied de mur (l'humidité), par plaques aux bords irréguliers
+      float m0 = texture(tBruit, uv * 0.09 + 0.5).a + 0.24 * (1.0 - smoothstep(0.5, 1.8, vPosM.y)) + 0.12 * (f - 0.5);
+      float tombe = smoothstep(0.8, 0.84, m0) * smoothstep(0.55, 0.75, vPosM.y);
+      float ke = (0.95 + 0.08 * g + 0.04 * f) * mix(1.0, 0.9, smoothstep(0.55, 0.8, texture(tBruit, uv * 0.05).g));
+      col = mix(col, cm * vec3(0.9, 0.88, 0.84), tombe);
+      k = mix(ke, km * 0.95, tombe);
+    }
+  } else if (m == 19) {
+    // petits pavés de grès : rangs décalés, pavés bombés (bords plus sombres), joints creux
+    vec2 p = uv / vec2(0.16, 0.14);
+    float rr = floor(p.y);
+    vec2 q = vec2(p.x + mod(rr, 2.0) * 0.5 + h21(vec2(rr, 4.0)) * 0.3, p.y), c = floor(q), fr = fract(q), ed = min(fr, 1.0 - fr);
+    float bord = min(ed.x * 0.16, ed.y * 0.14);
+    k = (0.8 + 0.3 * h21(c)) * mix(0.84, 1.0, smoothstep(0.0, 0.05, bord)) * (0.93 + 0.12 * f) * (0.9 + 0.16 * g);
+    k = mix(k, 0.55, 1.0 - smoothstep(0.006, 0.02, bord));
+    col *= mix(vec3(1.0), vec3(1.05, 0.98, 0.9), h21(c + 3.0));
   }
   return col * k * pied;
 }`;
@@ -453,22 +485,40 @@ export function S(r, c, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, detail = 0)
   }
   return geo(p, n, c);
 }
-// Toit à deux pans : base w x d posée en y, faîtage parallèle à x (ou à z si surZ)
-export function toit(w, d, h, c, x = 0, y = 0, z = 0, surZ = false) {
+// Toit à deux pans sur des murs w x d dont le haut est en y, faîtage parallèle à x (ou à z si surZ), haut de ht. Un vrai
+// toit : pans épais (ep) qui reposent sur les murs, débord à l'égout (egout) et aux rives (rive), dessous en voliges,
+// tuiles faîtières ; les pignons sont des murs (couleur mur) dans le plan des murs. Rien ne laisse passer le jour entre
+// les murs et le toit, quel que soit l'angle de vue. Rend les morceaux (à fusionner avec le reste du décor).
+export function toit(w, d, ht, c, x = 0, y = 0, z = 0, surZ = false, o = {}) {
   if (surZ) [w, d] = [d, w];
-  const a = w / 2, b = d / 2;
-  const P = [
-    -a, 0, b, a, 0, b, a, h, 0, -a, 0, b, a, h, 0, -a, h, 0, // pan avant
-    a, 0, -b, -a, 0, -b, -a, h, 0, a, 0, -b, -a, h, 0, a, h, 0, // pan arrière
-    -a, 0, -b, -a, 0, b, -a, h, 0, // pignon gauche
-    a, 0, b, a, 0, -b, a, h, 0, // pignon droit
-  ];
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  g.computeVertexNormals();
-  if (surZ) g.rotateY(Math.PI / 2);
-  g.translate(x, y, z);
-  return finir(g, c);
+  const e = o.egout ?? 0.4, r = o.rive ?? 0.22, ep = o.ep ?? 0.2;
+  const a = w / 2, b = d / 2, A = a + r, E = b + e, k = ht / E;
+  const yb = v => k * (b - Math.abs(v)), yh = v => yb(v) + ep; // dessous, dessus du pan
+  const dessus = [], dessous = [], bords = [], pignons = [];
+  // un quadrilatère p0..p3, tourné vers n (l'ordre des sommets est corrigé au besoin)
+  const quad = (P, p0, p1, p2, p3, n) => {
+    const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2], vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+    const sens = (uy * vz - uz * vy) * n[0] + (uz * vx - ux * vz) * n[1] + (ux * vy - uy * vx) * n[2];
+    if (sens < 0) [p1, p3] = [p3, p1];
+    P.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3);
+  };
+  for (const s of [1, -1]) {
+    quad(dessus, [-A, yh(E), s * E], [A, yh(E), s * E], [A, yh(0), 0], [-A, yh(0), 0], [0, 1, s * k]);
+    quad(dessous, [-A, yb(E), s * E], [A, yb(E), s * E], [A, yb(0), 0], [-A, yb(0), 0], [0, -1, -s * k]);
+    quad(bords, [-A, yb(E), s * E], [A, yb(E), s * E], [A, yh(E), s * E], [-A, yh(E), s * E], [0, 0, s]); // égout
+    for (const t of [1, -1]) quad(bords, [t * A, yb(E), s * E], [t * A, yb(0), 0], [t * A, yh(0), 0], [t * A, yh(E), s * E], [t, 0, 0]); // rives
+    const tri = [s * a, 0, -b, s * a, 0, b, s * a, yb(0), 0];
+    if (s < 0) pignons.push(...tri); else pignons.push(tri[3], tri[4], tri[5], tri[0], tri[1], tri[2], tri[6], tri[7], tri[8]);
+  }
+  const parts = [[dessus.concat(bords), c], [dessous, o.dessous || '#5a3f2b'], [pignons, o.mur || '#ebe0c6']].map(([P, coul]) => {
+    const q = new THREE.BufferGeometry();
+    q.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    q.computeVertexNormals();
+    return colorer(q, coul);
+  });
+  parts.push(B(2 * A + 0.04, 0.12, 0.3, o.faitiere || '#8c5a44', 0, yh(0) - 0.01, 0));
+  for (const q of parts) { if (surZ) tournerY(q, Math.PI / 2); deplacer(q, x, y, z); }
+  return parts;
 }
 
 // Attributs compactés pour la carte graphique, une fois la géométrie finie : normale sur 3 octets, couleur sur

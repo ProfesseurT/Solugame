@@ -3,13 +3,14 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME } from './modeles.js';
 import { hasard, lisse } from './outils.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
 export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
 const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
+const FEUILLES_VIGNE = ['#b8642c', '#c9a23a', '#a6823a', '#8a8f3a'], VIGNE_VIERGE = ['#b0402c', '#c2562e', '#8e2a3b', '#d0702f', '#a8452f'];
 
 function hash(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
 function bruit(x, z) {
@@ -277,17 +278,21 @@ void main() {
 
   /* ------------------------------------------------------------ routes, place, cour, parcelles */
   const surf = [];
-  const ROUTE = '#55575f', LIGNE = '#ece6d4', TROTT = '#bdb19b';
-  surf.push(B(840, 0.06, 7, ROUTE, 0, 0, 10));
-  surf.push(B(840, 0.065, 0.14, LIGNE, 0, 0, 6.85), B(840, 0.065, 0.14, LIGNE, 0, 0, 13.15));
-  for (let x = -414; x < 420; x += 9) surf.push(B(3, 0.068, 0.15, LIGNE, x, 0, 10));
-  rect(-200, 6.5, 200, 13.5, '#4a4c55');
-  // trottoirs du bourg
+  const ROUTE = '#55575f', VIEILLE = '#78736b', LIGNE = '#ece6d4', TROTT = '#bdb19b', PAVES = '#a89c88', BORDURE = '#d9cdb2';
+  // la départementale ; dans le bourg (x de 22 à 158) une vieille chaussée plus claire, sans bandes blanches, entre deux
+  // caniveaux pavés ; au cœur du bourg (x de 70 à 120, carrefour de la rue de la place), elle est pavée
+  surf.push(B(442, 0.06, 7, ROUTE, -199, 0, 10), B(136, 0.06, 7, VIEILLE, 90, 0, 10), B(262, 0.06, 7, ROUTE, 289, 0, 10));
+  for (const [x0, x1] of [[-420, 22], [158, 420]]) surf.push(B(x1 - x0, 0.065, 0.14, LIGNE, (x0 + x1) / 2, 0, 6.85), B(x1 - x0, 0.065, 0.14, LIGNE, (x0 + x1) / 2, 0, 13.15));
+  for (let x = -414; x < 420; x += 9) if (x < 20 || x > 160) surf.push(B(3, 0.068, 0.15, LIGNE, x, 0, 10));
+  surf.push(B(136, 0.066, 0.6, PAVES, 90, 0, 6.8), B(136, 0.066, 0.6, PAVES, 90, 0, 13.2), B(50, 0.07, 6.98, PAVES, 95, 0, 10));
+  rect(-200, 6.5, 200, 13.5, '#4a4c55'); rect(70, 6.5, 120, 13.5, '#a89c88');
+  // trottoirs du bourg, bordés de pierre
   surf.push(B(130, 0.09, 4, TROTT, 90, 0, 4.5), B(130, 0.09, 4, TROTT, 90, 0, 15.5));
+  surf.push(B(67, 0.14, 0.22, BORDURE, 58.5, 0, 6.39), B(57, 0.14, 0.22, BORDURE, 126.5, 0, 6.39), B(130, 0.14, 0.22, BORDURE, 90, 0, 13.61));
   rect(25, 2.5, 155, 6.5, TROTT); rect(25, 13.5, 155, 17.5, TROTT);
-  // rue du bourg vers la place et la mairie
-  surf.push(B(6, 0.062, 90, ROUTE, 95, 0, -35));
-  rect(92, -80, 98, 6.5, '#4a4c55');
+  // rue du bourg vers la place et la mairie : petits pavés ; parvis de l'église
+  surf.push(B(6, 0.062, 90, PAVES, 95, 0, -35), B(3.4, 0.082, 12, '#cdb998', 113.6, 0, -46));
+  rect(92, -80, 98, 6.5, '#a89c88');
   // place pavée
   surf.push(B(38, 0.08, 34, '#cdb998', 95, 0, -46));
   surf.push(B(16, 0.081, 9, '#cdb998', 95, 0, -77));
@@ -429,31 +434,136 @@ void main() {
     vignes.fine = gFine; vignes.simple = gSimple;
   }
 
-  /* ------------------------------------------------------------ bâtiments */
-  const fenetre = (L, x, y, z, f, volets) => {
+  /* ------------------------------------------------------------ bâtiments
+     De vieilles bâtisses : murs en pierre de taille (tuffeau), en moellons ou enduits à la chaux ; sur les deux derniers,
+     chaînes d'angle et encadrements en tuffeau. Corniche sous l'égout, appuis de fenêtre, seuil de pierre, souche de
+     cheminée et ses pots, lucarnes sur certains toits, vigne vierge ou treille sur certaines façades. Ce qui varie d'une
+     maison à l'autre est tiré d'après sa place (hm) : le tirage au sort du reste du monde ne bouge pas. */
+  const MOELLONS = ['#cdbf9f', '#c7b593', '#d3c4a3'], ENDUITS = ['#e6d4b0', '#ead9bb', '#dfcaa4', '#e9d2a8'];
+  const PIERRE = '#e3dac6', APPUI = '#d9cdb2', TAILLE = '#e8decb'; // TAILLE : pierre de taille lisse (chaînes, encadrements)
+  // Plaque de pierre de taille posée à plat sur un mur (chaîne d'angle, encadrement) : un seul quadrilatère, à 6 mm du mur,
+  // tourné vers n (axe 'x' ou 'z', sens s). Trois fois moins de triangles qu'un bloc, pour un relief qu'on ne voit pas.
+  const plaques = [];
+  const plaque = (x, y, z, axe, s, l, hh) => {
+    const u = l / 2, v = hh / 2, a = axe === 'x' ? [x, y - v, z - u * s] : [x + u * s, y - v, z], b = axe === 'x' ? [x, y - v, z + u * s] : [x - u * s, y - v, z];
+    const c = [b[0], y + v, b[2]], d = [a[0], y + v, a[2]];
+    plaques.push(...a, ...c, ...b, ...a, ...d, ...c);
+  };
+  const finirPlaques = L => {
+    if (!plaques.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(plaques, 3));
+    g.computeVertexNormals();
+    L.push(teinter(g, TAILLE));
+    plaques.length = 0;
+  };
+  const fenetre = (L, x, y, z, f, volets, pierre) => {
+    if (pierre) plaque(x, y, z + f * 0.006, 'z', f, 1.2, 1.58);
     L.push(B(0.98, 1.34, 0.08, '#efe7d6', x, y, z + f * 0.02));
     L.push(B(0.74, 1.1, 0.1, rnd() < 0.2 ? '#4a3a2a' : '#2f3c4f', x, y, z + f * 0.035)); // certaines fenêtres sont déjà allumées
+    if (f > 0) L.push(B(1.12, 0.08, 0.2, APPUI, x, y - 0.71, z + f * 0.07)); // appui, côté rue
     if (volets) L.push(B(0.46, 1.32, 0.06, volets, x - 0.75, y, z + f * 0.05), B(0.46, 1.32, 0.06, volets, x + 0.75, y, z + f * 0.05));
   };
-  // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options
+  // Feuilles plates (petits losanges) plaquées contre un mur, regroupées par couleur : items [x, y, z, taille, angle, couleur].
+  // axe : 'x' pour un mur dont la normale est en x, 'z' pour une façade ; s : sens de la normale (vers l'extérieur).
+  function feuilles(L, items, axe, s) {
+    const par = new Map();
+    for (const [x, y, z, t, a, c] of items) {
+      let P = par.get(c);
+      if (!P) par.set(c, P = []);
+      const pt = (du, dv) => axe === 'x' ? [x, y + dv, z + du] : [x + du, y + dv, z];
+      const ca = Math.cos(a) * t, sa = Math.sin(a) * t, p1 = pt(ca, sa), p2 = pt(-sa * 0.7, ca * 0.7), p3 = pt(-ca, -sa), p4 = pt(sa * 0.7, -ca * 0.7);
+      if ((axe === 'x') === (s > 0)) P.push(...p1, ...p3, ...p2, ...p1, ...p4, ...p3); else P.push(...p1, ...p2, ...p3, ...p1, ...p3, ...p4);
+    }
+    for (const [c, P] of par) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.computeVertexNormals();
+      L.push(teinter(g, c, T.feuillage));
+    }
+  }
+  // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options (mur : couleur imposée)
   function maison(o) {
-    const L = [], { w, d, h } = o, ht = o.ht ?? Math.min(w, d) * 0.55;
-    L.push(B(w, h, d, o.mur || TUF, 0, h / 2, 0));
+    const L = [], { w, d, h } = o, ht = o.ht ?? Math.min(w, d) * 0.55, surZ = d > w;
+    const hm = k => hash(o.x * 0.37 + k * 1.7, o.z * 0.71 - k * 2.3);
+    const genre = o.mur ? 'taille' : hm(1) < 0.42 ? 'taille' : hm(1) < 0.72 ? 'enduit' : 'moellon';
+    const mur = o.mur || (genre === 'taille' ? TUF : genre === 'enduit' ? ENDUITS[Math.floor(hm(2) * 4)] : MOELLONS[Math.floor(hm(2) * 3)]);
+    const pierre = genre !== 'taille', ardoise = o.toit || [ARD, ARD2, '#62666f'][Math.floor(hm(8) * 3)];
+    L.push(B(w, h, d, mur, 0, h / 2, 0));
     L.push(B(w + 0.14, 0.6, d + 0.14, o.socle || '#b9a98b', 0, 0.3, 0));
-    L.push(toit(w + 0.8, d + 0.8, ht, o.toit || ARD, 0, h, 0, d > w));
-    if (o.cheminee !== false) L.push(B(0.7, ht * 0.8 + 0.9, 0.7, '#a99a82', w * 0.3, h + ht * 0.45, d > w ? d * 0.22 : 0));
+    L.push(...toit(w, d, ht, ardoise, 0, h, 0, surZ, { mur }));
+    // corniche sous l'égout, le long des deux pans
+    if (surZ) for (const s of [1, -1]) L.push(B(0.18, 0.26, d + 0.12, APPUI, s * (w / 2 + 0.07), h - 0.2, 0));
+    else for (const s of [1, -1]) L.push(B(w + 0.12, 0.26, 0.18, APPUI, 0, h - 0.2, s * (d / 2 + 0.07)));
+    // chaînes d'angle : blocs de tuffeau alternés, un peu en saillie
+    if (pierre) for (const sx of [1, -1]) for (const sz of [1, -1]) for (let i = 0, y = 0.85; y < h - 0.4; i++, y += 0.5) {
+      const lx = i % 2 ? 0.32 : 0.56, lz = i % 2 ? 0.56 : 0.32;
+      plaque(sx * (w / 2 - lx / 2), y, sz * (d / 2 + 0.006), 'z', sz, lx, 0.46);
+      plaque(sx * (w / 2 + 0.006), y, sz * (d / 2 - lz / 2), 'x', sx, lz, 0.46);
+    }
+    // souche de cheminée, son chapeau, ses pots
+    const E = (surZ ? w : d) / 2, kp = ht / (E + 0.4), faite = h + kp * E + 0.2;
+    if (o.cheminee !== false) {
+      const cx = surZ ? 0 : w * 0.3, cz = surZ ? d * 0.22 : 0, haut = faite + 0.95;
+      L.push(B(0.78, 2.4, 0.62, APPUI, cx, haut - 1.2, cz), B(0.92, 0.1, 0.76, PIERRE, cx, haut + 0.05, cz));
+      for (const dx of [-0.17, 0.17]) L.push(B(0.16, 0.3, 0.16, '#9a5a3e', cx + dx, haut + 0.25, cz));
+    }
     const etages = o.etages ?? Math.max(1, Math.floor((h - 0.3) / 2.8)), nf = o.nf ?? Math.max(1, Math.floor(w / 3.1));
-    const porte = o.porte ?? Math.floor(nf / 2);
+    const porte = o.porte ?? Math.floor(nf / 2), colX = i => -w / 2 + (i + 0.5) * w / nf;
     for (let e = 0; e < etages; e++) for (let i = 0; i < nf; i++) {
-      const x = -w / 2 + (i + 0.5) * w / nf, y = 1.75 + e * 2.8;
-      fenetre(L, x, y, -d / 2, -1, o.volets);
+      const x = colX(i), y = 1.75 + e * 2.8;
+      fenetre(L, x, y, -d / 2, -1, o.volets, pierre);
       if (e === 0 && o.vitrine) continue;
-      if (e === 0 && i === porte) { L.push(B(1.15, 2.25, 0.12, o.porteC || '#5b3a2a', x, 1.12, d / 2 + 0.04)); continue; }
-      fenetre(L, x, y, d / 2, 1, o.volets);
+      if (e === 0 && i === porte) {
+        if (pierre) plaque(x, 1.24, d / 2 + 0.006, 'z', 1, 1.45, 2.48);
+        L.push(B(1.15, 2.25, 0.12, o.porteC || '#5b3a2a', x, 1.12, d / 2 + 0.04), B(1.5, 0.14, 0.42, '#cbbf9f', x, 0.07, d / 2 + 0.21));
+        continue;
+      }
+      fenetre(L, x, y, d / 2, 1, o.volets, pierre);
       if (e >= 1 && o.fleurs !== false && rnd() < 0.45) {
         L.push(B(0.96, 0.17, 0.24, '#6b4a30', x, y - 0.74, d / 2 + 0.15), B(0.9, 0.07, 0.2, '#4f7a32', x, y - 0.63, d / 2 + 0.15));
         const fl = pick(['#d23a4a', '#e86a8a', '#c42d3a', '#f4f1ea', '#e0457a']);
         for (let k = 0; k < 5; k++) L.push(B(0.12, 0.11, 0.12, k % 2 ? fl : '#5d8a36', x - 0.36 + k * 0.18, y - 0.55 + (k % 2) * 0.03, d / 2 + 0.16));
+      }
+    }
+    // lucarnes de tuffeau sur le pan de la façade, à l'aplomb des fenêtres
+    if (!surZ && h >= 6 && o.lucarnes !== false && hm(3) < 0.6) {
+      const zf = d / 2 - 0.15, y0 = h + kp * (d / 2 - zf) + 0.1, hb = 1.5 + 1.7 * kp;
+      for (const i of nf >= 3 && w >= 11 ? [0, nf - 1] : [Math.floor(nf / 2)]) {
+        const x = colX(i);
+        L.push(B(1.3, hb, 1.6, PIERRE, x, y0 + 1.5 - hb / 2, zf - 0.8));
+        L.push(...toit(1.3, 1.6, 0.62, ardoise, x, y0 + 1.5, zf - 0.8, true, { mur: PIERRE, egout: 0.12, rive: 0.14, ep: 0.12 }));
+        L.push(B(0.72, 0.92, 0.07, '#efe7d6', x, y0 + 0.78, zf + 0.02), B(0.54, 0.74, 0.09, '#2f3c4f', x, y0 + 0.78, zf + 0.03));
+      }
+    }
+    // une treille au-dessus du rez-de-chaussée (les grappes pendent), ou de la vigne vierge rougie qui grimpe au pignon
+    if (!o.vitrine && o.plantes !== false) {
+      const zv = d / 2 + 0.05, items = [];
+      if (hm(4) < 0.3) {
+        const xt = colX(porte) + 0.85;
+        L.push(C(0.05, 0.08, 2.75, 5, '#5e4a36', xt, 1.37, zv + 0.03), B(w - 0.9, 0.05, 0.05, '#5e4a36', 0, 2.78, zv + 0.06));
+        for (let x = -w / 2 + 0.55, i = 0; x < w / 2 - 0.45; x += 0.23, i++) for (let r = 0; r < 3; r++) {
+          const j = hash(x * 4.1 + o.z, r + o.x);
+          items.push([x + (j - 0.5) * 0.12, 2.62 + r * 0.17 + (j - 0.5) * 0.12, zv + 0.03 + j * 0.06, 0.15 + 0.06 * j, j * 6.3, FEUILLES_VIGNE[Math.floor(j * 4)]]);
+          if (r === 0 && i % 4 === 1) L.push(teinter(S(0.075, '#3b2340', x, 2.47, zv + 0.09, 1, 1.8, 1), '#3b2340'));
+        }
+        feuilles(L, items, 'z', 1);
+      } else if (hm(5) < 0.32) {
+        // vigne vierge : une nappe de feuilles sur le pignon (sans fenêtre), qui part du pied, s'élargit et déborde sur
+        // l'angle de la façade
+        const sx = hm(6) < 0.5 ? 1 : -1, top = h * (0.55 + 0.35 * hm(7)), coin = [];
+        for (let y = 0.25, r = 0; y < top; y += 0.2, r++) {
+          const t = y / top, large = 0.35 + 2.4 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.75 + 0.25 * hash(r, o.x));
+          for (let zz = d / 2 - 0.08; zz > d / 2 - large; zz -= 0.21) {
+            const j = hash(zz * 3.1 + o.x, y * 5.3 + o.z);
+            items.push([sx * (w / 2 + 0.03 + j * 0.06), y + (j - 0.5) * 0.12, zz + (j - 0.5) * 0.12, 0.15 + 0.08 * j, j * 6.3, VIGNE_VIERGE[Math.floor(j * 5)]]);
+          }
+          if (t > 0.15 && t < 0.9) for (let k = 0; k < 3; k++) {
+            const j = hash(r * 1.3 + k, o.z + k);
+            if (j < 0.75) coin.push([sx * (w / 2 - 0.1 - k * 0.2 - j * 0.1), y + (j - 0.5) * 0.1, d / 2 + 0.03 + j * 0.05, 0.14 + 0.07 * j, j * 6.3, VIGNE_VIERGE[Math.floor(j * 5)]]);
+          }
+        }
+        feuilles(L, items, 'x', sx); feuilles(L, coin, 'z', 1);
       }
     }
     if (o.vitrine) {
@@ -471,6 +581,7 @@ void main() {
       L.push(C(0.04, 0.04, 2.6, 5, '#ddd', 0, h - 0.5, d / 2 + 0.9, 'y'));
       L.push(B(0.05, 0.6, 0.3, '#2b4ea2', 0, h + 0.4, d / 2 + 1.0), B(0.05, 0.6, 0.3, '#f4f1ea', 0, h + 0.4, d / 2 + 1.3), B(0.05, 0.6, 0.3, '#d23a3a', 0, h + 0.4, d / 2 + 1.6));
     }
+    finirPlaques(L);
     poser(L, o.x, o.z, o.rot || 0, bati);
     const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5;
     const bx = col.boiteC(o.x, o.z, tourne ? d : w, tourne ? w : d);
@@ -498,7 +609,7 @@ void main() {
     const SO = '#b9a98b';
     L.push(B(PL + 13.07, 0.6, 0.22, SO, (PL - 13.07) / 2, 0.3, 5.96), B(13.07 - PR, 0.6, 0.22, SO, (PR + 13.07) / 2, 0.3, 5.96));
     L.push(B(w + 0.14, 0.6, 0.22, SO, 0, 0.3, -5.96), B(0.22, 0.6, d + 0.14, SO, -12.96, 0.3, 0), B(0.22, 0.6, d + 0.14, SO, 12.96, 0.3, 0));
-    L.push(toit(w + 0.8, d + 0.8, Math.min(w, d) * 0.55, ARD2, 0, h, 0, false));
+    L.push(...toit(w, d, Math.min(w, d) * 0.55, ARD2, 0, h, 0, false));
     for (let i = 0; i < 6; i++) {
       const x = -w / 2 + (i + 0.5) * w / 6;
       fenetre(L, x, 1.75, -d / 2, -1);
@@ -742,6 +853,25 @@ void main() {
   }
   for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]])
     maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS) });
+  // murs de clôture en moellons entre les maisons de la rue, chaperon de tuffeau, portail de bois dans les plus longs
+  function cloture(x0, x1, z, portail) {
+    const H = 2.1, mc = MOELLONS[Math.floor(hash(x0, z) * 3)], seg = (u0, u1) => {
+      if (u1 - u0 < 0.05) return;
+      bati.push(B(u1 - u0, H, 0.45, mc, (u0 + u1) / 2, H / 2, z), B(u1 - u0 + 0.04, 0.14, 0.6, APPUI, (u0 + u1) / 2, H + 0.07, z));
+    };
+    if (portail && x1 - x0 > 5) {
+      const cx = (x0 + x1) / 2, a0 = cx - 1.55, a1 = cx + 1.55;
+      seg(x0, a0 - 0.25); seg(a1 + 0.25, x1);
+      for (const x of [a0, a1]) bati.push(B(0.5, 2.5, 0.6, PIERRE, x, 1.25, z), B(0.62, 0.14, 0.72, APPUI, x, 2.57, z), S(0.16, PIERRE, x, 2.8, z));
+      bati.push(B(2.6, 1.9, 0.08, '#5b3a2a', cx, 1.05, z));
+      for (const y of [0.45, 1.65]) bati.push(B(2.6, 0.12, 0.12, '#4a3324', cx, y, z + 0.06), B(2.6, 0.12, 0.12, '#4a3324', cx, y, z - 0.06));
+    } else seg(x0, x1);
+    col.boite(x0, z - 0.25, x1, z + 0.25).haut = true;
+    plan.push({ t: 'b', x0, z0: z - 0.25, x1, z1: z + 0.25 });
+    contact.jupe(x0, z - 0.3, x1, z + 0.3, 0.9, 0.42);
+  }
+  for (const [x0, x1, p] of [[39, 41.5], [50.5, 52.5], [63.5, 75.5, 1], [84.5, 91.6, 1], [98.4, 104.5, 1], [115.5, 119], [129, 131.5]]) cloture(x0, x1, 1.25, p);
+  for (const [x0, x1, p] of [[45, 49.5], [58.5, 62], [74, 79, 1], [89, 95, 1], [105, 108.5], [119.5, 123], [133, 136]]) cloture(x0, x1, 18.75, p);
   // rue de la place
   for (const z of [-14, -24]) {
     maison({ x: 86, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: Math.PI / 2, volets: pick(VOLETS) });
@@ -757,19 +887,58 @@ void main() {
   maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
   const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
   enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
+  /* L'église Saint-Vincent (le patron des vignerons), façade vers la place : clocher-porche, nef, chevet arrondi.
+     Repère local : la nef le long de z (clocher en z = 10), tournée de -90° (monde x = 128 - z, monde z = -46 + x). */
   {
-    const L = [
-      B(10, 9, 24, TUF, 0, 4.5, 0), B(10.2, 0.6, 24.2, '#b9a98b', 0, 0.3, 0),
-      toit(10.8, 24.8, 5.2, ARD, 0, 9, 0, true),
-      B(5.6, 17, 5.6, TUF, 0, 8.5, 10), C(0, 4.3, 9, 4, ARD, 0, 21.5, 10, 'y', Math.PI / 4),
-      B(2.2, 3.6, 0.2, '#4a3324', 0, 1.8, 12.86), C(1.1, 1.1, 0.2, 14, '#3d5f8e', 0, 6.4, 12.86, 'z'),
-      C(0.85, 0.85, 0.16, 14, '#f2ead8', 0, 14.6, 12.86, 'z'), B(0.08, 0.6, 0.05, '#222', 0, 14.75, 12.96),
-    ];
-    for (let z = -9; z <= 5; z += 4.6) for (const s of [1, -1]) L.push(B(0.12, 3.4, 1.1, '#3d5f8e', s * 5.03, 4.8, z));
+    const L = [B(10, 9, 24, TUF, 0, 4.5, 0), B(10.2, 0.6, 24.2, '#b9a98b', 0, 0.3, 0), ...toit(10, 24, 5.2, ARD, 0, 9, 0, true, { mur: TUF })];
+    // chevet en demi-cercle, son toit conique, trois petites baies
+    L.push(C(3.8, 3.8, 7.2, 14, TUF, 0, 3.6, -12), C(3.9, 3.9, 0.6, 14, '#b9a98b', 0, 0.3, -12), C(0, 4.25, 3.4, 14, ARD, 0, 8.9, -12));
+    for (const a of [-0.9, 0, 0.9]) {
+      const x = Math.sin(a) * 3.82, z = -12 - Math.cos(a) * 3.82;
+      L.push(B(0.6, 1.9, 0.12, '#3d5f8e', x, 4.0, z, Math.PI - a), deplacer(tournerY(C(0.3, 0.3, 0.12, 8, '#3d5f8e', 0, 0, 0, 'z'), Math.PI - a), x, 4.95, z));
+    }
+    // contreforts entre les baies de la nef ; baies en plein cintre dans leur encadrement de pierre
+    for (const s of [1, -1]) {
+      for (const z of [-11.4, -6.7, -2.1, 2.5, 6.9]) L.push(B(0.9, 6.2, 0.8, TUF, s * 5.45, 3.1, z), B(0.55, 1.6, 0.7, TUF, s * 5.27, 6.9, z));
+      for (const z of [-9, -4.4, 0.2, 4.8]) L.push(B(0.12, 3.0, 1.3, PIERRE, s * 5.02, 4.6, z), C(0.65, 0.65, 0.12, 8, PIERRE, s * 5.02, 6.1, z, 'x'),
+        B(0.14, 2.8, 0.86, '#3d5f8e', s * 5.04, 4.5, z), C(0.43, 0.43, 0.14, 8, '#3d5f8e', s * 5.04, 5.9, z, 'x'));
+    }
+    // croix de pierre au pignon du chevet
+    L.push(B(0.2, 1.2, 0.2, PIERRE, 0, 14.6, -12.1), B(0.8, 0.2, 0.2, PIERRE, 0, 14.85, -12.1));
+    // clocher : bandeau, corniche, abat-sons sur les quatre faces, horloge, porche en plein cintre, marches
+    L.push(B(5.6, 17, 5.6, TUF, 0, 8.5, 10), B(5.8, 0.22, 5.8, APPUI, 0, 9.6, 10), B(6.0, 0.36, 6.0, APPUI, 0, 17.0, 10));
+    for (const [nx, nz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) for (const t of [-0.75, 0.75]) {
+      const x = nx * 2.83 + nz * t, z = 10 + nz * 2.83 - nx * t, ry = nx ? Math.PI / 2 : 0;
+      L.push(B(0.66, 1.7, 0.1, '#2b2622', x, 14.6, z, ry), C(0.33, 0.33, 0.1, 8, '#2b2622', x, 15.45, z, nx ? 'x' : 'z'));
+      for (const y of [14.0, 14.45, 14.9, 15.35]) L.push(B(0.68, 0.06, 0.16, '#6b4a30', x, y, z, ry));
+    }
+    L.push(C(0.85, 0.85, 0.16, 14, '#f2ead8', 0, 12.0, 12.86, 'z'), B(0.08, 0.6, 0.05, '#222', 0, 12.15, 12.96), B(0.4, 0.07, 0.05, '#222', 0.15, 12.0, 12.97));
+    L.push(C(1.1, 1.1, 0.2, 14, '#3d5f8e', 0, 6.6, 12.86, 'z'), C(1.3, 1.3, 0.16, 14, PIERRE, 0, 6.6, 12.83, 'z'));
+    L.push(B(2.8, 3.0, 0.16, PIERRE, 0, 1.5, 12.84), C(1.4, 1.4, 0.16, 14, PIERRE, 0, 3.0, 12.84, 'z'), B(2.0, 3.0, 0.2, '#4a3324', 0, 1.5, 12.88), C(1.0, 1.0, 0.2, 14, '#4a3324', 0, 3.0, 12.88, 'z'));
+    L.push(B(4.0, 0.12, 1.5, '#cbbf9f', 0, 0.06, 13.55), B(3.4, 0.12, 0.7, '#cbbf9f', 0, 0.18, 13.2));
+    // flèche d'ardoise à huit pans, croix et coq
+    L.push(C(0, 3.3, 10, 8, ARD, 0, 22.2, 10, 'y', Math.PI / 8));
+    L.push(C(0.1, 0.1, 0.2, 6, '#c9a55a', 0, 27.25, 10), B(0.12, 1.9, 0.12, '#2b2b30', 0, 28.2, 10), B(0.95, 0.12, 0.12, '#2b2b30', 0, 28.5, 10));
+    L.push(B(0.42, 0.24, 0.05, '#c9a55a', 0, 29.3, 10), B(0.12, 0.3, 0.05, '#c9a55a', -0.22, 29.4, 10), B(0.1, 0.16, 0.05, '#c9a55a', 0.22, 29.48, 10));
     poser(L, 128, -46, -Math.PI / 2, bati);
-    const b = col.boite(115.2, -51, 140, -41); b.haut = true;
-    plan.push({ t: 'b', x0: 115.2, z0: -51, x1: 140, z1: -41 });
-    contact.jupe(116, -51.2, 140.2, -40.9, 1.8, 0.42);
+    const b = col.boite(115.2, -51.95, 140, -40.05); b.haut = true;
+    col.boite(140, -49.8, 143.85, -42.2).haut = true;
+    plan.push({ t: 'b', x0: 115.2, z0: -51, x1: 140, z1: -41 }, { t: 'b', x0: 140, z0: -49.8, x1: 143.8, z1: -42.2 });
+    contact.jupe(116, -52.1, 140.2, -39.9, 1.8, 0.42);
+    contact.tache(140, -46, 4.6, 4.6, 0.4);
+  }
+  // calvaire de pierre à l'entrée du bourg, croix de fer sur son socle au carrefour du chemin des Grands Champs
+  {
+    const P = '#cbbf9f';
+    bati.push(B(2.4, 0.3, 2.4, P, 19.5, 0.15, 0.5), B(1.8, 0.3, 1.8, P, 19.5, 0.45, 0.5), B(1.0, 0.7, 1.0, PIERRE, 19.5, 0.95, 0.5),
+      B(0.32, 3.3, 0.28, PIERRE, 19.5, 2.95, 0.5), B(1.3, 0.28, 0.26, PIERRE, 19.5, 3.85, 0.5));
+    col.boiteC(19.5, 0.5, 2.4, 2.4).haut = true;
+    contact.jupe(18.3, -0.7, 20.7, 1.7, 0.9, 0.38);
+    plan.push({ t: 'b', x0: 18.3, z0: -0.7, x1: 20.7, z1: 1.7 });
+    bati.push(B(1.4, 0.35, 1.4, P, -55, 0.17, 3), B(0.7, 1.2, 0.7, PIERRE, -55, 0.95, 3), B(0.1, 2.6, 0.1, '#2b2b30', -55, 2.85, 3), B(0.9, 0.08, 0.08, '#2b2b30', -55, 3.6, 3),
+      C(0.12, 0.12, 0.04, 8, '#2b2b30', -55, 3.6, 3.05, 'z'));
+    col.boiteC(-55, 3, 1.4, 1.4);
+    contact.jupe(-55.7, 2.3, -54.3, 3.7, 0.7, 0.35);
   }
   // fontaine (l'eau ondule et reflète le ciel), monument, bancs, réverbères, terrasse du bar
   bati.push(C(2.1, 2.3, 0.7, 14, '#d9cdb2', 95, 0.35, -46), C(1.85, 1.85, 0.1, 14, '#4f93b8', 95, 0.66, -46),
@@ -806,7 +975,7 @@ void main() {
   // château au loin, sur la colline (hors zone de jeu)
   {
     const cx = -240, cz = -225, y0 = hauteur(cx, cz) - 1;
-    const L = [B(30, 13, 12, '#efe6d3', 0, y0 + 6.5, 0), toit(31, 13, 7, ARD, 0, y0 + 13, 0)];
+    const L = [B(30, 13, 12, '#efe6d3', 0, y0 + 6.5, 0), ...toit(30, 12, 7, ARD, 0, y0 + 13, 0, false, { mur: '#efe6d3' })];
     for (const [x, z] of [[-15, -6], [15, -6], [-15, 6], [15, 6]]) L.push(C(3.2, 3.2, 17, 10, '#efe6d3', x, y0 + 8.5, z), C(0, 3.8, 8, 10, ARD, x, y0 + 21, z));
     for (let i = -3; i <= 3; i++) for (const e of [0, 1]) L.push(B(1.1, 1.6, 0.1, '#2f3c4f', i * 3.6, y0 + 4 + e * 4.4, 6.04));
     poser(L, cx, cz, 0.55, bati);

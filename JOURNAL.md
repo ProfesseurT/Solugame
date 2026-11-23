@@ -385,3 +385,21 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Cheveux courts jusqu'à la nuque ; oreilles plus bas (du sourcil au bas du nez), arrondies ; mâchoire d'homme moins pointue ; lunettes à la largeur du visage, branches qui longent la tête jusqu'aux oreilles.
 
 **Vérifié** : portraits avant et après sous quatre angles, en pied ; poses (téléphone, salut, assis, au volant), port des cartons, personnages dans le bourg ; `npm run verifie` ; conduite assistée en tracteur et en van (aucun choc, aucune traversée). Coût : même calcul des poses ; environ 270 triangles de plus par personnage (+4 % sur la place, la plus peuplée) ; démarrage inchangé.
+
+## 23/11/2026 · Retours de Teddy (6) : un vrai village, des toits fermés
+
+**Demande** : « améliorer le sol et les toits... on voit des fentes entre les murs et les toits » ; l'impression d'un petit village viticole, de vieilles bâtisses, un sol tantôt pavé, tantôt en route ; une croix et une église.
+
+**Cause des fentes** : les toits étaient de simples surfaces sans épaisseur, invisibles par en dessous ; vu de la rue, on voyait le ciel entre le haut des murs et le bord du toit. Les pignons étaient des triangles d'ardoise flottant à 40 cm des murs.
+
+**Fait** :
+- Toits (`toit`, modeles.js) : pans épais posés sur les murs, débord à l'égout et aux rives, dessous en voliges, épaisseur visible, tuiles faîtières ; pignons en pierre dans le plan des murs. Toutes les maisons, le chai, l'église, le château.
+- Vieilles bâtisses (`maison`, monde.js) : murs en tuffeau, en moellons ou enduits à la chaux (qui tombe par plaques en pied de mur) ; chaînes d'angle et encadrements de pierre de taille sur les deux derniers ; corniche sous l'égout, appuis de fenêtre, seuil de pierre, souche de cheminée et ses pots, lucarnes de tuffeau sur les toits ; trois teintes d'ardoise ; vigne vierge rougie sur certains pignons, treille avec ses grappes sur certaines façades. Deux nouvelles matières dessinées dans le shader (moellons, enduit).
+- La rue : murs de clôture en moellons entre les maisons, chaperon de tuffeau, portails de bois dans les plus longs.
+- Sols : dans le bourg, la départementale devient une vieille chaussée plus claire, sans bandes blanches, entre deux caniveaux pavés, bordée de pierre ; pavée au cœur du bourg (devant l'épicerie, au carrefour, devant la Treille) ; la rue de la place en petits pavés (nouvelle matière) ; parvis de l'église. Les sons et les secousses des véhicules suivent (`natureSol`).
+- L'église Saint-Vincent : contreforts, chevet arrondi et son toit conique, baies en plein cintre dans leur encadrement, clocher avec bandeau, corniche, abat-sons sur les quatre faces, horloge, rosace, porche en plein cintre et ses marches, flèche d'ardoise à huit pans, croix et coq ; croix de pierre au pignon du chevet.
+- Deux croix : un calvaire de pierre à l'entrée du bourg, une croix de fer sur son socle face au chemin des Grands Champs.
+
+**Coût** : le décor du bourg passe de 20 000 à 36 600 triangles (ombres non comprises) ; les chaînes d'angle et encadrements sont des plaques plates (un quadrilatère) et les toits rejoignent directement le décor du quartier, pour que la construction du monde ne coûte rien de plus (environ 130 ms sur ordinateur, avant comme après). Mêmes appels de dessin.
+
+**Vérifié** : captures de la rue, de la place, de la rue de la place, du carrefour, du chevet, du calvaire, du domaine, vue d'en haut ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; accueil ; banc d'allègement de three.js : équivalent ; ESLint.

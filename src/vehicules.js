@@ -14,8 +14,9 @@ export function natureSol(x, z, col) {
   if (x > 76 && x < 114 && z > -63 && z < -29) return 'paves';            // place
   if (x > 87 && x < 103 && z > -82 && z < -72) return 'paves';            // parvis de la mairie
   if (x > 25 && x < 155 && ((z > 2.5 && z < 6.5) || (z > 13.5 && z < 17.5))) return 'paves'; // trottoirs du bourg
+  if (x > 70 && x < 120 && z > 6.5 && z < 13.5) return 'paves';           // cœur du bourg pavé
   if (z > 6.5 && z < 13.5) return 'asphalte';                              // départementale
-  if (x > 92 && x < 98 && z > -80 && z < 6.5) return 'asphalte';          // rue de la place
+  if (x > 92 && x < 98 && z > -80 && z < 6.5) return 'paves';             // rue de la place, en petits pavés
   if (x > -92 && x < -88 && z > -34 && z < 6.5) return 'gravier';         // chemin du domaine
   if (x > -115 && x < -62 && z > -72 && z < -34) return 'gravier';        // cour du domaine
   return 'herbe';
