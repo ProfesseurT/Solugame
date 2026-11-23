@@ -1,7 +1,7 @@
 // Tournée générale : boucle de jeu, assemblage du monde, des personnages et de l'interface.
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, BRUIT, compacter } from './modeles.js';
+import { UNI, BRUIT, compacter, B, MAT } from './modeles.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture } from './engins.js';
 import { perso, HEROS } from './perso.js';
@@ -407,7 +407,7 @@ const jeu = {
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
 const pc = new PC(jeu);
-const gestes = new Gestes({ jeu, scene, col }); // monter, descendre, porter les cartons (gestes.js)
+const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
 // la palette des commandes du jour devant le chai : les piles prévues par la mission, en carré
 {
   const pal = new THREE.Group(); pal.position.set(L.palette.x, 0, L.palette.z); scene.add(pal);
@@ -424,7 +424,10 @@ const etqMonter = hud.etiquette(tactile ? 'Monter' : 'Monter (E)', 'action', () 
 const etqServir = hud.etiquette(tactile ? 'Servir un verre' : 'Servir un verre (E)', 'action');
 const etqDescendre = hud.etiquette(tactile ? 'Descendre' : 'Descendre (E)', 'action', () => agir());
 const etqCible = hud.etiquette('', 'cible');
-const etqPC = hud.etiquette(tactile ? 'Ouvrir le PC' : 'Ouvrir le PC (E)', 'action');
+const etqPC = hud.etiquette(tactile ? 'Déposer le chèque' : 'Déposer le chèque (E)', 'action');
+const etqEntrer = hud.etiquette(tactile ? 'Entrer au bureau' : 'Entrer au bureau (E)', 'action');
+const etqSortir = hud.etiquette(tactile ? 'Sortir' : 'Sortir (E)', 'action');
+const etqPortable = hud.etiquette(tactile ? 'S\'asseoir au portable' : 'S\'asseoir au portable (E)', 'action');
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -476,15 +479,41 @@ jeu.charger = (piles, place, fin) => {
 };
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
-const presPC = () => !jeu.auVolant && mission.pcDispo && Math.hypot(joueur.pos.x - L.pc.x, joueur.pos.z - L.pc.z) < 4;
+/* ------------------------------------------------------------------ le bureau du chai
+   La pièce est au bout sud du chai (monde.js). On y entre par sa porte (gestes.js : fondu au noir au seuil, la caméra
+   passe dans un coin de la pièce) ; au bureau en bois, on dépose le chèque, puis on s'assoit au portable (pc.js : Le
+   bureau et Vitisoft). */
+const BU = L.bureau;
+jeu.dedans = false;
+let auPortable = false;
+const pres = (p, d) => Math.hypot(joueur.pos.x - p.x, joueur.pos.z - p.z) < d;
+const presPorteDehors = () => !jeu.dedans && !jeu.auVolant && pres(BU.dehors, 2.6);
+const presPorteDedans = () => jeu.dedans && pres(BU.dedans, 1.5);
+const presDepot = () => jeu.dedans && mission.chequeADeposer && pres(BU.depot, 2.0);
+const presChaise = () => jeu.dedans && !mission.chequeADeposer && !auPortable && pres(BU.chaise, 1.8);
+const fonduVers = noir => $('fondu').classList.toggle('noir', noir);
+// le chèque de l'épicerie, posé sur le bureau une fois déposé
+const cheque3D = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT);
+cheque3D.position.set(BU.depot.x, BU.depot.y, BU.depot.z); cheque3D.rotation.y = 0.3; cheque3D.visible = false; scene.add(cheque3D);
+function passerPorte(entrer) {
+  ctrl.relacher();
+  gestes.passer(BU, entrer, { fondu: fonduVers, passe: () => { jeu.dedans = entrer; cam.pret = false; if (!entrer) cam.yaw = -Math.PI / 2; }, fin: () => {} });
+}
+function asseoirPortable() {
+  ctrl.relacher();
+  gestes.asseoir(BU, () => { auPortable = true; mission.ouvrirPC(); pc.ouvrir(mission.pcDispo ? 'vitisoft' : 'bureau'); });
+}
+jeu.leverPortable = () => { if (!auPortable) return; auPortable = false; gestes.lever(BU, () => {}); };
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
-  // au bureau du chai : d'abord poser le chèque de l'épicerie, ensuite ouvrir le PC
-  if (presPC()) {
-    if (mission.chequeADeposer) mission.deposerCheque();
-    else if (mission.ouvrirPC()) { pc.ouvrir(); ctrl.relacher(); }
+  // dans le bureau du chai : sortir ; d'abord poser le chèque de l'épicerie, ensuite s'asseoir au portable
+  if (jeu.dedans) {
+    if (presPorteDedans()) passerPorte(false);
+    else if (presDepot()) { mission.deposerCheque(); cheque3D.visible = true; }
+    else if (presChaise()) asseoirPortable();
     return;
   }
+  if (presPorteDehors()) { passerPorte(true); return; }
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (servable) { servir(servable); return; }
   const v = vehiculeProche();
@@ -493,12 +522,12 @@ function agir() {
 const proj = new THREE.Vector3();
 function toucher(tp) {
   if (tel.ouvert || pc.ouvert || gestes.actif) return;
-  for (const e of [etqPC, etqServir, etqMonter, etqDescendre]) {
+  for (const e of [etqPC, etqEntrer, etqSortir, etqPortable, etqServir, etqMonter, etqDescendre]) {
     if (e.el.hidden) continue;
     const r = e.el.getBoundingClientRect();
     if (tp.x > r.left - 12 && tp.x < r.right + 12 && tp.y > r.top - 12 && tp.y < r.bottom + 12) { agir(); return; }
   }
-  const v = !jeu.auVolant && !joueur.service && vehiculeProche();
+  const v = !jeu.auVolant && !jeu.dedans && !joueur.service && vehiculeProche();
   if (!v) return;
   proj.set(v.p.pos.x, 1.6, v.p.pos.z).project(camera);
   const sx = (proj.x + 1) / 2 * largeur, sy = (1 - proj.y) / 2 * hauteurE;
@@ -591,7 +620,7 @@ function miseAJour(dt) {
     else if (a === 'son') son.basculer();
     else if (a === 'radio') jeu.basculerRadio();
     else if (a === 'echap' && tel.ouvert && mission.peutFermer()) tel.fermer();
-    else if (a === 'echap' && pc.ouvert) { pc.fermer(); mission.fermerPC(); }
+    else if (a === 'echap' && pc.ouvert) { pc.fermer(); mission.fermerPC(); jeu.leverPortable(); }
   }
   ctrl.actions.length = 0;
   for (const tp of ctrl.touchers) toucher(tp);
@@ -606,6 +635,9 @@ function miseAJour(dt) {
   const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
 
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
+  joueur.clavier = auPortable && pc.ouvert;
+  // assis au portable : après un appel passé depuis le bureau, on y revient
+  if (auPortable && !pc.ouvert && !tel.ouvert && !gestes.actif && !jeu.finVue) pc.ouvrir();
   if (gestes.actif) {
     // un geste se joue (monter, descendre, porter les cartons) : il mène le personnage ; le véhicule reste à l'arrêt.
     // Doigt posé ou touche de direction enfoncée : une scène de cartons se joue trois fois plus vite.
@@ -724,7 +756,7 @@ function miseAJour(dt) {
 
   // marque de mission et étiquettes
   const cible = mission.cible;
-  marque.visible = !!cible;
+  marque.visible = !!cible && !jeu.dedans;
   if (cible) {
     marque.position.set(cible.x, 0, cible.z);
     const u = marque.userData, k = 1 + Math.sin(temps * 4) * 0.06;
@@ -736,20 +768,25 @@ function miseAJour(dt) {
       etqCible.el.textContent = mission.nomCible + ' · ' + d + ' m';
     }
   }
-  hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert);
-  const pcPres = presPC() && !tel.ouvert && !pc.ouvert;
-  const txtPC = mission.chequeADeposer ? (tactile ? 'Déposer le chèque' : 'Déposer le chèque (E)') : (tactile ? 'Ouvrir le PC' : 'Ouvrir le PC (E)');
-  if (etqPC.el.textContent !== txtPC) etqPC.el.textContent = txtPC;
-  hud.placer(etqPC, L.pc.x, 2.9, L.pc.z, pcPres);
+  hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
+  // le bureau du chai
+  const libreB = !tel.ouvert && !pc.ouvert && !gestes.actif;
+  const pcPres = libreB && (presPorteDehors() || presPorteDedans() || presDepot() || presChaise());
+  hud.placer(etqEntrer, BU.seuil.x - 0.2, 2.55, BU.seuil.z, libreB && presPorteDehors());
+  hud.placer(etqSortir, BU.seuil.x + 0.3, 2.3, BU.seuil.z, libreB && presPorteDedans());
+  hud.placer(etqPC, BU.depot.x, 1.25, BU.depot.z, libreB && presDepot());
+  hud.placer(etqPortable, BU.chaise.x, 1.45, BU.chaise.z, libreB && presChaise());
   chercherServable();
-  const vp = !pcPres && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
+  const vp = !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) { const t = vp.genre === 'van' ? (tactile ? 'Monter dans le van' : 'Monter dans le van (E)') : (tactile ? 'Monter' : 'Monter (E)'); if (etqMonter.el.textContent !== t) etqMonter.el.textContent = t; }
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp && vp.genre === 'van' ? 3.0 : 3.6, vp ? vp.p.pos.z : 0, !!vp);
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 
-  // caméra, soleil, ciel ; un geste qui se regarde (charger, décharger) a son cadre
-  if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
+  // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
+  // son cadre
+  if (!camLibre && jeu.dedans) cam.salle(dt, BU, joueur.pos.x, joueur.pos.z, auPortable && (pc.ouvert || gestes.actif));
+  else if (!camLibre && gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
   hud.carte(ego.x, ego.z, cam.yaw, jeu.auVolant ? tr.h : joueur.h, cible, jeu.auVolant ? 1.45 : 2.2, mission.couleur, mission.route);
 }

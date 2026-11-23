@@ -1,5 +1,6 @@
-// Le PC du domaine, dans le chai : Vitisoft, version simplifiée.
-// Trois choses à faire au retour de la tournée : saisir le règlement du chèque de l'épicerie, facturer les
+// Le portable du bureau du chai : un navigateur à deux onglets, Le bureau (les mêmes écrans que sur le téléphone,
+// telephone.js) et Vitisoft, version simplifiée. Les appels du bureau partent du téléphone.
+// Trois choses à faire dans Vitisoft au retour de la tournée : saisir le règlement du chèque de l'épicerie, facturer les
 // commandes signées dans le bureau (Factur-X, transmises par Pennylane, plateforme agréée), calculer la DRM du
 // mois dernier (à valider ensuite dans CIEL). Le journal des ventes et les encaissements partent chez le comptable.
 import { VITISOFT } from './textes.js';
@@ -14,21 +15,32 @@ const VUES = ['accueil', 'reglements', 'commandes', 'drm']; // les écrans où l
 export class PC {
   constructor(jeu) {
     this.jeu = jeu; this.el = $('pc'); this.ouvert = false; this.vue = 'accueil'; this.envoi = null; this.tEnvoi = 0; this.tDrm = 0;
+    this.onglet = 'bureau';
     this.el.addEventListener('click', e => {
       const b = e.target.closest('[data-a]');
       if (!b || b.disabled) return;
       e.preventDefault(); son.jouer('tap');
-      const [nom, arg] = b.dataset.a.split(':'), m = this.jeu.mission;
+      const [nom, arg] = b.dataset.a.split(':'), m = this.jeu.mission, tel = this.jeu.tel;
+      // le navigateur : changer d'onglet, se lever du portable (Vitisoft fermé quand tout est fait : fin de la mission)
+      if (nom === 'onglet') { this.onglet = arg; this.afficher(); return; }
+      if (nom === 'quitter' || nom === 'fermer') { this.fermer(); m.fermerPC(); this.jeu.leverPortable(); return; }
+      if (this.onglet === 'bureau') {
+        // un appel part du téléphone ; le reste se fait ici, comme sur le téléphone
+        if (nom === 'rappel' && m.client(arg)?.mode === 'appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); m.rappel(arg); return; }
+        tel.action(b.dataset.a);
+        this.afficher();
+        return;
+      }
       if (nom === 'vue') this.vue = arg;
       else if (nom === 'regler') m.saisirReglement();
       else if (nom === 'fac') m.facturer(arg);
       else if (nom === 'env' && !this.envoi) { this.envoi = arg; this.tEnvoi = 1.1; son.jouer('envoi'); }
       else if (nom === 'drm') { m.calculerDRM(); this.tDrm = 1.4; }
-      else if (nom === 'fermer') { this.fermer(); m.fermerPC(); return; }
       this.afficher();
     });
   }
-  ouvrir() { this.ouvert = true; this.el.hidden = false; this.vue = 'accueil'; this.afficher(); }
+  // onglet : 'bureau' ou 'vitisoft' (sinon, celui d'avant)
+  ouvrir(onglet) { if (onglet) { this.onglet = onglet; this.vue = 'accueil'; } this.ouvert = true; this.el.hidden = false; this.afficher(); }
   fermer() { this.ouvert = false; this.el.hidden = true; }
   update(dt) {
     if (!this.ouvert) return;
@@ -92,8 +104,7 @@ export class PC {
     return m.toutFait ? `<div class="vs-fin"><b>Tout est fait pour ce soir.</b> ${esc(VITISOFT.journal)}<button class="vs-bt" data-a="fermer">Fermer Vitisoft</button></div>` : '';
   }
 
-  afficher() {
-    const m = this.jeu.mission;
+  vitisoft(m) {
     const menu = VITISOFT.menu.map(x => `<button class="${x.id === this.vue ? 'on' : ''}" data-a="vue:${x.id}">${esc(x.t)}</button>`).join('');
     let corps;
     if (VUES.includes(this.vue)) corps = this[this.vue](m);
@@ -101,11 +112,20 @@ export class PC {
       const x = VITISOFT.menu.find(i => i.id === this.vue);
       corps = `<h2>${esc(x.t)}</h2><p class="vs-texte">${esc(x.d)}</p><p class="vs-note">Dans le jeu complet.</p>`;
     }
-    $('pc-ecran').innerHTML = `<div class="vs">
-      <header class="vs-barre"><b>Vitisoft</b><span>Domaine du Clos Libre</span><button class="vs-x" data-a="fermer" aria-label="Fermer Vitisoft">×</button></header>
+    return `<div class="vs"><header class="vs-barre"><b>Vitisoft</b><span>Domaine du Clos Libre</span></header>
       <div class="vs-corps"><nav class="vs-menu">${menu}</nav><main class="vs-main">${corps}</main></div></div>`;
-    // sur téléphone, le menu défile en largeur : l'onglet ouvert reste visible
+  }
+
+  afficher() {
+    const m = this.jeu.mission, v = this.onglet === 'vitisoft';
+    const onglet = (id, t) => `<button class="nav-o${this.onglet === id ? ' on' : ''}" data-a="onglet:${id}"><i class="nav-ic ${id}"></i>${t}</button>`;
+    const page = this.el.querySelector('.nav-page'), haut = page ? page.scrollTop : 0;
+    $('pc-ecran').innerHTML = `<div class="nav-fenetre"><div class="nav"><div class="nav-onglets">${onglet('bureau', 'Le bureau')}${onglet('vitisoft', 'Vitisoft')}</div>
+      <button class="nav-x" data-a="quitter" aria-label="Se lever du portable">×</button></div>
+      <div class="nav-page">${v ? this.vitisoft(m) : `<div class="pt-bureau">${this.jeu.tel.vuePortable()}</div>`}</div></div>`;
+    if (!v) { const p = this.el.querySelector('.pt-bureau'); if (p && this.dernierBureau === this.jeu.tel.app) p.scrollTop = haut; this.dernierBureau = this.jeu.tel.app; }
+    // sur téléphone, le menu de Vitisoft défile en largeur : l'onglet ouvert reste visible
     const nav = this.el.querySelector('.vs-menu'), on = nav && nav.querySelector('.on');
-    if (on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = Math.max(0, on.offsetLeft - 8);
+    if (on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = Math.max(0, on.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft - 8);
   }
 }

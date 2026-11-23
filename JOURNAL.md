@@ -263,3 +263,13 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Les étoiles de retard ne montent pas pendant un geste.
 
 **Vérifié** : captures du chargement et d'une livraison (tracteur et van) ; `npm run verifie` (28 étapes par parcours : chargement commencé, palette vide, cartons posés avant le bon de livraison, retour au volant, 11 cartons devant les clients) ; conduite assistée complète, tracteur et van, avec 3 décalages de départ : tournée finie, aucun choc. Durée d'un chargement au chai : environ 20 s (moins de 10 s en accéléré).
+
+## 23/11/2026 · Lot 3 : le bureau du chai, où l'on entre
+
+**Fait** :
+- `monde.js` (`chaiEtBureau`) : au bout sud du chai, une vraie pièce de 4,5 x 5,1 m sous plafond à 2,8 m, porte « BUREAU » sur la façade (avec applique ; la fenêtre du bureau est éclairée). Dedans : parquet, lambris et plâtre, poutres, suspension ; le bureau en bois contre le mur est (caisson à tiroirs, le portable ouvert, une lampe, une tasse, des papiers), la chaise, une étagère (classeurs, bouteilles), une caisse de vin, un classeur métallique, une plante, un portemanteau et sa veste, la carte des parcelles au mur, un tapis bordeaux. Même extérieur que l'ancien chai et mêmes tirages au sort : le reste du monde ne bouge pas. L'intérieur est un maillage à part, éclairé sans ombre portée.
+- `gestes.js` : entrer (on va à la porte, elle s'ouvre vers l'intérieur, au seuil un fondu au noir d'un quart de seconde, la caméra passe dans un coin de la pièce, la porte se referme) ; sortir, l'inverse ; s'asseoir au portable, se lever (`anim.js` : transition debout-assis sur une chaise, pose au clavier).
+- Le portable (`pc.js`, l'ancien PC) : un navigateur à deux onglets, Le bureau et Vitisoft. Le bureau y montre les mêmes écrans que sur le téléphone (Ma journée, Commandes, Tournée, ajouter à la tournée, lancer la tournée) ; un appel part du téléphone, puis on revient au portable. Source : la page du bureau dit « Au domaine sur l'ordinateur, au salon sur la tablette, en tournée sur le smartphone ».
+- Mission : au retour, on rentre au bureau du chai, on dépose le chèque sur le bureau (il y reste), on s'assoit au portable : Vitisoft s'ouvre. Itinéraire du retour jusque devant la porte. Textes : « le PC » devient « le portable du bureau du chai ».
+
+**Vérifié** : captures de l'entrée (porte, fondu, caméra de la pièce), de l'arrivée au portable, du portable (onglets Le bureau et Vitisoft) sur ordinateur et sur téléphone 390 x 844 ; `npm run verifie` (30 étapes par parcours) ; conduite assistée complète en tracteur et en van, aucun choc ; coût d'une image au domaine : +2 appels de dessin, +1 000 triangles, même durée.

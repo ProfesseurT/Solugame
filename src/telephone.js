@@ -1,5 +1,6 @@
 // Le téléphone du personnage : la mise en abyme. Le bureau (vendre, faire signer, livrer),
-// Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le PC du domaine.
+// Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
+// chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
 import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE } from './textes.js';
 import { son } from './audio.js';
@@ -84,7 +85,8 @@ export class Telephone {
     this.afficher();
   }
   toast(txt) {
-    const t = this.el.querySelector('.ph-toast');
+    this.dernierToast = { txt, t: performance.now() }; // le portable le remontre après avoir redessiné sa page
+    const t = document.querySelector('#pc:not([hidden]) .ph-toast') || this.el.querySelector('.ph-toast');
     if (!t) return;
     t.textContent = txt; t.classList.remove('vu'); void t.offsetWidth; t.classList.add('vu');
   }
@@ -134,8 +136,20 @@ export class Telephone {
     cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
   }
 
+  // Le bureau sur le portable du bureau du chai (« Au domaine sur l'ordinateur », page du bureau) : les mêmes écrans,
+  // sans l'en-tête du téléphone
+  vuePortable() {
+    if (!['bureau', 'commande', 'tournee', 'message'].includes(this.app)) this.app = 'bureau';
+    this.surPortable = true;
+    const h = this[this.app]();
+    this.surPortable = false;
+    const d = this.dernierToast, recent = d && performance.now() - d.t < 2500;
+    return h + `<p class="ph-toast${recent ? ' vu' : ''}" role="status">${recent ? esc(d.txt) : ''}</p>`;
+  }
+
   /* ------------------------------------------------------------ écrans */
   entete(titre, classe, retour = 'accueil') {
+    if (this.surPortable) return '';
     const r = this.jeu.mission.peutFermer() ? `<button class="ap-ret" data-a="${retour}" aria-label="Retour">‹</button>` : '<i class="ap-ret vide"></i>';
     return `<header class="ap-tete ${classe}">${r}<span>${esc(titre)}</span><i class="ap-ic">${ICONES[classe] || ''}</i></header>`;
   }

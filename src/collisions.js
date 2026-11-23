@@ -58,7 +58,7 @@ export class Collisions {
       if (!l) continue;
       for (let i = 0; i < l.length; i++) {
         const b = l[i];
-        if (b.vu === this.vu) continue;
+        if (b.vu === this.vu || b.fantome) continue; // fantome : compte pour la caméra (dedans), n'arrête personne
         b.vu = this.vu;
         if (this.pousser(p, r, b)) touche = true;
       }

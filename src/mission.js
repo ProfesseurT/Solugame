@@ -6,7 +6,7 @@
 //    Parmi les tâches du jour, un règlement en retard (l'Épicerie du Bourg) : on ajoute soi-même le passage à la tournée.
 // 4. On lance la tournée dans le bureau : d'abord l'Épicerie du Bourg, qui nous remet un chèque ; puis, à chaque
 //    livraison, le client signe le bon de livraison sur notre téléphone.
-// 5. Retour au domaine : on dépose le chèque au bureau, puis sur le PC, dans Vitisoft (pas d'appli téléphone),
+// 5. Retour au bureau du chai : on dépose le chèque sur le bureau, puis sur le portable, dans Vitisoft (pas d'appli téléphone),
 //    on saisit le règlement, on facture les 3 commandes (Factur-X, transmises par Pennylane) et on calcule la DRM.
 import { DIALOGUES, OBJECTIFS, CLIENTS, RETARD } from './textes.js';
 import { son } from './audio.js';
@@ -264,8 +264,8 @@ export class Mission {
     j.remonter(this.charge); // on retourne au volant
   }
 
-  /* ------------------------------------------------------------ actions du PC (Vitisoft) */
-  // au bureau du chai : d'abord poser le chèque, ensuite ouvrir le PC
+  /* ------------------------------------------------------------ actions du portable (Vitisoft) */
+  // au bureau du chai : d'abord poser le chèque, ensuite s'asseoir au portable
   get chequeADeposer() { return this.pcDispo && this.retardataire.statut === 'recupere'; }
   deposerCheque() {
     if (!this.chequeADeposer) return;

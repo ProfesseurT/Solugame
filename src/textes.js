@@ -21,8 +21,8 @@ export const OBJECTIFS = {
   tournee: 'Lancez la tournée dans le bureau',
   livrer: nom => `Tournée : livrez ${nom}`,
   cheque: nom => `Tournée : récupérez le chèque de ${nom}`,
-  retour: 'Rentrez au domaine : déposez le chèque au bureau, près du PC',
-  pcOuvrir: 'Ouvrez le PC : tout se fait dans Vitisoft',
+  retour: 'Rentrez au bureau du chai : déposez le chèque sur le bureau',
+  pcOuvrir: 'Asseyez-vous au portable : tout se fait dans Vitisoft',
   pc: n => `Vitisoft : règlement, factures, DRM (${n} sur 3)`,
   libre: 'Balade libre',
 };
@@ -87,9 +87,9 @@ export const DIALOGUES = {
   chequePied: [{ qui: '', txt: 'Le chèque se récupère au comptoir de l\'épicerie.' }],
   chequeDepose: [{ qui: '', txt: 'Chèque posé sur le bureau. Reste à saisir le règlement dans Vitisoft.' }],
   livre: c => [{ qui: '', txt: `Bon de livraison ${c.bl} signé par ${c.du}.` }, ...(c.id === 'cave' ? [{ qui: 'Vous', txt: 'La facture part ce soir, depuis Vitisoft.' }] : [])],
-  pcTracteur: [{ qui: '', txt: 'Descendez : le PC est dans le chai.' }],
+  pcTracteur: [{ qui: '', txt: 'Descendez : le bureau du chai est là, sa porte donne sur la cour.' }],
   verre: [{ qui: 'Vous', txt: 'Un verre de Cuvée du Clos ? C\'est la maison qui offre.' }],
-  retour: [{ qui: '', txt: 'Tournée terminée. Retour au domaine : le chèque au bureau, puis le PC, dans Vitisoft.' }],
+  retour: [{ qui: '', txt: 'Tournée terminée. Retour au bureau du chai : le chèque sur le bureau, puis Vitisoft, sur le portable.' }],
   merci: [{ qui: '', txt: 'Trois livraisons, trois factures, un chèque saisi et la DRM prête pour CIEL. Bonne soirée !' }],
 };
 
@@ -97,8 +97,9 @@ export const DIALOGUES = {
 export const REPLIQUES_VERRE = ['Santé !', 'À la vôtre !', 'Fameux, ce rouge !', 'Il a du fruit !', 'Je passerai au domaine !', 'Un vrai velours.', 'Merci, c\'est gentil !'];
 export const CHOCS_VOITURE = ['Eh ! Mon pare-chocs !', 'Regardez devant vous !', 'Ma voiture toute neuve !', 'Oh là là !', 'Doucement, le paysan !'];
 
-// Le bureau (extension web de Vitisoft, sur ordinateur, tablette ou smartphone).
-// Source : vitisoft.fr/fonctionnalites/le-bureau-application-commerciale (22/11/2026).
+// Le bureau (extension web de Vitisoft, sur ordinateur, tablette ou smartphone), sur le téléphone et sur le portable
+// du bureau du chai (« Au domaine sur l'ordinateur, au salon sur la tablette, en tournée sur le smartphone »).
+// Source : vitisoft.fr/fonctionnalites/le-bureau-application-commerciale (22/11/2026, relue le 23/11/2026).
 // Pas de prix, pas de date, pas d'« IA ».
 export const BUREAU = {
   commande: 'Préparée pendant l\'appel, au tarif et aux remises du client.',
@@ -111,7 +112,7 @@ export const BUREAU = {
   bl: 'Le client signe le bon de livraison, du doigt, sur votre téléphone.',
 };
 
-// Vitisoft, sur le PC du domaine (Vitisoft n'a pas d'appli téléphone : arbitrage de Teddy, 22/11/2026).
+// Vitisoft, sur le portable du bureau du chai (Vitisoft n'a pas d'appli téléphone : arbitrage de Teddy, 22/11/2026).
 export const VITISOFT = {
   menu: [
     { id: 'accueil', t: 'À faire' },

@@ -111,8 +111,10 @@ async function relever(fichier, palier) {
         const a = CL.jeu.lieux.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); CL.finirGeste(4000); CL.step(10); CL.bench(1);
         T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10); CL.finirGeste(2000);
       }
-      CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-      CL.jeu.joueur.placer(-78.0, -50.5, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); CL.agir(); CL.step(5);
+      const BU = CL.jeu.lieux.bureau;
+      CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+      CL.jeu.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); CL.bench(1);
+      CL.jeu.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
       clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]'); clic('[data-a="vue:commandes"]');
       for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }
       clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);

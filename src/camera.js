@@ -114,6 +114,18 @@ export class Camera {
     if (this.tMain > 1.5) this.yaw = angle(this.yaw + angle(c.h - this.yaw) * lisser(dt, 1.6));
     this.suivre(dt, c.x, c.z, c.h, 0, false, col);
   }
+  // Dans le bureau du chai (B : lieux.bureau) : la caméra posée dans un coin suit le personnage (x, z) du regard ; au
+  // portable (proche), elle passe derrière son épaule
+  salle(dt, B, x, z, proche) {
+    const P = proche ? B.prise : B.camera, k = this.pret ? lisser(dt, proche ? 2.2 : 3.2) : 1;
+    const rx = proche ? B.portable.x : B.centre.x + (x - B.centre.x) * 0.6, rz = proche ? B.portable.z : B.centre.z + (z - B.centre.z) * 0.6;
+    this.pos.x += (P.x - this.pos.x) * k; this.pos.y += (P.y - this.pos.y) * k; this.pos.z += (P.z - this.pos.z) * k;
+    this.regard.x += (rx - this.regard.x) * k; this.regard.y += ((proche ? B.portable.y : B.centre.y) - this.regard.y) * k; this.regard.z += (rz - this.regard.z) * k;
+    this.c.position.copy(this.pos); this.c.lookAt(this.regard);
+    if (Math.abs(this.c.fov - this.fovBase) > 0.02) { this.c.fov = this.fovBase; this.c.updateProjectionMatrix(); }
+    this.fovPose = this.c.fov; this.fovPlus = 0;
+    this.pret = true;
+  }
   // vue de l'accueil : tour lent autour d'un point
   // large : le personnage se place à droite du titre ; étroit : en haut de l'écran
   orbite(t, cx, cz, large) {

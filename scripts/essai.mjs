@@ -90,11 +90,18 @@ if (scenario === 'parcours') {
       log.push(['de nouveau au volant après ' + id, CL.jeu.auVolant]);
     }
     log.push(['véhicule vide, 11 cartons posés devant les clients', CL.jeu.tm.cartons.every(c => !c.visible) && m.deposes.reduce((s, p) => s + p.userData.n, 0) === 11]);
-    CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-    CL.jeu.joueur.placer(-78.0, -50.5, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
-    log.push(['chèque déposé au bureau, PC pas encore ouvert', m.retardataire.statut === 'depose' && !CL.jeu.pc.ouvert]);
-    CL.agir(); CL.step(5);
-    log.push(['PC ouvert', CL.jeu.pc.ouvert]);
+    // retour : garé devant le bureau du chai, on descend, on entre (porte, fondu), on dépose le chèque, on s'assoit au portable
+    const BU = CL.jeu.lieux.bureau;
+    CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+    CL.jeu.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+    log.push(['entré dans le bureau du chai (porte refermée)', CL.jeu.dedans && Math.abs(CL.monde.porteBureau.rotation.y) < 0.01 && !CL.jeu.pc.ouvert]);
+    CL.jeu.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
+    log.push(['chèque déposé sur le bureau, portable pas encore ouvert', m.retardataire.statut === 'depose' && !CL.jeu.pc.ouvert]);
+    CL.agir(); CL.finirGeste(); CL.step(5);
+    log.push(['assis au portable, Vitisoft ouvert', CL.jeu.pc.ouvert && CL.jeu.pc.onglet === 'vitisoft' && CL.joueur.assis]);
+    clic('[data-a="onglet:bureau"]');
+    log.push(['le bureau aussi, sur le portable', !!q('#pc .pt-bureau .onglets') && !!q('#pc [data-a="ouvrir:tournee"]')]);
+    clic('[data-a="onglet:vitisoft"]');
     clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]');
     log.push(['règlement saisi dans Vitisoft', m.retardataire.statut === 'saisi']);
     clic('[data-a="vue:commandes"]');

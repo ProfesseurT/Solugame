@@ -5,12 +5,13 @@
 // Repère d'un véhicule : avant vers +z, +x à gauche, le côté du conducteur.
 import * as THREE from 'three';
 import { son } from './audio.js';
-import { versAngle } from './outils.js';
+import { versAngle, angle } from './outils.js';
 import { MAT } from './modeles.js';
 import { geoCarton, PAS_CARTON } from './engins.js';
 
 const lisse = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 const mix = (a, b, t) => a + (b - a) * t;
+const angleVers = (a, b) => angle(b - a); // le plus court chemin de l'angle a à l'angle b
 const OUVERTE = -1.15;  // angle de la portière du van grande ouverte (rad)
 const GLISSE = 0.78;    // course de la porte coulissante vers l'arrière (m)
 const PORT = new THREE.Vector3(0, 0.95, 0.36); // la pile dans les bras : centre du carton du bas (repère du personnage)
@@ -325,6 +326,75 @@ export class Gestes {
       }));
     });
     this.lancer(etapes, fin);
+  }
+
+  /* ------------------------------------------------------------ le bureau du chai (monde.js : la pièce, sa porte) */
+  // la porte du bureau s'ouvre vers l'intérieur (sens 1) ou se referme (sens -1)
+  porteBureau(sens) {
+    const pt = this.c.porte;
+    let claque = false;
+    return {
+      duree: sens > 0 ? 0.5 : 0.45,
+      debut: () => { if (sens > 0) son.jouer('portiere'); },
+      maj: (dt, t, u) => {
+        pt.rotation.y = -1.45 * (sens > 0 ? u : 1 - u);
+        if (sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
+        this.immobile(dt, t);
+      },
+    };
+  }
+  // Passer la porte : on y va, elle s'ouvre, on passe le seuil ; au seuil, fondu au noir et la caméra change de côté
+  // (passe), puis on avance et elle se referme. B : lieux.bureau ; entrer : vers l'intérieur, sinon vers la cour.
+  passer(B, entrer, { fondu, passe, fin }) {
+    const cap = entrer ? Math.PI / 2 : -Math.PI / 2, a = entrer ? B.dehors : B.dedans, b = entrer ? B.dedans : B.dehors;
+    this.lancer([
+      ...this.allerA(() => a, () => cap),
+      this.porteBureau(1),
+      ...this.allerA(() => B.seuil, () => cap),
+      { action: () => fondu(true) },
+      { duree: 0.25, maj: (dt, t) => this.immobile(dt, t) }, // le temps du fondu au noir (index.html, #fondu)
+      { action: () => { passe(); fondu(false); } },
+      ...this.allerA(() => b, () => cap + (entrer ? 0.4 : 0)),
+      this.porteBureau(-1),
+    ], fin);
+  }
+  // S'asseoir au portable : devant la chaise, on s'y assoit en se tournant vers le bureau ; assis() quand c'est fait
+  asseoir(B, assis) {
+    const A = { x: 0, z: 0, h: 0 }, C = B.chaise;
+    this.lancer([
+      ...this.allerA(() => B.devant, () => Math.atan2(C.x - B.devant.x, C.z - B.devant.z)),
+      {
+        duree: 0.9,
+        debut: () => { const j = this.j; A.x = j.pos.x; A.z = j.pos.z; A.h = j.h; j.assis = true; j.transition = 0; j.baisse = 0.1; j.v = 0; },
+        maj: (dt, t, u) => {
+          const j = this.j, g = j.m.groupe, k = lisse(u * 1.3);
+          g.position.set(mix(A.x, C.x, k), 0, mix(A.z, C.z, k)); g.rotation.set(0, A.h + angleVers(A.h, C.h) * k, 0);
+          j.transition = lisse((u - 0.2) / 0.8);
+          j.sync(dt, t); j.pos.x = g.position.x; j.pos.z = g.position.z; j.h = g.rotation.y;
+        },
+      },
+      { action: () => { const j = this.j; j.transition = null; j.baisse = undefined; j.clavier = true; assis(); } },
+    ]);
+  }
+  // Se lever du portable, revenir devant la chaise
+  lever(B, fin) {
+    const C = B.chaise;
+    this.lancer([{
+      duree: 0.8,
+      debut: () => { const j = this.j; j.clavier = false; j.transition = 1; j.baisse = 0.1; },
+      maj: (dt, t, u) => {
+        const j = this.j, g = j.m.groupe;
+        g.position.set(mix(C.x, B.devant.x, lisse((u - 0.3) / 0.7)), 0, mix(C.z, B.devant.z, lisse((u - 0.3) / 0.7)));
+        j.transition = 1 - lisse(u / 0.8);
+        j.sync(dt, t); j.pos.x = g.position.x; j.pos.z = g.position.z;
+      },
+    }, {
+      action: () => {
+        const j = this.j;
+        j.pos.set(B.devant.x, 0, B.devant.z); j.h = j.hv = C.h; j.v = 0;
+        j.assis = false; j.transition = null; j.baisse = undefined; j.sync(0.016, 0);
+      },
+    }], fin);
   }
 
   // Après la livraison : on referme la porte coulissante (van), on retourne au volant

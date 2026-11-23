@@ -119,9 +119,9 @@ export class Anim {
     this.ry += (cy - this.ry) * kl(dt, 4.5); this.rp += (cp - this.rp) * kl(dt, 4.5);
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
-    if (p.transition != null && conduite) this.poseTransition(dt, p, t, br);
+    if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
     else if (conduite) this.poseConduite(dt, p, t, br);
-    else if (p.assis) this.poseAssise(br);
+    else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
 
@@ -274,7 +274,7 @@ export class Anim {
   }
 
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */
-  poseAssise(br) {
+  poseAssise(br, p) {
     const o = this.o, g = this.m.groupe, s = this.m.echelle, dm = this.m.dim;
     const yB = (0.56 - g.position.y) / s + 0.1, yP = (0 - g.position.y) / s + DIM.cheville;
     o[OS.bassin].position.set(0, yB, -0.02);
@@ -284,7 +284,15 @@ export class Anim {
     o[OS.tete].rotation.set(-0.02 + this.rp * 0.85, this.ry * 0.66, 0);
     this.reperes();
     for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (dm.xh + 0.04), yP, 0.42 + (sg * this.poids > 0 ? 0.06 : 0), 0, sg * 0.12, 0.6); }
-    // mains posées sur les cuisses
+    // mains posées sur les cuisses ; au portable (p.clavier), un peu penché, les mains sur le clavier
+    if (p && p.clavier) {
+      o[OS.ventre].rotation.x += 0.12; o[OS.poitrine].rotation.x += 0.1; this.reperes();
+      const yC = (0.82 - g.position.y) / s;
+      this.brasIK(0, 0.15, yC, 0.62, 0.7, -0.5, -0.6, 1);
+      this.brasIK(3, -0.15, yC, 0.62, -0.7, -0.5, -0.6, 1);
+      o[OS.mainG].rotation.set(0.25, 0, 0.2); o[OS.mainD].rotation.set(0.25, 0, -0.2);
+      return;
+    }
     this.brasIK(0, dm.xh + 0.03, yB + 0.06, 0.24, 0.6, -0.4, -1, 1);
     this.brasIK(3, -dm.xh - 0.03, yB + 0.06, 0.24, -0.6, -0.4, -1, 1);
     o[OS.mainG].rotation.set(-0.5, 0, 0.3); o[OS.mainD].rotation.set(-0.5, 0, -0.3);
@@ -341,15 +349,16 @@ export class Anim {
     }
   }
 
-  /* ---------------------------------------------------------------- monter dans un véhicule, en descendre (gestes.js)
-     p.transition : 0 debout, 1 au volant ; les deux poses sont calculées puis mélangées os par os. Les mains ne prennent
-     le volant qu'à la fin (sa position suppose le personnage déjà tourné vers l'avant) ; on se baisse pour passer. */
-  poseTransition(dt, p, t, br) {
+  /* ---------------------------------------------------------------- monter dans un véhicule, en descendre ; s'asseoir sur une
+     chaise, se lever (gestes.js). p.transition : 0 debout, 1 assis (au volant ou sur la chaise) ; les deux poses sont
+     calculées puis mélangées os par os. Les mains ne prennent le volant qu'à la fin (sa position suppose le personnage
+     déjà tourné vers l'avant) ; on se baisse pour passer. */
+  poseTransition(dt, p, t, br, conduite) {
     const o = this.o, w = p.transition, n = o.length;
     this.poseDebout(dt, p, 0, 1, br);
     for (let i = 0; i < n; i++) MEMO[i].copy(o[i].quaternion);
     vMemo.copy(o[OS.bassin].position);
-    this.poseConduite(dt, p, t, br);
+    if (conduite) this.poseConduite(dt, p, t, br); else this.poseAssise(br);
     const wb = lisse(0.8, 1, w);
     for (let i = 0; i < n; i++) { q1.copy(o[i].quaternion); o[i].quaternion.copy(MEMO[i]).slerp(q1, BRAS.includes(i) ? wb : w); }
     v1.copy(o[OS.bassin].position); o[OS.bassin].position.copy(vMemo).lerp(v1, w);
