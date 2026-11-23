@@ -600,6 +600,7 @@ void main() {
     const dedans = new THREE.Mesh(fusion(I), MAT);
     dedans.receiveShadow = false; dedans.castShadow = false; dedans.name = 'bureau du chai';
     scene.add(dedans);
+    o.interieur = dedans; // dessiné seulement quand on le voit (main.js : dedans, ou porte ouverte)
 
     // la porte : un battant sur sa charnière (côté nord), qui s'ouvre vers l'intérieur (rotation.y négative)
     const porte = new THREE.Group(); porte.position.set(-75.85, 0, -60.12);
@@ -1080,5 +1081,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, moulin };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, porteBureau: chai.porte, interieurBureau: chai.interieur, moulin };
 }

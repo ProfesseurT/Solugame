@@ -345,3 +345,14 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Code mort : 5 règles CSS (`vtuiles`, `vtuile`, `fc-ligne`, `coche`, `vs-x`) et un dialogue (`chequePied`).
 - Chaque image : plus de fonction neuve pour chercher à qui servir un verre ni pour le boire, plus de tableau neuf pendant un demi-tour du pilote, plus de déstructuration de tableau dans le calcul des voitures.
 - `essai-perso-jeu` : il échouait (« aucun passant n'a sauté ») depuis la conduite repensée du 22/11 : le tracteur accélère plus doucement et n'atteignait jamais le passant visé en 1,8 s. Le banc le laisse maintenant arriver (5 s au plus) : les passants sautent bien de côté. Le jeu n'était pas en cause.
+
+## 23/11/2026 · Passe d'assainissement (2) : moins d'appels de dessin
+
+**Fait** :
+- Cartons en instances : ceux d'un véhicule ne font plus qu'un appel de dessin (seuls les visibles sont dessinés ; chaque carton reste un petit objet `{ position, visible }`, le reste du code n'a pas changé), une pile (palette, bras, devant un client) un seul.
+- La pièce du bureau du chai n'est dessinée que si on la voit (dedans, ou porte ouverte).
+- Dans le bureau : la caméra ne dessine qu'à 16 m (le monde extérieur, derrière les murs, et le ciel ne sont plus dessinés) et la carte d'ombre n'est plus recalculée (la pièce ne reçoit pas d'ombre portée).
+
+**Mesuré** (téléphone 390 x 844, palier moyen ; appels de dessin, ombres comprises) : chai avec le tracteur chargé 86 → 65 ; sur la route 88 → 68 ; domaine 86 → 79 ; place après les livraisons 80 → 74 ; dans le bureau 73 → 44 et 107 000 → 59 000 triangles (et, en jeu, sans passe d'ombre). Scène : 682 → 621 objets, 484 → 423 matrices recalculées par image.
+
+**Vérifié** : captures du chargement et d'une livraison en van (palette, van chargé vu par les vitres) ; `npm run verifie` ; conduite assistée complète en tracteur et en van ; banc d'allègement de three.js : équivalent.

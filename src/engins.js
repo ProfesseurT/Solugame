@@ -202,14 +202,27 @@ export function geoCarton() {
   return geoCartonP;
 }
 // Les cartons d'un véhicule : 6 colonnes de 3 (colonne c : cartons 3c, 3c + 1, 3c + 2, de bas en haut), cachés tant
-// qu'ils ne sont pas chargés. base(c) : centre du carton du bas de la colonne c, dans le repère de la caisse.
+// qu'ils ne sont pas chargés. Dessinés d'un seul appel (instances : seulement les cartons visibles). Chaque carton est un
+// petit objet { position, visible } (repère de la caisse) : le montrer ou le cacher met les instances à jour.
+// base(c) : centre du carton du bas de la colonne c.
+const M_CARTON = new THREE.Matrix4();
 function colonnes(caisse, base) {
-  const cartons = [];
+  const im = new THREE.InstancedMesh(geoCarton(), MAT, 18), cartons = [];
+  im.castShadow = true; im.receiveShadow = true; im.count = 0; im.name = 'cartons';
+  caisse.add(im);
+  const maj = () => {
+    let n = 0;
+    for (const c of cartons) if (c.vu) { const p = c.position; im.setMatrixAt(n++, M_CARTON.makeTranslation(p.x, p.y, p.z)); }
+    im.count = n; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere();
+  };
   for (let i = 0; i < 18; i++) {
-    const m = new THREE.Mesh(geoCarton(), MAT), [x, y, z] = base(Math.floor(i / 3));
-    m.position.set(x, y + (i % 3) * PAS_CARTON, z);
-    m.castShadow = true; m.visible = false; caisse.add(m); cartons.push(m);
+    const [x, y, z] = base(Math.floor(i / 3));
+    cartons.push({
+      position: new THREE.Vector3(x, y + (i % 3) * PAS_CARTON, z), vu: false,
+      get visible() { return this.vu; }, set visible(v) { if (!!v !== this.vu) { this.vu = !!v; maj(); } },
+    });
   }
+  maj();
   return cartons;
 }
 

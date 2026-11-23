@@ -90,17 +90,16 @@ function cadreEntre(a, b, v) {
   const nx = uz / l, nz = -ux / l, s = (v.p.pos.x - mx) * nx + (v.p.pos.z - mz) * nz > 0 ? -1 : 1;
   return { x: mx, z: mz, h: Math.atan2(-s * nx, -s * nz) };
 }
-// une pile de n cartons (3 au plus) ; sa position est celle du carton du bas
+// une pile de n cartons (3 au plus), dessinée d'un seul appel (instances) ; sa position est celle du carton du bas
+const M_PILE = new THREE.Matrix4();
 export function pileCartons(n) {
-  const g = new THREE.Group();
-  for (let i = 0; i < 3; i++) {
-    const m = new THREE.Mesh(geoCarton(), MAT); m.position.y = i * PAS_CARTON; m.castShadow = true; m.receiveShadow = true;
-    g.add(m);
-  }
+  const g = new THREE.InstancedMesh(geoCarton(), MAT, 3);
+  for (let i = 0; i < 3; i++) g.setMatrixAt(i, M_PILE.makeTranslation(0, i * PAS_CARTON, 0));
+  g.castShadow = true; g.receiveShadow = true; g.name = 'pile';
   montrer(g, n);
   return g;
 }
-function montrer(pile, n) { pile.children.forEach((m, i) => { m.visible = i < n; }); pile.userData.n = n; }
+function montrer(pile, n) { pile.count = n; pile.userData.n = n; pile.computeBoundingSphere(); }
 
 export class Gestes {
   // c : { jeu, scene, col }

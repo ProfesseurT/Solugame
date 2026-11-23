@@ -103,8 +103,8 @@ function appliquerQualite(q) {
   }
   scene.fog.near = q.brume[0]; scene.fog.far = q.brume[1];
   // au-delà de 1,6 fois la fin de la brume tout est couleur de brume : inutile de le dessiner
-  camera.far = q.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
-  monde.ciel.scale.setScalar(camera.far * 0.9 / 800);
+  monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800);
+  regarder();
   UNI.uLoin.value = q.loin;
   // filtrage anisotrope du bruit des matières (sol vu de biais) : jusqu'à 4 lectures de plus par texture, réservé aux appareils puissants
   if (BRUIT.anisotropy !== q.aniso) { BRUIT.anisotropy = q.aniso; BRUIT.needsUpdate = true; }
@@ -112,6 +112,14 @@ function appliquerQualite(q) {
   tacheMat.opacity = q.tache;
   ratioMaxEff = Math.min(dpr, q.ratioMax);
   if (ratio > ratioMaxEff) changerRatio(ratioMaxEff);
+}
+// Jusqu'où la caméra dessine : loin dehors (la brume du palier) ; dans le bureau du chai, la pièce seulement (le monde
+// extérieur, derrière les murs, n'est pas dessiné, ni le ciel)
+let vueDedans = false;
+function regarder(dedans = vueDedans) {
+  vueDedans = dedans;
+  camera.far = dedans ? 16 : qualite.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
+  monde.ciel.visible = !dedans;
 }
 // Compilation des shaders en tâche de fond (KHR_parallel_shader_compile) : l'accueil s'affiche tout de suite
 // et la page ne gèle pas ; l'image 3D apparaît quand tout est prêt (et après un changement de palier).
@@ -499,7 +507,7 @@ const cheque3D = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT)
 cheque3D.position.set(BU.depot.x, BU.depot.y, BU.depot.z); cheque3D.rotation.y = 0.3; cheque3D.visible = false; scene.add(cheque3D);
 function passerPorte(entrer) {
   ctrl.relacher();
-  gestes.passer(BU, entrer, { fondu: fonduVers, passe: () => { jeu.dedans = entrer; cam.pret = false; if (!entrer) cam.yaw = -Math.PI / 2; }, fin: () => {} });
+  gestes.passer(BU, entrer, { fondu: fonduVers, passe: () => { jeu.dedans = entrer; regarder(entrer); cam.pret = false; if (!entrer) cam.yaw = -Math.PI / 2; }, fin: () => {} });
 }
 function asseoirPortable() {
   ctrl.relacher();
@@ -793,6 +801,8 @@ function miseAJour(dt) {
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 
+  // la pièce du bureau n'est dessinée que si on la voit : dedans, ou par la porte ouverte
+  monde.interieurBureau.visible = jeu.dedans || monde.porteBureau.rotation.y < -0.01;
   // caméra, soleil, ciel ; dans le bureau du chai, la caméra de la pièce ; un geste qui se regarde (charger, décharger) a
   // son cadre
   if (!camLibre && jeu.dedans) cam.salle(dt, BU, joueur.pos.x, joueur.pos.z, auPortable && (pc.ouvert || gestes.actif));
@@ -835,7 +845,8 @@ function avantRendu(ego) {
   placerLumiere(ego.x, ego.z);
   majTaches();
   monde.maj(camera.position.x, camera.position.z);
-  if (qualite.ombres && ++nOmbre >= qualite.ombrePas) {
+  // dans le bureau, la pièce ne reçoit pas d'ombre portée : on ne recalcule pas la carte d'ombre
+  if (qualite.ombres && !jeu.dedans && ++nOmbre >= qualite.ombrePas) {
     nOmbre = 0; renderer.shadowMap.needsUpdate = true;
     const c = monde.soleil.shadow.camera;
     monde.ombres(monde.soleil.target.position, c.right, c.top);
