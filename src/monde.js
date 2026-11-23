@@ -1430,14 +1430,21 @@ void main() {
     terrasse: terrasse.map(([x, z]) => ({ x: x - 0.75, z, h: Math.PI / 2 })),
     place: { x0: 79, z0: -60, x1: 111, z1: -33 },
     fontaine: { x: 95, y: 2.62, z: -46 },
-    // itinéraire de la tournée, au départ du domaine (chai, portail, départementale, rue de la place)
-    // la conduite assistée (pilote.js) le suit sur la file de droite : il évite la fontaine, le monument, les bancs
-    // puis, pour finir, le chemin des Grands Champs jusqu'à l'auberge
-    route: [[-82.8, -58.4], [-87.5, -51.9], [-90, -44], [-90, 10], [95, 10], [95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [110.5, 9.4],
-      [-55, 10], [-55, 124], [-53.2, 134.5]],
+    // le réseau des routes et chemins (reseau.js : l'itinéraire le plus court d'un point à un autre). La conduite assistée
+    // (pilote.js) le suit sur la file de droite : dans le bourg, il évite la fontaine, le monument, les bancs.
+    reseau: [
+      [[-90, 10], [-90, -38], [-90, -44], [-87.5, -51.9], [-82.8, -58.4]], // l'allée du domaine, jusqu'à la sortie du chai
+      [[-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],              // la cour, jusqu'au bureau du chai
+      [[-90, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],              // la cour, jusqu'à la grande porte du chai
+      [[-90, 10], [-55, 10], [95, 10], [110.5, 9.4]],                      // la départementale (l'épicerie, La Treille)
+      [[95, 10], [95, -30]],                                               // la rue de la place, en montant
+      // la boucle du bourg, à sens unique : la place, la Cave du Pressoir, le Bar Le Cep, et l'on redescend
+      { sens: true, points: [[95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [95, 10]] },
+      [[-55, 10], [-55, 124], [-53.2, 134.5]],                             // le chemin des Grands Champs, jusqu'à l'auberge
+    ],
+    route0: [-82.8, -58.4], // où l'on part en tournée : la sortie du chai (main.js, cheminSortie)
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
-    retour: [[-53.2, 134.5], [-55, 124], [-55, 10], [-90, 10], [-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],
   };
   lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
 

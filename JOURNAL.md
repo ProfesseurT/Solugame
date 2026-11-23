@@ -480,3 +480,17 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Partout : si l'avance de la caméra fait entrer le point visé dans un bâtiment, elle est raccourcie.
 
 **Vérifié** : arrivées filmées image par image au doigt (conduite assistée), lancé au clavier en tracteur et en van, entrée et sortie en marche avant et en marche arrière hors chargement, à pied ; aucune image dans un toit ou un mur. Chargement en van filmé ; `npm run verifie` ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée).
+
+## 23/11/2026 · Retours de Teddy (10) : la journée à la carte, le chèque, la fontaine
+
+**Demandes** : « pour la récupération du chèque, le mec va sortir de la voiture pour récupérer le truc » ; « permettre au joueur soit de faire un par un les missions, soit de faire une tournée globale, ou de faire une tournée avec ce qu'il a déjà signé » ; « le bruit de la fontaine est bien relou ».
+
+**Fait** :
+- La journée se joue dans l'ordre qu'on veut (`mission.js`). Plus d'attente de toutes les tâches avant d'aller au chai : au chai, on charge ce qui est signé (tout, ou seulement ce qui l'est déjà ; un deuxième chargement remplit les colonnes libres du véhicule). Une commande n'apparaît sur la palette qu'une fois signée.
+- Écran Tournée du bureau : les 5 arrêts dans l'ordre et où chacun en est (à ajouter, commande à prendre, signature en attente, à charger au chai, prêt, en cours, fait). « Démarrer la tournée » lance tous les arrêts prêts (la tournée complète, ou celle de ce qui est déjà signé et chargé) ; « Y aller » lance un seul arrêt. On peut aussi s'arrêter chez un client prêt sans rien lancer. La tournée finie, la journée reprend (objectif selon ce qui reste) ; tout fait dehors, retour au bureau du chai.
+- Itinéraires calculés (`reseau.js`, `lieux.reseau`) : le plus court chemin d'un point à un autre sur le réseau des routes (la boucle du bourg à sens unique, comme avant), refait si l'on s'en écarte de plus de 25 m. La tournée complète reprend les mêmes routes qu'avant.
+- Conduite assistée (`pilote.js`) : elle garde sa file jusqu'au bout de l'itinéraire (sinon, l'épicerie étant au bout, elle dérivait vers le milieu et une voiture d'en face s'arrêtait devant elle) ; avant de tourner à gauche en coupant la file d'en face (vers les Grands Champs, la rue de la place), elle attend dans sa file que les voitures qui arrivent soient passées. Le défaut existait déjà : l'ancien banc passait par chance de calendrier.
+- Le chèque (`gestes.js`, `cheque`) : arrêté devant l'épicerie, on descend, on va au comptoir face à l'épicier, il parle, il tend le chèque, qu'on regarde des deux mains avant de le ranger, on remonte. À pied, on va seulement au comptoir. La caméra cadre l'épicier devant sa boutique.
+- La « fontaine » : c'était la rumeur de la place, du bruit filtré centré sur la fontaine, audible à 67 m, avec une bande aiguë qui sifflait comme un jet d'eau. Plus de bande aiguë, aigus coupés à 800 Hz, volume divisé par trois, entendue seulement à moins de 34 m.
+
+**Vérifié** : `npm run verifie` (parcours en tracteur et en van, et le nouveau banc `souple` : le chèque seul, deux commandes chargées pendant que la troisième n'est pas prise, tournée de ces deux-là, deuxième chargement, le bar seul, le prospect seul, retour) ; conduite assistée complète en tracteur et en van (aucun choc, aucune traversée) ; le geste du chèque filmé image par image ; écrans Tournée et Ma journée en cours de journée.

@@ -91,7 +91,7 @@ export class Anim {
     // porter une pile de cartons (gestes.js) : p.porte est la pile, un groupe enfant du personnage (repère du personnage) ;
     // on s'accroupit d'autant plus qu'elle est basse (la prendre sur la palette, la poser au sol)
     const pile = p.porte;
-    if (pile) { this.pile.copy(pile.position); this.pileL = 0.18 * pile.scale.x; }
+    if (pile) { this.pile.copy(pile.position); this.pileL = (pile.userData.demi || 0.18) * pile.scale.x; } // une pile de cartons, ou le chèque (gestes.js)
     this.wPorte += ((pile ? 1 : 0) - this.wPorte) * kl(dt, 8);
     this.accroupi += ((pile ? borne((0.92 - pile.position.y) / 0.55, 0, 1) : 0) - this.accroupi) * kl(dt, 9);
     if (pile) this.envie = 0;

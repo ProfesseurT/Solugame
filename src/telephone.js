@@ -71,6 +71,7 @@ export class Telephone {
       case 'signer': if (!m.envoyerCommande(this.client)) { son.jouer('erreur'); this.toast(CONSIGNE_QTE(m.client(this.client))); return; } break;
       case 'msg': m.envoyerMessage(this.client); this.app = 'bureau'; this.afficher(); this.toast('Message envoyé à Bar Le Cep.'); return;
       case 'tournee': m.demarrerTournee(); return;
+      case 'aller': m.demarrerTournee(arg); return; // un seul arrêt
       case 'cheque': m.planifierCheque(); break;
       case 'prospect': m.planifierProspect(); break;
       case 'bl': if (!m.blPret) return; this.app = 'bl'; break;
@@ -176,9 +177,10 @@ export class Telephone {
       return `<div class="rappel"><span class="av" style="background:${c.coul}">${c.ini}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(c.note)}</span><div class="rl">${tag}${bt}</div></div></div>`;
     }).join('');
     let carte = '';
-    if (e === 'tournee') carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>${m.arrets.length} arrêts, tout est chargé</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>`;
-    else if (m.attenteBL && m.blPret) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
-    else if (e === 'chai') carte = '<div class="carte-a-faire bureau"><p class="ap-sur">Commandes envoyées</p><b>Chargez-les au chai dès qu\'elles sont signées</b></div>';
+    const prets = m.arretsPrets.length, aCharger = m.aCharger.length;
+    if (m.attenteBL && m.blPret) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Livraison en cours</p><b>${esc(m.client(m.attenteBL).nom)}</b><button class="ap-bt plein" data-a="bl">Faire signer le bon de livraison</button></div>`;
+    else if (aCharger) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Commande${aCharger > 1 ? 's' : ''} signée${aCharger > 1 ? 's' : ''}</p><b>${aCharger} à charger au chai</b></div>`;
+    else if (e === 'journee' && prets) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>${prets} arrêt${prets > 1 ? 's' : ''} prêt${prets > 1 ? 's' : ''}</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>`;
     // le règlement en retard : une tâche du jour, qu'on ajoute soi-même à la tournée
     const r = m.retardataire, planifie = r.statut !== 'a_planifier';
     const reglement = `<div class="rappel"><span class="av" style="background:${r.coul}">${r.ini}</span><div class="rq"><b>${esc(r.nom)} · ${esc(r.lieu)}</b>
@@ -234,22 +236,31 @@ export class Telephone {
       <p class="bulle moi">${esc(BUREAU.texteMessage)}</p>
       <button class="ap-bt plein large" data-a="msg">Envoyer le message</button></div>`;
   }
+  // Tournée : les arrêts du jour dans l'ordre, ce qu'il y a à faire chez chacun et où il en est ; on lance la tournée de
+  // tout ce qui est prêt (complète, ou avec ce qui est déjà signé et chargé), ou l'on va à un seul arrêt
   tournee() {
-    const m = this.jeu.mission, e = m.etape;
+    const m = this.jeu.mission, e = m.etape, libre = ['journee', 'livraisons'].includes(e) && !m.attenteBL && !m.attenteCheque;
     const tete = this.entete('Tournée', 'bureau', 'ouvrir:bureau') + this.onglets('tournee');
-    if (!['tournee', 'livraisons', 'retour', 'pc', 'fin', 'libre'].includes(e)) return tete + '<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-txt">Pas encore de tournée : préparez les commandes, puis chargez au chai celles qui sont signées.</p></div>';
-    const dist = Math.round(this.jeu.longueurTournee / 10) * 10 + ' m';
+    const prets = m.arretsPrets, courant = m.arretCourant;
     const arrets = m.arrets.map((c, i) => {
-      const cheque = c === m.retardataire, prospect = c === m.prospect;
-      const fait = cheque ? ['recupere', 'depose', 'saisi'].includes(c.statut) : prospect ? c.statut === 'a_rappeler' : ['livree', 'facturee', 'transmise'].includes(c.statut), enCours = e === 'livraisons' && i === m.arret;
-      const etat = fait ? `<span class="tag ok">${cheque ? 'Récupéré' : prospect ? 'Rencontré' : 'Livré'}</span>` : enCours ? '<span class="tag jour">En cours</span>' : '';
-      const quoi = cheque ? `Récupérer le chèque de la facture ${c.facture} (${eur(c.ttc)})` : prospect ? 'Prospect : passer le voir, lui faire goûter le rouge' : `Livrer ${c.cartons} cartons, faire signer le bon de livraison`;
-      return `<div class="arret"><span class="num">${i + 1}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(quoi)}</span></div>${etat}</div>`;
+      const id = c.id, g = m.genre(c), fait = m.fait(c), pret = m.pret(c), dansTour = e === 'livraisons' && m.tour.includes(id);
+      const quoi = g === 'cheque' ? `Récupérer le chèque de la facture ${c.facture} (${eur(c.ttc)})` : g === 'prospect' ? 'Prospect : passer le voir, lui faire goûter le rouge' : `Livrer ${c.cartons || c.demande} cartons, faire signer le bon de livraison`;
+      let etat;
+      if (fait) etat = `<span class="tag ok">${g === 'cheque' ? 'Récupéré' : g === 'prospect' ? 'Rencontré' : 'Livré'}</span>`;
+      else if (id === courant) etat = '<span class="tag jour">En cours</span>';
+      else if (dansTour) etat = '<span class="tag ok">Dans la tournée</span>';
+      else if (pret) etat = libre ? `<button class="ap-bt" data-a="aller:${id}">Y aller</button>` : '<span class="tag decroche">Prêt</span>';
+      else if (g === 'client') etat = `<span class="tag decroche">${c.statut === 'signee' ? 'À charger au chai' : c.statut === 'envoyee' ? 'Signature en attente' : 'Commande à prendre'}</span>`;
+      else etat = '<span class="tag decroche">À ajouter</span>';
+      return `<div class="arret${fait ? ' fait' : ''}"><span class="num">${i + 1}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(quoi)}</span></div>${etat}</div>`;
     }).join('');
-    const bas = e === 'tournee' ? '<button class="ap-bt plein large" data-a="tournee">Démarrer la tournée</button>'
-      : m.attenteBL && m.blPret ? '<button class="ap-bt plein large" data-a="bl">Faire signer le bon de livraison</button>' : '';
-    return tete + `<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-note">${esc(BUREAU.tournee)}</p>${arrets}
-      <p class="ap-note">${esc(BUREAU.itineraire)} : ${dist}.</p>${bas}</div>`;
+    const tous = prets.length === m.arrets.filter(c => !m.fait(c)).length;
+    let bas = '';
+    if (m.attenteBL && m.blPret) bas = '<button class="ap-bt plein large" data-a="bl">Faire signer le bon de livraison</button>';
+    else if (libre && prets.length) bas = `<p class="ap-note">${esc(BUREAU.itineraire)} : ${Math.round(this.jeu.longueurTournee(prets) / 10) * 10} m.</p>
+      <button class="ap-bt plein large" data-a="tournee">${tous ? 'Démarrer la tournée' : `Démarrer la tournée · ${prets.length} arrêt${prets.length > 1 ? 's' : ''} prêt${prets.length > 1 ? 's' : ''}`}</button>`;
+    else if (!prets.length && !m.dehorsFini) bas = `<p class="ap-note">${esc(BUREAU.rienDePret)}</p>`;
+    return tete + `<div class="ap-corps"><p class="ap-sur">Tournée du jour</p><p class="ap-note">${esc(BUREAU.tournee)}</p>${arrets}${bas}</div>`;
   }
   bl() {
     const m = this.jeu.mission, c = m.client(m.attenteBL);

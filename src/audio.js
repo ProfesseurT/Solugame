@@ -203,15 +203,16 @@ function creerAmbiance() {
   const l2 = ctx.createOscillator(); l2.frequency.value = 0.13; const l2g = gain(0.01); l2.connect(l2g); l2g.connect(vg.gain);
   s.connect(vf); vf.connect(vg); vg.connect(amb);
   l1.start(); l2.start();
-  // rumeur de la place : deux bandes de voix qui papotent (volume modulé), selon la distance
-  const rg = gain(0);
+  // rumeur de la place, autour de la fontaine : deux bandes graves qui papotent (volume modulé), adoucies (sans aigus :
+  // plus aiguë, on aurait dit un jet d'eau qui siffle), seulement de près
+  const rg = gain(0), rl = filtre('lowpass', 800); rg.connect(rl);
   const bande = (fr, q, rythme, depth) => {
     const bf = filtre('bandpass', fr, q), m = gain(0.5);
     const l = ctx.createOscillator(); l.frequency.value = rythme; const lg = gain(depth);
     l.connect(lg); lg.connect(m.gain); s.connect(bf); bf.connect(m); m.connect(rg); l.start();
   };
-  bande(380, 1.6, 2.7, 0.4); bande(1100, 2.2, 3.9, 0.45); bande(700, 1.8, 0.45, 0.3);
-  A = { vg, rg, brancherRumeur: branchement(rg, amb) };
+  bande(380, 1.6, 2.7, 0.4); bande(650, 1.8, 0.45, 0.3);
+  A = { vg, rg, brancherRumeur: branchement(rl, amb) };
 }
 function oiseau(vol) {
   const t = ctx.currentTime + 0.02, pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
@@ -384,9 +385,9 @@ export const son = {
     else if (demiPrec !== null && demi !== demiPrec && demi % 2 === 1 && actif) cloche(1, vc * 0.8);
     heurePrec = heure; demiPrec = demi;
     // rumeur de la place, branchée seulement quand on est assez près
-    const dp = Math.hypot(x - PLACE.x, z - PLACE.z), kr = borne(1 - (dp - 12) / 55, 0, 1);
+    const dp = Math.hypot(x - PLACE.x, z - PLACE.z), kr = borne(1 - (dp - 6) / 28, 0, 1);
     A.brancherRumeur(kr > 0);
-    A.rg.gain.setTargetAtTime(0.11 * kr * kr, t, 0.6);
+    A.rg.gain.setTargetAtTime(0.035 * kr * kr, t, 0.6);
     // vent : un peu plus présent dans les vignes, loin du bourg
     A.vg.gain.setTargetAtTime(dp > 90 ? 0.026 : 0.016, t, 2);
     // oiseaux, surtout à pied, et moins près de la route

@@ -19,8 +19,8 @@ function decaler(route) {
       const dx = route[b][0] - route[a][0], dz = route[b][1] - route[a][1], l = Math.hypot(dx, dz) || 1, k = surRoute(route[a], route[b]) ? VOIE : 0;
       rx += -dz / l * k; rz += dx / l * k; m++; // droite de la direction (dx, dz)
     }
-    // la destination finale reste sur l'itinéraire (les arrêts sont déjà au bord)
-    const k = i === n - 1 || !m ? 0 : 1 / m;
+    // jusqu'au bout sur sa file (un arrêt au bord de la départementale) ; hors de la départementale, rien ne bouge
+    const k = !m ? 0 : 1 / m;
     out.push({ x: route[i][0] + rx * k, z: route[i][1] + rz * k });
   }
   return out;
@@ -149,6 +149,25 @@ export class Pilote {
       }
       const vs = Math.sqrt(2 * 2.4 * Math.max(0, bord));
       vc = Math.min(vc, arrive ? vs : vs + 3);
+    }
+    // tourner à gauche depuis la départementale (vers les Grands Champs, la rue de la place) : on coupe la file d'en face ;
+    // on s'arrête bien avant le coin, encore dans sa file (sinon la voiture d'en face nous voit dans la sienne et s'arrête
+    // dans l'entrée du chemin), tant qu'une voiture arrive en face (environ 4 s d'avance)
+    if (Math.abs(pos.z - 10) < 3) {
+      for (let k = this.i + 1; k < P.length - 1 && k <= this.i + 3; k++) {
+        const A = P[k], B = P[k + 1];
+        if (Math.abs(A.z - 10) > 3) break;
+        if (Math.abs(B.z - 10) < 6 || (B.z - 10) * (pos.z - 10) >= 0) continue;
+        const dC = Math.hypot(A.x - pos.x, A.z - pos.z);
+        if (dC < 40) {
+          for (let j = 0; j < voitures.length; j++) {
+            const v = voitures[j], ex = (pos.x - v.x) * v.sens; // > 0 : elle vient vers nous
+            // (arrêtée, elle nous laisse passer)
+            if (v.sens * sx < 0 && v.v > 0.5 && ex > -5 && ex < 8 + v.v * 4) { vc = Math.min(vc, Math.sqrt(2 * 2.4 * Math.max(0, dC - 9))); break; }
+          }
+        }
+        break;
+      }
     }
     const gaz = vc < 0.05 && tr.v < 0.3 ? 0 : borne((vc - tr.v) * 0.9, -1, 1);
     this.actif = true;

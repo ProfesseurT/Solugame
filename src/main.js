@@ -22,6 +22,7 @@ import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces } from './particules.js';
 import { Bureau } from './bureau.js';
+import { Reseau, longueur } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
 // Polices : la feuille de Google Fonts est préchargée sans bloquer la page (une feuille de style bloquante retenait tout le
@@ -225,11 +226,15 @@ const ctrl = new Controles(canvas, $('stick'));
 cam.lier(ctrl);
 
 let dejaConduit = false;
-let longueurTournee = 0;
-for (let i = 1; i < L.route.length; i++) longueurTournee += Math.hypot(L.route[i][0] - L.route[i - 1][0], L.route[i][1] - L.route[i - 1][1]);
+const reseau = new Reseau(L.reseau); // routes et chemins : l'itinéraire d'un point à un autre (mission.js, pilote.js)
 const jeu = {
-  longueurTournee,
-  hud, lieux: L, vehicules: VEHICULES,
+  // longueur de la tournée des arrêts ids, au départ du domaine (sortie du chai) : écran Tournée du bureau
+  longueurTournee(ids) {
+    let l = 0, a = { x: L.route0[0], z: L.route0[1] };
+    for (const id of ids) { const b = L.arrets[id]; l += longueur(reseau.itineraire(a, b)); a = b; }
+    return l;
+  },
+  hud, lieux: L, vehicules: VEHICULES, reseau,
   get tr() { return tr; }, get tm() { return tm; }, get veh() { return veh; },
   basculerRadio() {
     const on = son.basculerRadio();
@@ -264,12 +269,12 @@ const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
 const pc = new PC(jeu);
 const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
-// la palette des commandes du jour devant le chai : les piles prévues par la mission, en carré
+// la palette des commandes du jour dans le chai : les piles prévues par la mission, en carré (mission.js les montre signées)
 {
   const pal = new THREE.Group(); pal.position.set(L.palette.x, 0, L.palette.z); scene.add(pal);
   const off = [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]];
   mission.palette = mission.pilesPrevues().map((p, i) => {
-    const g = pileCartons(p.n); g.position.set(off[i][0], L.palette.y + 0.14, off[i][1]); pal.add(g);
+    const g = pileCartons(p.n); g.position.set(off[i][0], L.palette.y + 0.14, off[i][1]); g.visible = false; pal.add(g); // montrée une fois signée
     return { ...p, groupe: g };
   });
 }
@@ -352,7 +357,7 @@ function cheminEntree(x0, z0, h0, D) { // déjà sur le seuil ou dedans : droit 
   pts.push([D.x, D.z]);
   return pts;
 }
-function cheminSortie(D) { // tout droit hors de la porte, puis en arc ; finit au départ de la tournée (lieux.route)
+function cheminSortie(D) { // tout droit hors de la porte, puis en arc ; finit au départ de la tournée (lieux.route0)
   const pts = [];
   for (let x = D.x; x > -79.6; x -= 0.5) pts.push([x, D.z]);
   for (let i = 0; i <= 20; i++) { const f = i / 20 * 2.2; pts.push([-79.6 - 4 * Math.sin(f), D.z - 4 * (1 - Math.cos(f))]); }
@@ -371,6 +376,13 @@ jeu.charger = (piles, place, fin) => {
   p.pos.set(x0, 0, z0); p.h = h0;
 };
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
+// À l'épicerie : arrêté devant, on descend, on va au comptoir, l'épicier parle et donne le chèque, on remonte ; à pied, on
+// va seulement au comptoir (gestes.js : cheque)
+jeu.chercherCheque = (f, dialogue, recu) => {
+  const v = jeu.auVolant ? veh : null;
+  if (v) couperMoteur();
+  gestes.cheque(v, f, { sorti: aPied, installe: () => auVolant(v), dire: fin => hud.dire(dialogue, fin), recu });
+};
 jeu.remonter = v => { if (!jeu.auVolant && !gestes.actif) gestes.remonter(v, () => auVolant(v)); };
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
@@ -643,7 +655,7 @@ function miseAJour(dt) {
   const pcPres = bureau.maj();
   // la grande porte du chai : ouverte quand on vient charger, ou qu'on s'en approche ; la halle n'est dessinée que de près
   {
-    const PC = monde.porteChai, etC = mission.etape === 'chai' || mission.etape === 'chargement';
+    const PC = monde.porteChai, etC = mission.aCharger.length > 0 || mission.etape === 'chargement';
     const ouvrir = jeu.auChai || jeu.dansChai || (etC && jeu.distance(L.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
     PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
     const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a; PC.col.fantome = PC.k > 0.5; // ouverte, elle n'arrête personne, mais compte toujours pour la caméra du dehors (le linteau)

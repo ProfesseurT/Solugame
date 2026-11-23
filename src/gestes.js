@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { son } from './audio.js';
 import { versAngle, angle, lisse, mix } from './outils.js';
-import { MAT } from './modeles.js';
+import { MAT, B, compacter } from './modeles.js';
 import { geoCarton, PAS_CARTON } from './engins.js';
 
 const angleVers = (a, b) => angle(b - a); // le plus court chemin de l'angle a à l'angle b
@@ -375,7 +375,7 @@ export class Gestes {
     const [lx, lz] = v.m.chargeur[k];
     const spot = versMonde(v, [lx, 0, lz], { x: 0, z: 0 });
     const ordre = [...piles].sort((a, b) => Math.hypot(a.groupe.position.x - spot.x, a.groupe.position.z - spot.z) - Math.hypot(b.groupe.position.x - spot.x, b.groupe.position.z - spot.z));
-    const cols = ORDRE[v.genre][k];
+    const cols = ORDRE[v.genre][k].filter(c => !v.m.cartons[3 * c].visible); // les colonnes encore vides (déjà chargé une fois)
     const pal = piles[0].groupe.parent;
     this.cadre = cadreEntre(spot, pal.position, v);
     const etapes = [...avant, ...this.etapesDescendre(v, sorti), ...this.ouvrirCote(v)];
@@ -421,6 +421,38 @@ export class Gestes {
       }));
     });
     this.lancer(etapes, fin);
+  }
+
+  // Le chèque de l'épicerie : arrêté devant (v), on descend, on va au comptoir face à l'épicier (f : {x, z, h}) ; il
+  // parle (dire(fin) : le dialogue, fin() à la dernière réplique) et tend le chèque, qu'on regarde des deux mains avant de
+  // le ranger (recu()) ; on remonte. À pied (v nul) : seulement le comptoir. La caméra cadre la scène de côté.
+  cheque(v, f, { sorti, installe, dire, recu }) {
+    const fx = Math.sin(f.h), fz = Math.cos(f.h), devant = { x: f.x + fx * 1.05, z: f.z + fz * 1.05 };
+    let parle = false;
+    // la caméra regarde l'épicier en face, un peu de biais, depuis la rue : on le voit tendre le chèque
+    this.cadre = { x: (devant.x + f.x) / 2, z: (devant.z + f.z) / 2, h: f.h + Math.PI + 0.5 };
+    const etapes = v ? [...this.etapesDescendre(v, sorti)] : [];
+    etapes.push(...this.allerA(() => devant, () => f.h + Math.PI));
+    etapes.push({ debut: () => { parle = false; dire(() => { parle = true; }); }, maj: (dt, t) => { this.immobile(dt, t); return parle; } });
+    const papier = () => {
+      const m = this.j.m;
+      if (!m.cheque) { m.cheque = new THREE.Mesh(compacter(B(0.17, 0.004, 0.08, '#f4efe2')), MAT); m.cheque.userData.demi = 0.05; m.cheque.scale.setScalar(1 / m.echelle); m.groupe.add(m.cheque); }
+      return m.cheque;
+    };
+    etapes.push({
+      duree: 1.7,
+      // tendu par l'épicier, pris des deux mains, regardé (incliné vers les yeux), puis rangé dans la poche
+      debut: () => { const c = papier(); c.visible = true; c.rotation.set(-0.9, 0, 0); this.j.porte = c; son.jouer('tap'); },
+      maj: (dt, t, u, T) => {
+        const c = papier(), k = lisse(T / 0.45), r = lisse((T - 1.3) / 0.4);
+        c.position.set(0, mix(1.05, 1.22, k) - r * 0.4, mix(0.62, 0.34, k));
+        if (T > 1.35) this.j.porte = null;
+        this.immobile(dt, t);
+        if (T + dt >= 1.7 && c.visible) { c.visible = false; this.j.porte = null; recu(); }
+      },
+    });
+    if (v) etapes.push(...this.etapesMonter(v, installe));
+    this.lancer(etapes);
   }
 
   /* ------------------------------------------------------------ le bureau du chai (monde.js : la pièce, sa porte) */
