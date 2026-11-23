@@ -16,6 +16,7 @@ import { Mission } from './mission.js';
 import { son } from './audio.js';
 import { versAngle, hasard } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
+import { Gestes } from './gestes.js';
 import { FIN, DIALOGUES, REPLIQUES_VERRE, CHOCS_VOITURE } from './textes.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -291,6 +292,7 @@ const mVan = van();
 // poste de conduite du van pour l'animation : assise, plancher, volant (centre, rayon, inclinaison de la jante)
 const vVan = creerVehicule('van', mVan, L.van, { assise: mVan.dims.assise, plancher: mVan.dims.plancher, volant: mVan.volantCentre, rayon: mVan.volantRayon, inclinaison: mVan.volantInclinaison });
 vTracteur.p.autre = vVan.p; vVan.p.autre = vTracteur.p;
+vTracteur.p.pos.demiLarg = 1.2; vVan.p.pos.demiLarg = 0.9; // pour les voitures qui les croisent (vehicules.js)
 let veh = vTracteur, tr = veh.p, tm = veh.m;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
@@ -387,7 +389,7 @@ const jeu = {
   get joueur() { return joueur; },
   distance(p) { const o = this.auVolant ? tr.pos : joueur.pos; return Math.hypot(o.x - p.x, o.z - p.z); },
   changerHeros(h) {
-    if (h === choixHeros || !HEROS[h]) return;
+    if (h === choixHeros || !HEROS[h] || gestes.actif) return;
     choixHeros = h; stocke.ecrire('tournee-generale-heros', h);
     const ancien = joueur;
     joueur = new Pieton(perso(HEROS[h]));
@@ -405,7 +407,8 @@ const jeu = {
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
 const pc = new PC(jeu);
-jeu.tel = tel; jeu.mission = mission; jeu.pc = pc;
+const gestes = new Gestes({ jeu, scene, col }); // monter dans un véhicule, en descendre (gestes.js)
+jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
 const etqMonter = hud.etiquette(tactile ? 'Monter' : 'Monter (E)', 'action', () => agir());
@@ -429,32 +432,31 @@ function vehiculeProche() {
   for (const v of VEHICULES) { const d = Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z); if (d < dmin) { dmin = d; best = v; } }
   return best;
 }
+// On monte (gestes.js : on va à la portière ou au marchepied, on s'installe), puis le moteur démarre
 function monter(v) {
+  if (gestes.actif) return;
   veh = v; tr = v.p; tm = v.m;
-  jeu.auVolant = true;
-  tm.caisse.add(joueur.m.groupe);
-  joueur.m.groupe.position.copy(tm.siege); joueur.m.groupe.rotation.set(0, 0, 0);
-  joueur.poste = v.poste;
-  joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
-  son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
-  if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
-  const sx = Math.sin(tr.h), sz = Math.cos(tr.h), [ex, ey, ez] = echappement(sx, sz);
-  for (let i = 0; i < 8; i++) emettre(ex, ey, ez, (rnd() - 0.5) * 0.6, 1.2 + rnd(), (rnd() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
+  ctrl.relacher();
+  gestes.monter(v, () => {
+    jeu.auVolant = true;
+    joueur.poste = v.poste; joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
+    son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
+    if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
+    const sx = Math.sin(tr.h), sz = Math.cos(tr.h), [ex, ey, ez] = echappement(sx, sz);
+    for (let i = 0; i < 8; i++) emettre(ex, ey, ez, (rnd() - 0.5) * 0.6, 1.2 + rnd(), (rnd() - 0.5) * 0.6, 0.9, 0x7d7a85, 1, -0.4);
+  });
 }
+// On coupe le moteur, puis on descend à gauche (gestes.js) ; le véhicule reste à l'arrêt (il repartait seul)
 function descendre() {
-  jeu.auVolant = false;
-  scene.add(joueur.m.groupe);
-  const lx = Math.cos(tr.h), lz = -Math.sin(tr.h);
-  const cote = veh.genre === 'van' ? 1.6 : 1.9; // on descend à gauche
-  joueur.pos.set(tr.pos.x + lx * cote, 0, tr.pos.z + lz * cote);
-  col.resoudre(joueur.pos, joueur.r);
-  joueur.h = tr.h; joueur.v = 0; joueur.assis = false; joueur.poste = null; joueur.sync(0, temps);
-  tr.v = 0; tr.pedale = 0; tr.frein = 0; // le véhicule reste à l'arrêt (il repartait seul)
+  if (gestes.actif) return;
+  tr.v = 0; tr.pedale = 0; tr.frein = 0;
   son.radio(false); son.moteur(false, 0);
+  ctrl.relacher();
+  gestes.descendre(veh, () => { jeu.auVolant = false; }, () => {});
 }
 const presPC = () => !jeu.auVolant && mission.pcDispo && Math.hypot(joueur.pos.x - L.pc.x, joueur.pos.z - L.pc.z) < 4;
 function agir() {
-  if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service) return; // pas pendant qu'on sert un verre
+  if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   // au bureau du chai : d'abord poser le chèque de l'épicerie, ensuite ouvrir le PC
   if (presPC()) {
     if (mission.chequeADeposer) mission.deposerCheque();
@@ -468,7 +470,7 @@ function agir() {
 }
 const proj = new THREE.Vector3();
 function toucher(tp) {
-  if (tel.ouvert || pc.ouvert) return;
+  if (tel.ouvert || pc.ouvert || gestes.actif) return;
   for (const e of [etqPC, etqServir, etqMonter, etqDescendre]) {
     if (e.el.hidden) continue;
     const r = e.el.getBoundingClientRect();
@@ -520,7 +522,7 @@ const SERVICE = 3.2;          // durée du geste (s)
 function candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); }
 function chercherServable() {
   servable = null;
-  if (jeu.auVolant || tel.ouvert || pc.ouvert || joueur.service || joueur.sautT > 0) return;
+  if (jeu.auVolant || tel.ouvert || pc.ouvert || joueur.service || joueur.sautT > 0 || gestes.actif) return;
   let dmin = 1e9;
   candidats((p, portee) => {
     if (p.verre > 0 || p.sautT > 0 || (p.servi && temps - p.servi < 60)) return;
@@ -582,7 +584,11 @@ function miseAJour(dt) {
   const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
 
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
-  if (jeu.auVolant) {
+  if (gestes.actif) {
+    // un geste se joue (monter, descendre) : il mène le personnage ; le véhicule reste à l'arrêt
+    gestes.update(dtm, temps);
+    if (jeu.auVolant) tr.update(dtm, 0, 0, col, voitures, temps);
+  } else if (jeu.auVolant) {
     let gaz = 0, braq = 0;
     const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
     pilote.prendre(mission.route);
@@ -712,11 +718,11 @@ function miseAJour(dt) {
   if (etqPC.el.textContent !== txtPC) etqPC.el.textContent = txtPC;
   hud.placer(etqPC, L.pc.x, 2.9, L.pc.z, pcPres);
   chercherServable();
-  const vp = !pcPres && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service ? vehiculeProche() : null;
+  const vp = !pcPres && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) { const t = vp.genre === 'van' ? (tactile ? 'Monter dans le van' : 'Monter dans le van (E)') : (tactile ? 'Monter' : 'Monter (E)'); if (etqMonter.el.textContent !== t) etqMonter.el.textContent = t; }
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp && vp.genre === 'van' ? 3.0 : 3.6, vp ? vp.p.pos.z : 0, !!vp);
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
-  hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle);
+  hud.placer(etqDescendre, tr.pos.x, 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 
   // caméra, soleil, ciel
   if (!camLibre) cam.suivre(dt, ego.x, ego.z, jeu.auVolant ? tr.h : joueur.h, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null);
@@ -859,6 +865,8 @@ window.CL = {
   jouer() { $('jouer').click(); },
   teleporter(x, z, h = 0) { if (jeu.auVolant) tr.placer(x, z, h); else joueur.placer(x, z, h); cam.yaw = h; cam.pret = false; },
   agir,
+  // laisse le geste en cours (monter, descendre) se jouer jusqu'au bout
+  finirGeste(n = 900) { for (let i = 0; i < n && gestes.actif; i++) this.step(1); },
   // caméra posée à la main pour les captures de vérification
   photo(px, py, pz, tx, ty, tz) { camLibre = px !== undefined; if (camLibre) { camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); } },
   step(n = 60, dt = 1 / 60) {

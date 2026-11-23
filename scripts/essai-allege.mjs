@@ -104,14 +104,14 @@ async function relever(fichier, palier) {
       clic('[data-a="ouvrir:bureau"]'); clic('[data-a="rappel:treille"]'); CL.step(700); saisir(3);
       clic('[data-a="ouvrir:bureau"]'); clic('[data-a="rappel:bar"]'); clic('[data-a="msg"]');
       CL.step(400); T.action('cmd:bar'); saisir(2); clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]'); T.fermer(); CL.step(1500);
-      { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.teleporter(-84, -52, -Math.PI / 2); CL.step(240); CL.bench(1);
+      { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.teleporter(-84, -52, -Math.PI / 2); CL.step(240); CL.bench(1);
       T.ouvrir('tournee'); clic('[data-a="tournee"]');
       { const a = CL.jeu.lieux.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(930); CL.bench(1); }
       for (const id of ['cave', 'bar', 'treille']) {
         const a = CL.jeu.lieux.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(510); CL.bench(1);
         T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10);
       }
-      CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
+      CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
       CL.jeu.joueur.placer(-78.0, -50.5, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); CL.agir(); CL.step(5);
       clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]'); clic('[data-a="vue:commandes"]');
       for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }

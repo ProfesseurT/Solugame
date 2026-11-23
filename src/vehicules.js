@@ -248,6 +248,11 @@ export class Tracteur {
 
 /* ---------------------------------------------------------------- voitures sur la départementale */
 const LONG = 4.2; // longueur d'une voiture (m)
+// Un obstacle (tracteur, van, personnage) est dans une voie si son centre en est plus près que la demi-largeur d'une
+// voiture (0,86 m), plus la sienne (o.demiLarg, 0,9 m par défaut), plus 25 cm de marge. Au-delà, on se croise sans se
+// toucher : un véhicule arrêté entre deux voies, pour livrer côté nord, ne bloque plus les deux sens à la fois (chacun
+// attendait l'autre).
+const dansVoie = (o, z) => Math.abs(o.z - z) < 1.11 + (o.demiLarg ?? 0.9);
 export class Voiture {
   constructor(mesh, x, sens, vmax) {
     this.mesh = mesh; this.x = x; this.sens = sens; this.vmax = vmax; this.v = vmax; this.a = 0;
@@ -267,7 +272,7 @@ export class Voiture {
     let libre = 1e9, obst = null;
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i], dx = (o.x - this.x) * this.sens - 4.5;
-      if (dx > -5 && dx < libre && Math.abs(o.z - z) < 2.7) { libre = dx; obst = o; }
+      if (dx > -5 && dx < libre && dansVoie(o, z)) { libre = dx; obst = o; }
     }
     for (let i = 0; i < voitures.length; i++) {
       const o = voitures[i];
@@ -282,7 +287,7 @@ export class Voiture {
   voieLibre(obstacles, voitures) {
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i], dx = (o.x - this.x) * this.sens;
-      if (dx > -6 && dx < 40 && Math.abs(o.z - this.zAutre) < 2.7) return false;
+      if (dx > -6 && dx < 40 && dansVoie(o, this.zAutre)) return false;
     }
     for (let i = 0; i < voitures.length; i++) {
       const o = voitures[i];

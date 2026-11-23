@@ -19,6 +19,7 @@ export class Pieton {
     this.salut = false;      // vrai : quelqu'un à saluer (un signe de la main chaque fois que ça devient vrai)
     this.poste = null;       // au volant du van : son poste de conduite (assise, plancher, volant) ; null : le tracteur
     this.service = null;     // en train de servir un verre : { t, duree, cible } (main.js)
+    this.transition = null;  // monter dans un véhicule, en descendre : 0 debout, 1 au volant (gestes.js) ; null sinon
     this.verre = 0;          // un verre à la main : secondes qui restent ; tVerre : depuis quand on l'a
     this.tVerre = 0; this.aServir = false; this.servi = -1e9;
     // état du mouvement (lu par l'animation)

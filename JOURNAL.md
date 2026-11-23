@@ -234,3 +234,20 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Corrigé au passage** (`scripts/build.mjs`) : le message « Tiret cadratin trouvé dans... » se perdait quand la sortie passait par un tube (macOS diffère l'écriture et le script quittait avant) ; il attend maintenant que le message soit écrit.
 
 **Vérifié** sur une branche jetable : cas normal (« Prêt à pousser ») ; tiret cadratin glissé dans `src/` (code 1, message affiché) ; commit de `src/` sans `index.html` (code 1, « L'ajouter au commit avant de pousser »).
+
+## 23/11/2026 · Mission enrichie, lot 1 : monter et descendre des véhicules
+
+**Demande de Teddy** (pour toute la suite) : une étape de plus dans la mission (aller voir un prospect dans une autre partie de la ville, ajouté à la tournée au départ) ; un bureau du chai où l'on entre (animation de dehors à dedans), avec un portable sur un bureau en bois : Le bureau et Vitisoft ; des animations pour monter en voiture, charger et décharger les cartons. Choix de Teddy : chez le prospect, dégustation puis rappel noté dans le bureau (pas de commande) ; une vraie pièce où l'on marche ; sur le portable, Le bureau et Vitisoft. Ordre de travail : 1. monter et descendre, 2. cartons, 3. bureau du chai, 4. prospect.
+
+**Source vérifiée pour le prospect** (vitisoft.fr/fonctionnalites/le-bureau-application-commerciale, lue le 23/11/2026) : « Prospection : Cavistes, restaurants, importateurs : suivis jusqu'à la commande. » ; fiche client : « Le fil du client : appels, notes, factures, commandes signées en ligne. » ; « Chaque matin, il vous dit qui rappeler, quoi proposer et pourquoi » ; « Au domaine sur l'ordinateur, au salon sur la tablette, en tournée sur le smartphone ». Pas de mention de dégustation (c'est un geste du jeu, pas une promesse produit). La page dit aussi que le bureau est « en cours de lancement ».
+
+**Fait (lot 1)** :
+- `src/gestes.js` : gestes joués tout seuls, étape par étape. Monter : on marche jusqu'au marchepied du tracteur, ou juste derrière la portière du van (hors de son passage) ; la portière s'ouvre, on s'installe en se baissant, elle se referme. Descendre : l'inverse, on pose le pied au sol tourné vers l'extérieur.
+- `anim.js` : pose de transition, les poses debout et au volant mélangées os par os ; les mains ne prennent le volant qu'à la fin.
+- `engins.js` : vraie portière du conducteur sur le van (pièce à part, avec sa vitre, son liseré, sa poignée, sur une charnière) ; marchepieds sur le tracteur.
+- `audio.js` : loquet, portière qui claque, pied sur le marchepied.
+- Corrigé au passage (`vehicules.js`) : en livrant La Treille (côté nord), le van arrêté entre deux voies bloquait les deux sens ; une voiture et lui s'attendaient sans fin (vu par le banc `conduite` en van, une fois le départ décalé de 3 s par le geste). Une voiture tient maintenant compte de la largeur de l'obstacle (`demiLarg`) pour savoir s'il est dans sa voie.
+
+**Vérifié** : captures image par image des deux gestes (montée, descente, tracteur et van) ; `npm run verifie` ; conduite assistée complète en tracteur et en van avec 6 décalages de départ (0 à 8 s) : tournée finie à chaque fois, aucun choc sauf un, en tracteur à +8 s, qui existait déjà avec l'ancien code (même essai sur l'ancienne règle : même choc).
+
+**À regarder plus tard** : `scripts/essai-perso-jeu.mjs` échoue sur « un passant a sauté de côté (0 image en l'air) », avant comme après ce lot (même échec avec le code d'avant) : le banc ne trouve plus de passant à viser, ou le tracteur ne les atteint plus.

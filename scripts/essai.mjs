@@ -69,7 +69,7 @@ if (scenario === 'parcours') {
     // VEHICULE=van : la tournée en van au lieu du tracteur
     const genre = VEH;
     { const p = CL.vehicule(genre).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } // à côté du véhicule choisi
-    CL.step(3); CL.agir();
+    CL.step(3); CL.agir(); CL.finirGeste();
     log.push(['monté dans ' + (genre === 'van' ? 'le van' : 'le tracteur'), CL.jeu.auVolant && CL.jeu.veh.genre === genre]);
     CL.teleporter(-84, -52, -Math.PI / 2); CL.step(240);
     log.push(['chargement fait (' + CL.tr.charge + ' cartons)', m.etape === 'tournee' && CL.tr.charge === 11]);
@@ -85,7 +85,7 @@ if (scenario === 'parcours') {
       log.push(['livré chez ' + id, m.client(id).statut === 'livree']);
     }
     log.push(['tracteur vide', CL.jeu.tm.cartons.every(c => !c.visible)]);
-    CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
+    CL.teleporter(-80.5, -52, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
     CL.jeu.joueur.placer(-78.0, -50.5, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
     log.push(['chèque déposé au bureau, PC pas encore ouvert', m.retardataire.statut === 'depose' && !CL.jeu.pc.ouvert]);
     CL.agir(); CL.step(5);
@@ -115,7 +115,7 @@ if (scenario === 'conduite') {
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="rappel:treille"]').click(); CL.step(700); saisir(3);
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="rappel:bar"]').click(); q('[data-a="msg"]').click(); CL.step(400); T.action('cmd:bar'); saisir(2);
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="cheque"]').click(); T.fermer(); CL.step(1500);
-    { const p = CL.vehicule(VEH).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.step(3);
+    { const p = CL.vehicule(VEH).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
     const C = CL.ctrl; C.id = 1; C.jx = 0; C.jy = 0;
     let t = 0, chocs = 0, arret = 0, bloque = false;
     for (let k = 0; k < 60 * 400 && m.etape !== 'pc'; k++) {
@@ -159,7 +159,7 @@ if (scenario === 'poids') {
     const tot = Object.values(r).reduce((a, b) => a + b, 0);
     console.log(`${nom.padEnd(8)} total ${tot.toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   }
-  await ev(() => { { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.teleporter(-30, 10, Math.PI / 2); CL.ctrl.ky = -1; CL.step(60); });
+  await ev(() => { { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.teleporter(-30, 10, Math.PI / 2); CL.ctrl.ky = -1; CL.step(60); });
   const r = await ev(() => { CL.profil(20); return CL.profil(120); });
   console.log(`conduite total ${Object.values(r).reduce((a, b) => a + b, 0).toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
@@ -174,7 +174,7 @@ if (scenario === 'photo') {
   for (const [nom, v] of Object.entries(vues)) { await ev(v => { CL.photo(...v); CL.step(2); }, v); await capture(nom); }
   await ev(() => { const j = CL.joueur; j.placer(-96, -47, 0.5); CL.step(2); CL.photo(j.pos.x + 1.2, 1.75, j.pos.z + 2.4, j.pos.x, 1.15, j.pos.z); });
   await capture('personnage');
-  await ev(() => { CL.photo(); { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.teleporter(-30, 10, Math.PI / 2); CL.ctrl.ky = -1; CL.step(90); CL.ctrl.ky = 0; });
+  await ev(() => { CL.photo(); { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.teleporter(-30, 10, Math.PI / 2); CL.ctrl.ky = -1; CL.step(90); CL.ctrl.ky = 0; });
   await capture('conduite');
 }
 

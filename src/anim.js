@@ -27,6 +27,8 @@ const JAMBES = [[OS.cuisseG, 1, 0], [OS.cuisseD, -1, 0.5]];
 // poste de conduite du tracteur (repère de sa caisse) : assise, plancher, centre et rayon du volant ; le van donne le sien (p.poste)
 const POSTE_TRACTEUR = { assise: 1.5, plancher: 1.24, volant: new THREE.Vector3(0, 1.9, -0.18), rayon: 0.2 };
 const BRAS = [OS.brasG, OS.coudeG, OS.mainG, OS.brasD, OS.coudeD, OS.mainD];
+// pose debout gardée le temps de la mélanger à la pose au volant (monter, descendre)
+const MEMO = Array.from({ length: 32 }, () => new THREE.Quaternion()), vMemo = new THREE.Vector3();
 
 // Cinématique inverse à deux os. a : os haut, b : os bas (articulation en charnière sur son axe x).
 // cible et pole dans le repère du parent de a. sens +1 : bras (l'avant-bras plie vers l'avant) ; -1 : jambe.
@@ -109,7 +111,8 @@ export class Anim {
     this.ry += (cy - this.ry) * kl(dt, 4.5); this.rp += (cp - this.rp) * kl(dt, 4.5);
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
-    if (conduite) this.poseConduite(dt, p, t, br);
+    if (p.transition != null && conduite) this.poseTransition(dt, p, t, br);
+    else if (conduite) this.poseConduite(dt, p, t, br);
     else if (p.assis) this.poseAssise(br);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
@@ -320,6 +323,22 @@ export class Anim {
       this.brasIK(c, v1.x, v1.y, v1.z, sg * 0.8, -0.6, -0.3, 1);
       this.mainVers(c, qTel, 1);
     }
+  }
+
+  /* ---------------------------------------------------------------- monter dans un véhicule, en descendre (gestes.js)
+     p.transition : 0 debout, 1 au volant ; les deux poses sont calculées puis mélangées os par os. Les mains ne prennent
+     le volant qu'à la fin (sa position suppose le personnage déjà tourné vers l'avant) ; on se baisse pour passer. */
+  poseTransition(dt, p, t, br) {
+    const o = this.o, w = p.transition, n = o.length;
+    this.poseDebout(dt, p, 0, 1, br);
+    for (let i = 0; i < n; i++) MEMO[i].copy(o[i].quaternion);
+    vMemo.copy(o[OS.bassin].position);
+    this.poseConduite(dt, p, t, br);
+    const wb = lisse(0.8, 1, w);
+    for (let i = 0; i < n; i++) { q1.copy(o[i].quaternion); o[i].quaternion.copy(MEMO[i]).slerp(q1, BRAS.includes(i) ? wb : w); }
+    v1.copy(o[OS.bassin].position); o[OS.bassin].position.copy(vMemo).lerp(v1, w);
+    const baisse = Math.sin(PI * w) * (p.baisse ?? 0.3);
+    o[OS.ventre].rotation.x += baisse * 0.6; o[OS.poitrine].rotation.x += baisse * 0.5; o[OS.tete].rotation.x -= baisse * 0.5;
   }
 
   // Servir : S = { t, duree }. On lève le verre et la bouteille, on verse, on range la bouteille, on tend le verre ;

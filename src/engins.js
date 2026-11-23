@@ -208,8 +208,11 @@ export function tracteur() {
     // garde-boue arrière
     B(0.5, 0.08, 1.5, OR, 0.95, 1.66, -0.9), B(0.5, 0.08, 1.5, OR, -0.95, 1.66, -0.9),
     B(0.06, 0.5, 1.5, OR, 0.71, 1.4, -0.9), B(0.06, 0.5, 1.5, OR, -0.71, 1.4, -0.9),
-    // plancher et siège
+    // plancher et siège ; marchepieds devant les roues arrière (on monte à gauche), pendus au plancher
     B(1.3, 0.08, 1.2, GRIS, 0, 1.2, -0.6),
+    B(0.3, 0.04, 0.26, GRIS, 0.74, 0.66, 0.1), B(0.3, 0.04, 0.26, GRIS, -0.74, 0.66, 0.1),
+    B(0.03, 0.54, 0.03, '#2b2b30', 0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', 0.87, 0.93, 0.2),
+    B(0.03, 0.54, 0.03, '#2b2b30', -0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', -0.87, 0.93, 0.2),
     B(0.5, 0.14, 0.46, '#2a2a2e', 0, 1.42, -0.62),
     B(0.5, 0.55, 0.1, '#2a2a2e', 0, 1.72, -0.86),
     // colonne de direction (le volant est à part, il tourne)
@@ -315,27 +318,38 @@ export function van() {
   const silhouette = [[-1.96, 0.36], ...arche(ZAR), ...arche(ZAV), [1.96, 0.36], [1.96, 0.852], [1.3, 1.033], [0.62, 1.765], [-1.96, 1.765]];
   const vitreCabine = [[1.147, 1.12], [0.627, 1.67], [-0.26, 1.7], [-0.26, 1.12]];
   const vitreLaterale = [[-0.42, 1.12], [-0.42, 1.7], [-1.16, 1.7], [-1.16, 1.12]]; // porte coulissante, à droite
+  // Porte du conducteur (à gauche) : une pièce à part, qui s'ouvre sur sa charnière avant (gestes.js). Le flanc gauche est
+  // percé à sa forme ; ses bords sombres font les joints. Sa vitre est un peu plus petite que celle d'en face (cadre).
+  const PORTE = [[-0.28, 0.4], [0.86, 0.4], [0.95, 0.78], [1.16, 1.1], [0.55, 1.745], [-0.28, 1.745]];
+  const vitrePorte = [[1.08, 1.14], [0.6, 1.65], [-0.22, 1.68], [-0.22, 1.14]];
+  const CHARNIERE = [0.9, 1.05]; // axe vertical de la porte : x, z
+  const atP = new Atelier(), atPV = new Atelier(), extraP = [];
   for (const s of [1, -1]) {
-    const trous = s > 0 ? [vitreCabine] : [vitreCabine, vitreLaterale];
+    const trous = s > 0 ? [PORTE] : [vitreCabine, vitreLaterale];
     dalle(at, silhouette, trous, (u, v, f) => [s * (flancX(v) - f * E), v, u], [s, 0, 0], CREME_V, PEINT, { colIn: '#d6d0c2', tyIn: 0, colT: SOMBRE_V, tyT: 0 });
-    for (const tr of trous) atV.poly(tr.map(([u, v]) => [s * (flancX(v) - E / 2), v, u]), VITRE, undefined, [s, 0, 0]);
+    if (s < 0) for (const tr of trous) atV.poly(tr.map(([u, v]) => [s * (flancX(v) - E / 2), v, u]), VITRE, undefined, [s, 0, 0]);
     const F = (z, y, e = 0.005) => [s * (flancX(y) + e), y, z], ext = [s, 0, 0];
-    // liseré bordeaux (une bande et un filet) tout le long
-    at.quad(F(-1.96, 0.8), F(1.9, 0.8), F(1.9, 0.86), F(-1.96, 0.86), BORDEAUX, PEINT, ext);
-    at.quad(F(-1.96, 0.765), F(1.9, 0.765), F(1.9, 0.778), F(-1.96, 0.778), BORDEAUX, PEINT, ext);
+    // liseré bordeaux (une bande et un filet) tout le long ; à gauche, coupé par la porte (qui porte le sien)
+    // z0 et z1 : début et fin de la bande selon la hauteur (le bord avant de la porte est en biais)
+    const bande = (a, z0, z1) => {
+      for (const [y0, y1] of [[0.8, 0.86], [0.765, 0.778]]) a.quad(F(z0(y0), y0), F(z1(y0), y0), F(z1(y1), y1), F(z0(y1), y1), BORDEAUX, PEINT, ext);
+    };
+    const k = z => () => z, avant = y => y < 0.78 ? 0.86 + (y - 0.4) * 0.09 / 0.38 : 0.95 + (y - 0.78) * 0.21 / 0.32;
+    if (s < 0) bande(at, k(-1.96), k(1.9));
+    else { bande(at, k(-1.96), k(-0.28)); bande(atP, k(-0.28), avant); bande(at, avant, k(1.9)); }
     // grappe sur le panneau de chargement
     grappe(at, (du, dv) => F(-1.56 + du, 1.33 + dv), ext, 0.046, BORDEAUX, PEINT);
-    // joints de portes (traits sombres) : porte avant, et porte coulissante à droite
+    // joints de portes (traits sombres) : porte avant, et porte coulissante à droite (à gauche, la vraie porte fait les siens)
     const J = nuance(CREME_V, 0.45), trait = (a, b) => {
       const dz = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dz, dy), oz = -dy / l * 0.006, oy = dz / l * 0.006;
       at.quad(F(a[0] + oz, a[1] + oy, 0.007), F(b[0] + oz, b[1] + oy, 0.007), F(b[0] - oz, b[1] - oy, 0.007), F(a[0] - oz, a[1] - oy, 0.007), J, PEINT, ext);
     };
-    trait([1.16, 1.1], [0.95, 0.78]); trait([0.95, 0.78], [0.87, 0.37]);
-    trait([-0.28, 0.37], [-0.28, 1.76]);
-    if (s < 0) { trait([-0.4, 0.37], [-0.4, 1.76]); trait([-1.18, 0.37], [-1.18, 1.76]); trait([-1.18, 1.42], [-1.95, 1.42]); }
-    else at.quad(F(-1.06, 0.93), F(-0.94, 0.93), F(-0.94, 1.03), F(-1.06, 1.03), nuance(CREME_V, 0.9), PEINT, ext); // trappe à carburant
+    if (s < 0) {
+      trait([1.16, 1.1], [0.95, 0.78]); trait([0.95, 0.78], [0.87, 0.37]); trait([-0.28, 0.37], [-0.28, 1.76]);
+      trait([-0.4, 0.37], [-0.4, 1.76]); trait([-1.18, 0.37], [-1.18, 1.76]); trait([-1.18, 1.42], [-1.95, 1.42]);
+    } else at.quad(F(-1.06, 0.93), F(-0.94, 0.93), F(-0.94, 1.03), F(-1.06, 1.03), nuance(CREME_V, 0.9), PEINT, ext); // trappe à carburant
     // poignées
-    extra.push(B(0.03, 0.035, 0.15, PLAST_V, s * 0.915, 1.0, -0.12));
+    (s > 0 ? extraP : extra).push(B(0.03, 0.035, 0.15, PLAST_V, s * 0.915, 1.0, -0.12));
     if (s < 0) extra.push(B(0.03, 0.035, 0.15, PLAST_V, -0.915, 1.0, -0.56));
     // rétroviseur : bras, coque, miroir
     extra.push(B(0.12, 0.035, 0.05, PLAST_V, s * 0.95, 1.13, 1.12), B(0.07, 0.21, 0.13, PLAST_V, s * 1.03, 1.2, 1.12));
@@ -455,6 +469,14 @@ export function van() {
   corps.castShadow = true; corps.receiveShadow = true; caisse.add(corps);
   const vitre = new THREE.Mesh(fusion(atV.geos()), MAT_VITRE);
   vitre.receiveShadow = true; caisse.add(vitre);
+  // la porte du conducteur, dans un groupe posé sur sa charnière : rotation.y négative, elle s'ouvre vers l'extérieur
+  dalle(atP, PORTE, [vitrePorte], (u, v, f) => [flancX(v) - f * E, v, u], [1, 0, 0], CREME_V, PEINT, { colIn: '#d6d0c2', tyIn: 0, colT: SOMBRE_V, tyT: 0 });
+  atPV.poly(vitrePorte.map(([u, v]) => [flancX(v) - E / 2, v, u]), VITRE, undefined, [1, 0, 0]);
+  const porte = new THREE.Group(); porte.position.set(CHARNIERE[0], 0, CHARNIERE[1]); caisse.add(porte);
+  for (const [geos, mat] of [[[...atP.geos(), ...extraP], MAT], [atPV.geos(), MAT_VITRE]]) {
+    const g = fusion(geos); deplacer(g, -CHARNIERE[0], 0, -CHARNIERE[1]);
+    const m = new THREE.Mesh(g, mat); m.castShadow = mat === MAT; m.receiveShadow = true; porte.add(m);
+  }
 
   const support = new THREE.Group(); support.position.copy(volantCentre); support.rotation.x = volantInclinaison; caisse.add(support);
   if (!geoVolantVan) {
@@ -495,7 +517,7 @@ export function van() {
     zAr: ZAR, zAv: ZAV, xAr: X, xAv: X, assise: 0.78, plancher: 0.45,
   };
   return {
-    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre,
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte,
     siege: new THREE.Vector3(0.38, -0.1, -0.05), dims, volantCentre, volantRayon: 0.19, volantInclinaison,
   };
 }

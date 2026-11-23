@@ -410,6 +410,9 @@ export const son = {
         { const o = note(70, t, 0.2, 'sine', 0.3, sfx); o.frequency.exponentialRampToValueAtTime(35, t + 0.2); }
         note(523, t, 0.45, 'sine', 0.05, sfx, 0, true); note(787, t, 0.3, 'sine', 0.04, sfx, 0, true); break; // résonance de tôle
       case 'carton': bruit(t, 0.12, 500, 0.35); break;
+      case 'portiere': bruit(t, 0.05, 2600, 0.22, 'bandpass'); bruit(t + 0.05, 0.09, 900, 0.12, 'bandpass'); break; // le loquet, la portière s'écarte
+      case 'claque': bruit(t, 0.16, 280, 0.5); { const o = note(90, t, 0.14, 'sine', 0.22, sfx); o.frequency.exponentialRampToValueAtTime(50, t + 0.14); } break; // portière refermée
+      case 'marche': bruit(t, 0.06, 1500, 0.2, 'bandpass'); note(310, t, 0.07, 'triangle', 0.04, sfx, 0, true); break; // pied sur le marchepied (tôle)
       case 'klaxon': note(392, t, 0.38, 'square', 0.05, sfx, 1600); note(494, t, 0.38, 'square', 0.05, sfx, 1600); break;
       case 'envoi': { const fl = bruit(t, 0.5, 600, 0.25, 'bandpass'); fl.frequency.exponentialRampToValueAtTime(4000, t + 0.45); } break;
       case 'envoye': // envoi réussi : deux notes claires qui montent

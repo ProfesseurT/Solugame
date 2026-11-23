@@ -40,7 +40,7 @@ console.log('personnages dans la scène :', await persos());
 const saut = await ev(async () => {
   const sc = CL.joueur.m.groupe.parent;
   const gens = sc.children.filter(c => c.isGroup && c.children[0]?.isSkinnedMesh && c !== CL.joueur.m.groupe);
-  { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir();
+  { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
   let max = 0, vus = 0;
   // on vise trois passants l'un après l'autre : le tracteur part à 14 m et fonce droit sur eux
   for (let k = 0; k < 3; k++) {
@@ -62,7 +62,7 @@ await capture('place-apres');
 
 // 3. le client de la cave se tourne vers le joueur, au repos il respire (pose qui change)
 const client = await ev(() => {
-  if (CL.jeu.auVolant) { CL.teleporter(70, -46, 0); CL.step(5); CL.agir(); CL.step(5); }
+  if (CL.jeu.auVolant) { CL.teleporter(70, -46, 0); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); }
   CL.photo();
   const sc = CL.joueur.m.groupe.parent, L = CL.jeu.lieux.figurants.cave;
   const g = sc.children.find(c => c.isGroup && c.children[0]?.isSkinnedMesh && Math.hypot(c.position.x - L.x, c.position.z - L.z) < 0.5);
