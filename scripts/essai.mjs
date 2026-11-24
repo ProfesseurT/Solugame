@@ -378,6 +378,8 @@ if (scenario === 'voitures') {
       // un passant qui voit venir la voiture saute de côté ; celui qui a le nez dans son téléphone se fait aplatir
       const E = CL.gens[1];
       CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); E.attente = 99; E.p.placer(-91, -47, 0);
+      // qu'il ne sorte pas son téléphone en attendant (un tirage au hasard) : il doit voir venir la voiture
+      { const A = E.p.anim; A.repos = 0; A.envie = 0; A.tEnvie = 99; A.wTel = 0; E.p.telephone = false; }
       let saute = false; CL.ctrl.ky = -1; for (let n = 0; n < 150; n++) { CL.step(1); if (E.p.sautT > 0) saute = true; } CL.ctrl.ky = 0; CL.step(60);
       log.push(['mode WTF : le passant qui la voit venir saute de côté', saute]);
       const G = CL.gens[0];
