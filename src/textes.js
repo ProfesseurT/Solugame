@@ -114,7 +114,8 @@ export const DIALOGUES = {
   signee: c => [{ qui: '', txt: `${c.nom} a signé la commande ${c.numero} sur son téléphone.` }],
   attenteSignature: n => [{ qui: '', txt: `Encore ${n} commande${s(n)} à signer. Patience, les clients relisent.` }],
   rienACharger: [{ qui: '', txt: 'Rien à charger pour l\'instant : les commandes se préparent dans le bureau, sur votre téléphone.' }],
-  voitureSansCartons: [{ qui: '', txt: 'Une voiture ne porte pas de cartons : prenez le tracteur ou le van.' }],
+  // un véhicule sans plateau (une voiture empruntée, l'enjambeur) au chai : il ne porte pas de cartons
+  sansPlateau: g => [{ qui: '', txt: `${g === 'enjambeur' ? 'L\'enjambeur' : 'Une voiture'} ne porte pas de cartons : prenez le tracteur ou le van.` }],
   wtf: on => [{ qui: '', txt: on ? 'Mode WTF : volez les voitures, aplatissez les passants. Ils se relèvent, promis.' : 'Mode WTF coupé : on emprunte les voitures, les passants s\'écartent.' }],
   aPied: [{ qui: '', txt: 'Les cartons à pied ? Prenez plutôt le tracteur ou le van.' }],
   sansCartons: v => [{ qui: '', txt: v === 'van' ? 'Les cartons sont dans le van.' : 'Les cartons sont sur le tracteur.' }],
@@ -330,8 +331,8 @@ export const TRAITEMENT = {
   },
   objectifs: {
     message: 'Lisez le message de Claire, la conseillère (Messages)',
-    tracteur: 'Montez dans le tracteur : le pulvérisateur y est attelé',
-    aire: 'En tracteur, à l\'aire de remplissage : préparez la bouillie',
+    enjambeur: 'Montez dans l\'enjambeur : le pulvérisateur y est installé',
+    aire: 'En enjambeur, à l\'aire de remplissage : préparez la bouillie',
     traiter: (noms, pc) => `Traitez ${noms}${pc ? ` (${pc} %)` : ''}`,
     noter: noms => `Notez le traitement dans le Registre phyto : ${noms}`,
     noterIci: noms => `Notez-le sur place, dans le Registre phyto : ${noms}`,
@@ -341,10 +342,11 @@ export const TRAITEMENT = {
   },
   dialogues: {
     reveil: [{ qui: '', txt: 'Mercredi 9 décembre, le lendemain de la tournée.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
-    luMessage: [{ qui: '', txt: 'La bouillie bordelaise, c\'est du cuivre : utilisable en bio. Le pulvérisateur est attelé au tracteur.' }],
-    pasTracteur: [{ qui: '', txt: 'Le pulvérisateur est sur le tracteur : il faut le tracteur.' }],
-    remplir: [{ qui: '', txt: 'De l\'eau et la bouillie bordelaise : la cuve est prête.' }, { qui: '', txt: 'Elle suffit pour les trois parcelles.' }],
-    guidage: tactile => [{ qui: '', txt: tactile ? 'Dans les rangs, doigt posé : le tracteur suit les passages tout seul, la scène va plus vite.' : 'Dans les rangs, flèche du haut seule : le tracteur suit les passages tout seul, la scène va plus vite.' }],
+    luMessage: [{ qui: '', txt: 'La bouillie bordelaise, c\'est du cuivre : utilisable en bio. Le pulvérisateur est sur l\'enjambeur.' }],
+    pasEnjambeur: [{ qui: '', txt: 'On pulvérise avec l\'enjambeur : c\'est lui qui porte le pulvérisateur.' }],
+    remplir: [{ qui: '', txt: 'De l\'eau et la bouillie bordelaise : les cuves sont prêtes.' }, { qui: '', txt: 'Elles suffisent pour les trois parcelles.' }],
+    guidage: tactile => [{ qui: '', txt: tactile ? 'Engagez l\'enjambeur dans un rang : doigt posé, il y va tout seul.' : 'Engagez l\'enjambeur dans un rang : flèche du haut seule, il y va tout seul.' }],
+    engage: tactile => [{ qui: '', txt: tactile ? 'Engagé : l\'enjambeur fait toute la parcelle tout seul. Je ne gère que l\'avance, doigt posé.' : 'Engagé : l\'enjambeur fait toute la parcelle tout seul. Je ne gère que l\'avance, flèche du haut.' }],
     parcelleFinie: nom => [{ qui: '', txt: `${nom} : traitée.` }],
     noter: [{ qui: '', txt: 'Je le note maintenant, sur le téléphone.' }],
     sansReseau: [{ qui: '', txt: 'Pas de réseau en bas des Grands Champs. Je le note quand même.' }],
@@ -421,7 +423,8 @@ export const TRAITEMENT = {
    du registre (fiche de faits), jamais additionné aux domaines de Vitisoft.
    La mission (Teddy, 24/11/2026) : un échantillon chez l'œnologue, qui donne les valeurs ; la fiche et le QR code dans
    Viticode, testés sur le téléphone ; l'étiquette envoyée à l'imprimeur-étiqueteur ; les bouteilles tirées-bouchées à
-   son entrepôt, pour l'habillage. Le lendemain de la journée de traitement : jeudi 10 décembre. Le BAT (bon à tirer) :
+   son entrepôt, pour l'habillage ; puis (Teddy, 24/11/2026) de grosses quantités : six palox sur une remorque, que seul
+   le tracteur tire, et un SMS quand c'est terminé. Le lendemain de la journée de traitement : jeudi 10 décembre. Le BAT (bon à tirer) :
    l'épreuve que l'imprimeur fait valider avant d'imprimer. Cuvée, analyse, lot, noms : fictifs. */
 export const HABILLAGE = {
   date: 'jeudi 10 décembre', dateCourte: '10 décembre',
@@ -446,11 +449,14 @@ export const HABILLAGE = {
       fil: [
         'Bonjour ! L\'habillage du Clos 2025, c\'est aujourd\'hui : la ligne est libre cet après-midi.',
         'Il me manque le fichier de la contre-étiquette : le QR code des ingrédients et de la déclaration nutritionnelle.',
-        'Envoyez-le-moi, puis amenez les bouteilles à l\'entrepôt, à la sortie du bourg.',
+        'Envoyez-le-moi, puis amenez-moi la remorque de palox à l\'entrepôt, à la sortie du bourg.',
       ],
       recu: 'Bien reçu ! Voici le BAT (bon à tirer) de la contre-étiquette :',
       accord: 'Bon pour accord !',
-      imprime: 'C\'est parti, j\'imprime. Amenez-moi les bouteilles à l\'entrepôt : la ligne d\'habillage vous attend.',
+      imprime: 'C\'est parti, j\'imprime. Amenez-moi la remorque à l\'entrepôt : la ligne d\'habillage vous attend.',
+      // le SMS de la fin : la photo d'une bouteille habillée, et le lien de sa fiche (Julien l'a scannée)
+      termine: 'C\'est terminé ! Les six palox du Clos 2025 sont habillés.',
+      termineFil: ['C\'est terminé ! Les six palox du Clos 2025 sont habillés : capsule, étiquette, et la contre-étiquette avec votre QR code.', 'J\'ai scanné une bouteille, la fiche s\'ouvre bien :', 'Passez reprendre la remorque quand vous voulez. Bonne soirée ! Julien'],
     },
     labo: {
       de: 'Laboratoire d\'œnologie', apercu: 'Le bulletin d\'analyse du Clos 2025...',
@@ -468,26 +474,32 @@ export const HABILLAGE = {
   ],
   objectifs: {
     message: 'Lisez le message de l\'imprimerie (Messages)',
-    echantillon: 'Au chai, à pied : prenez une bouteille du Clos, l\'échantillon pour le labo',
-    chargerAvant: 'Chargez aussi les cartons du Clos, en van ou en tracteur : après le labo, ils iront à l\'imprimerie',
-    labo: 'Apportez l\'échantillon au labo d\'œnologie, dans le bourg',
+    echantillon: 'À la remorque de palox, à pied : prenez une bouteille, l\'échantillon pour le labo',
+    tracteur: 'Prenez le tracteur : lui seul tire la remorque de palox',
+    atteler: 'En tracteur, arrêtez-vous devant le timon de la remorque : on l\'attelle',
+    labo: 'Apportez l\'échantillon au labo d\'œnologie, dans le bourg (la remorque suit)',
     analyse: 'Le labo analyse le vin : le bulletin arrive sur votre téléphone',
     fiche: 'Viticode : créez la fiche du Clos 2025 avec le bulletin du labo',
     tester: 'Viticode : testez la fiche, « Testez-moi ! »',
     telecharger: 'Viticode : téléchargez le QR code pour l\'imprimeur',
     envoyer: 'Envoyez le QR code à l\'imprimerie',
     bat: 'Messages : validez le BAT de l\'imprimerie',
-    charger: 'Chargez les cartons du Clos au chai, en van ou en tracteur',
-    entrepot: 'Apportez les bouteilles à l\'entrepôt de l\'imprimerie',
-    habillage: 'L\'habillage du Clos 2025',
-    scanner: 'Scannez la contre-étiquette avec votre téléphone',
+    entrepot: 'Emmenez la remorque de palox à l\'imprimerie, après le bourg',
+    dechargement: 'Julien rentre les palox au chariot élévateur',
+    attente: 'L\'habillage est lancé : un SMS arrivera quand ce sera fini',
+    sms: 'Lisez le SMS de l\'imprimerie',
     fin: 'Le Clos 2025 est habillé',
   },
   dialogues: {
-    reveil: [{ qui: '', txt: 'Jeudi 10 décembre. Aujourd\'hui, on habille le Clos 2025.' }, { qui: '', txt: 'Un message de l\'imprimerie.' }],
-    luMessage: [{ qui: '', txt: 'Pour le QR code, il me faut les valeurs du labo : un échantillon à l\'œnologue d\'abord.' }, { qui: '', txt: 'Les bouteilles tirées-bouchées attendent au chai, en cartons.' }],
-    echantillon: [{ qui: '', txt: 'Une bouteille du lot : l\'échantillon pour le labo.' }, { qui: '', txt: 'Je charge aussi les cartons : le labo et l\'imprimerie sont du même côté, après le bourg.' }],
-    aPied: [{ qui: '', txt: 'L\'échantillon : à pied, dans le chai, le carton ouvert près de la palette.' }],
+    reveil: [{ qui: '', txt: 'Jeudi 10 décembre. Aujourd\'hui, on habille le Clos 2025 : six palox.' }, { qui: '', txt: 'Un message de l\'imprimerie.' }],
+    luMessage: [{ qui: '', txt: 'Pour le QR code, il me faut les valeurs du labo : un échantillon à l\'œnologue d\'abord.' }, { qui: '', txt: 'Les palox sont sur la remorque, au domaine : il faudra le tracteur pour la tirer.' }],
+    echantillon: [{ qui: '', txt: 'Une bouteille du palox : l\'échantillon pour le labo.' }, { qui: '', txt: 'Maintenant, le tracteur : on attelle la remorque, le labo et l\'imprimerie sont du même côté.' }],
+    echantillonAttelee: [{ qui: '', txt: 'Une bouteille du palox : l\'échantillon pour le labo. En route !' }],
+    pasTracteur: [{ qui: '', txt: 'Six palox, c\'est trop lourd : il faut le tracteur pour tirer la remorque.' }],
+    timon: [{ qui: '', txt: 'Pour atteler : arrêté juste devant le timon, dans son axe.' }],
+    attelee: [{ qui: '', txt: 'Attelée. Direction le labo, avec l\'échantillon.' }],
+    atteleeSansEchantillon: [{ qui: '', txt: 'Attelée. L\'échantillon d\'abord : une bouteille d\'un palox, à pied.' }],
+    versEntrepot: [{ qui: '', txt: 'La remorque est attelée : direction l\'imprimerie, après le bourg.' }],
     labo: [
       { qui: 'Hélène', txt: 'Bonjour ! C\'est l\'échantillon du Clos ?' },
       { qui: '', txt: 'Oui, pour la déclaration nutritionnelle. Rien d\'ajouté à part le soufre, à la mise.' },
@@ -499,20 +511,12 @@ export const HABILLAGE = {
     teste: [{ qui: '', txt: 'Ce que lira le client en scannant la bouteille, dans sa langue.' }],
     envoye: [{ qui: '', txt: 'Le fichier est parti à l\'imprimerie.' }],
     bat: [{ qui: '', txt: 'Le BAT de l\'imprimerie : la contre-étiquette, avec le QR code.' }],
-    batOk: [{ qui: '', txt: 'Les bouteilles maintenant : au chai, puis à l\'entrepôt.' }],
-    charge: [{ qui: '', txt: 'Les cartons du Clos sont chargés : direction l\'entrepôt de l\'imprimerie.' }],
-    chargeAvant: [{ qui: '', txt: 'Les cartons du Clos sont chargés. Reste la contre-étiquette, dans Viticode.' }],
-    chargeLabo: [{ qui: '', txt: 'Les cartons du Clos sont chargés. D\'abord le labo, avec l\'échantillon.' }],
-    entrepot: [{ qui: 'Julien', txt: 'Salut ! Posez les cartons là, je les passe sur la ligne.' }],
+    batOk: [{ qui: '', txt: 'La remorque maintenant : au domaine, en tracteur.' }],
     pasFichier: [{ qui: 'Julien', txt: 'Salut ! Il me faut d\'abord la contre-étiquette validée : le fichier du QR code, puis le BAT.' }],
-    pasCartons: [{ qui: 'Julien', txt: 'Et les bouteilles ? Elles sont au chai, en cartons.' }],
-    autreVehicule: g => [{ qui: '', txt: `Les cartons sont dans le ${g === 'van' ? 'van' : 'tracteur'}.` }],
-    ligne: [
-      { qui: 'Julien', txt: 'Capsule, étiquette, contre-étiquette : tout se fait sur la ligne.' },
-      { qui: 'Julien', txt: 'Votre QR code est bien net, avec « Ingrédients » au-dessus et la valeur énergétique en dessous.' },
-      { qui: 'Julien', txt: 'Tenez, la première bouteille. Scannez-la, pour voir !' },
-    ],
-    scanne: [{ qui: '', txt: 'Ingrédients, déclaration nutritionnelle : tout y est, en un scan.' }],
+    pasRemorque: [{ qui: 'Julien', txt: 'Et les bouteilles ? Les palox sont sur la remorque, au domaine : venez avec le tracteur.' }],
+    entrepot: [{ qui: 'Julien', txt: 'Salut ! Dételez-la là, je prends le chariot.' }],
+    chariot: [{ qui: 'Julien', txt: 'Je rentre les palox et je lance la ligne. Je vous envoie un SMS quand c\'est fini !' }],
+    decharge: [{ qui: '', txt: 'Les six palox sont rentrés, la ligne tourne. J\'ai le temps d\'un tour au bourg.' }],
     fin: [{ qui: '', txt: 'Le Clos 2025 est habillé, et chaque bouteille dit ce qu\'elle contient.' }],
   },
   // l'appli : ce que le jeu rappelle (consignes, pas Viticode) et les refus quand la fiche ne correspond pas au bulletin
@@ -551,8 +555,10 @@ export const HABILLAGE = {
     publiee: ['Fiche publiée', 'Le QR code du Clos 2025'],
     envoye: ['Envoyé', 'Le QR code est chez l\'imprimeur'],
     bat: ['BAT validé', 'La contre-étiquette part à l\'impression'],
-    charge: ['Chargé', 'Les cartons du Clos 2025'],
-    livre: ['Livré', 'Les bouteilles sont à l\'entrepôt'],
+    attelee: ['Attelée', 'La remorque de palox du Clos 2025'],
+    livre: ['Livré', 'La remorque est à l\'imprimerie'],
+    decharge: ['Palox rentrés', 'La ligne d\'habillage tourne'],
+    sms: ['SMS', 'Imprimerie Saint-Vincent : c\'est terminé'],
     fin: ['Habillé', 'Le Clos 2025, avec son QR code'],
   },
   finCarte: {
@@ -583,12 +589,12 @@ export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
     traitement: ['Bon courage pour le traitement !', 'Je rince les barriques ce matin, elles seront prêtes pour le soutirage.'],
-    habillage: ['C\'est aujourd\'hui, l\'habillage du Clos ?', 'Les cartons du Clos sont sur la palette, dans le chai.'],
+    habillage: ['C\'est aujourd\'hui, l\'habillage du Clos ?', 'Les palox du Clos sont sur la remorque : il faudra le tracteur.'],
   },
   porteuse: {
     tournee: ['Je range les caisses de vendange pour l\'hiver.', 'Bonne tournée ! Les clients vont être contents.', 'Attention, ça glisse près du nettoyeur.'],
     traitement: ['Alors, cette tournée d\'hier ? Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
-    habillage: ['Le traitement d\'hier s\'est bien passé ? Bon habillage !', 'Le carton ouvert près de la palette, c\'est pour l\'échantillon du labo.'],
+    habillage: ['Le traitement d\'hier s\'est bien passé ? Bon habillage !', 'Pour l\'échantillon du labo, prenez une bouteille dans un palox.'],
   },
 };
 

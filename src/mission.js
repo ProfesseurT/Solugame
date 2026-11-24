@@ -276,7 +276,7 @@ export class Mission {
         const piles = this.palette.filter(x => x.groupe.visible && this.client(x.client).statut === 'signee');
         if (j.auVolant && piles.length && (lent || devant)) {
           if (j.veh.m.cartons) { this.charger(piles); return; }
-          this.aider(DIALOGUES.voitureSansCartons, 'chai'); // une voiture empruntée : pas de plateau
+          this.aider(DIALOGUES.sansPlateau(j.veh.genre), 'chai'); // une voiture empruntée, l'enjambeur : pas de plateau
         }
         if (j.auVolant && !piles.length && lent) {
           const n = this.compter('envoyee');

@@ -634,13 +634,25 @@ if (scenario === 'traitement') {
   const r = await ev(async () => {
     const J = CL.jeu, T = CL.traitement, tel = J.tel, log = [];
     const obj = () => document.querySelector('#objectif')?.textContent || '', toast = () => document.querySelector('#app .ph-toast')?.textContent || '';
+    // traiter une parcelle : l'enjambeur posé à son entrée, flèche du haut tenue (le guidage l'engage dans un rang, puis il
+    // fait toute la parcelle) ; une fois engagé, la flèche de droite tenue un moment : il ne dévie pas (on ne gère que
+    // l'avance) ; rend la parcelle, la durée, l'écart maximal à l'axe du passage pendant le coup de volant, engagé ou non
     const traiter = (id, x, z) => {
       const p = T.parcelles.find(q => q.id === id);
       CL.teleporter(x, z, 0); CL.step(10);
-      let n = 0; CL.ctrl.ky = -1;
-      for (; n < 60 * 150 && !p.traitee; n++) CL.step(1);
-      CL.ctrl.ky = 0; CL.step(30);
-      return [p, n / 60];
+      let n = 0, engage = false, ecartMax = 0, volant = 0; CL.ctrl.ky = -1;
+      for (; n < 60 * 200 && !p.traitee; n++) {
+        CL.step(1);
+        if (T.engage) engage = true;
+        // un coup de volant à droite, engagé, au milieu d'un passage
+        if (T.engage && volant < 120 && T.pulverise) {
+          CL.ctrl.kx = 1; volant++;
+          const q = p.q, tr = CL.tr, k = Math.round((tr.pos.x - q.xr) / q.ecart);
+          ecartMax = Math.max(ecartMax, Math.abs(tr.pos.x - (q.xr + k * q.ecart)));
+        } else CL.ctrl.kx = 0;
+      }
+      CL.ctrl.ky = 0; CL.ctrl.kx = 0; CL.step(30);
+      return [p, n / 60, ecartMax, engage, volant];
     };
     const noter = ids => {
       tel.ouvrir('phyto'); tel.action('rp-nouveau');
@@ -655,16 +667,22 @@ if (scenario === 'traitement') {
       log.push(['avant la mission 2, le Registre phyto annonce la mission', (tel.ouvrir('phyto'), document.querySelector('#app').textContent.includes('Mission 2')) && !T.actif]);
       tel.fermer();
       CL.versMission2(); CL.step(300);
-      log.push(['au réveil, le lendemain : la mission 2, le pulvérisateur attelé, le message de Claire', T.actif && J.minutes >= 1440 + 420 && J.minutes < 1440 + 480 && CL.pulve.groupe.visible && tel.notif === 'messages' && obj().includes('Claire')]);
+      log.push(['au réveil, le lendemain : la mission 2, le message de Claire', T.actif && J.minutes >= 1440 + 420 && J.minutes < 1440 + 480 && tel.notif === 'messages' && obj().includes('Claire')]);
       tel.ouvrir('messages'); tel.action('fil:claire'); tel.fermer(); CL.step(60);
-      log.push(['message lu : monter dans le tracteur', T.etape === 'preparer' && obj().includes('tracteur')]);
-      const v = CL.vehicule('tracteur');
+      log.push(['message lu : monter dans l\'enjambeur', T.etape === 'preparer' && obj().includes('enjambeur')]);
+      // le tracteur ne pulvérise pas : à l'aire, il faut l'enjambeur
+      { const t = CL.vehicule('tracteur').p.pos; CL.teleporter(t.x + 2.4, t.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
+      CL.teleporter(-86, -66, Math.PI); CL.step(40);
+      log.push(['en tracteur à l\'aire : pas de bouillie, on dit qu\'il faut l\'enjambeur', !T.prete && !J.gestes.actif && document.querySelector('#sous-titre').textContent.includes('enjambeur')]);
+      CL.agir(); CL.finirGeste(); CL.step(3);
+      const v = CL.vehicule('enjambeur');
       for (let k = 0; k < 40 && !J.auVolant; k++) { const a = k * 0.5; J.joueur.placer(v.p.pos.x + Math.cos(a) * 2.8, v.p.pos.z + Math.sin(a) * 2.8, 0); CL.step(2); CL.agir(); CL.finirGeste(); CL.step(2); }
       CL.teleporter(-86, -66, Math.PI); CL.step(20); CL.finirGeste(); CL.step(10);
-      log.push(['à l\'aire de remplissage, la bouillie est prête ; on est de nouveau au volant', T.prete && T.etape === 'traiter' && J.auVolant]);
-      const [p1, t1] = traiter('perrieres', -147, -116);
-      const [p2, t2] = traiter('clos', -36, -116);
-      log.push([`Les Perrières (${t1.toFixed(0)} s) et Le Clos (${t2.toFixed(0)} s) traités au guidage, à plus de 97 %`, p1.traitee && p2.traitee && t1 < 120 && t2 < 120]);
+      log.push(['à l\'aire de remplissage, la bouillie est prête ; on est de nouveau au volant de l\'enjambeur', T.prete && T.etape === 'traiter' && J.auVolant && J.veh.genre === 'enjambeur']);
+      const [p1, t1, e1, g1, k1] = traiter('perrieres', -147, -116);
+      const [p2, t2, e2, g2] = traiter('clos', -36, -116);
+      log.push([`Les Perrières (${t1.toFixed(0)} s) et Le Clos (${t2.toFixed(0)} s) traités : engagé dans un rang, l'enjambeur fait toute la parcelle, à plus de 97 %`, p1.traitee && p2.traitee && g1 && g2 && t1 < 160 && t2 < 160]);
+      log.push([`engagé, le volant ne fait rien : la flèche de droite tenue ${(k1 / 60).toFixed(1)} s, il reste sur le rang (écart ${e1.toFixed(2)} m)`, k1 >= 60 && e1 < 0.6]);
       log.push(['ensuite : les noter dans le Registre phyto', obj().startsWith('Notez le traitement')]);
       tel.ouvrir('phyto'); tel.action('rp-nouveau'); tel.action('rp-cocher:grandschamps'); tel.action('rp-suite');
       const refusP = tel.app === 'phytoP' && toast().includes('pas encore traitée');

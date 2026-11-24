@@ -170,12 +170,11 @@ export class Telephone {
       }
       case 'vc-qr': this.app = 'vcQr'; break;
       case 'vc-copier': this.toast(HX.app.copie); return;
-      case 'vc-tester': this.app = 'vcTest'; this.majeur = false; this.depuisScan = false; this.langue = 'fr'; this.menuLangues = false; break;
-      case 'vc-scan': this.app = 'vcTest'; this.majeur = false; this.depuisScan = true; this.langue = 'fr'; this.menuLangues = false; break;
+      case 'vc-tester': this.app = 'vcTest'; this.majeur = false; this.depuisSms = arg === 'sms'; this.langue = 'fr'; this.menuLangues = false; break;
       case 'vc-age': if (arg === 'oui') { this.majeur = true; H.vue(); } else { this.toast(HX.app.mineur); return; } break;
       case 'vc-langues': this.menuLangues = !this.menuLangues; break;
       case 'vc-lg': this.langue = arg; this.menuLangues = false; break;
-      case 'vc-fermer-test': this.app = this.depuisScan && H.etape === 'scanner' ? 'scan' : H.publiee ? 'vcQr' : 'viticode'; break;
+      case 'vc-fermer-test': if (this.depuisSms) { this.app = 'messages'; this.fil = 'imprimerie'; } else this.app = H.publiee ? 'vcQr' : 'viticode'; break;
       case 'vc-telecharger': this.app = 'vcPerso'; break;
       case 'vc-regler': H.regler(arg, arg2 === '1' ? true : arg2 === '0' ? false : arg2); break;
       case 'vc-dl': {
@@ -544,11 +543,6 @@ export class Telephone {
       <span class="mentions"><span>75 cl</span><span>${fr(v.degre)} % vol</span><span>Lot ${esc(v.lot)}</span></span>
       <span class="mentions"><span>Produit de France</span>${VC.enceinte.replace('<svg ', '<svg class="fe" ')}</span></div>`;
   }
-  // L'appareil photo, sur la contre-étiquette de la première bouteille habillée : le lien de la fiche apparaît
-  scan() {
-    return `<div class="scan"><p class="vise">Visez le QR code de la contre-étiquette</p>${this.contreEtiquette()}
-      <button class="lien" data-a="vc-scan">viticode.fr · Ouvrir la fiche</button></div>`;
-  }
   phyto() {
     const R = this.jeu.traitement;
     if (!R || !R.actif) return this.entete('Registre phyto', 'phyto') + `<div class="ap-corps">
@@ -638,6 +632,12 @@ export class Telephone {
     if (H.bat !== 'aucun') b += `<p class="bulle">${esc(I.recu)}</p><div class="bat">${this.contreEtiquette()}</div>`;
     if (H.bat === 'recu') b += `<button class="ap-bt plein large" data-a="vc-accord">${esc(I.accord)}</button>`;
     if (H.bat === 'ok') { b += `<p class="bulle moi">${esc(I.accord)}</p>`; if (H.tImprime <= 0) b += `<p class="bulle">${esc(I.imprime)}</p>`; }
+    // le SMS de la fin : la photo d'une bouteille habillée, le lien de sa fiche (comme le client la verra)
+    if (H.sms) {
+      const [a, b2, c] = I.termineFil;
+      b += `<p class="bulle">${esc(a)}</p><div class="bat photo">${this.contreEtiquette()}</div><p class="bulle">${esc(b2)}</p>
+        <button class="lien-fiche" data-a="vc-tester:sms">${ICONES.viticode}<span><b>${esc(HX.vin.nom)}</b><br>viticode.fr/fiche-produit</span></button><p class="bulle">${esc(c)}</p>`;
+    }
     return this.entete(I.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil">${b}</div>`;
   }
   // Le fil du labo d'œnologie (mission 3) : le bulletin d'analyse du Clos 2025

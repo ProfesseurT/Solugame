@@ -1,10 +1,12 @@
 // Mission 2 : « La journée de traitement », le lendemain de la tournée de Noël (Teddy, 24/11/2026). Après la tournée, on
 // va dormir ; au réveil, le mercredi 9 décembre, Claire, la conseillère viticole, écrit : le passage d'hiver, bouillie
 // bordelaise seule (un traitement bio), contre le mildiou qui passe l'hiver, sur trois parcelles (l'ETA a fait les autres).
-// 1. Au domaine, en tracteur (le pulvérisateur y est attelé), à l'aire de remplissage : on prépare la bouillie.
-// 2. Dans chaque parcelle, on passe dans les rangs : les rampes se déplient, traitent deux rangs de chaque côté, les
-//    feuilles prennent un voile bleuté. Doigt posé (ou flèche du haut seule), le guidage suit les passages tout seul et
-//    la scène va trois fois plus vite (main.js).
+// 1. Au domaine, en enjambeur (le pulvérisateur y est installé ; le tracteur ne pulvérise pas : Teddy, 24/11/2026), à
+//    l'aire de remplissage : on prépare la bouillie.
+// 2. Dans chaque parcelle, l'enjambeur enjambe un rang : ses bras se déplient et ses descentes traitent ce rang et les
+//    deux voisins, les feuilles prennent un voile bleuté. Une fois engagé dans un rang, il fait toute la parcelle tout
+//    seul, passage après passage, demi-tours compris : on ne gère que l'avance (main.js) ; la scène va trois fois plus
+//    vite.
 // 3. Dans le Registre phyto (téléphone), on note le traitement : les parcelles traitées, les produits et leurs doses, le
 //    stade (repris du dernier traitement), la cible. En bas des Grands Champs, pas de réseau : noté, envoyé quand ça capte.
 // Pour finir toujours : l'objectif est recalculé à chaque image d'après l'état ; l'appli refuse une saisie qui ne
@@ -13,10 +15,11 @@ import { TRAITEMENT as TX } from './textes.js';
 import { son } from './audio.js';
 import { ecart } from './reseau.js';
 
-const DEMI = 3.6;           // le pulvérisateur traite les rangs à moins de 3,6 m de part et d'autre de ses rampes
 const FAITE = 0.97;         // une parcelle est traitée quand 97 % de ses travées l'ont été
 const RANG_FAIT = 0.92;     // un rang l'est à 92 % (le guidage ne repasse plus dessus)
-const RAMPES = 3.05;        // les rampes sont à 3,05 m derrière le centre du tracteur
+const PAR_PASSAGE = 3;      // l'enjambeur traite trois rangs par passage : celui qu'il enjambe et ses deux voisins
+// engagé dans un rang : à moins de 0,9 m de l'axe d'un passage, dans son sens à 0,45 rad près (il pulvérise déjà)
+const ENGAGE_X = 0.9, ENGAGE_CAP = 0.45;
 const RAPPEL = 8;           // secondes au moins entre deux aides dites en route
 const ENVOI = 1.5;          // secondes de réseau retrouvé avant l'envoi de ce qui attend
 // pas de réseau en bas des Grands Champs (le chemin, la parcelle, le hameau)
@@ -40,7 +43,8 @@ export class Traitement {
     this.tRappel = 0; this.aideCle = null; this.aideT = -1e9;
     this.ouvert = 0;             // les rampes dépliées, de 0 à 1
     this.pulverise = false;      // les rampes traitent (dans les rangs d'une parcelle du jour, en roulant)
-    this.guidage = false;        // le tracteur est dans une parcelle du jour : le guidage peut suivre les passages
+    this.guidage = false;        // l'enjambeur est dans une parcelle du jour : le guidage peut suivre les passages
+    this.engage = false;         // engagé dans un rang : il fait toute la parcelle tout seul, on ne gère que l'avance
     this.tEnvoi = 0; this.tSon = 0; this.guideDit = false; this.dit = false; this.tObj = 0;
   }
   get actif() { return this.etape !== 'avant'; }
@@ -51,7 +55,7 @@ export class Traitement {
   get fini() { return this.jour.every(p => p.notee) && !this.enAttente.length; }
   noms(l) { const n = l.map(p => p.nom); return n.length > 1 ? n.slice(0, -1).join(', ') + ' et ' + n[n.length - 1] : n[0]; }
   // le tracteur conduit (le pulvérisateur est dessus)
-  get enTracteur() { return this.j.auVolant && this.j.veh.genre === 'tracteur'; }
+  get enEnjambeur() { return this.j.auVolant && this.j.veh.genre === 'enjambeur'; }
   // la parcelle du jour où se trouve le tracteur (élargie de m mètres), ou null
   dans(m = 0) {
     if (!this.j.auVolant) return null;
@@ -141,8 +145,10 @@ export class Traitement {
     if (!this.itin || this.itin.c !== c || this.itin.p) this.itin = { c, pts: j.reseau.itineraire(j.auVolant ? j.tr.pos : j.joueur.pos, c) };
     return this.itin.pts;
   }
-  // Les passages qui restent dans la parcelle p, depuis o : un passage tous les 4 rangs (il en traite 4), seulement ceux
-  // dont un rang n'est pas fini ; du côté le plus proche d'abord, en serpentine, demi-tours en arc dans les tournières
+  // Les passages qui restent dans la parcelle p, depuis o : l'enjambeur passe au-dessus d'un rang sur trois (il traite
+  // celui qu'il enjambe et ses deux voisins), seulement là où un rang n'est pas fini ; du côté le plus proche d'abord, en
+  // serpentine, un passage sur deux puis les autres en revenant (comme au vrai : les demi-tours ont de la place), en arc
+  // dans les tournières
   passages(p, o) {
     const q = p.q, n = q.n, faits = new Float32Array(n), tot = new Float32Array(n);
     for (const b of p.v.blocs) for (let k = 0; k < b.n; k++) {
@@ -150,14 +156,15 @@ export class Traitement {
       if (r >= 0 && r < n) { tot[r]++; if (b.traite[k]) faits[r]++; }
     }
     const rangFait = r => r < 0 || r >= n || tot[r] === 0 || faits[r] / tot[r] >= RANG_FAIT;
-    const ps = [];
-    for (let i = 1; ; i += 4) {
+    let ps = [];
+    for (let i = 1; ; i += PAR_PASSAGE) {
       const k = Math.min(i, n - 2);
-      if (![k - 1, k, k + 1, k + 2].every(rangFait)) ps.push(q.xr + (k + 0.5) * q.ecart);
-      if (k >= n - 2 || k + 2 >= n - 1) break;
+      if (![k - 1, k, k + 1].every(rangFait)) ps.push(q.xr + k * q.ecart);
+      if (k + 1 >= n - 1) break;
     }
     if (!ps.length) return [[o.x, o.z], [o.x, o.z + 0.1]];
     if (Math.abs(o.x - ps[ps.length - 1]) < Math.abs(o.x - ps[0])) ps.reverse();
+    if (ps.length > 2) ps = [...ps.filter((x, i) => i % 2 === 0), ...ps.filter((x, i) => i % 2 === 1)];
     // (le premier point : le tracteur lui-même ; sinon la conduite assistée prendrait le passage le plus proche de lui)
     const za = q.z0 - 1, zb = q.z1 + 1, pts = [[o.x, o.z]];
     let sud = o.z < (q.z0 + q.z1) / 2;
@@ -179,7 +186,7 @@ export class Traitement {
     const e = this.etape, O = TX.objectifs, j = this.j;
     if (e === 'avant') return null;
     if (e === 'debut' || e === 'message') return O.message;
-    if (e === 'preparer') return this.enTracteur ? O.aire : O.tracteur;
+    if (e === 'preparer') return this.enEnjambeur ? O.aire : O.enjambeur;
     if (e === 'dodo') return O.dodo;
     if (e === 'fin' || e === 'libre') return O.fin;
     if (e === 'remplir') return O.aire;
@@ -219,9 +226,9 @@ export class Traitement {
         break;
       case 'preparer': {
         const d = j.distance(j.lieux.aire);
-        if (j.auVolant && j.veh.genre !== 'tracteur' && d < 8) this.aider(TX.dialogues.pasTracteur, 'aire');
-        if (this.enTracteur && d < 3.6 && Math.abs(j.tr.v) < 1.2 && !j.gestes.actif && !j.tel.ouvert) this.remplir();
-        if (this.enTracteur && this.dans(2)) this.aider(TX.dialogues.pasPrete, 'parcelle'); // dans les vignes sans bouillie
+        if (j.auVolant && j.veh.genre !== 'enjambeur' && d < 8) this.aider(TX.dialogues.pasEnjambeur, 'aire');
+        if (this.enEnjambeur && d < 3.6 && Math.abs(j.tr.v) < 1.2 && !j.gestes.actif && !j.tel.ouvert) this.remplir();
+        if (this.enEnjambeur && this.dans(2)) this.aider(TX.dialogues.pasPrete, 'parcelle'); // dans les vignes sans bouillie
         break;
       }
       case 'traiter': this.traiter(dt); break;
@@ -266,7 +273,7 @@ export class Traitement {
     }
     // arrivé dans une parcelle du jour avec la bouillie : le guidage ; avec un autre véhicule : il faut le tracteur
     if (this.guidage && !this.guideDit) { this.guideDit = true; hud.dire(TX.dialogues.guidage(j.tactile)); }
-    if (j.auVolant && j.veh.genre !== 'tracteur' && this.dans(2)) this.aider(TX.dialogues.pasTracteur, 'parcelle');
+    if (j.auVolant && j.veh.genre !== 'enjambeur' && this.dans(2)) this.aider(TX.dialogues.pasEnjambeur, 'parcelle');
     // au bout des passages sans avoir tout traité (on en a sauté, à la main), ou loin d'eux : on refait le plan depuis ici
     if (this.itin && this.itin.p && j.auVolant && (this.tItin -= dt) <= 0) {
       this.tItin = 0.5;
@@ -294,22 +301,31 @@ export class Traitement {
   // Les rampes : dépliées dans une parcelle du jour (la bouillie prête, le tracteur au volant), repliées ailleurs ; elles
   // traitent les rangs qu'elles survolent en roulant. pas : appelé à chaque pas de la conduite (main.js), même accélérée.
   rampes(dt) {
-    const j = this.j, P = this.c.pulve, p = this.prete && this.enTracteur ? this.dans(8) : null;
+    const j = this.j, P = this.c.pulve, p = this.prete && this.enEnjambeur ? this.dans(8) : null;
     this.guidage = !!p && !p.traitee;
+    // engagé dans un rang, il le reste jusqu'au bout de la parcelle (ou si l'on en sort, ou qu'on descend)
+    if (!this.guidage) this.engage = false;
     const but = this.guidage ? 1 : 0;
     if (this.ouvert !== but) { this.ouvert = but > this.ouvert ? Math.min(1, this.ouvert + dt * 0.8) : Math.max(0, this.ouvert - dt * 0.8); this.c.deplier(P, this.ouvert); }
   }
   pas(dt) {
-    const j = this.j;
+    const j = this.j, P = this.c.pulve;
     this.pulverise = false;
     if (!this.guidage || this.ouvert < 0.95) return;
     const tr = j.tr, p = this.dans(4);
-    if (!p || p.traitee || Math.abs(tr.v) < 0.4) return;
-    const q = p.q;
-    const bx = tr.pos.x - Math.sin(tr.h) * RAMPES, bz = tr.pos.z - Math.cos(tr.h) * RAMPES;
+    if (!p || p.traitee) return;
+    // engagé : l'axe de l'enjambeur sur un passage, dans son sens (il entre dans le rang qu'il enjambe)
+    if (!this.engage && this.itin && this.itin.p === p) {
+      const q = p.q, k = Math.round((tr.pos.x - q.xr) / q.ecart), dx = Math.abs(tr.pos.x - (q.xr + k * q.ecart));
+      const aligne = Math.abs(Math.sin(tr.h)) < Math.sin(ENGAGE_CAP), dedans = tr.pos.z > q.zr0 - 1 && tr.pos.z < q.zr1 + 1;
+      if (dx < ENGAGE_X && aligne && dedans && Math.abs(tr.v) > 0.3) { this.engage = true; j.hud.dire(TX.dialogues.engage(j.tactile)); }
+    }
+    if (Math.abs(tr.v) < 0.4) return;
+    const q = p.q, z = P.z ?? -3.05;
+    const bx = tr.pos.x + Math.sin(tr.h) * z, bz = tr.pos.z + Math.cos(tr.h) * z;
     if (bx < q.x0 - 1 || bx > q.x1 + 1 || bz < q.zr0 - 0.6 || bz > q.zr1 + 0.6) return;
     this.pulverise = true;
-    p.faites += this.c.monde.traiter(p.v, bx, bz, DEMI);
+    p.faites += this.c.monde.traiter(p.v, bx, bz, P.demi ?? 3.3);
     // la bouillie : un brouillard fin qui sort des buses vers les feuilles, et son souffle
     const E = this.c.particules.emettre, M = this.c.pulve.groupe.matrixWorld, V = this.c.v, rnd = this.c.rnd;
     for (const b of this.c.pulve.buses) {

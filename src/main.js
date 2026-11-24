@@ -645,7 +645,16 @@ function conduire(dt, dtm, dernier = true) {
   const M = enCours();
   pilote.prendre(M.route);
   jeu.pilote = false;
-  if (ctrl.clavier && libre) {
+  // mission 2 : l'enjambeur engagé dans un rang fait toute la parcelle tout seul (passages, demi-tours) ; on ne gère que
+  // l'avance (Teddy, 24/11/2026) : doigt posé ou flèche du haut, il avance ; glissé vers le bas ou flèche du bas, il
+  // freine ; rien, il s'arrête. Le volant (doigt de côté, flèches de côté) ne fait rien.
+  const engage = M === traitement && traitement.engage && libre ? pilote.commande(tr, veh.genre, M.cible, voitures, col) : null;
+  if (engage) {
+    const avance = ctrl.clavier ? (ctrl.ky < 0 ? 1 : ctrl.ky > 0 ? -1 : 0) : ctrl.id !== null ? (ctrl.jy > 0.45 ? -1 : 1) : 0;
+    braq = engage.braq; jeu.pilote = true;
+    gaz = avance > 0 ? engage.gaz : tr.v > 0.3 ? (avance < 0 ? -1 : -0.6) : tr.v < -0.3 ? 0.6 : 0;
+  }
+  else if (ctrl.clavier && libre) {
     gaz = -ctrl.ky; braq = -ctrl.kx;
     // dans une parcelle du jour, la bouillie prête (mission2.js) : flèche du haut seule, le guidage suit les passages
     if (M === traitement && traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, voitures, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
