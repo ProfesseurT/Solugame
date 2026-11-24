@@ -147,7 +147,7 @@ export class Gestes {
         const j = this.j, q = p();
         pts = [];
         let a = { x: j.pos.x, z: j.pos.z };
-        for (const v of this.c.jeu.vehicules) { const d = contourner(v, a, q); if (d.length) { pts.push(...d); a = d[d.length - 1]; } }
+        for (const v of this.c.jeu.aContourner || this.c.jeu.vehicules) { const d = contourner(v, a, q); if (d.length) { pts.push(...d); a = d[d.length - 1]; } }
         k = 0;
         let l = 0, b = j.pos;
         for (const c of [...pts, q]) { l += Math.hypot(c.x - b.x, c.z - b.z); b = c; }

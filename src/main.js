@@ -15,6 +15,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { enjambeur, deplierEnjambeur } from './enjambeur.js';
+import { remorque, Attelage, peutAtteler, etapesAtteler, etapesDeteler, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement } from './remorque.js';
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
@@ -142,6 +143,20 @@ creerVehicule('van', mVan, L.van, posteDe(mVan));
 const mEnj = enjambeur(); deplierEnjambeur(mEnj, 0);
 const vEnjambeur = creerVehicule('enjambeur', mEnj, L.enjambeur, posteDe(mEnj));
 let veh = vTracteur, tr = veh.p, tm = veh.m;
+// La remorque de palox du Clos 2025 (mission 3 ; remorque.js), garée au domaine, chargée ; seul le tracteur la tire.
+// Posée, c'est une boîte du décor ; attelée, elle suit le tracteur (Attelage.maj, à chaque image) et repousse les piétons.
+const mRem = remorque();
+scene.add(mRem.groupe);
+const att = new Attelage(mRem, col);
+att.poser(L.remorque.x, L.remorque.z, L.remorque.h);
+OBSTACLES.push(att.pos); // les voitures de la départementale la voient
+// (pour contourner à pied, gestes.js : la remorque attelée comme un véhicule de plus)
+const remorqueContour = { p: att, m: mRem, genre: 'remorque' };
+// Le chariot élévateur de l'imprimerie : à sa place dans la cour ; il décharge les palox (Dechargement)
+const mChariot = chariot();
+scene.add(mChariot.groupe);
+placerChariot(mChariot, L.entrepot.chariot, col);
+let dech = null;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
 const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
@@ -307,6 +322,9 @@ const jeu = {
     return l;
   },
   hud, lieux: L, vehicules: VEHICULES, reseau,
+  // ce que le personnage contourne à pied (gestes.js) : les véhicules, et la remorque quand elle est attelée (posée, elle
+  // est une boîte du décor)
+  get aContourner() { return att.attelee ? [...VEHICULES, remorqueContour] : VEHICULES; },
   get tr() { return tr; }, get tm() { return tm; }, get veh() { return veh; },
   basculerRadio() {
     const on = son.basculerRadio();
@@ -374,9 +392,36 @@ jeu.traitement = traitement;
 // jeu.chariot, plus bas)
 const habillage = new Habillage(jeu, {});
 jeu.habillage = habillage;
-// PROVISOIRE : la remorque et le chariot (remorque.js) arrivent
-jeu.remorque = { ici: L.tracteur, peutAtteler: () => false, atteler() {}, deteler() {}, debout: () => L.tracteur, pointEchantillon: () => ({ x: L.tracteur.x, y: 1, z: L.tracteur.z }) };
-jeu.chariot = { lancer() {}, fini: false };
+// La remorque et le chariot, pour la mission 3 (mission3.js)
+jeu.remorque = {
+  get ici() { return att.pos; },          // la remorque (la balise de l'échantillon, à pied)
+  approche: L.remorque.approche,         // où le tracteur vient se mettre devant le timon (la balise pour atteler)
+  get attelee() { return att.attelee; },
+  peutAtteler: () => jeu.auVolant && veh.genre === 'tracteur' && peutAtteler(tr, att),
+  atteler(fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesAtteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v) }), fin); },
+  deteler(fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesDeteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v), depot: L.entrepot.depot }), fin); },
+  debout: () => att.pointEchantillon(joueur.pos.x, joueur.pos.z).debout,
+  pointEchantillon: () => att.pointEchantillon(joueur.pos.x, joueur.pos.z),
+};
+// Julien (l'étiqueteur) va à son chariot, s'assoit, rentre les six palox près de la ligne, en descend (remorque.js)
+const VITE_CHARIOT = 2.5;
+jeu.chariot = {
+  get fini() { return !!dech && dech.fini; },
+  get avancement() { return dech ? dech.avancement : 0; },
+  lancer() {
+    const f = gens3.liste[1], G = f.gestes, C = L.entrepot.chariot, P = { x: C.x + 1.1, z: C.z };
+    f.etat = 'range'; G.g = null; f.p.salut = false; f.p.regard = null;
+    G.lancer([...G.allerA(() => P, () => -Math.PI / 2), {
+      action: () => { asseoirChariot(f.p, mChariot); dech = new Dechargement({ ch: mChariot, att, L: L.entrepot, conducteur: f.p, col, scene, vite: VITE_CHARIOT }); },
+    }]);
+  },
+};
+// déchargement fini (ou repris fini) : Julien descend de son chariot, près des palox
+function finDechargement() {
+  const f = gens3.liste[1];
+  if (f.p.assis) descendreChariot(f.p, mChariot, scene);
+  f.etat = 'range'; f.gestes.g = null; f.p.m.groupe.visible = true;
+}
 // l'œnologue et l'étiqueteur (créés dans peupler) : comme les clients, ils se tournent vers vous et font signe ; leur
 // affaire faite (l'échantillon donné, les cartons livrés), ils rentrent au labo ou à l'entrepôt (clients.js)
 L.portes.entrepot = L.entrepot.porte;
@@ -692,6 +737,7 @@ function marcher(dtm) {
   if (joueur.service) joueur.update(dtm, 0, 0, 0, false, col, temps);
   else joueur.update(dtm, wx, wz, force, ctrl.courir, col, temps, ctrl.fleches && !ctrl.courir ? MARCHE : undefined);
   horsDesVehicules(joueur.pos, joueur.r);
+  if (att.attelee) att.pousser(joueur.pos, joueur.r);
   horsDesVoitures();
   // un pas chaque fois qu'un pied se pose (la foulée, anim.js, fait deux pas par cycle)
   const pp = Math.floor(joueur.anim.ph * 2);
@@ -715,7 +761,7 @@ function bourg(dtm, ego) {
       son.jouer('pouet'); son.jouer('choc'); cam.secousse = Math.max(cam.secousse, 0.3);
       hud.bulle(p.cri, pick(REPLIQUES.ecrase), 1.4);
     }
-    if (p.ecrase <= 0) horsDesVehicules(p.p.pos, 0.34);
+    if (p.ecrase <= 0) { horsDesVehicules(p.p.pos, 0.34); if (att.attelee) att.pousser(p.p.pos, 0.34); }
     if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
   }
   clients.maj(dtm, temps, ego, jeu.auVolant);
@@ -800,9 +846,8 @@ function lendemain() {
   vEnjambeur.p.placer(L.enjambeur.x, L.enjambeur.z, L.enjambeur.h);
   mission2 = true;
 }
-// Après la journée de traitement (mission2.js : dodo), le réveil se fait le jeudi (Teddy, 24/11/2026) : le pulvérisateur
-// est dételé, le tracteur et le van à leur place, vides ; les cartons du Clos 2025 sur la palette du chai, le carton
-// ouvert à côté ; la mission 3 commence (mission3.js)
+// Après la journée de traitement (mission2.js : dodo), le réveil se fait le jeudi (Teddy, 24/11/2026) : les véhicules à
+// leur place, vides ; la remorque de palox du Clos 2025 au domaine ; la mission 3 commence (mission3.js)
 function surlendemain() {
   mission.aller('libre');
   if (traitement.actif) traitement.aller('libre');
@@ -814,6 +859,8 @@ function surlendemain() {
     v.p.charge = 0;
   }
   for (const p of mission.palette) p.groupe.visible = false;
+  // la remorque de palox au domaine, chargée, dételée ; le chariot à sa place dans la cour de l'imprimerie
+  att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.recharger();
   mission3 = true;
 }
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
@@ -894,13 +941,19 @@ function miseAJour(dt) {
     for (let i = 0; i < k; i++) conduire(dt, dtm, i === k - 1);
   }
   else marcher(dtm);
+  // la remorque attelée suit le tracteur (aussi pendant un geste : il recule tout seul pour atteler) ; le chariot de
+  // l'imprimerie décharge les palox (mission 3)
+  att.maj(dtm, !gestes.roule, voitures);
+  if (dech && !dech.fini) { dech.maj(dtm, temps); if (dech.fini) finDechargement(); }
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
   son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant);
   bourg(dtm, ego);
   phares();
   particules.fontaine(dtm, L.fontaine);
   enCours().update(dt);
-  if (monde.ligne) monde.ligne.maj(dtm, habillage.livre, camera.position.x, camera.position.z); // la ligne d'habillage (mission 3)
+  // la ligne d'habillage tourne dès que les premiers palox sont rentrés (mission 3) ; le chariot, dessiné de près
+  if (monde.ligne) monde.ligne.maj(dtm, habillage.decharge || (!!dech && dech.avancement > 0.15), camera.position.x, camera.position.z);
+  voirChariot(mChariot, camera.position.x, camera.position.z);
   // la barre d'état du téléphone : sans réseau en bas des Grands Champs (mission 2)
   { const res = !traitement.actif || traitement.reseau; if (res !== resAff) { resAff = res; $('tel-res').textContent = res ? '4G' : 'Pas de service'; } }
   tel.update(dt);
@@ -959,6 +1012,8 @@ function majTaches() {
   t.debut();
   if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0, joueur.pos.y);
   for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre], g = v.m.groupe; t.poser(g.position.x, g.position.z, lx, lz, 0, g.position.y, g.quaternion); }
+  { const g = mRem.groupe; t.poser(g.position.x, g.position.z, 1.2, 3.15, 0, g.position.y, g.quaternion); } // la remorque de palox
+  if (mChariot.groupe.visible) { const g = mChariot.groupe; t.poser(g.position.x, g.position.z, 0.62, 1.35, 0, 0, g.quaternion); }
   for (const p of passants) if (ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z)) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0, p.p.pos.y);
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const f of gens3.liste) if (gens3.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
@@ -1075,6 +1130,14 @@ function reprendrePartie(P) {
     surlendemain(); mission3 = false; horloge(0);
     habillage.reprendre(P.etat);
     gens3.reprendre();
+    // la remorque déjà livrée : dételée dans la cour de l'imprimerie, les palox rentrés (ou qu'on rentre tout de suite)
+    if (habillage.livre) {
+      const D = L.entrepot.depot;
+      att.poser(D.x, D.z, D.h);
+      dech = new Dechargement({ ch: mChariot, att, L: L.entrepot, conducteur: null, col, scene, vite: VITE_CHARIOT });
+      dech.finir(); finDechargement();
+      const f = gens3.liste[1], S = L.entrepot.stock[0]; f.p.placer(S.x + 1.6, S.z - 1.4, Math.PI / 2);
+    }
   } else if (P.mission === 'traitement') {
     lendemain(); mission2 = false; horloge(0);
     traitement.reprendre(P.etat);
@@ -1122,7 +1185,7 @@ mesures.script = Math.round(performance.now() - T0);
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis,
-  habillage, gens3, tel,
+  habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil

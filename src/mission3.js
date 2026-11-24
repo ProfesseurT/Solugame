@@ -108,7 +108,9 @@ export class Habillage {
   get prochain() {
     const L = this.j.lieux, R = this.R;
     if (this.livre) return null;
-    if (this.echantillon === 'aucun' || !this.attelee) return { lieu: R.ici, nom: 'Remorque du Clos' };
+    if (this.echantillon === 'aucun') return { lieu: R.ici, nom: 'Remorque du Clos' };
+    // l'atteler : la balise devant le timon (la conduite assistée s'y arrête, alignée)
+    if (!this.attelee) return { lieu: R.approche, nom: 'Remorque du Clos' };
     if (this.echantillon === 'pris') return { lieu: L.arrets.labo, nom: 'Labo d\'œnologie' };
     if (this.bat !== 'ok') return null;
     return { lieu: L.entrepot.depot, nom: 'Imprimerie Saint-Vincent' };
@@ -124,7 +126,8 @@ export class Habillage {
     const c = this.cible;
     if (!c) return null;
     const j = this.j, o = j.auVolant ? j.tr.pos : j.joueur.pos;
-    if (!this.itin || this.itin.c !== c || (c === this.R.ici && (this.itin.x !== c.x || this.itin.z !== c.z))) this.itin = { c, x: c.x, z: c.z, pts: j.reseau.itineraire(o, c) };
+    // (la remorque attelée bouge : la balise de l'échantillon la suit, l'itinéraire est refait quand elle a bougé)
+    if (!this.itin || this.itin.c !== c || Math.hypot(this.itin.x - c.x, this.itin.z - c.z) > 3) this.itin = { c, x: c.x, z: c.z, pts: j.reseau.itineraire(o, c) };
     return this.itin.pts;
   }
   get enTracteur() { return this.j.auVolant && this.j.veh.genre === 'tracteur'; }
@@ -215,7 +218,7 @@ export class Habillage {
     if (this.occupe || j.gestes.actif || j.tel.ouvert || j.pc.ouvert) return;
     const v = j.auVolant ? Math.abs(j.tr.v) : 0, lent = j.auVolant && v < 2.5, arrete = !j.auVolant || v < 0.6;
     // la remorque, pas encore attelée : en tracteur, devant le timon, on l'attelle ; avec un autre véhicule, on le dit
-    if (!this.attelee && !this.livre && j.auVolant && arrete && j.distance(R.ici) < 9) {
+    if (!this.attelee && !this.livre && j.auVolant && arrete && (j.distance(R.ici) < 14 || j.distance(R.approche) < 6)) {
       if (j.veh.genre !== 'tracteur') this.aider(HX.dialogues.pasTracteur, 'remorque');
       else if (R.peutAtteler()) { this.atteler(); return; }
       else this.aider(HX.dialogues.timon, 'remorque');

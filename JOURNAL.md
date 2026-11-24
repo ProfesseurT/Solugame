@@ -792,3 +792,27 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Le reste** : accueil (« Ou la mission 3 : l'habillage, avec Viticode »), app Missions (3 missions), sauvegarde (`instantane`, `reprendre` : fiche, BAT, cartons et leur véhicule, l'œnologue et l'étiqueteur rentrés), le parvis parle de l'habillage, la carte de fin de la mission 1 annonce la 3.
 
 **Vérifié** : banc `habillage` en van et en tracteur (dans `npm run verifie`) ; banc `sauvegarde` (une mission 3 avancée reprise) ; `traitement` et `parcours` ; en conduite assistée au doigt, du domaine au chai, au labo, à l'entrepôt : 5, 29 et 10 s, aucun choc (van et tracteur) ; `essai-allege` équivalent aux trois paliers (fait sur le décor) ; images des écrans du téléphone (fiche, QR code, test, langues, personnalisation, partage, BAT, scan) et des scènes (le carton ouvert, le labo, le déchargement, la ligne, la bouteille tendue).
+
+## 24/11/2026 · Retours de Teddy (24) : l'enjambeur, la remorque de palox
+
+**Demande** : « Pour la mission de la pulvérisation : tu vas créer un enjambeur, aussi détaillé que le tracteur. C'est avec ça qu'on pulvérise, avec une extension, pas avec le tracteur ; et surtout, une fois que l'enjambeur est emmanché dans une allée, il fait toute la parcelle, on ne gère que l'accélération. Ensuite, pour la mission de l'étiquette, les quantités seront beaucoup plus grosses, donc on oblige le tracteur qui vient attraper une remorque remplie de palox de bouteilles qu'on va emmener à l'imprimerie. On reçoit un SMS quand c'est terminé. Attention, gros taf de détail. »
+
+**Comment** : trois chantiers en parallèle. Une copie de Claude a fait l'enjambeur (enjambeur.js), une autre la remorque, l'attelage et le chariot élévateur (remorque.js), chacune dans son worktree ; leurs branches ont été fusionnées. Le fil principal a écrit les deux missions, le téléphone, les textes et les bancs, puis a tout branché (main.js).
+
+**L'enjambeur** (enjambeur.js, vehicules.js, gestes.js, anim.js, camera.js) :
+- Un portique haut qui enjambe un rang (voie 2,2 m), quatre roues sur leurs jambes, cabine vitrée en haut, échelle, capot, échappement en haut, phares, feux stop et de recul, gyrophare.
+- Son pulvérisateur : la cuve, la soufflerie, et l'extension, deux bras qui se déplient dans les parcelles du jour. Six descentes encadrent le rang enjambé et ses deux voisins : il en traite trois à chaque passage.
+- On monte par l'échelle (une vraie pose d'escalade), assis la tête sous le toit. La caméra recule et monte pour lui. Garé dans la cour. La potence de l'aire de remplissage et le portail du domaine ont été relevés pour lui.
+
+**La mission 2** :
+- Le tracteur ne pulvérise plus : arrivé en tracteur à l'aire, on entend qu'il faut l'enjambeur.
+- Les passages : un rang sur trois ; un passage sur deux, puis les autres en revenant (des demi-tours qui ont de la place). Demi-tours dans les tournières : quart de tour, la tournière tout droit, quart de tour, rayon 4,2 m (l'enjambeur braque à 3,6 m). Les premiers demi-tours en arc de 10 m de rayon sortaient de la parcelle : le guidage lâchait l'enjambeur.
+- Une fois engagé dans un rang (son axe sur un passage, dans son sens), il fait toute la parcelle tout seul. On ne gère que l'avance : doigt posé ou flèche du haut, il avance ; vers le bas, il freine ; rien, il s'arrête ; le volant ne fait rien. Le pilote, pour lui, vise plus près et ne fait jamais de demi-tour en trois temps (`serre`). La scène va trois fois plus vite, dans les rangs et dans les tournières.
+
+**La remorque et la mission 3** (remorque.js, mission3.js) :
+- Une remorque plateau à ridelles, timon, béquille, tandem, chargée de six palox de bouteilles tirées-bouchées, garée au domaine, timon vers la départementale. L'échantillon se prend à pied, dans un palox.
+- Seul le tracteur l'attelle (en van : « il faut le tracteur ») : arrêté devant le timon, il recule tout seul, on lève la béquille, on met la goupille. Attelée, elle suit le tracteur (sans se mettre en portefeuille), alourdit le tracteur, bute contre le décor, les véhicules et les voitures, et repousse les piétons ; à pied, on la contourne.
+- Le labo, Viticode et le BAT ne changent pas. À l'imprimerie, on dételle dans la cour ; Julien monte sur son chariot élévateur (un vrai modèle, mât, fourches) et rentre les six palox près de la ligne d'habillage, qui tourne. On est libre ; 45 s après le dernier palox, le SMS : « C'est terminé ! Les six palox du Clos 2025 sont habillés », la photo d'une bouteille habillée, le lien de sa fiche (comme le client la verra). Le lire finit la mission.
+- Plus de cartons ni de carton ouvert au chai, plus de bouteille tendue ni de scan.
+
+**Vérifié** : bancs `traitement` (l'enjambeur ; trois parcelles en 98 à 112 s ; engagé, la flèche de droite tenue 2 s : il reste à 0,30 m de l'axe du rang), `habillage` (en conduite assistée, remorque attelée, du domaine au labo en 40 s puis à l'imprimerie en 13 s : aucun choc, la remorque ne bute jamais ; dételée à sa place ; les six palox rentrés ; le SMS), `sauvegarde` (une mission 3 livrée reprise : la remorque dans la cour, les palox rentrés, le SMS arrive).
