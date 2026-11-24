@@ -506,6 +506,8 @@ export function tracteur() {
   corps.push(B(1.3, 0.08, 0.75, '#56585f', 0, 1.25, -1.85));
   corps.push(B(0.06, 0.3, 0.75, '#56585f', 0.62, 1.4, -1.85), B(0.06, 0.3, 0.75, '#56585f', -0.62, 1.4, -1.85));
   corps.push(B(0.34, 0.12, 0.02, '#2c2c2e', 0, 1.09, -2.23), B(0.32, 0.1, 0.02, '#ecebe3', 0, 1.09, -2.235));
+  // chape d'attelage, sous le plateau : la remorque s'y accroche (remorque.js, attelage : l'anneau de son timon)
+  corps.push(B(0.2, 0.05, 0.36, FONCE, 0, 0.62, -2.05), B(0.2, 0.05, 0.24, FONCE, 0, 0.48, -2.1), B(0.2, 0.19, 0.06, FONCE, 0, 0.55, -1.9), C(0.022, 0.022, 0.26, 6, '#9a9da3', 0, 0.6, -2.2));
 
   const c = new THREE.Mesh(fusion([...at.geos(), ...corps]), MAT); c.castShadow = true; c.receiveShadow = true; caisse.add(c);
 
@@ -539,7 +541,7 @@ export function tracteur() {
     emprise: [[-1.28, 1.28, -1.77, -0.1], [-0.5, 0.5, -2.25, 2.18], [-1.0, 1.0, 0.88, 1.82], [-0.68, 0.68, -2.25, -1.45]],
   };
   return {
-    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62),
+    groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62), attelage: new THREE.Vector3(0, 0.55, -2.2),
     dims, volantCentre: new THREE.Vector3(0, 1.9, -0.18), volantRayon: 0.2, volantInclinaison: -0.55,
     phares: eclairage({ av: [0.29, 1.36, 1.88], ar: null }, caisse, groupe),
     feux: feuxDomaine(caisse, [[0.03, 0.08, 0.075, 1.3, 1.2, -1.66]], null), gyro: gyrophare(caisse, 0.55, 3.21, -1.0),
