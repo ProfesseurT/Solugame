@@ -61,9 +61,12 @@ if (scenario === 'parcours') {
     const clic = s => { const e = q(s); if (!e) throw new Error('absent : ' + s + ' (appli ' + T.app + ', étape ' + m.etape + ')'); if (e.disabled) throw new Error('désactivé : ' + s); e.click(); };
     const saisir = n => { for (let i = 0; i < n; i++) clic('[data-a="qte:1"]'); clic('[data-a="signer"]'); };
     CL.jouer(); CL.step(260);
+    // le parvis du chai vit : le rinceur arrose la barrique, la porteuse range les caisses de la remorque
+    { const P = CL.parvis, k0 = P.k; CL.step(60 * 25); log.push(['le parvis vit : le jet sur la barrique, ' + (P.k - k0) + ' caisses rangées en 25 s', P.ri.surB > 0.3 && P.k > k0 && P.k - k0 <= 4 && P.chien.g.visible]); }
     // pas d'anachronisme : avant tout appel, ni commande dans le bureau, ni dans Vitisoft ; rien à facturer, rien à encaisser
-    const P = CL.jeu.pc, vs = vue => { P.onglet = 'vitisoft'; P.vue = vue; P.afficher(); return q('#pc-ecran').textContent; };
+    const P = CL.jeu.pc, vs = vue => { P.lancer('vitisoft'); P.vue = vue; P.afficher(); return q('#pc-ecran .vs').textContent; };
     log.push(['au départ, Vitisoft n\'a aucune commande, rien à facturer ni à encaisser', vs('commandes').includes('Aucune commande arrivée') && !vs('accueil').includes('Facturer') && !vs('accueil').includes('Saisir le règlement') && !q('#pc-ecran [data-a="regler"]')]);
+    P.ouvertes = []; P.fenetre = null;
     q('#poche').click(); clic('[data-a="ouvrir:commande"]');
     log.push(['au départ, le bureau n\'a pas encore de commande', q('#app').textContent.includes('Pas encore de commande')]);
     log.push(['au départ, palette du chai vide', m.palette.every(p => !p.groupe.visible)]);
@@ -132,20 +135,24 @@ if (scenario === 'parcours') {
     CL.jeu.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
     log.push(['chèque déposé sur le bureau, portable pas encore ouvert', m.retardataire.statut === 'depose' && !CL.jeu.pc.ouvert]);
     CL.agir(); CL.finirGeste(); CL.step(5);
-    log.push(['assis au portable, Vitisoft ouvert', CL.jeu.pc.ouvert && CL.jeu.pc.onglet === 'vitisoft' && CL.joueur.assis]);
-    clic('[data-a="onglet:bureau"]');
-    log.push(['le bureau aussi, sur le portable', !!q('#pc .pt-bureau .onglets') && !!q('#pc [data-a="ouvrir:tournee"]')]);
-    clic('[data-a="onglet:vitisoft"]');
-    clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]');
+    log.push(['assis au portable : le bureau de l\'ordinateur, l\'icône Vitisoft à ouvrir, l\'objectif au-dessus', CL.jeu.pc.ouvert && CL.jeu.pc.fenetre === null && !!q('.pc-ico.conseil[data-a="lancer:vitisoft"]') && q('#pc-obj').textContent.startsWith('Vitisoft') && CL.joueur.assis]);
+    clic('[data-a="lancer:bureau"]');
+    log.push(['le bureau aussi, dans le navigateur', !!q('#pc .pt-bureau .onglets') && !!q('#pc [data-a="ouvrir:tournee"]')]);
+    clic('[data-a="lancer:vitisoft"]');
+    log.push(['Vitisoft : le tableau de bord, une facture à l\'échéance dépassée', !!q('#pc .vs .vs-tu.rouge') && q('#pc .vs-tu.rouge b').textContent === '1']);
+    clic('[data-a="vue:factures"]'); clic('[data-a="ouvrirReg"]'); clic('[data-a="regler"]');
     log.push(['règlement saisi dans Vitisoft', m.retardataire.statut === 'saisi']);
     clic('[data-a="vue:commandes"]');
     for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }
     log.push(['3 factures transmises (' + CL.jeu.ventes + ' €)', m.toutTransmis && Math.abs(CL.jeu.ventes - 640.2) < 0.01]);
-    log.push(['Vitisoft ne se ferme pas tant que la DRM manque', !q('.vs-fin')]);
-    clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
-    log.push(['DRM du mois dernier calculée', m.drm === 'faite']);
-    clic('.vs-fin [data-a="fermer"]'); CL.step(560);
+    clic('[data-a="fermerF:vitisoft"]');
+    log.push(['Vitisoft fermé avant la DRM : la mission continue', m.etape === 'pc' && CL.jeu.pc.ouvert && CL.jeu.pc.fenetre !== 'vitisoft']);
+    clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
+    log.push(['DRM du mois dernier calculée, le pense-bête coché', m.drm === 'faite' && q('.pc-note').querySelectorAll('span.ok').length === 3]);
+    clic('[data-a="fermerF:vitisoft"]'); CL.step(560);
     log.push(['carte de fin', !q('#fin').hidden]);
+    // le soir : les ouvriers du parvis sont partis pendant la tournée, les moineaux dorment
+    { const P = CL.parvis, h = CL.jeu.minutes % 1440; log.push(['le soir (' + Math.floor(h / 60) + ' h), le parvis est calme : ouvriers partis, moineaux couchés', h < 1110 || (P.ouvriers.every(o => !o.present && !o.p.m.groupe.visible) && P.oiseaux.count === 0)]); }
     log.push(['les clients ont rangé leurs cartons et sont rentrés dans leur boutique', CL.clients.liste.length === 5 && CL.clients.liste.every(f => f.etat === 'dedans' && !f.p.m.groupe.visible) && m.deposes.every(p => !p.visible)]);
     log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     return log;
@@ -264,8 +271,8 @@ if (scenario === 'aides') {
     J.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.step(5);
     log.push(['chèque déposé en cours de journée', m.retardataire.statut === 'depose' && m.etape === 'journee']);
     CL.agir(); CL.finirGeste(); CL.step(5);
-    log.push(['assis au portable : Vitisoft s\'ouvre (le règlement est à saisir)', J.pc.ouvert && J.pc.onglet === 'vitisoft']);
-    clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]');
+    log.push(['assis au portable : l\'icône Vitisoft à ouvrir (le règlement est à saisir)', J.pc.ouvert && !!q('.pc-ico.conseil[data-a="lancer:vitisoft"]')]);
+    clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:factures"]'); clic('[data-a="ouvrirReg"]'); clic('[data-a="regler"]');
     clic('[data-a="quitter"]'); CL.finirGeste(); CL.step(5);
     log.push(['règlement saisi ; levé du portable, la journée continue', m.retardataire.statut === 'saisi' && !J.pc.ouvert && m.etape === 'journee' && objectif().startsWith('Le bureau')]);
     J.joueur.placer(BU.dedans.x + 0.3, BU.dedans.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
@@ -299,11 +306,11 @@ if (scenario === 'aides') {
     J.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
     log.push(['dans le bureau : « Asseyez-vous au portable »', J.dedans && objectif().startsWith('Asseyez-vous')]);
     J.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-    clic('[data-a="vue:commandes"]');
+    clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:commandes"]');
     for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }
     clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
     log.push(['tout est fait : « fermez Vitisoft »', m.toutFait && objectif() === 'Tout est fait : fermez Vitisoft']);
-    clic('.vs-fin [data-a="fermer"]'); CL.step(560);
+    clic('[data-a="fermerF:vitisoft"]'); CL.step(560);
     log.push(['carte de fin', !q('#fin').hidden]);
     log.push(['pendant les gestes, le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }

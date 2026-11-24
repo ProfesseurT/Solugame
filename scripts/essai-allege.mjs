@@ -120,10 +120,10 @@ async function relever(fichier, palier) {
       CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
       CL.jeu.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); CL.bench(1);
       CL.jeu.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-      clic('[data-a="vue:reglements"]'); clic('[data-a="regler"]'); clic('[data-a="vue:commandes"]');
+      clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:factures"]'); clic('[data-a="ouvrirReg"]'); clic('[data-a="regler"]'); clic('[data-a="vue:commandes"]');
       for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }
       clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
-      clic('.vs-fin [data-a="fermer"]'); CL.step(560); CL.bench(1);
+      clic('[data-a="fermerF:vitisoft"]'); CL.step(560); CL.bench(1);
       if (!m.toutFait || q('#fin').hidden) parcours = 'inachevé';
     } catch (e) { parcours = 'interrompu : ' + e.message; }
     for (const [x, z, h] of [[-99, -55, 0], [-30, 10, Math.PI / 2], [60, 10, Math.PI / 2], [95, -30, Math.PI], [-130, 60, 0]]) { CL.teleporter(x, z, h); CL.step(60); CL.bench(2); }

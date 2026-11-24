@@ -106,7 +106,7 @@ export class Anim {
     this.conduite = false; this.hp = 0; this.px = 0; this.pz = 0; this.braq = 0; this.lat = 0;
     this.meche = 0; this.mecheV = 0; this.telVu = false; this.vt = 0;
     this.wServ = 0; this.wVerre = 0;
-    this.wPorte = 0; this.accroupi = 0; this.pile = new THREE.Vector3(0, 0.95, 0.36); this.pileL = 0.2;
+    this.wPorte = 0; this.wOutil = 0; this.accroupi = 0; this.pile = new THREE.Vector3(0, 0.95, 0.36); this.pileL = 0.2;
   }
 
   // dt = 0 : tout se place d'un coup (placement, changement de personnage)
@@ -140,8 +140,8 @@ export class Anim {
     if (pile) { this.pile.copy(pile.position); this.pileL = (pile.userData.demi || 0.18) * pile.scale.x; } // une pile de cartons, ou le chèque (gestes.js)
     this.wPorte += ((pile ? 1 : 0) - this.wPorte) * kl(dt, 8);
     this.accroupi += ((pile ? borne((0.92 - pile.position.y) / 0.55, 0, 1) : 0) - this.accroupi) * kl(dt, 9);
-    if (pile) this.envie = 0;
-    this.wTel += (((p.telephone || this.envie > 0) && !conduite && !pile ? 1 : 0) - this.wTel) * kl(dt, 5);
+    if (pile || p.outil) this.envie = 0;
+    this.wTel += (((p.telephone || this.envie > 0) && !conduite && !pile && !p.outil ? 1 : 0) - this.wTel) * kl(dt, 5);
     // signe de la main
     if (this.salut > 0) this.salut -= dt;
     this.tSalut = Math.max(0, this.tSalut - dt);
@@ -173,6 +173,15 @@ export class Anim {
       const P = this.pile, l = this.pileL + 0.03;
       this.brasIK(0, P.x + l, P.y + 0.02, P.z - 0.03, 0.8, -0.5, -0.5, this.wPorte);
       this.brasIK(3, P.x - l, P.y + 0.02, P.z - 0.03, -0.8, -0.5, -0.5, this.wPorte);
+    }
+
+    /* ------------------------------------------------ un outil tenu des deux mains (parvis.js : la lance du nettoyeur) :
+       p.outil = { d: [x, y, z], g: [x, y, z] }, où vont la main droite et la main gauche, dans le repère du personnage */
+    this.wOutil += ((p.outil ? 1 : 0) - this.wOutil) * kl(dt, 6);
+    if (this.wOutil > 0.01 && p.outil) {
+      const { d, g } = p.outil;
+      this.brasIK(3, d[0], d[1], d[2], -0.8, -0.6, -0.3, this.wOutil);
+      this.brasIK(0, g[0], g[1], g[2], 0.8, -0.6, -0.3, this.wOutil);
     }
 
     /* ------------------------------------------------ téléphone en main (main droite, l'autre vient le tenir) */

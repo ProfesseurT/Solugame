@@ -26,6 +26,7 @@ import { Bureau } from './bureau.js';
 import { Chai } from './chai.js';
 import { Verres } from './verres.js';
 import { Clients } from './clients.js';
+import { Parvis } from './parvis.js';
 import { Reseau, longueur } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -104,6 +105,7 @@ const marque = new THREE.Group();
 /* ------------------------------------------------------------------ particules et ombres de contact (particules.js) */
 const particules = new Particules(scene, camera, rnd), emettre = particules.emettre;
 const taches = new Taches(scene);
+const parvis = new Parvis({ scene, camera, emettre }); // le parvis du chai : ceux qui y travaillent, le chien, les moineaux
 const traces = new Traces(scene);
 const effets = new EffetsVehicule(particules, traces, col, rnd); // fumée, traces, feuilles, gravillons du véhicule conduit
 
@@ -202,6 +204,7 @@ function peupler() {
   }
   // les conducteurs des voitures de la départementale
   for (const vo of voitures) asseoirConducteur(vo);
+  parvis.peupler(hud); // le rinceur et la porteuse du parvis du chai (tenues fixées : rien ne change pour les autres)
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
@@ -646,6 +649,7 @@ function marcher(dtm) {
 // La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients (ils se tournent vers vous et font
 // signe ; leur affaire faite, ils rangent leurs cartons et rentrent : clients.js), les figurants assis, les verres qu'on
 // boit, les voitures de la départementale
+const PARVIS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
   DANGER.wtf = jeu.wtf;
@@ -663,6 +667,8 @@ function bourg(dtm, ego) {
     if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
   }
   clients.maj(dtm, temps, ego, jeu.auVolant);
+  PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
+  parvis.maj(dtm, PARVIS_C);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
@@ -736,7 +742,7 @@ function phares() {
 let mission2 = false, resAff = true;
 function printemps() {
   mission.aller('libre');
-  monde.saison(true);
+  monde.saison(true); parvis.saison(true);
   vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
   const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
   pulve.groupe.visible = true;
@@ -887,6 +893,7 @@ function majTaches() {
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
+  parvis.taches(t, ombrePerso);
   t.fin();
 }
 // Tout ce qui précède le dessin d'une image : décor animé, ombre, herbe proche
@@ -985,7 +992,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },

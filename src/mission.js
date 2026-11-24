@@ -147,7 +147,7 @@ export class Mission {
     if (this.attenteCheque) return OBJECTIFS.cheque(r.du);
     if (p.statut === 'visite' || p.statut === 'deguste') return OBJECTIFS.deguster(p.du);
     // pendant la saisie d'une commande (téléphone, ou le bureau sur le portable) : la quantité dite au téléphone
-    const tel = j.tel, vu = tel.ouvert || (j.pc.ouvert && j.pc.onglet === 'bureau'), c = vu && tel.app === 'commande' && this.client(tel.client);
+    const tel = j.tel, vu = tel.ouvert || (j.pc.ouvert && j.pc.fenetre === 'bureau'), c = vu && tel.app === 'commande' && this.client(tel.client);
     if (c && c.statut === 'commande') return OBJECTIFS.saisie(c);
     if (e === 'livraisons' && this.tour.length) {
       const a = this.arretDe(this.tour[0]), g = this.genre(a);

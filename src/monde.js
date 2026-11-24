@@ -1172,13 +1172,93 @@ void main() {
   {
     enseigne('CHAI', facade(chai, 0, 0.12), 4.65, 2.2, 0.7, '#5b3a2a', '#f1e2c4');
   }
-  // fûts et cartons devant le chai
-  for (let i = 0; i < 5; i++) {
-    bati.push(C(0.46, 0.46, 0.95, 10, '#7a4a2a', -77.1, 0.46, -41.5 - i * 1.0, 'x'));
-    bati.push(C(0.475, 0.475, 0.06, 10, '#3a3a3e', -76.8, 0.46, -41.5 - i * 1.0, 'x'), C(0.475, 0.475, 0.06, 10, '#3a3a3e', -77.4, 0.46, -41.5 - i * 1.0, 'x'));
+  /* -- Le parvis du chai (Teddy, 24/11/2026 : « des artefacts viticoles, réalistes, et que ça vive »). Au nord de la grande
+     porte, le chantier des barriques, le poste de rinçage (une barrique couchée sur son berceau d'inox, le nettoyeur haute
+     pression et son tuyau, une flaque, le caniveau à grille), des barriques rincées debout qui s'égouttent ; dans le coin
+     contre le muret, une remorque plateau chargée de caisses de vendange que l'on range sur des palettes, deux palox ;
+     près du bureau, un vieux pressoir à cage et un demi-fût planté. Ceux qui y travaillent, les caisses (en instances), le
+     chien, les moineaux : parvis.js. Rien sur les passages des véhicules (la cour, la porte, le bureau), ni sur la marche
+     arrière qui ressort du chai (chai.js, cheminSortie). */
+  const FUT = '#7a4a2a', CERCLE = '#3a3a3e', INOX = '#a3aab2';
+  // une barrique de 225 L : deux troncs de cône (le bouge au milieu, 70 cm ; les fonds, 58 cm), quatre cercles, la bonde
+  const barrique = (x, y, z, axe = 'x', bonde = true) => {
+    const haut = axe === 'x' ? -1 : 1, d = axe === 'x' ? [1, 0, 0] : axe === 'z' ? [0, 0, 1] : [0, 1, 0];
+    for (const sg of [-1, 1]) {
+      const o = sg * 0.2375, tete = sg === haut;
+      bati.push(C(tete ? 0.29 : 0.35, tete ? 0.35 : 0.29, 0.475, 12, FUT, x + d[0] * o, y + d[1] * o, z + d[2] * o, axe));
+      for (const [k, r] of [[0.4, 0.312], [0.13, 0.346]]) bati.push(C(r, r, 0.05, 12, CERCLE, x + d[0] * sg * k, y + d[1] * sg * k, z + d[2] * sg * k, axe));
+      bati.push(C(0.24, 0.24, 0.012, 12, '#5a3f2b', x + d[0] * sg * 0.478, y + d[1] * sg * 0.478, z + d[2] * sg * 0.478, axe));
+    }
+    if (bonde && axe !== 'y') bati.push(C(0.035, 0.035, 0.06, 6, '#5a3f2b', x, y + 0.35, z));
+  };
+  // le chantier contre le chai : deux madriers, six barriques couchées, cinq par-dessus, dans les creux
+  bati.push(B(0.12, 0.12, 4.6, '#5a3f2b', -77.25, 0.06, -44.45), B(0.12, 0.12, 4.6, '#5a3f2b', -76.75, 0.06, -44.45));
+  for (let i = 0; i < 6; i++) barrique(-77, 0.47, -46.3 + i * 0.74);
+  for (let i = 0; i < 5; i++) barrique(-77, 1.064, -45.93 + i * 0.74, 'x', false);
+  col.boite(-77.6, -46.75, -76.3, -42.2);
+  contact.jupe(-77.5, -46.7, -76.5, -42.2, 0.8, 0.4);
+  // le poste de rinçage : la barrique couchée, bonde en bas, sur deux berceaux d'inox ; la flaque, le caniveau à grille
+  for (const x of [-79.88, -79.32]) bati.push(B(0.06, 0.3, 0.62, INOX, x, 0.15, -44.6), B(0.06, 0.04, 0.7, INOX, x, 0.31, -44.6));
+  bati.push(B(0.62, 0.04, 0.06, INOX, -79.6, 0.04, -44.3), B(0.62, 0.04, 0.06, INOX, -79.6, 0.04, -44.9));
+  barrique(-79.6, 0.64, -44.6, 'x', false);
+  for (const [x, z, r] of [[-79.6, -44.5, 0.95], [-79.05, -43.8, 0.6], [-80.2, -45.3, 0.5]]) bati.push(C(r, r, 0.004, 14, '#ad9f86', x, 0.031, z));
+  bati.push(B(3.0, 0.008, 0.26, '#2b2b30', -79.6, 0.032, -43.35));
+  for (let i = 0; i < 15; i++) bati.push(B(0.03, 0.01, 0.24, '#78736b', -81.0 + i * 0.2, 0.036, -43.35));
+  col.boite(-80.1, -45.0, -79.1, -44.2);
+  // le nettoyeur haute pression : caisson jaune sur deux roues, poignée, enrouleur ; son tuyau jusqu'au rinceur
+  bati.push(B(0.5, 0.62, 0.62, '#e0b12a', -81.6, 0.5, -47.6), B(0.52, 0.06, 0.64, '#2b2b30', -81.6, 0.82, -47.6), B(0.04, 0.5, 0.04, '#2b2b30', -81.85, 1.05, -47.85), B(0.04, 0.5, 0.04, '#2b2b30', -81.85, 1.05, -47.35));
+  bati.push(B(0.04, 0.04, 0.54, '#2b2b30', -81.85, 1.3, -47.6), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.95, 'z'), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.25, 'z'));
+  bati.push(C(0.2, 0.2, 0.3, 10, '#2f4a32', -81.55, 1.0, -47.6, 'z'));
+  {
+    const pts = [[-81.3, -47.35], [-81.0, -46.95], [-80.5, -46.95], [-80.05, -46.75], [-79.85, -46.55]];
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1], [bx, bz] = pts[i], l = Math.hypot(bx - ax, bz - az);
+      bati.push(C(0.018, 0.018, l, 5, '#1e1e22', (ax + bx) / 2, 0.035, (az + bz) / 2, 'z', Math.atan2(bx - ax, bz - az)));
+    }
   }
-  col.boite(-77.7, -46.2, -76, -40.8);
-  contact.jupe(-77.6, -46.0, -76.6, -41.0, 0.7, 0.35);
+  col.boiteC(-81.6, -47.6, 0.7, 0.75);
+  // l'enrouleur d'eau au mur, à côté de la porte
+  bati.push(C(0.26, 0.26, 0.1, 12, '#c0392b', -76.12, 1.2, -47.9, 'x'), C(0.22, 0.22, 0.14, 12, '#2f6b3a', -76.18, 1.2, -47.9, 'x'), B(0.05, 1.1, 0.06, '#5d6b78', -76.06, 0.55, -47.9));
+  // les barriques rincées, debout, bonde en bas, qui s'égouttent sur des cales
+  for (const [x, z] of [[-80.3, -41.25], [-79.5, -41.25], [-79.9, -40.55]]) { bati.push(B(0.62, 0.08, 0.14, '#5a3f2b', x, 0.04, z)); barrique(x, 0.555, z, 'y'); }
+  bati.push(C(0.7, 0.7, 0.004, 14, '#ad9f86', -79.9, 0.031, -40.95));
+  col.boite(-80.7, -41.65, -79.1, -40.15);
+  contact.jupe(-80.65, -41.6, -79.15, -40.2, 0.7, 0.3);
+  // la remorque plateau contre le muret : plateau, ridelles basses, châssis, deux essieux, flèche et sa roue jockey
+  {
+    const x0 = -85.8, x1 = -81.8, z0 = -36.5, z1 = -34.9, xm = (x0 + x1) / 2, zm = (z0 + z1) / 2;
+    bati.push(B(x1 - x0, 0.08, z1 - z0, '#6b4a30', xm, 0.58, zm), B(x1 - x0, 0.14, 0.12, '#8e2a2a', xm, 0.47, z0 + 0.25), B(x1 - x0, 0.14, 0.12, '#8e2a2a', xm, 0.47, z1 - 0.25));
+    for (const z of [z0 + 0.03, z1 - 0.03]) bati.push(B(x1 - x0, 0.16, 0.05, '#8e2a2a', xm, 0.7, z));
+    for (const x of [x0 + 0.03, x1 - 0.03]) bati.push(B(0.05, 0.16, z1 - z0, '#8e2a2a', x, 0.7, zm));
+    for (const dx of [-0.36, 0.36]) for (const z of [z0 + 0.16, z1 - 0.16]) bati.push(C(0.26, 0.26, 0.2, 12, '#1e1e22', xm + dx, 0.26, z, 'z'), C(0.14, 0.14, 0.21, 10, '#9aa1a8', xm + dx, 0.26, z, 'z'));
+    for (const z of [zm - 0.45, zm + 0.45]) bati.push(B(1.38, 0.1, 0.1, '#8e2a2a', x0 - 0.65, 0.4, (z + zm) / 2, Math.atan2(zm - z, 1.3)));
+    bati.push(C(0.05, 0.05, 0.45, 6, '#2b2b30', x0 - 1.3, 0.22, zm), C(0.09, 0.09, 0.06, 8, '#1e1e22', x0 - 1.3, 0.09, zm, 'z'));
+    col.boite(x0, z0, x1, z1);
+    contact.jupe(x0, z0, x1, z1, 0.9, 0.3);
+  }
+  // les palettes où l'on range les caisses (les caisses : parvis.js), deux palox gris empilés au coin du chai
+  for (const x of [-80.4, -79.1, -77.8]) bati.push(B(1.2, 0.14, 0.8, '#9a7b55', x, 0.07, -35.55));
+  col.boite(-81.0, -35.95, -77.2, -35.15);
+  for (const y of [0.38, 1.14]) bati.push(B(1.2, 0.72, 1.0, '#4f5a63', -77.0, y, -37.6), B(1.24, 0.06, 1.04, '#5c6873', -77.0, y + 0.36, -37.6));
+  for (const dx of [-0.45, 0.45]) bati.push(B(0.14, 0.06, 1.0, '#4f5a63', -77.0 + dx, 0.03, -37.6));
+  col.boite(-77.6, -38.1, -76.4, -37.1);
+  contact.jupe(-77.6, -38.1, -76.4, -37.1, 0.8, 0.35);
+  // le vieux pressoir à cage, près du bureau : la maie de pierre et son bec, la cage de douelles cerclée de fer, le mouton,
+  // la vis et sa barre
+  {
+    const x = -79.4, z = -63.2;
+    bati.push(B(1.7, 0.45, 1.7, '#cfc3a8', x, 0.225, z), B(1.5, 0.04, 1.5, '#a99a82', x, 0.44, z), B(0.3, 0.12, 0.34, '#cfc3a8', x - 0.98, 0.33, z));
+    bati.push(C(0.58, 0.58, 0.85, 16, '#6b4a30', x, 0.88, z));
+    for (const y of [0.6, 0.9, 1.2]) bati.push(C(0.6, 0.6, 0.05, 16, CERCLE, x, y, z));
+    bati.push(B(1.2, 0.18, 0.28, '#5b3a2a', x, 1.42, z), B(0.28, 0.18, 1.2, '#5b3a2a', x, 1.6, z));
+    bati.push(C(0.06, 0.06, 1.3, 8, '#2b2b30', x, 2.2, z), C(0.13, 0.13, 0.2, 8, '#2b2b30', x, 1.85, z), B(1.7, 0.07, 0.07, '#5b3a2a', x, 1.88, z, 0.6));
+    col.boiteC(x, z, 1.7, 1.7);
+    contact.jupe(x - 0.85, z - 0.85, x + 0.85, z + 0.85, 0.5, 0.3);
+  }
+  // un demi-fût planté d'un laurier, à côté de la porte du bureau
+  bati.push(C(0.4, 0.36, 0.46, 12, FUT, -77.0, 0.23, -58.75), C(0.405, 0.405, 0.04, 12, CERCLE, -77.0, 0.36, -58.75), C(0.37, 0.37, 0.02, 12, '#6f5238', -77.0, 0.45, -58.75));
+  bati.push(S(0.42, '#4d6b3c', -77.0, 0.92, -58.75, 1, 1.15, 1, 1), S(0.3, '#557544', -76.9, 1.3, -58.65, 1, 1, 1, 1));
+  col.boiteC(-77.0, -58.75, 0.8, 0.8);
   bati.push(B(1.25, 0.14, 1.05, '#9a7b55', -78.4, 0.07, -57.5));
   for (let i = 0; i < 12; i++) bati.push(B(0.4, 0.28, 0.32, '#b98a55', -78.8 + (i % 3) * 0.41, 0.28 + Math.floor(i / 6) * 0.29, -57.75 + (Math.floor(i / 3) % 2) * 0.34));
   col.boiteC(-78.4, -57.5, 1.3, 1.1);

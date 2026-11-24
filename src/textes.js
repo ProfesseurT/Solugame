@@ -195,21 +195,41 @@ export const BUREAU = {
 };
 
 // Vitisoft, sur le portable du bureau du chai (Vitisoft n'a pas d'appli téléphone : arbitrage de Teddy, 22/11/2026).
+// C'est un logiciel installé, une icône sur le bureau de l'ordinateur, pas un onglet du navigateur (Teddy, 24/11/2026).
+// Son interface d'après les captures du site (dépôt vitisoft.fr, src/assets/images/captures : dashboard-hero,
+// vitisoft-tableau-de-bord-2026, vitisoft-caisse-reglement) : barre « VITISOFT » et nom du domaine, menu à gauche par
+// rubriques (libellés recopiés), tableau de bord en tuiles, fenêtre Règlement aux modes de paiement en tuiles.
 export const VITISOFT = {
+  domaine: 'Domaine du Clos Libre',
+  // le soir de la tournée (choisi avant le 10 : la DRM de novembre se valide dans CIEL avant le 10 décembre)
+  date: { jour: 'mardi', n: '08', mois: 'décembre', courte: '08/12/2026' },
+  mois: 'Novembre 2026',
   menu: [
-    { id: 'accueil', t: 'À faire' },
-    { id: 'reglements', t: 'Règlements' },
-    { id: 'commandes', t: 'Commandes' },
-    { id: 'factures', t: 'Factures', d: 'Vitisoft fait vos factures au format Factur-X. Pennylane, plateforme agréée, les transmet.' },
-    { id: 'drm', t: 'DRM', d: 'Vitisoft calcule votre DRM. Vous la validez dans CIEL, chaque mois avant le 10.' },
-    { id: 'dae', t: 'DAE et DAES', d: 'Vitisoft génère vos DAE et DAES sur GAMMA 2, depuis vos factures. Hors UE, c\'est un DAE.' },
-    { id: 'journal', t: 'Journal des ventes', d: 'Votre journal des ventes, TVA comprise, part dans le logiciel de votre comptable.' },
+    ['Contacts', [['clients', 'Clients / contacts'], ['commerciaux', 'Commerciaux'], ['courtiers', 'Courtiers'], ['transporteurs', 'Transporteurs']]],
+    ['Factures', [['factures', 'Liste des factures / Règlements'], ['faire', 'Faire une facture'], ['remises', 'Règlements / Remises banque'], ['avoirs', 'Avoirs']]],
+    ['Commandes / Pro forma', [['commandes', 'Liste des commandes / BL'], ['commande', 'Faire une commande / BL'], ['proforma', 'Pro forma']]],
+    ['Produits / Stocks', [['produits', 'Produits'], ['reservations', 'Réservations'], ['achats', 'Achats'], ['depots', 'Dépôts']]],
+    ['Déclarations douanes', [['drm', 'DRM / DMS'], ['capsules', 'Capsules']]],
+    ['Analyse', [['statistiques', 'Statistiques'], ['commissions', 'Commissions'], ['comptabilite', 'Comptabilité']]],
   ],
+  // ce qu'on peut dire des écrans qui ne sont pas dans la démo (fiche de faits du 21/11/2026)
+  fiches: {
+    faire: 'Vitisoft fait vos factures au format Factur-X. Pennylane, plateforme agréée, les transmet.',
+    comptabilite: 'Votre journal des ventes, TVA comprise, part dans le logiciel de votre comptable.',
+  },
+  // tableau de bord du domaine fictif : factures de l'exercice avant ce soir, panier moyen ; chiffre d'affaires par mois
+  // (en euros), exercice en cours (décembre commencé) et exercice précédent
+  facturesAvant: 126, panier: '312,40 €',
+  ca: [[9800, 7400, 8900, 10200, 9100, 7600, 8300, 6900, 9400, 11800, 14200, 3100], [9100, 7900, 9600, 9800, 8700, 8100, 7700, 7200, 10100, 12400, 13600, 17900]],
+  // factures déjà réglées (données fictives) : numéro, date, client, TTC
+  anciennes: [['F-2026-0126', '05/12/2026', 'Vente au caveau', 64.8], ['F-2026-0125', '03/12/2026', 'Vente au caveau', 129.6],
+    ['F-2026-0112', '31/10/2026', 'Restaurant La Treille', 213.6]],
+  retardDate: '13/10/2026', retardEcheance: '12/11/2026', echeance: '07/01/2027',
+  parCheque: 'L\'Épicerie du Bourg a réglé par chèque.',
   arrivees: 'Commandes signées, arrivées du bureau sans ressaisie',
   factureCreee: 'Facture créée au format Factur-X : un PDF lisible, avec ses données que les logiciels savent lire.',
   transmise: 'Transmise par Pennylane, plateforme agréée.',
   journal: 'Votre journal des ventes, TVA comprise, part dans le logiciel de votre comptable.',
-  reglements: 'Règlements à saisir',
   reglementSaisi: 'Règlement saisi : la facture est soldée. Vos encaissements partent avec vos factures dans le logiciel de votre comptable.',
   drmTitre: 'DRM du mois dernier',
   drm: 'Vitisoft calcule votre DRM. Vous la validez dans CIEL, chaque mois avant le 10.',
@@ -220,7 +240,6 @@ export const VITISOFT = {
   tacheReglement: 'Saisir le règlement de l\'Épicerie du Bourg',
   tacheFactures: n => `Facturer ${n > 1 ? `les ${n} commandes livrées` : 'la commande livrée'}`,
   tacheDrm: 'Calculer la DRM du mois dernier',
-  rienAFaire: 'Rien d\'autre à faire pour l\'instant.',
   // une commande arrive dans Vitisoft quand le client l'a signée en ligne, pas avant
   aucuneCommande: 'Aucune commande arrivée pour l\'instant. Elles arrivent ici une fois signées en ligne par le client, sans ressaisie.',
   chequeAttendu: 'Le règlement n\'est pas encore arrivé.',
@@ -368,5 +387,18 @@ export const TRAITEMENT = {
       'En cas de contrôle : PDF, format officiel et fiche Stat\'Phyto',
     ],
     bouton: 'Continuer la balade',
+  },
+};
+
+// Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. En hiver, le soir
+// de la tournée ; au printemps, le matin du traitement.
+export const PARVIS = {
+  rinceur: {
+    hiver: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
+    printemps: ['Bon courage pour le traitement !', 'Je rince les barriques ce matin, elles seront prêtes pour le soutirage.'],
+  },
+  porteuse: {
+    hiver: ['Je range les caisses de vendange pour l\'hiver.', 'Bonne tournée ! Les clients vont être contents.', 'Attention, ça glisse près du nettoyeur.'],
+    printemps: ['Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
   },
 };

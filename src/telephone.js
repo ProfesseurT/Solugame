@@ -6,7 +6,7 @@ import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSI
 import { son } from './audio.js';
 import { $, esc, eur } from './outils.js';
 
-const ICONES = {
+export const ICONES = {
   bureau: '<svg viewBox="0 0 24 24"><path d="M9 7V5.5h6V7" fill="none" stroke="#fff" stroke-width="2"/><rect x="3" y="7" width="18" height="12" rx="2.5" fill="#fff"/><rect x="3" y="11.5" width="18" height="1.6" fill="#8e2a3b" opacity=".35"/></svg>',
   viticode: '<svg viewBox="0 0 24 24"><g fill="#fff"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></g><g fill="#ff3d8b"><path d="M5 5h3v3H5zM16 5h3v3h-3zM5 16h3v3H5z"/></g></svg>',
   phyto: '<svg viewBox="0 0 24 24"><path d="M5 19C5 10 11 4 20 4c0 9-6 15-15 15z" fill="#fff"/><path d="M5 19L15 9" stroke="#2fc6e0" stroke-width="1.8"/></svg>',

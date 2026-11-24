@@ -24,6 +24,7 @@ export class Pieton {
     this.service = null;     // en train de servir un verre : { t, duree, cible } (main.js)
     this.transition = null;  // monter dans un véhicule, en descendre : 0 debout, 1 au volant (gestes.js) ; null sinon
     this.porte = null;       // la pile de cartons qu'on porte (un groupe enfant du personnage, gestes.js), ou null
+    this.outil = null;       // un outil tenu des deux mains : { d, g } où vont les mains (parvis.js, anim.js), ou null
     this.clavier = false;    // assis au portable du bureau du chai : les mains sur le clavier
     this.verre = 0;          // un verre à la main : secondes qui restent ; tVerre : depuis quand on l'a
     this.tVerre = 0; this.aServir = false; this.servi = -1e9;

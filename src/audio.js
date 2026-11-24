@@ -387,6 +387,13 @@ export const son = {
       if (actif && (aPied || Math.random() < 0.35)) { if (nuit) grillon(0.012 * route); else oiseau(0.022 * route * (aPied ? 1 : 0.7)); }
     }
   },
+  // le nettoyeur haute pression du parvis du chai (parvis.js) : le jet, un souffle aigu, et le moteur ; k de 0 à 1 selon
+  // la distance. Rejoué toutes les demi-secondes tant qu'il tourne.
+  jet(k) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime;
+    bruit(t, 0.6, 3600, 0.05 * k, 'highpass'); note(96, t, 0.6, 'sawtooth', 0.012 * k, sfx, 300);
+  },
   jouer(nom) {
     if (!ctx || !actif) return;
     const t = ctx.currentTime;
