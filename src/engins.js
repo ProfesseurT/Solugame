@@ -14,7 +14,7 @@ const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : r
 // Atelier : triangles rangés par couleur et par matière, livrés en géométries (position, normale de la facette,
 // couleur et type par sommet) prêtes pour fusion(). Chaque triangle est tourné vers `ext` (direction indicative
 // de l'extérieur) : l'ordre des sommets donné n'a pas d'importance.
-class Atelier {
+export class Atelier {
   constructor() { this.lots = new Map(); this.detour = null; }
   // detour : { test(x, y, z), at } : les facettes dont le centre passe le test vont dans un autre atelier (la portière
   // d'une voiture qui s'ouvre)
@@ -255,6 +255,27 @@ function eclairage(P, caisse, sol = caisse) {
   return { groupe, flaque: fl };
 }
 
+/* ---------------------------------------------------------------- feux des véhicules du domaine
+   Feux stop (au freinage) et feux de recul (en marche arrière) : des pavés sans éclairage posés sur les feux, cachés tant
+   qu'ils ne servent pas (aucun appel de dessin) ; vehicules.js les allume. stop, recul : [lx, ly, lz, x, y, z] par paire
+   (x et -x). Le gyrophare du tracteur : une lentille orange qui tourne quand il roule. */
+const MAT_RECUL = new THREE.MeshBasicMaterial({ color: '#fff4dc' });
+function feuxDomaine(caisse, stop, recul) {
+  const f = {};
+  for (const [k, l, mat] of [['stop', stop, () => MAT_STOP], ['recul', recul, () => MAT_RECUL]]) {
+    if (!l) continue;
+    const g = [];
+    for (const [lx, ly, lz, x, y, z] of l) for (const s of [1, -1]) g.push(B(lx, ly, lz, '#fff', s * x, y, z));
+    f[k] = new THREE.Mesh(fusion(g), mat()); f[k].visible = false; caisse.add(f[k]);
+  }
+  return f;
+}
+function gyrophare(caisse, x, y, z) {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.visible = false; caisse.add(g);
+  g.add(new THREE.Mesh(fusion([B(0.05, 0.085, 0.13, '#fff', 0.035, 0, 0), B(0.05, 0.085, 0.13, '#fff', -0.035, 0, 0)]), MAT_CLIGNO));
+  return g;
+}
+
 /* ---------------------------------------------------------------- carton de 6 bouteilles
    Un seul modèle pour tous : sur la palette du chai, dans les bras, dans le tracteur ou le van, devant les clients.
    Centré sur l'origine ; on les empile tous les PAS_CARTON mètres. */
@@ -279,7 +300,7 @@ function colonnes(caisse, base) {
   const maj = () => {
     let n = 0;
     for (const c of cartons) if (c.vu) { const p = c.position; im.setMatrixAt(n++, M_CARTON.makeTranslation(p.x, p.y, p.z)); }
-    im.count = n; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere();
+    im.count = n; im.visible = n > 0; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); // vide : pas d'appel de dessin
   };
   for (let i = 0; i < 18; i++) {
     const [x, y, z] = base(Math.floor(i / 3));
@@ -472,7 +493,7 @@ export function tracteur() {
     B(0.36, 0.025, 0.04, '#2a2a2e'), B(0.04, 0.025, 0.2, '#2a2a2e', 0, 0, -0.09),
     C(0.045, 0.045, 0.05, 8, OR, 0, 0.01, 0),
   ]), MAT);
-  volant.castShadow = true; support.add(volant);
+  support.add(volant); // sans ombre portée : sous le toit, elle ne se voit pas
 
   // roues : une géométrie par côté (jante vers l'extérieur), partagée par tous les tracteurs
   const { rouesAr, rouesAv, pivots, essieu } = roues(groupe,
@@ -497,6 +518,7 @@ export function tracteur() {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, chargeur, ridelle, siege: new THREE.Vector3(0, 0.62, -0.62),
     dims, volantCentre: new THREE.Vector3(0, 1.9, -0.18), volantRayon: 0.2, volantInclinaison: -0.55,
     phares: eclairage({ av: [0.29, 1.36, 1.88], ar: null }, caisse, groupe),
+    feux: feuxDomaine(caisse, [[0.03, 0.08, 0.075, 1.3, 1.2, -1.66]], null), gyro: gyrophare(caisse, 0.55, 3.21, -1.0),
   };
 }
 
@@ -720,7 +742,7 @@ export function van() {
       teinter(C(0.026, 0.026, 0.006, 8, '#000', 0, 0.034, 0), BORDEAUX, PEINT),
     ]);
   }
-  const volant = new THREE.Mesh(geoVolantVan, MAT); volant.castShadow = true; support.add(volant);
+  const volant = new THREE.Mesh(geoVolantVan, MAT); support.add(volant); // sans ombre portée : dans la cabine
 
   // roues : une géométrie par côté (jante vers l'extérieur), partagée par l'avant et l'arrière (et par tous les vans)
   const rG = roue(R, 0.2, 12, 1, true, '#b9bec4'), rD = roue(R, 0.2, 12, -1, true, '#b9bec4');
@@ -739,6 +761,7 @@ export function van() {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte, coulissante, chargeur,
     siege: new THREE.Vector3(0.38, -0.1, -0.05), dims, volantCentre, volantRayon: 0.19, volantInclinaison,
     phares: eclairage({ av: [0.62, 0.77, 2.09], ar: [0.72, 0.95, -2.18] }, caisse, groupe),
+    feux: feuxDomaine(caisse, [[0.19, 0.31, 0.01, 0.73, 1.27, -2.05]], [[0.19, 0.13, 0.01, 0.73, 0.94, -2.05]]),
   };
 }
 

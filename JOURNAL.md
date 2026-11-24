@@ -695,3 +695,23 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Coût** (palier moyen, téléphone 390 x 844, devant le chai) : 12 appels de dessin de plus, 0,05 ms de logique et 0,3 ms de préparation du rendu ; la carte graphique ne bouge pas. Rien ailleurs : le chien et les moineaux ne sont dessinés qu'à moins de 70 m, les ouvriers comme les autres passants (`q.persos`), rien n'est calculé quand la caméra est loin. Le chien ne porte pas d'ombre (sa tache suffit). Poids : 743 → 774 Ko (245 → 256 Ko compressé) pour les deux lots, sans aucun fichier à télécharger.
 
 **Vérifié** : `npm run verifie` (bancs adaptés au bureau de l'ordinateur ; le parcours vérifie aussi que le parvis vit le jour et qu'il est calme le soir). Images : le portable sur ordinateur et téléphone (tableau de bord, factures, règlement, commandes, DRM, Le bureau) ; le parvis de quatre côtés, le chien, le rinceur de près.
+
+## 24/11/2026 · Retours de Teddy (19) : le parvis mieux fait, plus vivant, plus léger ; les détails des véhicules
+
+**Demande** : « Tu vas améliorer le décor et les animations sur le parvis, tu vas optimiser les rendus et les détails. Tu vas optimiser aussi les détails des véhicules. »
+
+**Le parvis (monde.js, parvis.js)** :
+- Les barriques sont tournées : douelles (une sur deux plus sombre), le bouge au milieu, le jable des fonds, les cercles peints à même le bois. Plus justes à l'œil, et 288 triangles au lieu de 384 (quinze barriques).
+- Les flaques reflètent le ciel (la matière de l'eau, une couleur de plus dans `TYPES`, aucun programme de plus).
+- Du matériel en plus, hors des passages : une brouette, deux seaux dont un renversé, des tuyaux à vin lovés et la pompe à vin sur son chariot, le balai et la raclette contre le mur, un transpalette devant les palox, la couverture et la gamelle du chien.
+- Le rinceur tient la lance des deux mains (en travers du corps, la main gauche sur le tube), change de côté de temps en temps (lance baissée en marchant), vise le milieu de la barrique : le jet la touche presque toujours. Le jet est maintenant un filet d'eau continu de la buse à ce qu'il touche, qui frémit (un maillage transparent), avec moins de gouttes en vol et des éclaboussures plus fines. Le tuyau qui pendait de la lance (on aurait dit une canne) est remplacé par le raccord ; le tuyau au sol va jusqu'à ses pieds.
+- Le chien est redessiné (pattes, museau effilé, truffe, taches feu, oreilles pointues) et vit davantage : il flaire quand on approche, penche la tête d'un côté puis de l'autre quand on reste tout près.
+- Les piles de caisses ne sont plus au cordeau (chaque caisse un peu de travers).
+
+**Les véhicules (engins.js, vehicules.js)** :
+- Feux stop au freinage (et au frein à main) sur le tracteur, le van et la voiture qu'on conduit ; feux de recul en marche arrière sur le van ; le gyrophare du tracteur tourne quand il roule. Éteints, ils ne coûtent rien (cachés).
+- Les cartons d'un véhicule vide ne sont plus dessinés (avant : un appel de dessin et une passe d'ombre pour rien, sur le tracteur et sur le van) ; les volants ne portent plus d'ombre.
+
+**Rendu** : la caisse que porte la porteuse est une instance des caisses (un appel de dessin et une passe d'ombre de moins ; seule sa matrice part à la carte graphique) ; la sphère englobante des caisses est calculée une fois, serrée autour des piles (les caisses cachées restent à leur place, réduites à rien : avant, elles l'étiraient jusqu'à l'origine du monde). Devant le chai, au palier moyen : 104 appels de dessin (106 hier, jet d'eau compris), préparation du rendu 0,7 à 0,8 ms (0,95 hier).
+
+**Vérifié** : `npm run verifie` (le banc de la route du château vérifie aussi le gyrophare et les feux stop) ; images du parvis, du rinceur de près, du chien, des feux du van et du gyrophare.

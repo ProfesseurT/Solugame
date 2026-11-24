@@ -33,6 +33,8 @@ const TYPES = new Map(Object.entries({
   '#a89c88': T.petitsPaves, '#b1a58f': T.petitsPaves, '#78736b': T.asphalte,
   '#a3aab2': T.carrosserie, '#757c85': T.carrosserie, // inox des cuves et du pressoir : il brille
   '#8f8a80': T.asphalte, // béton du chai
+  '#6e4227': T.bois, // douelles plus sombres des barriques (parvis du chai)
+  '#8f877a': T.eau, // les flaques du parvis : elles reflètent le ciel
 }));
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance

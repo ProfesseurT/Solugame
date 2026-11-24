@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
+import { Atelier } from './engins.js';
 import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, reserve } from './relief.js';
 
 export { SOLEIL };
@@ -1180,15 +1181,32 @@ void main() {
      chien, les moineaux : parvis.js. Rien sur les passages des véhicules (la cour, la porte, le bureau), ni sur la marche
      arrière qui ressort du chai (chai.js, cheminSortie). */
   const FUT = '#7a4a2a', CERCLE = '#3a3a3e', INOX = '#a3aab2';
-  // une barrique de 225 L : deux troncs de cône (le bouge au milieu, 70 cm ; les fonds, 58 cm), quatre cercles, la bonde
-  const barrique = (x, y, z, axe = 'x', bonde = true) => {
-    const haut = axe === 'x' ? -1 : 1, d = axe === 'x' ? [1, 0, 0] : axe === 'z' ? [0, 0, 1] : [0, 1, 0];
-    for (const sg of [-1, 1]) {
-      const o = sg * 0.2375, tete = sg === haut;
-      bati.push(C(tete ? 0.29 : 0.35, tete ? 0.35 : 0.29, 0.475, 12, FUT, x + d[0] * o, y + d[1] * o, z + d[2] * o, axe));
-      for (const [k, r] of [[0.4, 0.312], [0.13, 0.346]]) bati.push(C(r, r, 0.05, 12, CERCLE, x + d[0] * sg * k, y + d[1] * sg * k, z + d[2] * sg * k, axe));
-      bati.push(C(0.24, 0.24, 0.012, 12, '#5a3f2b', x + d[0] * sg * 0.478, y + d[1] * sg * 0.478, z + d[2] * sg * 0.478, axe));
+  // une barrique de 225 L, tournée (axe y, centre à l'origine) : les douelles (une sur deux un peu plus sombre), le bouge
+  // au milieu (70 cm), les fonds (58 cm) et leur jable, quatre cercles de fer peints à même le bois (sans facette de plus) ;
+  // une géométrie par axe, copiée pour chaque barrique (288 triangles, au lieu de 384 en cylindres empilés)
+  const FUTS = {};
+  const geoBarrique = axe => {
+    if (!FUTS[axe]) {
+      const at = new Atelier(), n = 12, L = 0.475, TOUR = Math.PI * 2, r = y => 0.29 + 0.06 * (1 - (y / L) ** 2);
+      const Y = [-L, -0.43, -0.37, -0.16, -0.1, 0.1, 0.16, 0.37, 0.43, L], CER = b => b % 2 === 1;
+      const P = (a, y, rr = r(y)) => [Math.cos(a) * rr, y, Math.sin(a) * rr];
+      for (let b = 0; b < Y.length - 1; b++) for (let i = 0; i < n; i++) {
+        const a0 = i / n * TOUR, a1 = (i + 1) / n * TOUR, am = (a0 + a1) / 2;
+        at.quad(P(a0, Y[b]), P(a1, Y[b]), P(a1, Y[b + 1]), P(a0, Y[b + 1]), CER(b) ? CERCLE : i % 2 ? '#6e4227' : FUT, CER(b) ? 0 : T.bois, [Math.cos(am), 0, Math.sin(am)]);
+      }
+      for (const sg of [1, -1]) for (let i = 0; i < n; i++) {
+        const a0 = i / n * TOUR, a1 = (i + 1) / n * TOUR, ext = [0, sg, 0];
+        at.quad(P(a0, sg * L, 0.29), P(a1, sg * L, 0.29), P(a1, sg * L, 0.25), P(a0, sg * L, 0.25), '#5a3f2b', T.bois, ext);
+        at.tri(P(a0, sg * L, 0.25), P(a1, sg * L, 0.25), [0, sg * L, 0], '#6b4a30', T.bois, ext);
+      }
+      const g = fusion(at.geos());
+      if (axe === 'x') g.rotateZ(Math.PI / 2); else if (axe === 'z') g.rotateX(Math.PI / 2);
+      FUTS[axe] = g;
     }
+    return FUTS[axe].clone();
+  };
+  const barrique = (x, y, z, axe = 'x', bonde = true) => {
+    bati.push(deplacer(geoBarrique(axe), x, y, z));
     if (bonde && axe !== 'y') bati.push(C(0.035, 0.035, 0.06, 6, '#5a3f2b', x, y + 0.35, z));
   };
   // le chantier contre le chai : deux madriers, six barriques couchées, cinq par-dessus, dans les creux
@@ -1201,7 +1219,7 @@ void main() {
   for (const x of [-79.88, -79.32]) bati.push(B(0.06, 0.3, 0.62, INOX, x, 0.15, -44.6), B(0.06, 0.04, 0.7, INOX, x, 0.31, -44.6));
   bati.push(B(0.62, 0.04, 0.06, INOX, -79.6, 0.04, -44.3), B(0.62, 0.04, 0.06, INOX, -79.6, 0.04, -44.9));
   barrique(-79.6, 0.64, -44.6, 'x', false);
-  for (const [x, z, r] of [[-79.6, -44.5, 0.95], [-79.05, -43.8, 0.6], [-80.2, -45.3, 0.5]]) bati.push(C(r, r, 0.004, 14, '#ad9f86', x, 0.031, z));
+  for (const [x, z, r] of [[-79.6, -44.45, 0.82], [-79.05, -43.8, 0.5], [-80.15, -45.25, 0.4], [-80.6, -44.2, 0.3]]) bati.push(C(r, r, 0.004, 14, '#8f877a', x, 0.031, z));
   bati.push(B(3.0, 0.008, 0.26, '#2b2b30', -79.6, 0.032, -43.35));
   for (let i = 0; i < 15; i++) bati.push(B(0.03, 0.01, 0.24, '#78736b', -81.0 + i * 0.2, 0.036, -43.35));
   col.boite(-80.1, -45.0, -79.1, -44.2);
@@ -1210,10 +1228,10 @@ void main() {
   bati.push(B(0.04, 0.04, 0.54, '#2b2b30', -81.85, 1.3, -47.6), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.95, 'z'), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.25, 'z'));
   bati.push(C(0.2, 0.2, 0.3, 10, '#2f4a32', -81.55, 1.0, -47.6, 'z'));
   {
-    const pts = [[-81.3, -47.35], [-81.0, -46.95], [-80.5, -46.95], [-80.05, -46.75], [-79.85, -46.55]];
+    const pts = [[-81.3, -47.35], [-81.0, -46.95], [-80.5, -46.9], [-80.1, -46.8], [-79.75, -46.85], [-79.45, -46.7]]; // jusqu'aux pieds du rinceur, entre ses deux places
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1], [bx, bz] = pts[i], l = Math.hypot(bx - ax, bz - az);
-      bati.push(C(0.018, 0.018, l, 5, '#1e1e22', (ax + bx) / 2, 0.035, (az + bz) / 2, 'z', Math.atan2(bx - ax, bz - az)));
+      bati.push(C(0.022, 0.022, l + 0.04, 5, '#1e1e22', (ax + bx) / 2, 0.05, (az + bz) / 2, 'z', Math.atan2(bx - ax, bz - az)));
     }
   }
   col.boiteC(-81.6, -47.6, 0.7, 0.75);
@@ -1221,7 +1239,7 @@ void main() {
   bati.push(C(0.26, 0.26, 0.1, 12, '#c0392b', -76.12, 1.2, -47.9, 'x'), C(0.22, 0.22, 0.14, 12, '#2f6b3a', -76.18, 1.2, -47.9, 'x'), B(0.05, 1.1, 0.06, '#5d6b78', -76.06, 0.55, -47.9));
   // les barriques rincées, debout, bonde en bas, qui s'égouttent sur des cales
   for (const [x, z] of [[-80.3, -41.25], [-79.5, -41.25], [-79.9, -40.55]]) { bati.push(B(0.62, 0.08, 0.14, '#5a3f2b', x, 0.04, z)); barrique(x, 0.555, z, 'y'); }
-  bati.push(C(0.7, 0.7, 0.004, 14, '#ad9f86', -79.9, 0.031, -40.95));
+  bati.push(C(0.55, 0.55, 0.004, 14, '#8f877a', -79.9, 0.031, -40.95));
   col.boite(-80.7, -41.65, -79.1, -40.15);
   contact.jupe(-80.65, -41.6, -79.15, -40.2, 0.7, 0.3);
   // la remorque plateau contre le muret : plateau, ridelles basses, châssis, deux essieux, flèche et sa roue jockey
@@ -1259,6 +1277,38 @@ void main() {
   bati.push(C(0.4, 0.36, 0.46, 12, FUT, -77.0, 0.23, -58.75), C(0.405, 0.405, 0.04, 12, CERCLE, -77.0, 0.36, -58.75), C(0.37, 0.37, 0.02, 12, '#6f5238', -77.0, 0.45, -58.75));
   bati.push(S(0.42, '#4d6b3c', -77.0, 0.92, -58.75, 1, 1.15, 1, 1), S(0.3, '#557544', -76.9, 1.3, -58.65, 1, 1, 1, 1));
   col.boiteC(-77.0, -58.75, 0.8, 0.8);
+  // un bâton (manche d'outil) de a à b
+  const manche = (a, b, r, c) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), g = C(r, r, l, 5, c), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3((b[0] - a[0]) / l, (b[1] - a[1]) / l, (b[2] - a[2]) / l)); g.applyQuaternion(q); return deplacer(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); };
+  // le balai et la raclette, appuyés au mur du chai près de l'enrouleur
+  bati.push(manche([-76.75, 0.02, -48.75], [-76.08, 1.35, -48.68], 0.016, '#c9a55a'), B(0.06, 0.08, 0.36, '#3a3a3e', -76.78, 0.06, -48.75));
+  bati.push(manche([-76.72, 0.02, -49.25], [-76.08, 1.3, -49.2], 0.016, '#c9a55a'), B(0.05, 0.1, 0.5, '#2b2b30', -76.75, 0.05, -49.25));
+  // deux seaux près du poste de rinçage, l'un renversé
+  bati.push(C(0.13, 0.11, 0.28, 10, '#2e86de', -81.05, 0.14, -44.85), C(0.105, 0.105, 0.012, 10, '#1d4f80', -81.05, 0.275, -44.85));
+  bati.push(C(0.11, 0.13, 0.28, 10, '#e0b13a', -81.25, 0.14, -45.25));
+  // les tuyaux à vin, lovés au sol à côté de la porte, et la pompe à vin sur son chariot
+  for (const [x, z, y] of [[-79.25, -48.55, 0.04], [-79.2, -48.6, 0.12]]) {
+    const t = teinter(new THREE.TorusGeometry(0.42, 0.042, 5, 16).rotateX(Math.PI / 2), '#a3322b'); bati.push(deplacer(t, x, y, z));
+  }
+  bati.push(manche([-79.6, 0.05, -48.35], [-80.3, 0.04, -47.9], 0.04, '#a3322b'));
+  bati.push(B(0.5, 0.06, 0.34, '#2b2b30', -78.05, 0.24, -48.35), B(0.42, 0.26, 0.28, '#b03a2e', -78.05, 0.41, -48.35), C(0.1, 0.1, 0.3, 10, '#b03a2e', -78.05, 0.45, -48.35, 'x'));
+  for (const s2 of [-1, 1]) bati.push(C(0.11, 0.11, 0.05, 10, '#1e1e22', -78.2, 0.11, -48.35 + s2 * 0.2, 'z'));
+  bati.push(manche([-77.85, 0.25, -48.35], [-77.55, 0.85, -48.35], 0.014, '#2b2b30'), C(0.05, 0.05, 0.12, 8, '#9aa1a8', -78.32, 0.45, -48.35, 'x'));
+  col.boite(-79.7, -49.05, -77.5, -48.05);
+  // une brouette, à côté des barriques qui s'égouttent : la caisse, la roue, les brancards et les pieds
+  {
+    const x = -81.35, z = -40.6;
+    bati.push(B(0.58, 0.05, 0.7, '#2f6b3a', x, 0.42, z), B(0.04, 0.24, 0.72, '#2f6b3a', x - 0.31, 0.56, z), B(0.04, 0.24, 0.72, '#2f6b3a', x + 0.31, 0.56, z), B(0.62, 0.24, 0.04, '#2f6b3a', x, 0.56, z - 0.37), B(0.62, 0.2, 0.04, '#2f6b3a', x, 0.53, z + 0.37));
+    bati.push(C(0.19, 0.19, 0.08, 10, '#1e1e22', x, 0.19, z + 0.62, 'x'), C(0.09, 0.09, 0.085, 8, '#c0392b', x, 0.19, z + 0.62, 'x'));
+    for (const s2 of [-1, 1]) bati.push(manche([x + s2 * 0.2, 0.19, z + 0.62], [x + s2 * 0.27, 0.62, z - 0.9], 0.02, '#c0392b'), B(0.03, 0.4, 0.03, '#c0392b', x + s2 * 0.22, 0.2, z - 0.25));
+    col.boite(x - 0.35, z - 0.95, x + 0.35, z + 0.82);
+  }
+  // le transpalette, garé devant les palox
+  bati.push(B(0.16, 0.05, 1.15, '#e0b12a', -79.0, 0.04, -38.75), B(0.16, 0.05, 1.15, '#e0b12a', -78.55, 0.04, -38.75), B(0.62, 0.36, 0.14, '#e0b12a', -78.78, 0.2, -38.12));
+  bati.push(manche([-78.78, 0.35, -38.05], [-78.78, 1.15, -37.82], 0.02, '#2b2b30'), B(0.24, 0.04, 0.04, '#2b2b30', -78.78, 1.15, -37.82));
+  col.boite(-79.1, -39.35, -78.45, -38.0);
+  // la couverture et la gamelle du chien (le chien : parvis.js)
+  bati.push(B(1.05, 0.03, 0.66, '#7a3f35', -77.25, 0.03, -63.4), B(0.08, 0.031, 0.64, '#c9a55a', -77.7, 0.031, -63.4), B(0.08, 0.031, 0.64, '#c9a55a', -76.8, 0.031, -63.4));
+  bati.push(C(0.12, 0.09, 0.07, 10, '#a3aab2', -77.95, 0.035, -62.75), C(0.1, 0.1, 0.006, 10, '#4f93b8', -77.95, 0.072, -62.75));
   bati.push(B(1.25, 0.14, 1.05, '#9a7b55', -78.4, 0.07, -57.5));
   for (let i = 0; i < 12; i++) bati.push(B(0.4, 0.28, 0.32, '#b98a55', -78.8 + (i % 3) * 0.41, 0.28 + Math.floor(i / 6) * 0.29, -57.75 + (Math.floor(i / 3) % 2) * 0.34));
   col.boiteC(-78.4, -57.5, 1.3, 1.1);

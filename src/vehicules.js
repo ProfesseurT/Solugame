@@ -265,6 +265,14 @@ export class Tracteur {
     m.rouesAv[0].rotation.x = m.rouesAv[1].rotation.x = this.rotA;
     m.pivots[0].rotation.y = m.pivots[1].rotation.y = this.braq;
     if (m.volant) m.volant.rotation.y = this.volant;
+    // feux stop au freinage (et au frein à main), feux de recul en marche arrière, gyrophare du tracteur quand il roule
+    const F = m.feux;
+    if (F) {
+      const stop = this.frein > 0.12 || this.fm > 0.3, recul = this.v < -0.15;
+      if (F.stop && F.stop.visible !== stop) F.stop.visible = stop;
+      if (F.recul && F.recul.visible !== recul) F.recul.visible = recul;
+    }
+    if (m.gyro) { const on = Math.abs(this.v) > 1.2; if (m.gyro.visible !== on) m.gyro.visible = on; if (on) m.gyro.rotation.y += dt * 8; }
     if (dt > 0) {
       // relief sous les quatre roues (plus marqué en roulant)
       const fx = Math.sin(this.h), fz = Math.cos(this.h), lx = fz, lz = -fx;

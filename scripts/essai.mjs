@@ -457,6 +457,9 @@ if (scenario === 'chateau') {
         const ok = suivre(route, genre === 'tracteur' ? 12 : 16, 120, m);
         log.push([genre + ' : monté au château (' + CL.tr.pos.y.toFixed(1) + ' m), sur la chaussée (écart ' + m.ecart.toFixed(1) + ' m), posé sur le sol (' + (m.sol * 100).toFixed(0) + ' cm), sans choc, la caméra au-dessus du relief ; au plus lent dans la montée ' + m.vmin.toFixed(1) + ' m/s',
           ok && Math.abs(CL.tr.pos.y - C.y) < 0.3 && m.ecart < 4 && m.sol < 0.15 && m.chocs === 0 && m.cam === 0 && m.vmin > 6]);
+        // en roulant, le gyrophare du tracteur tourne ; au freinage, les feux stop s'allument (et rien en marche avant pour le recul)
+        { const F = CL.vehicule(genre).m, gyro = genre !== 'tracteur' || F.gyro.visible; CL.ctrl.ky = 1; CL.step(6); const stop = F.feux.stop.visible, recul = F.feux.recul ? F.feux.recul.visible : false; CL.ctrl.ky = 0;
+          log.push([genre + ' : ' + (genre === 'tracteur' ? 'le gyrophare tourne en roulant, ' : '') + 'les feux stop s\'allument au freinage', gyro && stop && !recul]); }
         if (genre === 'tracteur') {
           // le tour du château, dans le sens des aiguilles d'une montre vu d'en haut, depuis l'arrivée de la route
           CL.ctrl.ky = 1; for (let k = 0; k < 300 && Math.abs(CL.tr.v) > 0.3; k++) CL.step(1); CL.ctrl.ky = 0;
