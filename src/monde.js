@@ -2160,18 +2160,9 @@ void main() {
     enseigne('ÉTIQUETTES · HABILLAGE', { x: 160.5, z: z0 - 0.07, rot: Math.PI }, 3.6, 5.4, 0.5, '#f4f1ea', BANDE);
     enseigne('IMPRIMERIE SAINT-VINCENT', { x: x1 + 0.07, z: pc, rot: Math.PI / 2 }, 5.25, 5.0, 0.55, BANDE, '#f4f1ea');
 
-    /* -- la cour : le chariot élévateur garé (fourches vers l'ouest), deux piles de palettes vides, une palette de bobines
-       d'étiquettes filmées près de l'angle du hangar, la benne à cartons, un mât d'éclairage */
+    /* -- la cour : deux piles de palettes vides, une palette de bobines d'étiquettes filmées près de l'angle du hangar, la
+       benne à cartons, un mât d'éclairage (le chariot élévateur, qui décharge les palox, est à part : remorque.js) */
     {
-      const fx = 184.0, fz = 23.0;
-      L.push(B(1.6, 0.55, 1.05, JAUNE, fx + 0.5, 0.62, fz), B(0.45, 0.75, 1.05, NOIR, fx + 1.45, 0.75, fz));
-      L.push(B(0.45, 0.12, 0.45, NOIR, fx + 0.85, 1.0, fz), B(0.08, 0.45, 0.45, NOIR, fx + 1.1, 1.28, fz), C(0.15, 0.15, 0.03, 8, NOIR, fx + 0.45, 1.3, fz));
-      for (const x of [fx, fx + 1.2]) for (const z of [fz - 0.45, fz + 0.45]) L.push(C(0.03, 0.03, 1.3, 5, NOIR, x, 1.55, z));
-      L.push(B(1.3, 0.05, 1.0, NOIR, fx + 0.6, 2.2, fz));
-      for (const z of [fz - 0.3, fz + 0.3]) L.push(B(0.08, 2.3, 0.1, NOIR, fx - 0.45, 1.2, z), B(1.0, 0.04, 0.1, GRIS, fx - 1.05, 0.1, z));
-      L.push(B(0.08, 0.08, 0.7, NOIR, fx - 0.45, 2.3, fz), B(0.06, 0.5, 0.9, GRIS, fx - 0.55, 0.4, fz));
-      for (const x of [fx - 0.15, fx + 1.2]) for (const z of [fz - 0.55, fz + 0.55]) L.push(C(0.27, 0.27, 0.2, 10, '#1d1d1d', x, 0.27, z, 'z'));
-      contact.tache(fx + 0.3, fz, 1.6, 0.9, 0.35);
       for (const [x, z, n] of [[184.9, 27.9, 7], [184.9, 29.2, 4]]) {
         for (let i = 0; i < n; i++) L.push(B(0.8, 0.13, 1.2, i % 2 ? PAL : '#8a6e4c', x, 0.07 + i * 0.145, z));
         contact.tache(x, z, 0.6, 0.8, 0.3);
@@ -2326,7 +2317,7 @@ void main() {
       for (const [a, b, c, d] of [[x0, z0, x1, z0 + ep], [x0, z1 - ep, x1, z1], [x0, z0, x0 + ep, z1], [x1 - ep, z0, x1, p0], [x1 - ep, p1, x1, z1]]) col.boite(a, b, c, d).haut = true;
       for (const [a, b, c, d] of [[166.55, z0, x1, 24.47], [LX - 0.62, 21.68, LX + 0.62, 23.42], [LX - 0.2, 23.4, LX + 0.2, 29.4], [LX - 1.42, ZM - 1.1, LX + 0.25, ZM + 1.1],
         [LX - 0.62, 29.4, LX + 0.62, 31.32], [164.6, 21.7, 165.4, 22.9], [LX + 1.15, 30.0, LX + 1.95, 31.2], [151.7, 21.1, 153.2, 31.9], [153.6, 21.05, 157.55, 22.25],
-        [154.95, 31.6, 157.45, z1 - ep], [159.4, 30.9, 160.2, 32.1], [182.4, 22.4, 185.7, 23.6], [184.5, 27.3, 185.3, 29.8], [172.15, 31.35, 173.35, 32.15],
+        [154.95, 31.6, 157.45, z1 - ep], [159.4, 30.9, 160.2, 32.1], [184.5, 27.3, 185.3, 29.8], [172.15, 31.35, 173.35, 32.15],
         [181.75, 42.05, 183.85, 45.95], [185.5, 33.5, 185.7, 33.7]]) col.boite(a, b, c, d);
       for (const z of [p0 - 0.35, p1 + 0.35]) col.boiteC(x1 + 0.5, z, 0.2, 0.2);
     });
@@ -2509,10 +2500,11 @@ void main() {
       [[-90, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],              // la cour, jusqu'à la grande porte du chai
       [[-90, 10], [-55, 10], [95, 10], [110.5, 9.4]],                      // la départementale (l'épicerie, La Treille)
       [[110.5, 9.4], [176, 10]],                                           // vers l'est : le laboratoire, l'entrepôt de l'imprimeur
-      // l'accès de l'entrepôt, jusqu'à la porte (lieux.entrepot.arret) : en biais, sans angle droit (la conduite assistée
-      // ne passe au tronçon suivant qu'une fois le bout du précédent dépassé : dans un angle droit coupé court, elle
-      // croirait le point visé derrière elle et ferait demi-tour), puis tout droit vers le sud, le long de la porte
-      [[176, 10], [179, 14.8], [175.6, 19.8], [175.2, 21.8], [175.2, 31.6]],
+      // l'accès de l'entrepôt (lieux.entrepot.arret) : en biais depuis la départementale, sans angle droit (la conduite
+      // assistée ne passe au tronçon suivant qu'une fois le bout du précédent dépassé : dans un angle droit coupé court,
+      // elle croirait le point visé derrière elle et ferait demi-tour), puis tout droit vers le sud, au milieu de la cour :
+      // un tracteur et sa remorque y entrent alignés, la remorque se pose le long de la grande porte (lieux.entrepot.depot)
+      [[176, 10], [179, 14.8], [179, 21], [179, 38.9]],
       [[95, 10], [95, -30]],                                               // la rue de la place, en montant
       // la boucle du bourg, à sens unique : la place, la Cave du Pressoir, le Bar Le Cep, et l'on redescend
       { sens: true, points: [[95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [95, 10]] },
@@ -2549,8 +2541,21 @@ void main() {
     lieux.figurants.labo = { x: +(p.x + 0.77).toFixed(2), z: 17.35, h: Math.PI };
     lieux.arrets.labo = { x: lieux.figurants.labo.x, z: 11.2 };
   }
+  /* La remorque de palox (mission 3, remorque.js) : remorque, sa place au domaine (le milieu de son tandem, son cap) :
+     sur l'herbe, le long de l'allée, à l'ouest, hors de la cour, le timon vers la départementale ; on vient se mettre
+     devant en tracteur par l'allée (approche : la balise ; la conduite assistée s'arrête 4,2 m avant, le tracteur tourné vers
+     la départementale, à 6 m devant l'anneau et 4,5 m de côté : il recule tout seul jusqu'à l'anneau). À l'entrepôt :
+     arret, la balise et le bout de l'itinéraire, au milieu de la cour ; la conduite assistée s'arrête 4,2 m avant, le
+     tracteur vers z = 34,7 et sa remorque vers z = 27,5, le long de la grande porte ; depot, la place où on la dételle
+     (le milieu de son tandem) ; chariot, la place du chariot élévateur, au nord de la porte, tourné vers le sud ; stock,
+     les six places des palox dans le hangar, près de la ligne d'habillage, en trois rangs de deux, l'un sur l'autre (le
+     milieu du palox au sol ; y : posé sur le sol ou sur un autre ; h : le cap du chariot qui le pose, fourches vers la ligne). */
+  lieux.remorque = { x: -94.5, z: -22, h: 0, approche: { x: -90, z: -4.8 } };
   lieux.entrepot = {
-    arret: { x: 175.2, z: 31.6, h: 0 },
+    arret: { x: 179, z: 38.9, h: 0 },
+    depot: { x: 179, z: 27.5, h: 0 },
+    chariot: { x: 174.2, z: 21.5, h: 0 },
+    stock: [26.0, 27.6, 29.2].flatMap(z => [0, 0.78].map(y => ({ x: 165.4, y, z, h: -Math.PI / 2 }))),
     figurant: { x: 172.9, z: 23.4, h: Math.PI / 2 },
     porte: { x: 172.1, z: (EN.p0 + EN.p1) / 2, rot: Math.PI / 2 },
     ligne: { camera: { x: 169.9, y: 2.5, z: 31.0 }, centre: { x: EN.LX, y: 1.0, z: 26.6 } },
