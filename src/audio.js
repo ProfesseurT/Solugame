@@ -330,7 +330,7 @@ export const son = {
     if (!moteurOn) { moteurOn = true; rapportPrec = 0; M.brancher(true); if (tAllume < t) tAllume = t; }
     const reg = etat && etat.regime !== undefined ? etat.regime : Math.min(1, 0.15 + a / 14);
     const eff = etat && etat.effort !== undefined ? etat.effort : 0.4;
-    const t0 = Math.max(t, tAllume), van = !!etat && etat.genre !== 'tracteur'; // le van et les voitures : un moteur à essence
+    const t0 = Math.max(t, tAllume), van = !!etat && etat.genre !== 'tracteur' && etat.genre !== 'enjambeur'; // le van et les voitures : un moteur à essence
     const f0 = van ? 36 + 64 * reg : 24 + 46 * reg;
     M.o1.frequency.setTargetAtTime(f0, t0, 0.06);
     M.lfo.frequency.setTargetAtTime(van ? 16 + 22 * reg : 5 + 10 * reg, t0, 0.06);

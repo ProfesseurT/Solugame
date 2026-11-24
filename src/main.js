@@ -14,6 +14,7 @@ import { Hud } from './hud.js';
 import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
+import { enjambeur, deplierEnjambeur } from './enjambeur.js';
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
@@ -137,6 +138,9 @@ const posteDe = m => ({ assise: m.dims.assise, plancher: m.dims.plancher, volant
 const vTracteur = creerVehicule('tracteur', tracteur(), L.tracteur, null);
 const mVan = van();
 creerVehicule('van', mVan, L.van, posteDe(mVan));
+// l'enjambeur (enjambeur.js), garé dans la cour, les bras de son pulvérisateur repliés : c'est lui qui pulvérise (mission 2)
+const mEnj = enjambeur(); deplierEnjambeur(mEnj, 0);
+const vEnjambeur = creerVehicule('enjambeur', mEnj, L.enjambeur, posteDe(mEnj));
 let veh = vTracteur, tr = veh.p, tm = veh.m;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
@@ -804,6 +808,7 @@ function lendemain() {
   parvis.lendemain();
   vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
   const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
+  vEnjambeur.p.placer(L.enjambeur.x, L.enjambeur.z, L.enjambeur.h);
   pulve.groupe.visible = true;
   if (!vTracteur.m.dims.emprise.includes(EMPRISE_PULVE)) vTracteur.m.dims.emprise.push(EMPRISE_PULVE);
   mission2 = true;
@@ -816,7 +821,7 @@ function surlendemain() {
   if (traitement.actif) traitement.aller('libre');
   parvis.lendemain('habillage');
   for (const v of VEHICULES) {
-    const l = v.genre === 'tracteur' ? L.tracteur : v.genre === 'van' ? L.van : null;
+    const l = v.genre === 'tracteur' ? L.tracteur : v.genre === 'van' ? L.van : v.genre === 'enjambeur' ? L.enjambeur : null;
     if (l) v.p.placer(l.x, l.z, l.h);
     if (v.m.cartons) for (const c of v.m.cartons) c.visible = false;
     v.p.charge = 0;
@@ -878,14 +883,14 @@ function reperes(dt, ego, cible) {
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
   hud.placer(etqEchantillon, CARTON3.x, 1.2, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
-  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : 'Monter');
-  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
+  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
+  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3, enjambeur: 4.9 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
   const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
   hud.placer(etqPrendre, vc ? vc.x : 0, 2.3, vc ? vc.z : 0, !!vc);
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
-  hud.placer(etqDescendre, tr.pos.x, tr.pos.y + 3.8, tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
+  hud.placer(etqDescendre, tr.pos.x, tr.pos.y + (veh.genre === 'enjambeur' ? 5.0 : 3.8), tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 }
 
 function miseAJour(dt) {
@@ -966,7 +971,7 @@ const ombrePerso = (m, x, z) => {
   if (m.maillage.visible !== vu) m.maillage.visible = vu;
   return vu;
 };
-const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05] }; // demi-largeur, demi-longueur
+const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05], enjambeur: [1.35, 2.25] }; // demi-largeur, demi-longueur
 function majTaches() {
   const t = taches;
   t.debut();

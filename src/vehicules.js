@@ -47,6 +47,10 @@ export const TEMPERAMENTS = {
   // le van : plus vif et plus rapide sur la route, mal à l'aise entre les rangs
   van: { vmax: 19, vmaxVigne: 2.8, vmaxAr: 4.5, vmaxArVigne: 1.8, acc: 4.6, accAr: 2.6, frein: 8, alat: 7.6, braqMax: 0.55, volant: 7,
     rapports: [0, 4.2, 8.6, 13.2, 99], resVigne: 1.6, ressorts: 0.7, tenue: 0.8, survirage: 0.08 },
+  // l'enjambeur : un portique haut, lent sur la route (25 à 30 km/h), chez lui dans les rangs (c'est son métier : peu de
+  // résistance, il les enjambe) ; lourd en haut, il penche et tangue doucement ; braque court (rayon d'environ 3,6 m)
+  enjambeur: { vmax: 8.3, vmaxVigne: 3.4, vmaxAr: 2.8, vmaxArVigne: 1.8, acc: 2.4, accAr: 1.6, frein: 5.5, alat: 4.2, braqMax: 0.6, volant: 5,
+    rapports: [0, 2.6, 5.4, 99], resVigne: 0.5, ressorts: 0.85, tenue: 0.25, survirage: 0 },
   // une voiture empruntée (ou volée, en mode WTF) : la plus vive, accrocheuse sur la route, perdue dans les vignes
   voiture: { vmax: 23, vmaxVigne: 2.4, vmaxAr: 5, vmaxArVigne: 1.6, acc: 5.6, accAr: 3, frein: 9.5, alat: 8.6, braqMax: 0.58, volant: 8,
     rapports: [0, 5, 10, 15.5, 99], resVigne: 2.2, ressorts: 0.55, tenue: 1, survirage: 0.16 },

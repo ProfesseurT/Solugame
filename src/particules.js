@@ -136,8 +136,10 @@ export class EffetsVehicule {
   choisir(a) { return a[Math.floor(this.rnd() * a.length)]; }
   // point de sortie des gaz du véhicule v (cap : sin sx, cos sz)
   echappement(v, sx, sz) {
-    const p = v.p.pos;
-    if (v.genre !== 'tracteur') { const a = v.genre === 'van' ? 2.3 : 2.0; ECH.x = p.x - sx * a + sz * 0.45; ECH.y = p.y + 0.3; ECH.z = p.z - sz * a - sx * 0.45; }
+    const p = v.p.pos, E = v.m.echappement;
+    // (un modèle qui dit où sort sa cheminée : l'enjambeur, en haut derrière la cabine)
+    if (E) { ECH.x = p.x + sx * E[2] + sz * E[0]; ECH.y = p.y + E[1]; ECH.z = p.z + sz * E[2] - sx * E[0]; }
+    else if (v.genre !== 'tracteur') { const a = v.genre === 'van' ? 2.3 : 2.0; ECH.x = p.x - sx * a + sz * 0.45; ECH.y = p.y + 0.3; ECH.z = p.z - sz * a - sx * 0.45; }
     else { ECH.x = p.x + sx * 1.45 + sz * 0.3; ECH.y = p.y + 2.55; ECH.z = p.z + sz * 1.45 - sx * 0.3; }
     return ECH;
   }
@@ -148,7 +150,7 @@ export class EffetsVehicule {
   }
   // en roulant (v : le véhicule conduit, { genre, p })
   maj(dt, v) {
-    const tr = v.p, r = this.rnd, van = v.genre !== 'tracteur'; // (le van, une voiture : le pot en bas, derrière)
+    const tr = v.p, r = this.rnd, van = v.genre === 'van' || v.genre === 'voiture'; // (le van, une voiture : le pot en bas, derrière)
     this.derapage(dt, v);
     const sx = Math.sin(tr.h), sz = Math.cos(tr.h);
     if (r() < dt * (3 + Math.abs(tr.v) * 0.4)) {
@@ -163,7 +165,7 @@ export class EffetsVehicule {
     }
     const av = Math.abs(tr.v);
     if ((tr.sol === 'gravier' || tr.sol === 'vigne') && av > 1.5 && r() < dt * av * 1.2) {
-      const cote = r() < 0.5 ? 0.98 : -0.98, bx = tr.pos.x - sx * 1.3 + sz * cote, bz = tr.pos.z - sz * 1.3 - sx * cote;
+      const xr = tr.d.xAr ?? 0.98, cote = r() < 0.5 ? xr : -xr, bx = tr.pos.x - sx * 1.3 + sz * cote, bz = tr.pos.z - sz * 1.3 - sx * cote;
       const gr = tr.sol === 'gravier', k = gr ? 0.25 : 0.35;
       this.emettre(bx, tr.pos.y + 0.3, bz, -sx * tr.v * k + (r() - 0.5), 1.2 + r() * 1.6, -sz * tr.v * k + (r() - 0.5), 0.9, this.choisir(gr ? GRAVIERS : MOTTES), gr ? 0.4 : 0.7, 9, tr.pos.y + 0.05);
     }
@@ -176,7 +178,7 @@ export class EffetsVehicule {
     for (let k = 0; k < 2; k++) {
       const s = k ? -1 : 1, x = tr.pos.x + fx * zr + fz * xr * s, z = tr.pos.z + fz * zr - fx * xr * s;
       const y = solEn(x, z);
-      if (dur) this.traces.marquer(k, x, z, v.genre === 'tracteur' ? 0.4 : 0.22, y); else this.traces.lever();
+      if (dur) this.traces.marquer(k, x, z, v.genre === 'tracteur' ? 0.4 : v.genre === 'enjambeur' ? 0.26 : 0.22, y); else this.traces.lever();
       if (r() < dt * 26 * g) this.emettre(x, y + 0.25, z, (r() - 0.5) * 0.8, 0.5 + r() * 0.6, (r() - 0.5) * 0.8, 1.1, dur ? 0xd9d5cc : POUSSIERE[tr.sol] ?? 0xcfc1a0, dur ? 1.1 : 0.9, -0.25);
     }
   }
