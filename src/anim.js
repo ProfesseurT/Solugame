@@ -167,6 +167,7 @@ export class Anim {
     else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
+    if (p.echelle) this.poseEchelle(p.echelle);
 
     /* ------------------------------------------------ la pile de cartons, tenue des deux mains par le carton du bas */
     if (this.wPorte > 0.01) {
@@ -422,6 +423,34 @@ export class Anim {
       v1.set(gx, gy, gz).addScaledVector(ex, sg * 0.02).addScaledVector(ey, 0.085);
       this.brasIK(c, v1.x, v1.y, v1.z, sg * 0.8, -0.6, -0.3, 1);
       this.mainVers(c, qTel, 1);
+    }
+  }
+
+  /* ---------------------------------------------------------------- à l'échelle (l'enjambeur : gestes.js) : face à elle, les
+     pieds sur les barreaux, les mains plus haut sur les montants ; un pied et la main de l'autre côté montent ensemble,
+     d'un barreau sur deux, pendant que le corps s'élève. E = { h : hauteur gravie depuis le pied de l'échelle (m), pas :
+     entre deux barreaux }. Le reste de la pose : debout (poseTransition). */
+  poseEchelle(E) {
+    const o = this.o, s = this.m.echelle, pas = E.pas, xh = this.m.dim.xh;
+    // le buste droit contre l'échelle, la tête levée vers où l'on va
+    o[OS.ventre].rotation.x += 0.07; o[OS.poitrine].rotation.x += 0.05; o[OS.tete].rotation.x -= 0.28;
+    this.reperes();
+    const ZP = 0.2 / s, ZM = 0.24 / s;
+    for (let j = 0; j < 2; j++) {
+      const sg = JAMBES[j][1];
+      // le pied : posé sur son barreau, il redescend (le corps monte) de 2 pas à un demi-pas au-dessus du repère, puis
+      // remonte au barreau d'après, 2 pas plus haut, en s'écartant un peu de l'échelle
+      const c = E.h / pas + j, ph = c / 2 - Math.floor(c / 2);
+      let y, z = ZP;
+      if (ph < 0.75) y = 2 * pas * (1 - ph);
+      else { const w = (ph - 0.75) / 0.25; y = mix(0.5 * pas, 2 * pas, lisse(w)) + Math.sin(PI * w) * 0.05; z = ZP - Math.sin(PI * w) * 0.07 / s; }
+      this.jambe(JAMBES[j][0], sg, sg * (xh + 0.04), y / s + DIM.cheville, z, 0.12, 0, 0.5);
+      // la main du même côté monte avec l'autre pied : en phase avec lui
+      const ch = E.h / pas + (1 - j), pm = ch / 2 - Math.floor(ch / 2);
+      let ym, zm = ZM;
+      if (pm < 0.75) ym = 1.25 + 2 * pas * (1 - pm);
+      else { const w = (pm - 0.75) / 0.25; ym = mix(1.25 + 0.5 * pas, 1.25 + 2 * pas, lisse(w)) + Math.sin(PI * w) * 0.04; zm = ZM - Math.sin(PI * w) * 0.06 / s; }
+      this.brasIK(j === 0 ? 0 : 3, sg * 0.19 / s, ym / s, zm, sg * 0.8, -0.4, -0.5, 1);
     }
   }
 

@@ -5,7 +5,7 @@ import { borne } from './outils.js';
 
 const VOIE = 1.6;          // décalage vers la droite de l'itinéraire sur la départementale (on roule à droite)
 const surRoute = (a, b) => Math.abs(a[1] - 10) < 2.5 && Math.abs(b[1] - 10) < 2.5; // segment le long de la départementale (z = 10)
-const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14 }; // vitesse de croisière (m/s)
+const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14, enjambeur: 6.8 }; // vitesse de croisière (m/s)
 const SONDE = { x: 0, z: 0 }; // point d'essai devant ou derrière le véhicule (demi-tour)
 const COINS = [0, 0.8, -0.8]; // milieu et coins du pare-chocs, sondés pendant un demi-tour
 

@@ -1437,8 +1437,10 @@ void main() {
   col.boite(-115, -33.75, -93.4, -33.25); col.boite(-86.6, -33.75, -62, -33.25);
   contact.jupe(-115, -33.75, -93.4, -33.25, 0.8, 0.3); contact.jupe(-86.6, -33.75, -62, -33.25, 0.8, 0.3);
   for (const x of [-93, -87]) { bati.push(B(0.8, 2.6, 0.8, TUF, x, 1.3, -33.5), B(1, 0.2, 1, '#cbbf9f', x, 2.7, -33.5)); col.boiteC(x, -33.5, 0.8, 0.8); }
-  bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 3.25, -33.5));
-  enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 3.65, 5.6, 0.72, '#2b2b30', '#f0d9a0');
+  // la barre du portail et son enseigne, sur deux montants de fer : assez haut pour l'enjambeur (4,3 m)
+  bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 5.2, -33.5));
+  for (const x of [-93, -87]) bati.push(B(0.09, 2.4, 0.09, '#2b2b30', x, 4.0, -33.5));
+  enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 4.82, 5.6, 0.72, '#2b2b30', '#f0d9a0');
   /* -- l'aire de remplissage (mission 2 ; Teddy, 24/11/2026 : « une espèce de fosse pour le tracteur, avec des détails ») :
      un bac de béton entre deux murets de rétention, où le tracteur entre par le sud et ressort au nord vers les vignes
      (le muret ouest s'ouvre pour aller à la cuve d'eau) ; joints de dilatation, caniveau central à grille qui mène à la
@@ -1475,11 +1477,14 @@ void main() {
       col.boiteC(x, z, 1.4, 1.4);
       contact.jupe(x - 0.65, z - 0.65, x + 0.65, z + 0.65, 0.6, 0.35);
     }
-    bati.push(manche([-89.7, 0.08, -67.0], [-89.65, 0.08, -64.0], 0.035, '#2f6db0'), manche([-89.65, 0.08, -64.0], [-89.65, 0.9, -64.0], 0.035, '#2f6db0'));
-    bati.push(B(0.16, 4.2, 0.16, '#5d6b78', -89.65, 2.1, -64.0), B(3.8, 0.12, 0.12, '#5d6b78', -87.8, 3.85, -64.0), manche([-89.65, 3.0, -64.0], [-88.7, 3.85, -64.0], 0.04, '#5d6b78'));
-    bati.push(B(0.3, 0.3, 0.2, '#2f6db0', -89.5, 1.25, -64.0), B(0.16, 0.16, 0.02, '#dfe6ea', -89.5, 1.28, -63.89), C(0.12, 0.12, 0.03, 10, '#c0392b', -89.45, 0.95, -63.86, 'z'));
-    bati.push(manche([-86.1, 3.85, -64.0], [-86.05, 2.25, -63.9], 0.045, NOIR2), C(0.06, 0.05, 0.16, 8, GRIS, -86.05, 2.18, -63.9));
-    col.boiteC(-89.65, -64.0, 0.35, 0.35);
+    // la potence : assez haute pour que la cabine de l'enjambeur passe dessous ; son tuyau tombe sur le couvercle de sa
+    // cuve quand il s'arrête au milieu de l'aire, tourné vers le nord (enjambeur.js : pulve.remplissage)
+    const ZP = -64.5;
+    bati.push(manche([-89.7, 0.08, -67.0], [-89.65, 0.08, ZP], 0.035, '#2f6db0'), manche([-89.65, 0.08, ZP], [-89.65, 0.9, ZP], 0.035, '#2f6db0'));
+    bati.push(B(0.16, 4.9, 0.16, '#5d6b78', -89.65, 2.45, ZP), B(3.8, 0.12, 0.12, '#5d6b78', -87.8, 4.6, ZP), manche([-89.65, 3.7, ZP], [-88.7, 4.6, ZP], 0.04, '#5d6b78'));
+    bati.push(B(0.3, 0.3, 0.2, '#2f6db0', -89.5, 1.25, ZP), B(0.16, 0.16, 0.02, '#dfe6ea', -89.5, 1.28, ZP + 0.11), C(0.12, 0.12, 0.03, 10, '#c0392b', -89.45, 0.95, ZP + 0.14, 'z'));
+    bati.push(manche([-86.1, 4.6, ZP], [-86.05, 3.82, ZP + 0.05], 0.045, NOIR2), C(0.06, 0.05, 0.16, 8, GRIS, -86.05, 3.75, ZP + 0.05));
+    col.boiteC(-89.65, ZP, 0.35, 0.35);
     // la réserve d'eau claire pour se laver les mains, son robinet
     bati.push(B(0.42, 0.5, 0.32, '#eef0ec', -90.4, 1.0, -64.6), B(0.08, 0.75, 0.08, GRIS, -90.4, 0.38, -64.6), C(0.02, 0.02, 0.12, 6, '#9aa1a8', -90.4, 0.72, -64.42, 'z'));
     col.boiteC(-90.4, -64.6, 0.45, 0.35);
@@ -2524,6 +2529,9 @@ void main() {
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
+  // l'enjambeur (enjambeur.js), garé dans la cour au sud de l'aire de remplissage, tourné vers elle (vers le nord), son
+  // échelle du côté de la maison ; hors des passages (le chemin de la cour au chai et à l'aire, la porte de la maison)
+  lieux.enjambeur = { x: -95, z: -48, h: Math.PI };
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   // la voiture du personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
   lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [184.2, 38.5, 0, '#2f4a6b']];

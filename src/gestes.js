@@ -285,11 +285,12 @@ export class Gestes {
         surChemin(ch, 0, g.position); g.rotation.set(0, -Math.PI / 2, 0); j.sync(0);
       },
       maj: (dt, t, u) => {
-        const j = this.j, g = j.m.groupe;
+        const j = this.j, g = j.m.groupe, T0 = M.tourne ? M.tourne[0] : 0.3, T1 = M.tourne ? M.tourne[1] : 1;
         surChemin(ch, u, g.position);
-        g.rotation.set(0, mix(-Math.PI / 2, 0, lisse((u - 0.3) / 0.7)), 0);
+        g.rotation.set(0, mix(-Math.PI / 2, 0, lisse((u - T0) / (T1 - T0))), 0);
         j.transition = lisse((u - M.assis) / (1 - M.assis));
-        if (!porte && !marche && u > 0.25) { marche = true; son.jouer(sonMontee); }
+        if (M.echelle) this.echelle(j, M.echelle, u, g.position.y);
+        else if (!porte && !marche && u > 0.25) { marche = true; son.jouer(sonMontee); }
         j.sync(dt, t);
         g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z; // la caméra suit
       },
@@ -298,7 +299,7 @@ export class Gestes {
     etapes.push({
       action: () => {
         const j = this.j;
-        j.transition = null; j.baisse = undefined;
+        j.transition = null; j.baisse = undefined; j.echelle = null;
         j.m.groupe.position.copy(v.m.siege); j.m.groupe.rotation.set(0, 0, 0);
         fin();
       },
@@ -314,11 +315,13 @@ export class Gestes {
       duree: M.duree * 0.9,
       debut: () => { const j = this.j; j.transition = 1; j.baisse = M.baisse; },
       maj: (dt, t, u) => {
-        const j = this.j, g = j.m.groupe;
+        const j = this.j, g = j.m.groupe, D = M.descente;
         surChemin(ch, 1 - u, g.position);
-        g.rotation.set(0, mix(0, Math.PI / 2, lisse((u - 0.15) / 0.6)), 0);
+        // (une échelle se descend face à elle : D.cap, le cap à prendre, et quand)
+        g.rotation.set(0, D ? mix(0, D.cap, lisse((u - D.tourne[0]) / (D.tourne[1] - D.tourne[0]))) : mix(0, Math.PI / 2, lisse((u - 0.15) / 0.6)), 0);
         j.transition = 1 - lisse((1 - u - M.assis) / (1 - M.assis));
-        if (!porte && !marche && u > 0.7) { marche = true; son.jouer(M.son || 'marche'); }
+        if (M.echelle) this.echelle(j, M.echelle, 1 - u, g.position.y);
+        else if (!porte && !marche && u > 0.7) { marche = true; son.jouer(M.son || 'marche'); }
         j.sync(dt, t);
         g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z;
         if (u >= 1) {
@@ -327,7 +330,7 @@ export class Gestes {
           versMonde(v, ch[0], this.cible);
           j.pos.set(this.cible.x, 0, this.cible.z); this.c.col.resoudre(j.pos, j.r);
           j.h = j.hv = v.p.h + Math.PI / 2; j.v = 0;
-          j.assis = false; j.transition = null; j.baisse = undefined; j.poste = null;
+          j.assis = false; j.transition = null; j.baisse = undefined; j.poste = null; j.echelle = null;
           j.sync(dt, t);
           sorti();
         }
@@ -335,6 +338,15 @@ export class Gestes {
     });
     if (porte && fermer) etapes.push(this.portiere(v, -1)); // (fermer faux : on la laisse ouverte à qui monte ensuite)
     return etapes;
+  }
+  // Sur une échelle (l'enjambeur : sa montée a une échelle, de la fraction E.u0 à E.u1 du chemin) : la pose qui grimpe
+  // (anim.js : poseEchelle) tant qu'on y est, la hauteur gravie ; un bruit de pied sur chaque barreau
+  echelle(j, E, u, y) {
+    if (u <= E.u0 || u >= E.u1) { if (j.echelle) j.echelle = null; return; }
+    const e = j.echelle || (j.echelle = { h: 0, pas: E.pas, k: -1 });
+    e.h = y - E.y0;
+    const k = Math.floor(e.h / E.pas);
+    if (k !== e.k) { if (e.k >= 0) son.jouer('marche'); e.k = k; }
   }
   // Monter dans le véhicule v ; fin() quand on est installé (main.js passe en conduite)
   monter(v, fin) { this.lancer(this.etapesMonter(v, fin)); }
