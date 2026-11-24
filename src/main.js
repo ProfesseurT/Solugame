@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer, MAT } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture, voitureConduite, allumerPhares, pulverisateur, deplier, geoCartonOuvert } from './engins.js';
+import { tracteur, van, voiture, voitureConduite, allumerPhares } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -366,31 +366,21 @@ function montrerFin(F, phyto) {
 }
 const tel = new Telephone(jeu);
 const mission = new Mission(jeu);
-// La mission 2 (mission2.js) : le pulvérisateur, attelé au tracteur au réveil (replié, caché jusque-là)
-const pulve = pulverisateur();
-pulve.groupe.visible = false; vTracteur.m.caisse.add(pulve.groupe); deplier(pulve, 0);
-const traitement = new Traitement(jeu, { monde, particules, pulve, deplier, v: new THREE.Vector3(), rnd: hasard(97) });
+// La mission 2 (mission2.js) : le pulvérisateur de l'enjambeur (ses bras se déplient dans les parcelles du jour)
+const pulve = mEnj.pulve;
+const traitement = new Traitement(jeu, { monde, particules, pulve, deplier: (P, k) => deplierEnjambeur(mEnj, k), v: new THREE.Vector3(), rnd: hasard(97) });
 jeu.traitement = traitement;
-// La mission 3 (mission3.js) : les cartons du Clos 2025 sur la palette du chai (quatre piles de trois, cachées jusqu'au
-// matin de l'habillage) et, à côté, le carton ouvert où l'on prend l'échantillon
-const piles3 = [];
-{
-  const pal = new THREE.Group(); pal.position.set(L.palette.x, 0, L.palette.z); scene.add(pal);
-  for (const [x, z] of [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]]) {
-    const g = pileCartons(3); g.position.set(x, L.palette.y + 0.14, z); g.visible = false; pal.add(g);
-    piles3.push({ groupe: g, n: 3, client: 'clos' });
-  }
-}
-const CARTON3 = { x: L.palette.x, y: 0.36, z: L.palette.z + 1.05 }; // le haut des bouteilles du carton ouvert
-const cartonOuvert = new THREE.Mesh(geoCartonOuvert(), MAT);
-cartonOuvert.position.set(CARTON3.x, 0, CARTON3.z); cartonOuvert.castShadow = true; cartonOuvert.receiveShadow = true; cartonOuvert.visible = false;
-scene.add(cartonOuvert);
-const habillage = new Habillage(jeu, { palette: piles3, carton: CARTON3, ligne: monde.ligne });
+// La mission 3 (mission3.js) : la remorque de palox du Clos 2025 et le chariot élévateur de l'imprimerie (jeu.remorque,
+// jeu.chariot, plus bas)
+const habillage = new Habillage(jeu, {});
 jeu.habillage = habillage;
+// PROVISOIRE : la remorque et le chariot (remorque.js) arrivent
+jeu.remorque = { ici: L.tracteur, peutAtteler: () => false, atteler() {}, deteler() {}, debout: () => L.tracteur, pointEchantillon: () => ({ x: L.tracteur.x, y: 1, z: L.tracteur.z }) };
+jeu.chariot = { lancer() {}, fini: false };
 // l'œnologue et l'étiqueteur (créés dans peupler) : comme les clients, ils se tournent vers vous et font signe ; leur
 // affaire faite (l'échantillon donné, les cartons livrés), ils rentrent au labo ou à l'entrepôt (clients.js)
 L.portes.entrepot = L.entrepot.porte;
-const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: habillage.deposes } });
+const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: [] } });
 // la mission qui mène la balise, l'itinéraire et l'objectif
 const enCours = () => (habillage.actif ? habillage : traitement.actif ? traitement : mission);
 const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
@@ -409,7 +399,7 @@ jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
 const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
-const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le carton ouvert du chai
+const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : un palox de la remorque
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
@@ -466,7 +456,7 @@ function descendre() {
 // ressort), décharger ceux d'un client, puis remonter au volant
 const chai = new Chai({ jeu, monde, mission, gestes, cam, hud, tactile, conduite: { couperMoteur, auVolant, aPied },
   // on vient charger : la grande porte s'ouvre (la tournée : ce qui est signé ; l'habillage : les cartons du Clos)
-  aCharger: () => (enCours() === habillage ? habillage.aCharger || habillage.chargement : mission.aCharger.length > 0 || mission.etape === 'chargement') });
+  aCharger: () => enCours() === mission && (mission.aCharger.length > 0 || mission.etape === 'chargement') });
 jeu.charger = (piles, place, fin) => chai.charger(piles, place, fin);
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 // À l'épicerie : arrêté devant, on descend, on va au comptoir, l'épicier parle et donne le chèque, on remonte ; à pied, on
@@ -652,7 +642,7 @@ function conduire(dt, dtm, dernier = true) {
   // mission 2 : l'enjambeur engagé dans un rang fait toute la parcelle tout seul (passages, demi-tours) ; on ne gère que
   // l'avance (Teddy, 24/11/2026) : doigt posé ou flèche du haut, il avance ; glissé vers le bas ou flèche du bas, il
   // freine ; rien, il s'arrête. Le volant (doigt de côté, flèches de côté) ne fait rien.
-  const engage = M === traitement && traitement.engage && libre ? pilote.commande(tr, veh.genre, M.cible, voitures, col) : null;
+  const engage = M === traitement && traitement.engage && libre ? pilote.commande(tr, veh.genre, M.cible, voitures, col, true) : null;
   if (engage) {
     const avance = ctrl.clavier ? (ctrl.ky < 0 ? 1 : ctrl.ky > 0 ? -1 : 0) : ctrl.id !== null ? (ctrl.jy > 0.45 ? -1 : 1) : 0;
     braq = engage.braq; jeu.pilote = true;
@@ -802,15 +792,12 @@ function phares() {
 // Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur et
 // le van à leur place, le pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
 let mission2 = false, mission3 = false, resAff = true;
-const EMPRISE_PULVE = [-0.75, 0.75, -3.45, -2.2]; // le pulvérisateur attelé, qu'on contourne à pied (gestes.js)
 function lendemain() {
   mission.aller('libre');
   parvis.lendemain();
   vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
   const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
   vEnjambeur.p.placer(L.enjambeur.x, L.enjambeur.z, L.enjambeur.h);
-  pulve.groupe.visible = true;
-  if (!vTracteur.m.dims.emprise.includes(EMPRISE_PULVE)) vTracteur.m.dims.emprise.push(EMPRISE_PULVE);
   mission2 = true;
 }
 // Après la journée de traitement (mission2.js : dodo), le réveil se fait le jeudi (Teddy, 24/11/2026) : le pulvérisateur
@@ -826,11 +813,7 @@ function surlendemain() {
     if (v.m.cartons) for (const c of v.m.cartons) c.visible = false;
     v.p.charge = 0;
   }
-  pulve.groupe.visible = false;
-  const E = vTracteur.m.dims.emprise, i = E.indexOf(EMPRISE_PULVE); if (i >= 0) E.splice(i, 1);
   for (const p of mission.palette) p.groupe.visible = false;
-  for (const p of piles3) p.groupe.visible = true;
-  cartonOuvert.visible = true;
   mission3 = true;
 }
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
@@ -881,7 +864,7 @@ function reperes(dt, ego, cible) {
   // devant la porte de la maison du domaine : rentrer dormir
   const dodo = !pcPres && !servable && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
-  hud.placer(etqEchantillon, CARTON3.x, 1.2, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
+  { const ok = habillage.echantillonProche && !tel.ouvert && !pcPres, P = ok ? jeu.remorque.pointEchantillon() : null; hud.placer(etqEchantillon, P ? P.x : 0, P ? P.y + 0.6 : 0, P ? P.z : 0, ok); }
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3, enjambeur: 4.9 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
@@ -907,7 +890,7 @@ function miseAJour(dt) {
   } else if (jeu.auVolant) {
     // en traitant les rangs (mission2.js), doigt posé ou touche enfoncée : la scène va trois fois plus vite (trois pas de
     // conduite par image)
-    const k = traitement.pulverise && (ctrl.id !== null || ctrl.ky < 0) ? 3 : 1;
+    const k = (traitement.pulverise || traitement.engage) && enCours() === traitement && (ctrl.id !== null || ctrl.ky < 0) ? 3 : 1;
     for (let i = 0; i < k; i++) conduire(dt, dtm, i === k - 1);
   }
   else marcher(dtm);
@@ -932,7 +915,6 @@ function miseAJour(dt) {
   if (camLibre) { /* posée à la main (captures) */ }
   else if (jeu.dedans) bureau.camera(dt);
   else if (chai.camera(dt, ego)) { /* posée au fond de la halle */ }
-  else if (habillage.vueLigne && !gestes.cadre) { const S = L.entrepot.ligne; cam.salle(dt, S, S.centre.x, S.centre.z, false); } // la ligne d'habillage (mission 3)
   else if (gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else {
     // en dérive, la caméra suit à moitié la direction où l'on glisse (on voit le véhicule de trois quarts, en travers)
@@ -1092,10 +1074,6 @@ function reprendrePartie(P) {
   if (P.mission === 'habillage') {
     surlendemain(); mission3 = false; horloge(0);
     habillage.reprendre(P.etat);
-    // les cartons du Clos : sur la palette, dans leur véhicule, ou déjà livrés
-    for (const p of piles3) p.groupe.visible = !habillage.veh && !habillage.livre;
-    const v = habillage.veh;
-    if (v) { for (const { c, n } of habillage.cols) for (let l = 0; l < n; l++) v.m.cartons[3 * c + l].visible = true; v.p.charge = habillage.cols.reduce((s, x) => s + x.n, 0); }
     gens3.reprendre();
   } else if (P.mission === 'traitement') {
     lendemain(); mission2 = false; horloge(0);
@@ -1144,7 +1122,7 @@ mesures.script = Math.round(performance.now() - T0);
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis,
-  habillage, gens3, piles3, CARTON3, cartonOuvert, tel,
+  habillage, gens3, tel,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil

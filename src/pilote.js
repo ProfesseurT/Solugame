@@ -38,8 +38,11 @@ export class Pilote {
     const A = this.P[i], B = this.P[i + 1], dx = B.x - A.x, dz = B.z - A.z, l2 = dx * dx + dz * dz || 1;
     return ((p.x - A.x) * dx + (p.z - A.z) * dz) / l2;
   }
-  // commande { gaz, braq } pour le véhicule tr (Tracteur de vehicules.js) vers la cible de la mission, ou null
-  commande(tr, genre, cible, voitures, col) {
+  // commande { gaz, braq } pour le véhicule tr (Tracteur de vehicules.js) vers la cible de la mission, ou null.
+  // serre : suivre au plus près un itinéraire tracé pour lui (l'enjambeur engagé dans une parcelle : ses passages et ses
+  // demi-tours dans les tournières, plus larges que son braquage) : point visé plus proche, jamais de demi-tour en trois
+  // temps
+  commande(tr, genre, cible, voitures, col, serre = false) {
     const P = this.P;
     this.actif = false;
     if (!P) return null;
@@ -61,7 +64,7 @@ export class Pilote {
       if (ecart > 15) { this.i = -1; return null; }
     }
     // point visé à L mètres devant, le long de l'itinéraire
-    const av = Math.abs(tr.v), L = 5.5 + av * 0.65;
+    const av = Math.abs(tr.v), L = serre ? 2.6 + av * 0.45 : 5.5 + av * 0.65;
     let i = this.i, t = borne(this.param(i, pos), 0, 1), reste = L;
     let x = P[i].x + (P[i + 1].x - P[i].x) * t, z = P[i].z + (P[i + 1].z - P[i].z) * t;
     while (reste > 0) {
@@ -75,7 +78,7 @@ export class Pilote {
     const T = tr.T, emp = tr.d.emp, ecartAngle = Math.atan2(lat, lon);
     // le point visé est derrière : demi-tour en trois temps (en avant braqué à gauche, en arrière braqué à droite,
     // puis on repart), comme dans une rue étroite ; on change de temps au bout de l'angle voulu ou contre un obstacle
-    if (!this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
+    if (!serre && !this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
     if (this.demi) {
       const D = this.demi, tourne = Math.abs(((h - D.h0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
       D.t += 1 / 60; D.tp += 1 / 60;

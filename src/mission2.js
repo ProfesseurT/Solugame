@@ -18,6 +18,7 @@ import { ecart } from './reseau.js';
 const FAITE = 0.97;         // une parcelle est traitée quand 97 % de ses travées l'ont été
 const RANG_FAIT = 0.92;     // un rang l'est à 92 % (le guidage ne repasse plus dessus)
 const PAR_PASSAGE = 3;      // l'enjambeur traite trois rangs par passage : celui qu'il enjambe et ses deux voisins
+const TOUR = 4.2;           // rayon des demi-tours dans les tournières (l'enjambeur braque à 3,6 m)
 // engagé dans un rang : à moins de 0,9 m de l'axe d'un passage, dans son sens à 0,45 rad près (il pulvérise déjà)
 const ENGAGE_X = 0.9, ENGAGE_CAP = 0.45;
 const RAPPEL = 8;           // secondes au moins entre deux aides dites en route
@@ -172,9 +173,14 @@ export class Traitement {
       const x = ps[i], z0 = sud ? za : zb, z1 = sud ? zb : za;
       for (let k = 0; k <= 8; k++) pts.push([x, z0 + (z1 - z0) * k / 8]);
       if (i + 1 < ps.length) {
-        // demi-tour en arc, du côté de la sortie, jusqu'au passage suivant
-        const x2 = ps[i + 1], xm = (x + x2) / 2, r = Math.abs(x2 - x) / 2, s = sud ? 1 : -1, a0 = x < x2 ? Math.PI : 0;
-        for (let k = 1; k < 12; k++) { const a = a0 + (x < x2 ? -1 : 1) * Math.PI * k / 12; pts.push([xm + Math.cos(a) * r, z1 + s * Math.abs(Math.sin(a)) * r]); }
+        // demi-tour dans la tournière, du côté de la sortie, jusqu'au passage suivant : un quart de tour (rayon TOUR, plus
+        // large que le braquage de l'enjambeur), la tournière tout droit, un quart de tour ; deux passages proches : un
+        // arc. On ne s'éloigne jamais de plus de TOUR du bout des rangs.
+        const x2 = ps[i + 1], s = sud ? 1 : -1, d = x2 > x ? 1 : -1, r = Math.min(TOUR, Math.abs(x2 - x) / 2);
+        for (let k = 1; k <= 6; k++) { const a = Math.PI / 2 * k / 6; pts.push([x + d * r * (1 - Math.cos(a)), z1 + s * r * Math.sin(a)]); }
+        const xa = x + d * r, xb = x2 - d * r;
+        for (let k = 1, nk = Math.max(1, Math.round(Math.abs(xb - xa) / 2)); k < nk; k++) pts.push([xa + (xb - xa) * k / nk, z1 + s * r]);
+        for (let k = 0; k < 6; k++) { const a = Math.PI / 2 * k / 6; pts.push([x2 - d * r * (1 - Math.cos(a)), z1 + s * r * Math.cos(a)]); }
       }
       sud = !sud;
     }
@@ -227,7 +233,8 @@ export class Traitement {
       case 'preparer': {
         const d = j.distance(j.lieux.aire);
         if (j.auVolant && j.veh.genre !== 'enjambeur' && d < 8) this.aider(TX.dialogues.pasEnjambeur, 'aire');
-        if (this.enEnjambeur && d < 3.6 && Math.abs(j.tr.v) < 1.2 && !j.gestes.actif && !j.tel.ouvert) this.remplir();
+        // (la conduite assistée s'arrête à 4,2 m de la balise : on remplit dès 5 m)
+        if (this.enEnjambeur && d < 5 && Math.abs(j.tr.v) < 1.2 && !j.gestes.actif && !j.tel.ouvert) this.remplir();
         if (this.enEnjambeur && this.dans(2)) this.aider(TX.dialogues.pasPrete, 'parcelle'); // dans les vignes sans bouillie
         break;
       }

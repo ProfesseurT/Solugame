@@ -677,7 +677,7 @@ if (scenario === 'traitement') {
       CL.agir(); CL.finirGeste(); CL.step(3);
       const v = CL.vehicule('enjambeur');
       for (let k = 0; k < 40 && !J.auVolant; k++) { const a = k * 0.5; J.joueur.placer(v.p.pos.x + Math.cos(a) * 2.8, v.p.pos.z + Math.sin(a) * 2.8, 0); CL.step(2); CL.agir(); CL.finirGeste(); CL.step(2); }
-      CL.teleporter(-86, -66, Math.PI); CL.step(20); CL.finirGeste(); CL.step(10);
+      CL.teleporter(-86, -66, Math.PI); CL.step(20); CL.finirGeste(3000); CL.step(10); // (l'échelle, en bas et en haut : plus long)
       log.push(['à l\'aire de remplissage, la bouillie est prête ; on est de nouveau au volant de l\'enjambeur', T.prete && T.etape === 'traiter' && J.auVolant && J.veh.genre === 'enjambeur']);
       const [p1, t1, e1, g1, k1] = traiter('perrieres', -147, -116);
       const [p2, t2, e2, g2] = traiter('clos', -36, -116);
@@ -695,7 +695,7 @@ if (scenario === 'traitement') {
       const refusCible = tel.app === 'phytoC';
       tel.action('rp-cible:Oïdium'); tel.action('rp-cible:Mildiou'); tel.action('rp-suite'); tel.action('rp-enregistrer');
       log.push(['le registre refuse une parcelle pas traitée, un produit pas bio, le soufre (pas dans la cuve), une mauvaise dose, une autre cible', refusP && refusBio && refusCuve && refusDose && refusCible]);
-      log.push(['enregistré : une ligne de plus, envoyée, qui dit qui a saisi et quand', T.registre.length === 3 && T.registre[0].statut === 'envoye' && T.registre[0].par.startsWith('vous') && !T.registre[0].quand.includes(' 0')]);
+      log.push(['enregistré : une ligne de plus, envoyée, qui dit qui a saisi et quand', T.registre.length === 3 && T.registre[0].statut === 'envoye' && T.registre[0].par.startsWith('vous') && !/· 0/.test(T.registre[0].quand)]);
       tel.fermer(); CL.step(30);
       const [p3, t3] = traiter('grandschamps', -29, 24);
       log.push([`Les Grands Champs traités (${t3.toFixed(0)} s) ; pas de réseau : la noter sur place`, p3.traitee && !T.reseau && obj().startsWith('Notez-le sur place') && document.querySelector('#tel-res').textContent === 'Pas de service']);
