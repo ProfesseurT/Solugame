@@ -24,6 +24,7 @@ export class Pieton {
     this.service = null;     // en train de servir un verre : { t, duree, cible } (main.js)
     this.transition = null;  // monter dans un véhicule, en descendre : 0 debout, 1 au volant (gestes.js) ; null sinon
     this.porte = null;       // la pile de cartons qu'on porte (un groupe enfant du personnage, gestes.js), ou null
+    this.saisir = null;      // la main gauche sur une poignée : { x, y, z, w } (gestes.js, anim.js), ou null
     this.outil = null;       // un outil tenu des deux mains : { d, g } où vont les mains (parvis.js, anim.js), ou null
     this.clavier = false;    // assis au portable du bureau du chai : les mains sur le clavier
     this.verre = 0;          // un verre à la main : secondes qui restent ; tVerre : depuis quand on l'a
@@ -63,7 +64,8 @@ export class Pieton {
         cible = vitesse ?? (courir || force > 0.82 ? 5.6 : 1.3 + 2.6 * force);
         const voulu = Math.atan2(dx, dz), ecart = Math.abs(angle(voulu - this.h));
         // on tourne vite à l'arrêt (demi-tour sur place), moins vite lancé
-        const vif = this.v < 1.5 ? 10 : Math.max(5.5, 10 - (this.v - 1.5) * 1.1);
+        // (en marchant, on tourne un peu moins sec : un demi-tour prend un instant, pas une image)
+        const vif = this.v < 0.6 ? 10 : this.v < 1.5 ? 7.5 : Math.max(5.5, 10 - (this.v - 1.5) * 1.1);
         this.h = versAngle(this.h, voulu, vif * dt);
         // on ralentit pour un virage serré, on freine pour un demi-tour
         if (ecart > 0.6) cible *= Math.max(0.08, Math.cos(Math.min(1.5, (ecart - 0.6) * 1.1)));

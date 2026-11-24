@@ -46,10 +46,10 @@ export const TEMPERAMENTS = {
     rapports: [0, 3.4, 7.4, 99], resVigne: 1, ressorts: 1, tenue: 0.45, survirage: 0 },
   // le van : plus vif et plus rapide sur la route, mal à l'aise entre les rangs
   van: { vmax: 19, vmaxVigne: 2.8, vmaxAr: 4.5, vmaxArVigne: 1.8, acc: 4.6, accAr: 2.6, frein: 8, alat: 7.6, braqMax: 0.55, volant: 7,
-    rapports: [0, 4.2, 8.6, 13.2, 99], resVigne: 1.6, ressorts: 0.7, tenue: 0.8, survirage: 0.15 },
+    rapports: [0, 4.2, 8.6, 13.2, 99], resVigne: 1.6, ressorts: 0.7, tenue: 0.8, survirage: 0.08 },
   // une voiture empruntée (ou volée, en mode WTF) : la plus vive, accrocheuse sur la route, perdue dans les vignes
   voiture: { vmax: 23, vmaxVigne: 2.4, vmaxAr: 5, vmaxArVigne: 1.6, acc: 5.6, accAr: 3, frein: 9.5, alat: 8.6, braqMax: 0.58, volant: 8,
-    rapports: [0, 5, 10, 15.5, 99], resVigne: 2.2, ressorts: 0.55, tenue: 1, survirage: 0.3 },
+    rapports: [0, 5, 10, 15.5, 99], resVigne: 2.2, ressorts: 0.55, tenue: 1, survirage: 0.16 },
 };
 const DIMS = { rAr: 0.78, rAv: 0.45, yAr: 0.78, yAv: 0.45, emp: 2.25, off: [1.05, -0.95], r: 1.12, pivot: new THREE.Vector3(0, 0.75, -0.35) };
 const DEUX = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
@@ -136,13 +136,15 @@ export class Tracteur {
        Une fois en travers, on tient la glisse à l'accélérateur (plus longtemps en voiture qu'en tracteur) et on la règle
        au volant : contre-braquer redresse. Lâchée, l'arrière raccroche en douceur. derive 0..1 : monte vite, retombe
        lentement ; beta : angle de glisse (positif : le véhicule glisse vers sa gauche) */
-    const freinVirage = this.frein > 0.55 && av > 7 && Math.abs(braq) > 0.3 ? (this.frein - 0.55) * 1.6 : 0;
+    // (un peu moins sensible, Teddy, 24/11/2026 : un freinage plus fort et plus vite pour partir en travers ; l'accélérateur
+    // tient une glisse déjà lancée, il n'en lance pas une en virage ; l'adhérence revient un peu plus vite)
+    const freinVirage = this.frein > 0.7 && av > 9 && Math.abs(braq) > 0.45 ? (this.frein - 0.7) * 2 : 0;
     const beta = Math.atan2(this.vT, Math.max(1, av));
-    const tenue = this.pedale > 0.25 && av > 4 && Math.abs(beta) > 0.1 ? (0.32 + 0.4 * this.pedale) * T.tenue : 0;
-    // à fond et en butée de volant, lancée, une voiture survire : l'arrière se dérobe un peu (de quoi lancer une glisse)
-    const survire = this.pedale > 0.85 && Math.abs(braq) > 0.9 && av > 10 ? T.survirage : 0;
+    const tenue = this.pedale > 0.25 && av > 4 && this.derive > 0.3 && Math.abs(beta) > 0.14 ? (0.32 + 0.4 * this.pedale) * T.tenue : 0;
+    // à fond et en butée de volant, bien lancée, une voiture survire : l'arrière se dérobe un peu
+    const survire = this.pedale > 0.9 && Math.abs(braq) > 0.95 && av > 12 ? T.survirage : 0;
     const cibleD = Math.min(1, this.fm * Math.min(1, av / 3) + freinVirage * 0.6 + tenue + survire);
-    this.derive += (cibleD - this.derive) * lisser(dt, cibleD > this.derive ? 10 : 1.7);
+    this.derive += (cibleD - this.derive) * lisser(dt, cibleD > this.derive ? 7 : 2.3);
     const derive = this.derive;
 
     /* -- direction : angle borné par l'adhérence (au-delà en dérive), volant qui tourne à vitesse finie et revient seul */

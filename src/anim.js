@@ -184,6 +184,11 @@ export class Anim {
       this.brasIK(0, g[0], g[1], g[2], 0.8, -0.6, -0.3, this.wOutil);
     }
 
+    /* ------------------------------------------------ la main gauche sur une poignée (gestes.js : une portière qu'on
+       ouvre ou referme) : p.saisir = { x, y, z, w }, dans le repère du personnage, w de 0 à 1 */
+    const sa = p.saisir;
+    if (sa && sa.w > 0.01) this.brasIK(0, sa.x, sa.y, sa.z, 0.7, -0.5, -0.6, sa.w);
+
     /* ------------------------------------------------ téléphone en main (main droite, l'autre vient le tenir) */
     const yB = o[OS.bassin].position.y;
     if (this.wTel > 0.01) {
@@ -301,9 +306,9 @@ export class Anim {
     // bassin : rotation avec les jambes, bascule sur la jambe d'appui, inclinaison dans les virages. Sa hauteur suit ce
     // que les jambes atteignent : bas quand les deux pieds sont au sol, haut quand la jambe d'appui passe sous lui
     // (le balancement de la marche), jamais plus haut que la pose voulue ; en courant, il plonge à l'appui.
-    const lacetB = -0.1 * wg * (1 - 0.4 * w) * c1;
-    const roulisB = 0.05 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
-    const bx = 0.03 * this.poids * (1 - wg) + 0.02 * s1 * wg * (1 - w) - this.bank * 0.35, bz = -0.06 * choc - 0.12 * cr;
+    const lacetB = -0.13 * wg * (1 - 0.5 * w) * c1;
+    const roulisB = 0.07 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
+    const bx = 0.03 * this.poids * (1 - wg) + 0.032 * s1 * wg * (1 - w) - this.bank * 0.35, bz = -0.06 * choc - 0.12 * cr;
     let yb = DIM.yBassin - 0.014 + wg * (0.011 * (1 - w) - 0.062 * w) - 0.04 * w * wg * Math.cos(2 * TAU * (ph - beta / 2));
     if (wg > 0.001) {
       for (let j = 0; j < 2; j++) {
@@ -320,25 +325,28 @@ export class Anim {
     b.position.set(bx, yb - 0.13 * att - 0.4 * cr, bz);
     b.rotation.set(0.03 + 0.05 * w + 0.35 * cr, lacetB, roulisB + this.bank * 0.5);
     // buste : penché en courant et en accélérant, épaules en contre-rotation, respiration, regard ; penché pour ramasser
-    const pen = 0.025 + 0.02 * wg * (1 - w) + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj + 0.25 * cr;
-    o[OS.ventre].rotation.set(pen * 0.45 + br * 0.3, -lacetB * 0.45 + this.ry * 0.12, -roulisB * 0.7 + this.bank * 0.3);
-    o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12, -lacetB * 0.8 + this.ry * 0.22, -roulisB * 0.25 + this.bank * 0.2);
-    o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85, lacetB * 0.25 + this.ry * 0.66, -roulisB * 0.3 - this.bank * 0.6);
+    const marche = wg * (1 - w), hoche = 0.022 * marche * Math.cos(2 * TAU * (ph - 0.08));
+    const pen = 0.025 + 0.045 * marche + 0.14 * w + this.pench - 0.5 * choc + 0.3 * sj + 0.25 * cr;
+    o[OS.ventre].rotation.set(pen * 0.45 + br * 0.3, -lacetB * 0.5 + this.ry * 0.12, -roulisB * 0.8 + this.bank * 0.3);
+    o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12 + hoche * 0.4, -lacetB * (0.8 + 0.35 * marche) + this.ry * 0.22, -roulisB * (0.25 + 0.25 * marche) + this.bank * 0.2);
+    o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85 - hoche, lacetB * 0.3 + this.ry * 0.66, -roulisB * 0.1 - this.bank * 0.6);
     this.reperes();
     for (let j = 0, k = 0; j < 2; j++, k += 6) this.jambe(JAMBES[j][0], JAMBES[j][1], PIEDS[k + X], PIEDS[k + Y], PIEDS[k + Z], PIEDS[k + TG], PIEDS[k + LACET]);
 
     // bras : balancier opposé aux jambes, un peu plus devant que derrière, la main vient vers le milieu en avançant ; coudes
     // pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un peu écartés du corps, coudes légèrement
     // pliés (des bras tout droits collés au corps font mannequin)
-    const A = mix(0.36 * Math.min(1, va / 1.3), 0.75, w) * wg * sens;
-    const cG = Math.cos(TAU * (ph - 0.5)), cD = c1, flot = Math.sin(this.resp * 0.9) * 0.02, devant = 0.05 * wg * (1 - w);
-    const dedansG = 0.06 * wg * (1 - w) * Math.max(0, cG), dedansD = 0.06 * wg * (1 - w) * Math.max(0, cD);
-    o[OS.brasG].rotation.set(-A * cG - 0.04 - devant - 0.9 * choc - 0.5 * sj + flot, 0, 0.115 + 0.1 * w + 1.9 * sj - dedansG);
-    o[OS.brasD].rotation.set(-A * cD - 0.04 - devant - 0.9 * choc - 0.5 * sj - flot, 0, -(0.115 + 0.1 * w + 1.9 * sj - dedansD));
-    o[OS.coudeG].rotation.set(mix(-0.25 - 0.45 * Math.max(0, cG) * wg, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
-    o[OS.coudeD].rotation.set(mix(-0.25 - 0.45 * Math.max(0, cD) * wg, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
-    o[OS.mainG].rotation.set(-0.12 - 0.2 * w, 0.1, 0.06);
-    o[OS.mainD].rotation.set(-0.12 - 0.2 * w, -0.1, -0.06);
+    const A = mix(0.56 * Math.min(1, va / 1.3), 0.75, w) * wg * sens, retard = 0.06 * (1 - w);
+    const cG = Math.cos(TAU * (ph - 0.5 - retard)), cD = Math.cos(TAU * (ph - retard)), flot = Math.sin(this.resp * 0.9) * 0.02, devant = 0.1 * marche;
+    const eG = Math.cos(TAU * (ph - 0.5 - 2 * retard)), eD = Math.cos(TAU * (ph - 2 * retard)); // le coude, encore un peu plus en retard
+    const dedansG = 0.07 * marche * Math.max(0, cG), dedansD = 0.07 * marche * Math.max(0, cD), ecart = 0.115 + 0.05 * marche + 0.1 * w;
+    o[OS.brasG].rotation.set(-A * cG - 0.04 - devant - 0.9 * choc - 0.5 * sj + flot, 0.06 * marche * cG, ecart + 1.9 * sj - dedansG);
+    o[OS.brasD].rotation.set(-A * cD - 0.04 - devant - 0.9 * choc - 0.5 * sj - flot, -0.06 * marche * cD, -(ecart + 1.9 * sj - dedansD));
+    o[OS.coudeG].rotation.set(mix(-0.28 - 0.7 * Math.max(0, eG) * wg - 0.06 * marche, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    o[OS.coudeD].rotation.set(mix(-0.28 - 0.7 * Math.max(0, eD) * wg - 0.06 * marche, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    // les mains : détendues, le poignet qui suit un peu le balancement
+    o[OS.mainG].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eG, 0.1, 0.08);
+    o[OS.mainD].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eD, -0.1, -0.08);
   }
 
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */

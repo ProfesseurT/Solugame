@@ -608,7 +608,7 @@ function conduire(dt, dtm, dernier = true) {
   else if (ctrl.id !== null && libre) {
     const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
     const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
-    if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.35 && tr.v > 4) { fm = true; gaz *= 0.3; } }
+    if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.5 && sy > 0.55 && tr.v > 6) { fm = true; gaz *= 0.3; } } // frein à main : un geste franc, lancé
     else {
       const auto = tourne ? null : pilote.commande(tr, veh.genre, M.cible, voitures, col);
       if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }

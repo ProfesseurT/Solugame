@@ -169,22 +169,45 @@ export class Gestes {
   // aller à un point du repère du véhicule, tourné vers le cap (relatif au véhicule)
   allerVers(v, l, capRel) { return this.allerA(() => versMonde(v, l, this.cible), () => v.p.h + capRel); }
   // un battant (porte sur ses gonds, objet pt) s'ouvre jusqu'à l'angle ouverte (sens 1) ou se referme (sens -1), en
-  // duree secondes, depuis là où il est (déjà ouvert : rien ne bouge) : grincement à l'ouverture, claquement à la fermeture
-  battant(pt, ouverte, sens, duree) {
-    let claque = false, a0 = 0;
-    const but = sens > 0 ? ouverte : 0;
+  // duree secondes, depuis là où il est (déjà ouvert : rien ne bouge) : grincement à l'ouverture, claquement à la fermeture.
+  // Une portière (poignee : la poignée, dans le repère du battant) bouge comme une vraie (Teddy, 24/11/2026 : « plus
+  // réaliste ») : la serrure se décolle, elle s'ouvre avec de l'élan et rebondit un peu sur sa butée ; refermée, elle
+  // accélère, claque et rebondit à peine. Debout à côté, on la tient par la poignée, de la main gauche (anim.js : saisir).
+  battant(pt, ouverte, sens, duree, poignee = null) {
+    let claque = false, a0 = 0, bouge = false;
+    const but = sens > 0 ? ouverte : 0, j = () => this.j, sg = Math.sign(ouverte) || -1;
     return {
-      duree,
-      debut: () => { a0 = pt.rotation.y; claque = Math.abs(a0 - but) < 0.05; if (sens > 0 && !claque) son.jouer('portiere'); },
+      duree: poignee ? duree * 1.3 : duree,
+      debut: () => { a0 = pt.rotation.y; const deja = Math.abs(a0 - but) < 0.05; claque = deja; bouge = !deja; if (sens > 0 && !deja) son.jouer('portiere'); },
       maj: (dt, t, u) => {
-        pt.rotation.y = mix(a0, but, u);
-        if (sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
+        if (!poignee) pt.rotation.y = mix(a0, but, u);
+        else if (!bouge) { /* déjà là où elle doit être */ } else if (sens > 0) {
+          // la serrure (un petit à-coup), puis l'élan, la butée dépassée de 6 %, le retour
+          const v = Math.max(0, (u - 0.12) / 0.88), c1 = 1.2, c3 = c1 + 1, k = v <= 0 ? 0 : 1 + c3 * (v - 1) ** 3 + c1 * (v - 1) ** 2;
+          pt.rotation.y = u < 0.12 ? a0 + sg * 0.03 * Math.sin(Math.PI * u / 0.12) : mix(a0, but, k);
+        } else {
+          // elle se referme de plus en plus vite, claque, rebondit d'un rien
+          const v = Math.min(1, u / 0.82);
+          pt.rotation.y = u < 0.82 ? mix(a0, 0, v * v) : sg * 0.035 * Math.sin(Math.PI * (u - 0.82) / 0.18);
+          if (u >= 0.82 && !claque) { claque = true; son.jouer('claque'); }
+        }
+        if (!poignee && sens < 0 && u >= 1 && !claque) { claque = true; son.jouer('claque'); }
+        // debout à côté (pas assis dedans) : la main gauche sur la poignée, le temps du mouvement
+        const a = j();
+        if (poignee && bouge && a && !a.assis) {
+          pt.updateWorldMatrix(true, false); a.m.groupe.updateWorldMatrix(true, false);
+          vA.copy(poignee).applyMatrix4(pt.matrixWorld); a.m.groupe.worldToLocal(vA);
+          const w = sens > 0 ? lisse(u / 0.14) * (1 - lisse((u - 0.62) / 0.3)) : lisse(u / 0.2) * (1 - lisse((u - 0.7) / 0.2));
+          a.saisir = a.saisir || { x: 0, y: 0, z: 0, w: 0 };
+          a.saisir.x = vA.x; a.saisir.y = vA.y; a.saisir.z = vA.z; a.saisir.w = w;
+        }
+        if (u >= 1 && j() && j().saisir) j().saisir.w = 0;
         this.immobile(dt, t);
       },
     };
   }
-  // la portière du van, ou d'une voiture (son angle d'ouverture : porteOuverte)
-  portiere(v, sens) { return this.battant(v.m.porte, v.m.porteOuverte ?? OUVERTE, sens, sens > 0 ? 0.45 : 0.35); }
+  // la portière du van, ou d'une voiture (son angle d'ouverture : porteOuverte ; sa poignée : poignee)
+  portiere(v, sens) { return this.battant(v.m.porte, v.m.porteOuverte ?? OUVERTE, sens, sens > 0 ? 0.5 : 0.36, v.m.poignee || null); }
   // la porte coulissante du van : elle s'écarte du flanc puis glisse vers l'arrière (sens 1), ou l'inverse
   coulissante(v, sens) {
     const pt = v.m.coulissante;

@@ -34,7 +34,7 @@ await mkdir(sortie, { recursive: true });
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const navigateur = await puppeteer.launch({
-  executablePath: CHROME, headless: 'new',
+  executablePath: CHROME, headless: 'new', protocolTimeout: 600000, // (une mission entière se joue en un appel : sous la charge des bancs en parallèle, plus de 3 min)
   args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', `--window-size=${W},${H}`],
   defaultViewport: { width: W, height: H, deviceScaleFactor: W < 600 ? 2 : 1, isMobile: W < 600, hasTouch: W < 600 },
 });

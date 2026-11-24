@@ -758,6 +758,7 @@ export function van() {
     emprise: [[-0.95, 0.95, -2.16, 2.17]],
   };
   return {
+    poignee: new THREE.Vector3(0.95 - CHARNIERE[0], 1.0, -0.12 - CHARNIERE[1]), // la poignée de la portière (repère de la portière)
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, cartons, vitre, porte, coulissante, chargeur,
     siege: new THREE.Vector3(0.38, -0.1, -0.05), dims, volantCentre, volantRayon: 0.19, volantInclinaison,
     phares: eclairage({ av: [0.62, 0.77, 2.09], ar: [0.72, 0.95, -2.18] }, caisse, groupe),
@@ -847,6 +848,7 @@ export function voitureConduite(couleur, nom) {
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant: null, feux: corps.userData.feux, corps, siege: s,
     porte: corps.userData.porte, porteOuverte: -1.1, // la portière du conducteur (gestes.js : portiere)
+    poignee: new THREE.Vector3(0.05, 0.9, M.poignees[0] - corps.userData.porte.position.z), // sa poignée (repère de la portière)
     phares: ph,
     dims: {
       rAr: M.rr, rAv: M.rr, yAr: M.rr, yAv: M.rr, emp: M.zAv - M.zAr, off: [L * 0.48, -L * 0.48], r: W + 0.08, pivot: new THREE.Vector3(0, 0.55, 0),

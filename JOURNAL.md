@@ -756,3 +756,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Corrigé en route** : une maison s'était posée dans la vigne des Perrières (le guidage de la mission 2 y butait) : les maisons évitent maintenant les vignes.
 
 **Vérifié** : bancs `chateau` (on roule dans l'herbe à 20 m de la route, posé sur la pente ; une maison de la route arrête) et `traitement` ; images de la route, de la jonction, des maisons, de l'aire avec le tracteur.
+
+## 24/11/2026 · Retours de Teddy (23) : la démarche, la glisse, les portières
+
+**Demandes** : « On va améliorer la démarche du vigneron / vigneronne. On dirait un robot là, tu vas faire un effort. » ; « Le drift un peu moins sensible, et les portes des voitures qui s'ouvrent un peu plus réaliste. »
+
+**La démarche (anim.js, pieton.js)** : filmée image par image (de côté, de face, de trois quarts) avant et après. Les jambes allaient bien ; le haut du corps était figé, bras presque droits qui bougeaient à peine. Maintenant, à la marche : les bras balancent plus amplement, plus devant que derrière, en léger retard sur les jambes (le coude encore un peu plus), le coude plie quand le bras passe devant, les mains suivent ; les épaules tournent à l'opposé du bassin et penchent à l'inverse de lui, le poids passe sur la jambe d'appui, le buste se penche un peu, la tête hoche à chaque pas. On tourne un peu moins sec en marchant. La course ne change pas. Tous les personnages en profitent (passants, ouvriers du parvis).
+
+**La glisse (vehicules.js, main.js)** : l'accélérateur ne lance plus une glisse en virage, il tient seulement une glisse lancée au frein à main ou d'un gros freinage ; ce freinage doit être plus fort et plus vite ; la voiture et le van survirent moins ; l'adhérence revient un peu plus vite. Au doigt, le frein à main demande un geste plus franc sur le côté et plus de vitesse.
+
+**Les portières (gestes.js, engins.js)** : la serrure se décolle (un à-coup), la portière s'ouvre avec de l'élan, dépasse un peu sa butée et revient ; refermée, elle accélère, claque et rebondit d'un rien. Debout à côté, le personnage la tient par la poignée, de la main gauche (van et voitures).
+
+**Vérifié** : images de la marche avant et après, de la portière du van qui s'ouvre (angles : -0,02, -0,36, -0,83, -1,11, -1,21 puis -1,15) ; banc `chateau` (la glisse se tient toujours 2,7 s sur 3,5, sans tête-à-queue) ; `npm run verifie`.
