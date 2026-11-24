@@ -4,7 +4,7 @@ import { B, C, T, MAT, MAT_VITRE, fusion, teinter, deplacer, compacter } from '.
 import { assombrir } from './outils.js';
 
 const TAU = Math.PI * 2;
-const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : reflète le ciel
+export const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : reflète le ciel
 
 /* ---------------------------------------------------------------- outils de carrosserie
    Les carrosseries sont faites de facettes posées une à une (coques en sections, dalles percées de fenêtres,
@@ -55,7 +55,7 @@ export class Atelier {
 
 // Bloc convexe à huit coins : p[0..3] tour de la face du bas, p[4..7] ceux du haut dans le même ordre
 const FACES_BLOC = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
-function bloc(at, p, col, ty) {
+export function bloc(at, p, col, ty) {
   let cx = 0, cy = 0, cz = 0;
   for (const q of p) { cx += q[0] / 8; cy += q[1] / 8; cz += q[2] / 8; }
   for (const f of FACES_BLOC) {
@@ -64,7 +64,7 @@ function bloc(at, p, col, ty) {
   }
 }
 // Barre de section carrée (demi-côté r) entre deux points
-function barre(at, a, b, r, col, ty) {
+export function barre(at, a, b, r, col, ty) {
   const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize();
   const u = new THREE.Vector3(0, 1, 0).cross(d); if (u.lengthSq() < 1e-6) u.set(1, 0, 0);
   u.normalize().multiplyScalar(r);
@@ -76,7 +76,7 @@ function barre(at, a, b, r, col, ty) {
 // Dalle : un contour plan [u, v] (et ses trous) qui prend de l'épaisseur. pt(u, v, s) place un point du contour sur
 // la face extérieure (s = 0) ou intérieure (s = 1) : la dalle peut être inclinée ou cintrée. ext : direction de la
 // face extérieure. Options : colIn (face intérieure), colT (tranche des trous : joints de vitre).
-function dalle(at, contour, trous, pt, ext, col, ty, o = {}) {
+export function dalle(at, contour, trous, pt, ext, col, ty, o = {}) {
   const V = l => l.map(([u, v]) => new THREE.Vector2(u, v));
   const faces = THREE.ShapeUtils.triangulateShape(V(contour), trous.map(V));
   const tous = contour.concat(...trous);
@@ -104,7 +104,7 @@ function dalle(at, contour, trous, pt, ext, col, ty, o = {}) {
 // Coque en sections : stations le long de z (croissant), chacune une demi-section [x, y] donnée du haut (x = 0) vers
 // le bas. L'anneau complet descend côté +x, passe dessous (si `ferme`) et remonte côté -x. couleur(g, k) donne
 // [couleur, type] de la facette entre les stations g et g + 1 sur le bandeau k (0 en haut ; symétrique), ou null.
-function coque(at, zs, demi, couleur, ferme) {
+export function coque(at, zs, demi, couleur, ferme) {
   const A = zs.map((z, i) => {
     const H = demi(z, i);
     return [...H, ...H.slice(1).reverse().map(([x, y]) => [-x, y])].map(([x, y]) => [x, y, z]);
@@ -123,14 +123,14 @@ function coque(at, zs, demi, couleur, ferme) {
   return { A, zs };
 }
 // direction extérieure d'un bandeau de coque : la normale, dans le plan de la section, du plus long des deux segments
-function dehors(a, a2, b, b2) {
+export function dehors(a, a2, b, b2) {
   let tx = a2[0] - a[0], ty = a2[1] - a[1];
   const sx = b2[0] - b[0], sy = b2[1] - b[1];
   if (sx * sx + sy * sy > tx * tx + ty * ty) { tx = sx; ty = sy; }
   return [-ty, tx, 0];
 }
 // Point de la coque (côté +x) : bandeau k, cote z, fraction v du bandeau ; décollé de e vers l'extérieur
-function surCoque(co, z, k, v, e = 0, g = -1) {
+export function surCoque(co, z, k, v, e = 0, g = -1) {
   const { A, zs } = co;
   if (g < 0) { g = 0; while (g < zs.length - 2 && z > zs[g + 1]) g++; }
   const u = Math.min(1, Math.max(0, (z - zs[g]) / (zs[g + 1] - zs[g]))), a = A[g], b = A[g + 1];
@@ -147,7 +147,7 @@ function surCoque(co, z, k, v, e = 0, g = -1) {
 }
 // Décor posé sur une coque, des deux côtés : rectangle [z0, z1] x [v0, v1] du bandeau k, décollé de e.
 // Coupé aux stations : chaque morceau épouse sa facette.
-function decor(at, co, k, z0, z1, v0, v1, e, col, ty) {
+export function decor(at, co, k, z0, z1, v0, v1, e, col, ty) {
   const zs = co.zs, coupes = [z0, ...zs.filter(z => z > z0 + 1e-4 && z < z1 - 1e-4), z1];
   for (let i = 0; i < coupes.length - 1; i++) {
     const a = coupes[i], b = coupes[i + 1], zm = (a + b) / 2;
@@ -159,14 +159,14 @@ function decor(at, co, k, z0, z1, v0, v1, e, col, ty) {
   }
 }
 // Fond d'une coque fermée (première ou dernière station), en éventail depuis le centre ; sz : +1 vers l'avant
-function fond(at, anneau, col, ty, sz) {
+export function fond(at, anneau, col, ty, sz) {
   let cx = 0, cy = 0;
   for (const p of anneau) { cx += p[0] / anneau.length; cy += p[1] / anneau.length; }
   const c = [cx, cy, anneau[0][2]];
   for (let k = 0; k < anneau.length; k++) at.tri(c, anneau[k], anneau[(k + 1) % anneau.length], col, ty, [0, 0, sz]);
 }
 // Rectangle plat (vu de face) dans le plan z = cte, tourné vers sz (+1 : vers l'avant)
-function plaque(at, x0, x1, y0, y1, z, sz, col, ty, miroir) {
+export function plaque(at, x0, x1, y0, y1, z, sz, col, ty, miroir) {
   for (const s of miroir ? [1, -1] : [1]) at.quad([x0 * s, y0, z], [x1 * s, y0, z], [x1 * s, y1, z], [x0 * s, y1, z], col, ty, [0, 0, sz]);
 }
 
@@ -175,7 +175,7 @@ function plaque(at, x0, x1, y0, y1, z, sz, col, ty, miroir) {
    lisent aussi bien à l'arrêt qu'en roulant) et cache-moyeu. Centre à l'origine, axe x, face extérieure du côté
    x > 0 (cote = 1) ou x < 0 (cote = -1). dedans : flanc intérieur (inutile quand il est caché par la caisse). */
 const ROUES = new Map();
-function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
+export function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
   const cle = [r, l, n, cote, dedans, jante].join();
   let g = ROUES.get(cle);
   if (g) return g;
@@ -199,7 +199,7 @@ function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
 // Les quatre roues d'un véhicule du domaine : à l'arrière sur le châssis (groupe), à l'avant sur deux pivots de direction
 // portés par un essieu oscillant (il penche sur les bosses). g : géométries [arrière gauche, arrière droite, avant
 // gauche, avant droite] ; demi-voie, hauteur et position le long du véhicule de l'arrière, puis de l'avant.
-function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
+export function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
   const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
   const rouesAr = [mk(g[0], groupe, xAr, yAr, zAr), mk(g[1], groupe, -xAr, yAr, zAr)];
   const essieu = new THREE.Group(); essieu.position.set(0, yAv, zAv); groupe.add(essieu);
@@ -217,7 +217,7 @@ function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
    la caisse). Rend { groupe, flaque } (cachés tant qu'ils ne sont pas allumés : main.js). Matières partagées : allumerPhares(n) règle
    leur éclat d'après la nuit. */
 let MAT_PHARES = null;
-function matieresPhares() {
+export function matieresPhares() {
   if (MAT_PHARES) return MAT_PHARES;
   // la flaque : un dégradé, vif près du véhicule, qui s'efface au loin et sur les côtés
   const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
@@ -236,7 +236,7 @@ function matieresPhares() {
   return MAT_PHARES;
 }
 export function allumerPhares(n) { const M = matieresPhares(); M.glaces.opacity = n; M.flaque.opacity = 0.42 * n; }
-function eclairage(P, caisse, sol = caisse) {
+export function eclairage(P, caisse, sol = caisse) {
   const M = matieresPhares(), groupe = new THREE.Group(), G = [];
   const disque = (x, y, z, r, coul, sz) => { const g = new THREE.CircleGeometry(r, 12); if (sz < 0) g.rotateY(Math.PI); g.translate(x, y, z); G.push(teinter(g, coul)); };
   for (const s of [1, -1]) {
@@ -260,7 +260,7 @@ function eclairage(P, caisse, sol = caisse) {
    qu'ils ne servent pas (aucun appel de dessin) ; vehicules.js les allume. stop, recul : [lx, ly, lz, x, y, z] par paire
    (x et -x). Le gyrophare du tracteur : une lentille orange qui tourne quand il roule. */
 const MAT_RECUL = new THREE.MeshBasicMaterial({ color: '#fff4dc' });
-function feuxDomaine(caisse, stop, recul) {
+export function feuxDomaine(caisse, stop, recul) {
   const f = {};
   for (const [k, l, mat] of [['stop', stop, () => MAT_STOP], ['recul', recul, () => MAT_RECUL]]) {
     if (!l) continue;
@@ -270,7 +270,7 @@ function feuxDomaine(caisse, stop, recul) {
   }
   return f;
 }
-function gyrophare(caisse, x, y, z) {
+export function gyrophare(caisse, x, y, z) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.visible = false; caisse.add(g);
   g.add(new THREE.Mesh(fusion([B(0.05, 0.085, 0.13, '#fff', 0.035, 0, 0), B(0.05, 0.085, 0.13, '#fff', -0.035, 0, 0)]), MAT_CLIGNO));
   return g;
@@ -317,7 +317,7 @@ export function geoCartonOuvert() {
 // petit objet { position, visible } (repère de la caisse) : le montrer ou le cacher met les instances à jour.
 // base(c) : centre du carton du bas de la colonne c.
 const M_CARTON = new THREE.Matrix4();
-function colonnes(caisse, base) {
+export function colonnes(caisse, base) {
   const im = new THREE.InstancedMesh(geoCarton(), MAT, 18), cartons = [];
   im.castShadow = true; im.receiveShadow = true; im.count = 0; im.name = 'cartons';
   caisse.add(im);
@@ -348,7 +348,7 @@ function colonnes(caisse, base) {
 // voile (une facette sur deux plus sombre : on la voit tourner), moyeu et écrous. Centre à l'origine, axe x, face
 // extérieure du côté de `cote` ; nc crampons par moitié de bande.
 const PNEUS = new Map();
-function pneuAgricole(r, l, n, cote, nc) {
+export function pneuAgricole(r, l, n, cote, nc) {
   const cle = [r, l, n, cote, nc].join();
   if (PNEUS.has(cle)) return PNEUS.get(cle);
   const at = new Atelier(), h = l / 2, PN = '#1c1c20', FL = '#26262b', JA = '#efe3c6', MO = '#3b3d44';
