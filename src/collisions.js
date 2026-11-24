@@ -29,6 +29,15 @@ export class Collisions {
     return b;
   }
   boiteC(cx, cz, w, d) { return this.boite(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2); }
+  // Une boîte tournée (les maisons du village du château, tournées vers lui) : centre, largeur w et profondeur d dans son
+  // repère, tourné de rot autour de la verticale comme le décor (modeles.js : x' = x cos + z sin, z' = z cos - x sin).
+  // Rangée dans la grille par son enveloppe (x0..z1), qui sert aussi à la caméra.
+  boiteO(cx, cz, w, d, rot) {
+    const co = Math.cos(rot), si = Math.sin(rot), ex = (Math.abs(co) * w + Math.abs(si) * d) / 2, ez = (Math.abs(si) * w + Math.abs(co) * d) / 2;
+    const b = this.boite(cx - ex, cz - ez, cx + ex, cz + ez);
+    b.o = { cx, cz, hw: w / 2, hd: d / 2, co, si };
+    return b;
+  }
   // retire une boîte (une voiture garée qu'on vient de prendre, main.js)
   retirer(b) {
     const i = this.boites.indexOf(b);
@@ -38,6 +47,7 @@ export class Collisions {
 
   // Pousse le cercle (p.x, p.z, r) hors d'une boîte. Renvoie true s'il y avait contact.
   pousser(p, r, b) {
+    if (b.o) return this.pousserO(p, r, b.o);
     const cx = p.x < b.x0 ? b.x0 : p.x > b.x1 ? b.x1 : p.x;
     const cz = p.z < b.z0 ? b.z0 : p.z > b.z1 ? b.z1 : p.z;
     const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
@@ -52,6 +62,24 @@ export class Collisions {
       else if (m === h) { p.z = b.z0 - r; this.nx = 0; this.nz = -1; }
       else { p.z = b.z1 + r; this.nx = 0; this.nz = 1; }
     }
+    return true;
+  }
+
+  // la même chose contre une boîte tournée : dans son repère, puis retour dans celui du monde
+  pousserO(p, r, o) {
+    const dx = p.x - o.cx, dz = p.z - o.cz;
+    let lx = dx * o.co - dz * o.si, lz = dx * o.si + dz * o.co, nx, nz;
+    const qx = lx < -o.hw ? -o.hw : lx > o.hw ? o.hw : lx, qz = lz < -o.hd ? -o.hd : lz > o.hd ? o.hd : lz;
+    const ex = lx - qx, ez = lz - qz, d2 = ex * ex + ez * ez;
+    if (d2 >= r * r) return false;
+    if (d2 > 1e-9) { const d = Math.sqrt(d2), k = (r - d) / d; lx += ex * k; lz += ez * k; nx = ex / d; nz = ez / d; }
+    else {
+      const m = Math.min(o.hw - lx, lx + o.hw, o.hd - lz, lz + o.hd);
+      if (m === o.hw - lx) { lx = o.hw + r; nx = 1; nz = 0; } else if (m === lx + o.hw) { lx = -o.hw - r; nx = -1; nz = 0; }
+      else if (m === o.hd - lz) { lz = o.hd + r; nx = 0; nz = 1; } else { lz = -o.hd - r; nx = 0; nz = -1; }
+    }
+    p.x = o.cx + lx * o.co + lz * o.si; p.z = o.cz + lz * o.co - lx * o.si;
+    this.nx = nx * o.co + nz * o.si; this.nz = nz * o.co - nx * o.si;
     return true;
   }
 
@@ -71,16 +99,10 @@ export class Collisions {
         if (this.pousser(p, r, b)) touche = true;
       }
     }
-    // hors du carré de la zone de jeu, on ne va que sur la route du château, la route du tour et dans la cour du château
-    // (relief.js) : sinon on revient au plus près, dans le carré ou sur la route
+    // on va partout, collines comprises, jusqu'au bord de ce qu'on peut parcourir (relief.js : permis) ; au-delà, on y revient
     if ((p.x < -LIMITE || p.x > LIMITE || p.z < -LIMITE || p.z > LIMITE) && !permis(p.x, p.z, r)) {
-      const dr = ramener(p.x, p.z, r);
-      const cx = Math.max(-LIMITE, Math.min(LIMITE, p.x)), cz = Math.max(-LIMITE, Math.min(LIMITE, p.z));
-      if (Math.hypot(cx - p.x, cz - p.z) <= dr) {
-        this.nx = cx > p.x ? 1 : cx < p.x ? -1 : 0; this.nz = cz > p.z ? 1 : cz < p.z ? -1 : 0;
-        if (this.nx && this.nz) this.nz = 0;
-        p.x = cx; p.z = cz;
-      } else { p.x = SORTIE.x; p.z = SORTIE.z; this.nx = SORTIE.nx; this.nz = SORTIE.nz; }
+      ramener(p.x, p.z, r);
+      p.x = SORTIE.x; p.z = SORTIE.z; this.nx = SORTIE.nx; this.nz = SORTIE.nz;
       touche = true;
     }
     return touche;
@@ -90,7 +112,13 @@ export class Collisions {
   dedans(x, z) {
     const l = this.cases.get(this.cle(Math.floor(x / CASE), Math.floor(z / CASE)));
     if (!l) return false;
-    for (let i = 0; i < l.length; i++) { const b = l[i]; if (b.haut && x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) return true; }
+    for (let i = 0; i < l.length; i++) {
+      const b = l[i];
+      if (!b.haut || x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue;
+      if (!b.o) return true;
+      const o = b.o, dx = x - o.cx, dz = z - o.cz;
+      if (Math.abs(dx * o.co - dz * o.si) < o.hw && Math.abs(dx * o.si + dz * o.co) < o.hd) return true;
+    }
     return false;
   }
 

@@ -742,3 +742,17 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Les ouvriers du parvis parlent du traitement le lendemain (« Alors, cette tournée d'hier ? »).
 
 **Vérifié** : bancs `traitement` (refus : parcelle pas traitée, produit pas bio, soufre pas dans la cuve, mauvaise dose, autre cible) et `sauvegarde`.
+
+## 24/11/2026 · Retours de Teddy (22) : le château ouvert, sa route propre et bâtie, l'aire de remplissage
+
+**Demandes** : « Revois un peu le délire autour du château. On doit pouvoir aller partout, dans l'herbe et tout. Et la route doit être propre partout. Ajoute des maisons sur la route. » (capture : à la jonction avec le tour, l'enrobé finissait en dalle sombre) ; « Et là pareil (l'aire de remplissage) : faut virer le bout de route et faire une espèce de fosse pour le tracteur. Arrange et mets des détails. »
+
+**Fait** :
+- On va partout, dans l'herbe et les collines, jusqu'à 470 m du centre (relief.js `permis`). Ce qui arrête : les maisons du village du château (boîtes tournées, nouvelles dans collisions.js `boiteO` : elles n'en avaient pas, on ne pouvait pas les approcher), leurs murs de jardin, le mur des jardins du château, ses parterres, tous les arbres. Les arbres des collines ne poussent plus dans les vignes ni sur leurs chemins.
+- La route du château : un enrobé neuf, sans plaques de reprise (un type de matière de plus, `T.enrobe`), deux lignes de rive ; à l'arrivée, l'enrobé et les bas-côtés épousent le bord du tour, la bordure pavée s'ouvre devant la route (plus de coupe droite ni de bordure en travers).
+- Dix maisons le long de la route : d'un côté puis de l'autre, en retrait, face à la route, là où le sol est presque plat, hors des vignes et des lacets ; un soubassement de pierre côté pente, une allée de gravier qui suit le sol, une boîte aux lettres, un arbre au fond du jardin ; des prés autour (choisies avant le terrain).
+- L'aire de remplissage refaite : le bout de chemin qui la traversait est retiré (le chemin des vignes part de son bord nord) ; un bac de béton clair entre deux murets de rétention (le muret ouest ouvert devant la cuve d'eau), joints, caniveau central à grille, fosse de récupération, regard du débourbeur ; la potence au-dessus de la cuve du pulvérisateur, le compteur d'eau, la vanne, le tuyau depuis la cuve de 1 000 L ; la réserve d'eau claire pour se laver les mains ; l'armoire des produits, un bac de rétention et ses bidons, l'extincteur ; des bornes jaunes ; le panneau.
+
+**Corrigé en route** : une maison s'était posée dans la vigne des Perrières (le guidage de la mission 2 y butait) : les maisons évitent maintenant les vignes.
+
+**Vérifié** : bancs `chateau` (on roule dans l'herbe à 20 m de la route, posé sur la pente ; une maison de la route arrête) et `traitement` ; images de la route, de la jonction, des maisons, de l'aire avec le tracteur.

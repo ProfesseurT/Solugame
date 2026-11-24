@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
 import { Atelier } from './engins.js';
-import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, reserve } from './relief.js';
+import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve } from './relief.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
@@ -318,6 +318,40 @@ void main() {
       j = f;
     }
   }
+  // Les maisons de la route du château (Teddy, 24/11/2026 : « ajoute des maisons sur la route ») : de place en place,
+  // d'un côté puis de l'autre, en retrait de la route et face à elle, là où le sol est presque plat sous la maison et à
+  // hauteur de la chaussée (ni sur un remblai, ni contre un déblai, loin des lacets). Choisies avant le terrain (des prés
+  // autour d'elles, pas de champ, ni d'arbre des collines) ; bâties avec le château (chateau). Leur propre tirage au sort.
+  // (les parcelles de vigne : x0, z0, x1, z1, cépage ; plantées plus bas)
+  const PARCELLES = [
+    [-165, -110, -125, -20, 'chenin'], [-58, -110, -12, -25, 'cabernet'], [0, -110, 50, -25, 'chenin'],
+    [145, -110, 178, -10, 'cabernet'], [-160, 25, -112, 100, 'chenin'], [-106, 25, -60, 100, 'cabernet'],
+    [-50, 30, -8, 108, 'cabernet'], [-2, 30, 36, 108, 'chenin'], [60, 34, 172, 110, 'cabernet'],
+  ];
+  const MAISONS_ROUTE = [];
+  {
+    const R = TRACE, rr = hasard(9127);
+    let derniere = -999, cote = 1;
+    for (let i = 60; i < R.n - 120; i += 3) {
+      if (i - derniere < 30) continue;
+      const a = Math.max(0, i - 3), b = Math.min(R.n - 1, i + 3), l = Math.hypot(R.x[b] - R.x[a], R.z[b] - R.z[a]), tx = (R.x[b] - R.x[a]) / l, tz = (R.z[b] - R.z[a]) / l;
+      for (const s of [cote, -cote]) {
+        const w = 8.5 + Math.floor(rr() * 4), d = 7.5 + rr() * 1.5, h = 5.6 + rr() * 1.4, off = VERGE + 4.5 + d / 2;
+        const x = R.x[i] - tz * s * off, z = R.z[i] + tx * s * off, rot = Math.atan2(R.x[i] - x, R.z[i] - z), co = Math.cos(rot), si = Math.sin(rot);
+        const coins = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [x + u * co + v * si, z + v * co - u * si]);
+        const ys = coins.map(([cx, cz]) => sol(cx, cz)), y0 = Math.min(...ys), y1 = Math.max(...ys);
+        if (y1 - y0 > 2.2 || Math.abs(sol(x, z) - R.y[i]) > 3) continue;
+        if (coins.some(([cx, cz]) => procheRoute(cx, cz, VERGE + 3).d < VERGE + 1.5)) continue; // une autre partie de la route
+        if (Math.hypot(x - CHATEAU.x, z - CHATEAU.z) < CHATEAU.plateau + 22 || MAISONS_ROUTE.some(m => Math.hypot(m.x - x, m.z - z) < 24)) continue;
+        if (coins.some(([cx, cz]) => PARCELLES.some(([x0, z0, x1, z1]) => cx > x0 - 8 && cx < x1 + 8 && cz > z0 - 8 && cz < z1 + 8))) continue; // pas dans les vignes
+        // le seuil (la façade, côté route) au-dessus du sol ; un soubassement de pierre jusqu'au point le plus bas
+        const yb = Math.max(ys[2], ys[3]) + 0.03;
+        MAISONS_ROUTE.push({ i, s, x, z, w, d, h, rot, tx, tz, y: yb, socle: yb - y0, genre: MAISONS_ROUTE.length % 3 });
+        derniere = i; cote = -s; break;
+      }
+    }
+  }
+  const presMaison = (x, z, m) => MAISONS_ROUTE.some(o => Math.hypot(o.x - x, o.z - z) < Math.max(o.w, o.d) / 2 + m);
   // La zone retouchée autour du château (relief.js) : sa grille fine, les triangles mêmes du sol où l'on marche ; des
   // prés le long de la route et autour du château, des champs ailleurs (comme le grand terrain). En blocs de 6 x 6
   // mailles du grand terrain, élagués hors champ.
@@ -334,7 +368,7 @@ void main() {
         const k0 = k;
         if (t === 0) { sommet(a, b); sommet(a, b + 1); sommet(a + 1, b); } else { sommet(a, b + 1); sommet(a + 1, b + 1); sommet(a + 1, b); }
         const x = (pos[k0 * 3] + pos[k0 * 3 + 3] + pos[k0 * 3 + 6]) / 3, z = (pos[k0 * 3 + 2] + pos[k0 * 3 + 5] + pos[k0 * 3 + 8]) / 3;
-        const pre = Math.hypot(x, z) < 200 || reserve(x, z, 8);
+        const pre = Math.hypot(x, z) < 200 || reserve(x, z, 8) || presMaison(x, z, 12);
         if (pre) c.copy(herbes[Math.floor(hache(Math.floor(x / 13), Math.floor(z / 13)) * herbes.length)]);
         else c.copy(champs[Math.floor(hache(Math.floor(x / 55) + 7, Math.floor(z / 48) - 3) * champs.length)]);
         for (let q = k0; q < k; q++) { cols[q * 3] = c.r; cols[q * 3 + 1] = c.g; cols[q * 3 + 2] = c.b; types[q] = pre ? T.herbe : T.champ; }
@@ -379,7 +413,9 @@ void main() {
   // derrière le domaine vers le nord des Perrières et du Clos (mission 2 : la journée de traitement). Un chemin : une
   // bande de terre battue le long de ses points, à plat.
   const CHEMINS = [[[-86, -66], [-87.5, -80], [-100, -114], [-147, -114]], [[-87.5, -80], [-72, -114], [-36, -114]]];
-  for (const pts of CHEMINS) {
+  for (const pts0 of CHEMINS) {
+    // (dessiné à partir du bord nord de l'aire de remplissage, qu'il ne traverse plus ; le réseau part du milieu de l'aire)
+    const pts = pts0[0][0] === -86 && pts0[0][1] === -66 ? [[-86.3, -71.6], ...pts0.slice(1)] : pts0;
     const p = [];
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1], [bx, bz] = pts[i], l = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / l * 2.1, nz = (bx - ax) / l * 2.1;
@@ -396,7 +432,7 @@ void main() {
     surf.push(teinter(g, '#c9b993'));
     plan.push({ t: 'l', pts, c: '#c9b993', w: 4.2 });
   }
-  surf.push(B(6, 0.09, 8.5, '#8f8a80', -86, 0, -67));
+  surf.push(B(6, 0.09, 8.5, '#aaa69d', -86, 0, -67)); // l'aire de remplissage : un béton clair (ses détails : plus bas)
   rect(-89, -71.25, -83, -62.75, '#a9a399');
   // parking de l'église
   surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
@@ -411,11 +447,6 @@ void main() {
     chenin: ['#e2b23a', '#d9a832', '#eac24a', '#cfa13a', '#bca73e', '#e6b845'],
     cabernet: ['#c2562e', '#b0402c', '#d0702f', '#9e3a2e', '#c98a34', '#b84a35'],
   };
-  const PARCELLES = [
-    [-165, -110, -125, -20, 'chenin'], [-58, -110, -12, -25, 'cabernet'], [0, -110, 50, -25, 'chenin'],
-    [145, -110, 178, -10, 'cabernet'], [-160, 25, -112, 100, 'chenin'], [-106, 25, -60, 100, 'cabernet'],
-    [-50, 30, -8, 108, 'cabernet'], [-2, 30, 36, 108, 'chenin'], [60, 34, 172, 110, 'cabernet'],
-  ];
   const parcs = PARCELLES.map(([x0, z0, x1, z1, cep]) => {
     const q = col.parcelle(x0, z0, x1, z1, 2.2);
     q.cep = cep;
@@ -864,9 +895,11 @@ void main() {
     poser(L, o.x, o.z, o.rot || 0, bati, o.y);
     if (V.length) poser(V, o.x, o.z, o.rot || 0, vitresB, o.y);
     if (Pm.length) poser(Pm, o.x, o.z, o.rot || 0, proches, o.y);
-    if (o.sansCol) {
-      // (le village du château : les maisons tournées vers lui, hors de ce qu'on peut atteindre) sur la mini-carte
+    if (Math.abs(Math.sin(2 * (o.rot || 0))) > 1e-3) {
+      // une maison de biais (le village du château, tournée vers lui ; la route du château) : sa boîte tournée, son
+      // contour sur la mini-carte
       const r0 = o.rot || 0, co = Math.cos(r0), si = Math.sin(r0);
+      col.boiteO(o.x, o.z, w, d, r0).haut = true;
       plan.push({ t: 'p', pts: [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => [o.x + x * co + z * si, o.z + z * co - x * si]) });
       return o;
     }
@@ -1318,18 +1351,63 @@ void main() {
   for (const x of [-93, -87]) { bati.push(B(0.8, 2.6, 0.8, TUF, x, 1.3, -33.5), B(1, 0.2, 1, '#cbbf9f', x, 2.7, -33.5)); col.boiteC(x, -33.5, 0.8, 0.8); }
   bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 3.25, -33.5));
   enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 3.65, 5.6, 0.72, '#2b2b30', '#f0d9a0');
-  // l'aire de remplissage (mission 2) : une cuve d'eau de 1 000 L dans sa cage, sur un socle ; la potence et son tuyau ;
-  // l'armoire fermée des produits, son pictogramme ; un caniveau qui récupère ce qui coule
+  /* -- l'aire de remplissage (mission 2 ; Teddy, 24/11/2026 : « une espèce de fosse pour le tracteur, avec des détails ») :
+     un bac de béton entre deux murets de rétention, où le tracteur entre par le sud et ressort au nord vers les vignes
+     (le muret ouest s'ouvre pour aller à la cuve d'eau) ; joints de dilatation, caniveau central à grille qui mène à la
+     fosse de récupération, regard du débourbeur ; la cuve d'eau de 1 000 L dans sa cage, son tuyau jusqu'à la potence,
+     le compteur d'eau, la vanne, la potence au-dessus de la cuve du pulvérisateur ; la réserve d'eau claire pour se
+     laver les mains ; l'armoire fermée des produits, le bac de rétention et ses bidons, l'extincteur ; des bornes
+     jaunes ; le panneau. Lieux : lieux.aire (le tracteur s'arrête au milieu, tourné vers le nord), aire.cuve. */
   {
-    const x = -90.2, z = -67.5;
-    bati.push(B(1.3, 0.5, 1.3, '#8f8a80', x, 0.25, z), B(1.15, 1.05, 1.15, '#eef0ec', x, 1.03, z), C(0.16, 0.16, 0.1, 10, '#2f6db0', x, 1.6, z));
-    for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) bati.push(B(0.05, 1.15, 0.05, '#9aa1a8', x + dx, 1.08, z + dz));
-    for (const y of [0.6, 1.08, 1.56]) bati.push(B(1.24, 0.04, 1.24, '#9aa1a8', x, y, z));
-    bati.push(B(0.12, 3.2, 0.12, '#5d6b78', -88.6, 1.6, -71.2), B(2.6, 0.1, 0.1, '#5d6b78', -87.4, 3.15, -71.2), B(0.06, 0.9, 0.06, '#1e1e22', -86.2, 2.65, -71.2));
-    bati.push(B(1.3, 1.9, 0.6, '#55705a', -83.4, 0.95, -71.4), B(1.32, 0.06, 0.62, '#3e5244', -83.4, 1.92, -71.4), B(0.3, 0.3, 0.02, '#e8b923', -83.4, 1.3, -71.09), B(0.2, 0.2, 0.025, '#1e1e22', -83.4, 1.3, -71.085));
-    bati.push(B(5.6, 0.04, 0.3, '#5b5e66', -86, 0.07, -62.9));
-    col.boiteC(x, z, 1.4, 1.4); col.boiteC(-88.6, -71.2, 0.3, 0.3); col.boiteC(-83.4, -71.4, 1.4, 0.7);
-    contact.jupe(x - 0.65, z - 0.65, x + 0.65, z + 0.65, 0.6, 0.35); contact.jupe(-84.05, -71.7, -82.75, -71.1, 0.6, 0.35);
+    const BET = '#aaa69d', MUR = '#bab5ab', JAUNE = '#e0b12a', NOIR2 = '#1e1e22', GRIS = '#6a6d74';
+    // les murets : à l'est d'un tenant, à l'ouest en deux, ouverts devant la cuve d'eau ; leurs bouts peints en jaune et noir
+    const muret = (x, z0, z1, h) => {
+      const z = (z0 + z1) / 2, l = z1 - z0;
+      bati.push(B(0.24, h, l, MUR, x, h / 2, z), B(0.3, 0.03, l + 0.04, '#cdc8bd', x, h + 0.015, z));
+      for (const zb of [z0 + 0.1, z1 - 0.1]) for (let k = 0; k < 2; k++) bati.push(B(0.25, h / 2, 0.2, k ? NOIR2 : JAUNE, x, h / 4 + k * h / 2 + 0.002, zb));
+      col.boite(x - 0.12, z0, x + 0.12, z1);
+    };
+    muret(-82.88, -71.25, -62.75, 0.3); muret(-89.12, -71.25, -68.4, 0.3); muret(-89.12, -66.6, -62.75, 0.3);
+    // joints de dilatation, les deux rebords en pente à l'entrée et à la sortie
+    for (const z of [-69.1, -66.9, -64.7]) bati.push(B(5.76, 0.006, 0.03, '#7d796f', -86, 0.047, z));
+    for (const z of [-62.55, -71.45]) bati.push(B(6, 0.05, 0.42, BET, -86, 0.02, z));
+    // le caniveau central à grille, la fosse de récupération au nord, le regard du débourbeur
+    bati.push(B(0.34, 0.012, 7.3, NOIR2, -86, 0.05, -66.85), B(0.42, 0.014, 7.38, GRIS, -86, 0.048, -66.85));
+    for (let z = -70.35; z < -63.3; z += 0.36) bati.push(B(0.3, 0.016, 0.04, '#8d9298', -86, 0.054, z));
+    bati.push(B(1.1, 0.014, 1.1, GRIS, -86, 0.049, -70.85), B(0.96, 0.012, 0.96, NOIR2, -86, 0.051, -70.85));
+    for (let k = -4; k <= 4; k++) bati.push(B(0.03, 0.016, 0.92, '#8d9298', -86 + k * 0.105, 0.056, -70.85));
+    bati.push(C(0.42, 0.42, 0.05, 14, '#5d6066', -90.6, 0.03, -71.9), C(0.36, 0.36, 0.055, 14, '#3a3a3e', -90.6, 0.035, -71.9));
+    // la cuve d'eau de 1 000 L dans sa cage, sur son socle ; son tuyau, le compteur d'eau, la vanne, la potence
+    {
+      const x = -90.2, z = -67.5;
+      bati.push(B(1.3, 0.5, 1.3, '#8f8a80', x, 0.25, z), B(1.15, 1.05, 1.15, '#eef0ec', x, 1.03, z), C(0.16, 0.16, 0.1, 10, '#2f6db0', x, 1.6, z));
+      for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) bati.push(B(0.05, 1.15, 0.05, '#9aa1a8', x + dx, 1.08, z + dz));
+      for (const y of [0.6, 1.08, 1.56]) bati.push(B(1.24, 0.04, 1.24, '#9aa1a8', x, y, z));
+      bati.push(C(0.07, 0.07, 0.16, 8, NOIR2, x + 0.5, 0.62, z + 0.45, 'x'));
+      col.boiteC(x, z, 1.4, 1.4);
+      contact.jupe(x - 0.65, z - 0.65, x + 0.65, z + 0.65, 0.6, 0.35);
+    }
+    bati.push(manche([-89.7, 0.08, -67.0], [-89.65, 0.08, -64.0], 0.035, '#2f6db0'), manche([-89.65, 0.08, -64.0], [-89.65, 0.9, -64.0], 0.035, '#2f6db0'));
+    bati.push(B(0.16, 4.2, 0.16, '#5d6b78', -89.65, 2.1, -64.0), B(3.8, 0.12, 0.12, '#5d6b78', -87.8, 3.85, -64.0), manche([-89.65, 3.0, -64.0], [-88.7, 3.85, -64.0], 0.04, '#5d6b78'));
+    bati.push(B(0.3, 0.3, 0.2, '#2f6db0', -89.5, 1.25, -64.0), B(0.16, 0.16, 0.02, '#dfe6ea', -89.5, 1.28, -63.89), C(0.12, 0.12, 0.03, 10, '#c0392b', -89.45, 0.95, -63.86, 'z'));
+    bati.push(manche([-86.1, 3.85, -64.0], [-86.05, 2.25, -63.9], 0.045, NOIR2), C(0.06, 0.05, 0.16, 8, GRIS, -86.05, 2.18, -63.9));
+    col.boiteC(-89.65, -64.0, 0.35, 0.35);
+    // la réserve d'eau claire pour se laver les mains, son robinet
+    bati.push(B(0.42, 0.5, 0.32, '#eef0ec', -90.4, 1.0, -64.6), B(0.08, 0.75, 0.08, GRIS, -90.4, 0.38, -64.6), C(0.02, 0.02, 0.12, 6, '#9aa1a8', -90.4, 0.72, -64.42, 'z'));
+    col.boiteC(-90.4, -64.6, 0.45, 0.35);
+    // des bornes jaunes devant la cuve et la potence
+    for (const z of [-69.6, -65.4]) { bati.push(C(0.08, 0.08, 0.9, 8, JAUNE, -89.55, 0.45, z), C(0.085, 0.085, 0.08, 8, NOIR2, -89.55, 0.7, z)); col.boiteC(-89.55, z, 0.2, 0.2); }
+    // l'armoire fermée des produits et son pictogramme, le bac de rétention et ses bidons, l'extincteur
+    bati.push(B(1.3, 1.9, 0.6, '#55705a', -83.4, 0.95, -71.4), B(1.32, 0.06, 0.62, '#3e5244', -83.4, 1.92, -71.4), B(0.3, 0.3, 0.02, '#e8b923', -83.4, 1.3, -71.09), B(0.2, 0.2, 0.025, NOIR2, -83.4, 1.3, -71.085));
+    bati.push(B(0.03, 0.22, 0.02, '#9aa1a8', -83.15, 1.0, -71.09), B(1.0, 0.22, 0.72, '#2f6b3a', -82.05, 0.11, -71.35));
+    for (const [dx, c] of [[-0.3, '#f1f1ee'], [0, '#f1f1ee'], [0.3, '#2f6db0']]) bati.push(B(0.24, 0.34, 0.16, c, -82.05 + dx, 0.39, -71.35), C(0.03, 0.03, 0.04, 6, dx > 0 ? '#f1f1ee' : '#2f6db0', -82.05 + dx + 0.06, 0.58, -71.35));
+    bati.push(C(0.07, 0.07, 0.42, 8, '#c0392b', -84.25, 1.0, -71.12), B(0.06, 0.04, 0.05, NOIR2, -84.25, 1.24, -71.08));
+    col.boiteC(-83.4, -71.4, 1.4, 0.7); col.boiteC(-82.05, -71.35, 1.05, 0.75);
+    contact.jupe(-84.05, -71.7, -82.75, -71.1, 0.6, 0.35);
+    // le panneau, à l'entrée
+    for (const dx of [-0.85, 0.85]) bati.push(B(0.07, 1.9, 0.07, '#5d6b78', -82.0 + dx, 0.95, -62.3));
+    col.boiteC(-82.0, -62.3, 1.9, 0.15);
+    enseigne('AIRE DE REMPLISSAGE', { x: -82.0, z: -62.27, rot: 0 }, 1.65, 1.9, 0.42, '#2f6b3a', '#f4efe2');
   }
 
   // Le bourg : maisons le long de la départementale
@@ -1513,7 +1591,27 @@ void main() {
     let iFin = R.n - 1;
     while (iFin > 0 && Math.hypot(R.x[iFin] - CH.x, R.z[iFin] - CH.z) < CH.tour + DEMI + 0.2) iFin--;
     const surf = []; // (les surfaces du reste du monde sont déjà fusionnées : celles-ci ont leur maillage)
-    surf.push(ruban(0, iFin, -DEMI, DEMI, 0.045, VIEILLE), ruban(0, iFin, DEMI, DEMI + 0.55, 0.035, '#cfc1a0'), ruban(0, iFin, -DEMI - 0.55, -DEMI, 0.035, '#cfc1a0'));
+    // un enrobé net, ses deux lignes de rive, ses bas-côtés en gravier (Teddy, 24/11/2026 : « la route doit être propre
+    // partout »)
+    const ENROBE = '#4f5158';
+    surf.push(ruban(0, iFin, -DEMI, DEMI, 0.045, ENROBE), ruban(0, iFin, DEMI, DEMI + 0.55, 0.035, '#cfc1a0'), ruban(0, iFin, -DEMI - 0.55, -DEMI, 0.035, '#cfc1a0'));
+    surf.push(ruban(0, iFin - 4, DEMI - 0.34, DEMI - 0.2, 0.05, LIGNE), ruban(0, iFin - 4, -DEMI + 0.2, -DEMI + 0.34, 0.05, LIGNE));
+    // le raccord avec le tour : du dernier profil de la route jusqu'au bord extérieur des pavés, qu'il épouse
+    const jA = Math.atan2(R.z[iFin] - CH.z, R.x[iFin] - CH.x), rBord = CH.tour + DEMI;
+    {
+      const a = iFin - 2, b = iFin, l = Math.hypot(R.x[b] - R.x[a], R.z[b] - R.z[a]), tx = (R.x[b] - R.x[a]) / l, tz = (R.z[b] - R.z[a]) / l;
+      for (const [dg, dd, dy, c] of [[-DEMI, DEMI, 0.045, ENROBE], [DEMI, DEMI + 0.55, 0.035, '#cfc1a0'], [-DEMI - 0.55, -DEMI, 0.035, '#cfc1a0']]) {
+        const P = dlat => { const x = R.x[iFin] - tz * dlat, z = R.z[iFin] + tx * dlat; return [x, R.y[iFin] + dy, z]; };
+        const surBord = q => { const dx = q[0] - CH.x, dz = q[2] - CH.z, k = rBord / Math.hypot(dx, dz); return [CH.x + dx * k, Y + dy, CH.z + dz * k]; };
+        const A = P(dg), Bq = P(dd), Cq = surBord(A), Dq = surBord(Bq), p = [];
+        for (const [u, v, w] of [[A, Bq, Cq], [Bq, Dq, Cq]]) {
+          const ny = (v[2] - u[2]) * (w[0] - u[0]) - (v[0] - u[0]) * (w[2] - u[2]);
+          p.push(...u, ...(ny >= 0 ? v : w), ...(ny >= 0 ? w : v));
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.computeVertexNormals();
+        surf.push(teinter(g, c));
+      }
+    }
     plan.push({ t: 'l', pts: Array.from({ length: Math.ceil(R.n / 4) }, (_, k) => [R.x[Math.min(R.n - 1, k * 4)], R.z[Math.min(R.n - 1, k * 4)]]), c: '#8b857b', w: 6 });
     // parapets du côté du vide (là où le relief d'origine tombe sous la chaussée), en murets d'au moins 24 m (les
     // trous de moins de 16 m comblés) ; arbres du côté de la pente
@@ -1535,6 +1633,7 @@ void main() {
       const cap = Math.atan2(tx, tz);
       // des balises blanches à bande noire au bord de la chaussée, tous les 28 m, en quinconce
       if (i % 28 === 0 && i > 80) for (const s of [1, -1]) {
+        if (MAISONS_ROUTE.some(m => m.s === s && Math.abs(m.i - i) < 4)) continue; // l'allée d'une maison
         const bx = R.x[i] - tz * s * (DEMI + 1.1), bz = R.z[i] + tx * s * (DEMI + 1.1), by = sol(bx, bz);
         bati.push(B(0.14, 1.0, 0.14, '#f1ece2', bx, by + 0.5, bz, cap), B(0.15, 0.2, 0.15, '#1d1d1d', bx, by + 0.78, bz, cap));
         col.boiteC(bx, bz, 0.2, 0.2);
@@ -1543,7 +1642,7 @@ void main() {
         const vide = vides[s > 0 ? 0 : 1][i];
         const px = R.x[i] - tz * s * 6.6, pz = R.z[i] + tx * s * 6.6;
         if (vide) bati.push(B(0.42, 0.78, 2.12, '#cdbf9f', px, R.y[i] + 0.33, pz, cap), B(0.52, 0.1, 2.12, APPUI, px, R.y[i] + 0.76, pz, cap));
-        else if (i - dernierArbre > 16 && R.y[i] > 3) {
+        else if (i - dernierArbre > 16 && R.y[i] > 3 && !presMaison(R.x[i] - tz * s * 9.6, R.z[i] + tx * s * 9.6, 3)) {
           dernierArbre = i;
           const ax = R.x[i] - tz * s * 9.6, az = R.z[i] + tx * s * 9.6;
           arbresChateau.push([ax, az, pick(['chene', 'platane', 'chene']), sol(ax, az)]);
@@ -1551,11 +1650,41 @@ void main() {
       }
     }
 
+    // les maisons de la route (choisies plus haut : MAISONS_ROUTE) : face à la route, sur un soubassement de pierre côté
+    // pente ; une allée de gravier de la route à la porte, qui suit le sol ; la boîte aux lettres au bord de la route ; un
+    // arbre au fond du jardin
+    const allee = (pts, larg, c) => {
+      for (let k = 1; k < pts.length; k++) {
+        const a = pts[k - 1], b = pts[k], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], l = Math.hypot(dx, dy, dz);
+        const g = B(larg, 0.04, l + 0.08, c), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(dx / l, dy / l, dz / l));
+        g.applyQuaternion(q); bati.push(deplacer(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2));
+      }
+    };
+    const rm = hasard(4405);
+    for (const m of MAISONS_ROUTE) {
+      const { x, z, y, w, d, h, rot, genre, i, s, tx, tz } = m, ENDUITS2 = ['#e6d4b0', '#ead9bb', '#e9d2a8'];
+      maison({ x, z, y, w, d, h, rot, volets: genre === 1 ? null : VOLETS[Math.floor(rm() * VOLETS.length)], mur: genre === 1 ? ENDUITS2[Math.floor(rm() * 3)] : genre === 0 ? TUF : undefined,
+        tourelle: genre === 0 && w >= 10, colombages: genre === 1, lucarnes: true });
+      if (m.socle > 0.04) bati.push(B(w + 0.24, m.socle + 0.35, d + 0.24, '#b9a98b', x, y - (m.socle + 0.35) / 2, z, rot));
+      const vx = Math.sin(rot), vz = Math.cos(rot), pts = [];
+      for (let k = 0; k <= 3; k++) {
+        const t = k / 3, d0 = DEMI + 0.55, d1 = VERGE + 4.5 - 0.3, dl = d0 + (d1 - d0) * t, px = R.x[i] - tz * s * dl, pz = R.z[i] + tx * s * dl;
+        pts.push([px, Math.max(sol(px, pz), k === 3 ? y : -99) + 0.035, pz]);
+      }
+      allee(pts, 1.3, '#cfc1a0');
+      const bx = R.x[i] - tz * s * (DEMI + 0.9) + tx * 1.4, bz = R.z[i] + tx * s * (DEMI + 0.9) + tz * 1.4, by = sol(bx, bz);
+      bati.push(B(0.08, 1.05, 0.08, '#4a3324', bx, by + 0.52, bz), B(0.42, 0.3, 0.3, pick(['#2f5d50', '#8e2a3b', '#2f4a6b']), bx, by + 1.15, bz, rot), B(0.3, 0.025, 0.015, '#d9cdb2', bx + vx * 0.155, by + 1.2, bz + vz * 0.155, rot));
+      col.boiteC(bx, bz, 0.4, 0.4);
+      const ax = x - vx * (d / 2 + 4.5), az = z - vz * (d / 2 + 4.5);
+      if (procheRoute(ax, az, 9).d > 8.5) arbresChateau.push([ax, az, rm() < 0.5 ? 'chene' : 'cedre', sol(ax, az)]);
+    }
+
     // la route du tour : petits pavés entre deux bordures ; l'allée et la cour du château, en gravier
-    const anneau = (r0, r1, y, couleur, n = 96) => {
+    const anneau = (r0, r1, y, couleur, n = 96, sauf = 0) => {
       const p = [];
       for (let k = 0; k < n; k++) {
         const a0 = k / n * Math.PI * 2, a1 = (k + 1) / n * Math.PI * 2;
+        if (sauf && Math.abs(angle((a0 + a1) / 2 - jA)) < sauf) continue; // ouverte devant la route
         const P = (r, a) => [CH.x + Math.cos(a) * r, y, CH.z + Math.sin(a) * r];
         p.push(...P(r0, a0), ...P(r1, a1), ...P(r1, a0), ...P(r0, a0), ...P(r0, a1), ...P(r1, a1));
       }
@@ -1564,7 +1693,7 @@ void main() {
       g.computeVertexNormals();
       return teinter(g, couleur);
     };
-    surf.push(anneau(CH.tour - DEMI, CH.tour + DEMI, Y + 0.045, PAVES), anneau(CH.tour - DEMI - 0.22, CH.tour - DEMI, Y + 0.11, BORDURE), anneau(CH.tour + DEMI, CH.tour + DEMI + 0.22, Y + 0.11, BORDURE));
+    surf.push(anneau(CH.tour - DEMI, CH.tour + DEMI, Y + 0.045, PAVES), anneau(CH.tour - DEMI - 0.22, CH.tour - DEMI, Y + 0.11, BORDURE), anneau(CH.tour + DEMI, CH.tour + DEMI + 0.22, Y + 0.11, BORDURE, 192, (DEMI + 0.7) / rBord));
     plan.push({ t: 'o', x: CH.x, z: CH.z, r: CH.tour, c: '#b8ad98', w: 6 });
     for (const [x0, z0, x1, z1] of COUR) {
       const zz0 = Math.max(z0, -(CH.tour - DEMI - 0.1));
@@ -1667,7 +1796,9 @@ void main() {
       const a = (k + 0.5) / 64 * Math.PI * 2, x = Math.cos(a) * 28.4, z = Math.sin(a) * 28.4;
       if (Math.abs(x) < 4.4 && z < 0) continue; // l'allée
       L.push(B(2.85, 0.95, 0.45, '#cdbf9f', x, 0.47, z, Math.PI / 2 - a), B(2.9, 0.1, 0.55, APPUI, x, 1.0, z, Math.PI / 2 - a));
+      col.boiteO(CH.x + x, CH.z + z, 2.85, 0.45, Math.PI / 2 - a);
     }
+    for (const q of [[-12.4, 17.1, -1.6, 25.4], [1.6, 17.1, 12.4, 25.4], [19.1, -8.4, 25.9, 8.4], [-25.9, -8.4, -19.1, 8.4]]) cols.push(q); // les parterres
     for (const s of [1, -1]) L.push(B(0.8, 2.2, 0.8, TUF, s * 4.4, 1.1, -28.2), S(0.32, TAILLE, s * 4.4, 2.45, -28.2)); // piliers du portail
     finirPlaques(L);
     poser(L, CH.x, CH.z, 0, bati, Y);
@@ -1695,7 +1826,7 @@ void main() {
       const r = RF + d / 2, x = CH.x + Math.cos(ac) * r, z = CH.z + Math.sin(ac) * r;
       const genre = n % 3, rot = Math.atan2(-Math.cos(ac), -Math.sin(ac));
       maison({
-        x, z, y: Y, w, d, h, rot, sansCol: true, volets: genre === 1 ? null : pick(VOLETS),
+        x, z, y: Y, w, d, h, rot, volets: genre === 1 ? null : pick(VOLETS),
         mur: genre === 1 ? pick(['#e6d4b0', '#ead9bb', '#e9d2a8']) : genre === 0 ? TUF : undefined,
         tourelle: genre === 0 && w >= 9, colombages: genre === 1, lucarnes: true,
       });
@@ -1703,6 +1834,7 @@ void main() {
       const ecart = 1.6 + rnd() * 2.2, a1 = ac + dem / RF, a2 = a1 + ecart / RF;
       const am = (a1 + a2) / 2, xm = CH.x + Math.cos(am) * (RF + 0.6), zm = CH.z + Math.sin(am) * (RF + 0.6);
       bati.push(B(ecart + 0.3, 1.9, 0.5, '#cdbf9f', xm, Y + 0.95, zm, Math.PI / 2 - am), B(ecart + 0.4, 0.12, 0.62, APPUI, xm, Y + 1.94, zm, Math.PI / 2 - am));
+      col.boiteO(xm, zm, ecart + 0.3, 0.5, Math.PI / 2 - am);
       a = a2; n++;
     }
     // réverbères sur le bas-côté, du côté des maisons
@@ -1745,11 +1877,15 @@ void main() {
     for (const z of [-55, -47, -39]) arbres.push([111.5, z, 'platane']);
     for (const [x, z] of [[-6, -40], [-6, -80], [-45, -13], [-20, -16], [22, -14], [-128, 20], [-70, 19.5], [-20, 21], [-6, 60], [52, 70], [-110, -95], [-60, -10], [160, 22]]) arbres.push([x, z, 'chene']);
     arbres.push([-110, -45, 'cedre']);
+    // pas d'arbre des collines dans les vignes ni sur leurs chemins (ils arrêtent : on y fait demi-tour en tracteur)
+    const dSeg = (x, z, [ax, az], [bx, bz]) => { const ux = bx - ax, uz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * ux + (z - az) * uz) / (ux * ux + uz * uz))); return Math.hypot(x - ax - ux * t, z - az - uz * t); };
+    const presVigne = (x, z) => PARCELLES.some(([x0, z0, x1, z1]) => x > x0 - 12 && x < x1 + 12 && z > z0 - 12 && z < z1 + 12)
+      || CHEMINS.some(pts => pts.some((q, i) => i > 0 && dSeg(x, z, pts[i - 1], q) < 7));
     for (let i = 0; i < 300; i++) {
       const a = rnd() * Math.PI * 2, r = 205 + rnd() * 230, x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(z - 10) < 28 || naturelle(x, z) < 3) continue; // (mêmes tirages qu'avant la route du château)
       const t = rnd() < 0.3 ? 'peuplier' : 'chene';
-      if (!reserve(x, z)) arbres.push([x, z, t, sol(x, z)]);
+      if (!reserve(x, z) && !presMaison(x, z, 6) && !presVigne(x, z)) arbres.push([x, z, t, sol(x, z)]);
     }
     const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Vector3(), axe = new THREE.Vector3(0, 1, 0), cc = new THREE.Color();
     // modèles construits une fois, puis copiés, recolorés et placés (bien plus rapide que de tout regénérer)
@@ -1780,8 +1916,8 @@ void main() {
       const fe = copie(y ? modele.fe0 : modele.fe1, pick(FEU[t]));
       fe.applyMatrix4(m.compose(p.set(x, y + fy * k, z), q, e.set(fx * k, fyS * k, fx * k * (0.9 + rnd() * 0.2))));
       bati.push(tr, fe);
+      col.boiteC(x, z, 0.6 * k * (t === 'cedre' ? 1.8 : 1), 0.6 * k * (t === 'cedre' ? 1.8 : 1)); // tous arrêtent : les collines se parcourent
       if (y === 0) {
-        col.boiteC(x, z, 0.6 * k, 0.6 * k);
         plan.push({ t: 'a', x, z, r: fx * k });
         contact.tache(x, z, fx * k * 0.8, fx * k * 0.8, 0.3);
       }
@@ -1826,7 +1962,7 @@ void main() {
     const a = rnd() * Math.PI * 2, r = 215 + rnd() * 170, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.abs(z - 10) < 30 || naturelle(x, z) < 2) continue;
     const rot = rnd() * 6.28;
-    if (!reserve(x, z, 4)) bati.push(C(0.78, 0.78, 1.25, 12, '#d6b058', x, sol(x, z) + 0.72, z, 'z', rot));
+    if (!reserve(x, z, 4) && !presMaison(x, z, 4)) bati.push(C(0.78, 0.78, 1.25, 12, '#d6b058', x, sol(x, z) + 0.72, z, 'z', rot));
   }
 
   // panneaux routiers (dessinés en code dans l'atlas, transparents autour de la forme)
@@ -2033,6 +2169,7 @@ void main() {
     // du parking du domaine au chai (par le nord du tracteur garé)
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
+  lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
 

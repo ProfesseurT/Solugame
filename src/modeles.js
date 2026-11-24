@@ -12,7 +12,7 @@ export const SOLEIL = new THREE.Vector3(-0.75, 0.42, 0.55).normalize();
    refléter le ciel aux vitres et à l'eau. Le type de matière vient de la couleur (table TYPES). */
 // carrosserie : peinture vernie des véhicules (reflet du ciel, éclat du soleil), appliquée à toute couleur par
 // teinter(g, couleur, T.carrosserie) : elle n'a pas de couleur réservée dans TYPES.
-export const T = { lisse: 0, pierre: 1, ardoise: 2, asphalte: 3, herbe: 4, gravier: 5, terre: 6, bois: 7, feuillage: 8, vitre: 9, paves: 10, eau: 11, peinture: 12, champ: 13, lampe: 14, allumee: 15, carrosserie: 16, moellon: 17, enduit: 18, petitsPaves: 19 };
+export const T = { lisse: 0, pierre: 1, ardoise: 2, asphalte: 3, herbe: 4, gravier: 5, terre: 6, bois: 7, feuillage: 8, vitre: 9, paves: 10, eau: 11, peinture: 12, champ: 13, lampe: 14, allumee: 15, carrosserie: 16, moellon: 17, enduit: 18, petitsPaves: 19, enrobe: 20 };
 const TYPES = new Map(Object.entries({
   '#ebe0c6': T.pierre, '#b9a98b': T.pierre, '#d9cdb2': T.pierre, '#efe6d3': T.pierre, '#a99a82': T.pierre,
   '#cfc3a8': T.pierre, '#e3dac6': T.pierre, '#cbbf9f': T.pierre, '#d8cbb0': T.pierre,
@@ -33,6 +33,7 @@ const TYPES = new Map(Object.entries({
   '#a89c88': T.petitsPaves, '#b1a58f': T.petitsPaves, '#78736b': T.asphalte,
   '#a3aab2': T.carrosserie, '#757c85': T.carrosserie, // inox des cuves et du pressoir : il brille
   '#8f8a80': T.asphalte, // béton du chai
+  '#4f5158': T.enrobe, // l'enrobé neuf de la route du château : sans plaques de reprise
   '#6e4227': T.bois, // douelles plus sombres des barriques (parvis du chai)
   '#8f877a': T.eau, // les flaques du parvis : elles reflètent le ciel
 }));
@@ -238,6 +239,9 @@ vec3 cl_detail(vec3 col) {
     float s = texture(tBruit, uv * 2.9).b;
     k = (0.82 + 0.3 * s * s + 0.08 * f) * (0.9 + 0.2 * g);
     k *= mix(1.0, 0.86, smoothstep(0.62, 0.7, texture(tBruit, uv * 0.11).a));
+  } else if (m == 20) {
+    float s = texture(tBruit, uv * 2.9).b;
+    k = (0.86 + 0.22 * s * s + 0.06 * f) * (0.96 + 0.06 * g);
   } else if (m == 4) {
     float s = texture(tBruit, uv * 1.7).b;
     float t2 = texture(tBruit, uv * 0.017 + 0.71).g;

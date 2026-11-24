@@ -174,38 +174,20 @@ export function sol(x, z) {
   return maille(forme(x0, z0), forme(x0 + PAS, z0), forme(x0, z0 + PAS), forme(x0 + PAS, z0 + PAS), u - i, v - j);
 }
 
-/* ---------------------------------------------------------------- où l'on peut aller hors de la zone de jeu
-   Sur la route du château (bas-côtés compris), sur la route du tour, dans l'allée et la cour du château. dehors(x, z, r)
-   rend vrai si le cercle déborde ; alors SORTIE donne le point permis le plus proche et la normale (vers l'intérieur). */
-export const LARGE = VERGE - 0.8; // demi-largeur permise de part et d'autre de l'axe de la route
-const DEDANS = DEMI + 0.3; // côté château, la route du tour s'arrête à sa bordure (le mur du jardin est juste derrière)
-// la cour du château et son allée (repère du château : x vers l'est, z vers le sud), où l'on entre en véhicule
+/* ---------------------------------------------------------------- où l'on peut aller
+   Partout, collines comprises (Teddy, 24/11/2026 : « on doit pouvoir aller partout, dans l'herbe et tout »), jusqu'à
+   MONDE mètres du centre : au-delà, la brume, et plus rien à voir. Les obstacles sont dans collisions.js (les maisons du
+   village du château, ses murs, les arbres des collines). SORTIE : le point permis le plus proche et la normale. */
+export const MONDE = 470;
+export const LARGE = VERGE - 0.8; // demi-largeur de la chaussée et de ses bas-côtés, de part et d'autre de l'axe de la route
+// la cour du château et son allée (repère du château : x vers l'est, z vers le sud), en gravier
 export const COUR = [[-10, -14, 10, 0.5], [-3.6, -30, 3.6, -14]];
 export const SORTIE = { x: 0, z: 0, nx: 0, nz: 0 };
-export function permis(x, z, r = 0) {
-  const C = CHATEAU, dx = x - C.x, dz = z - C.z, d = Math.hypot(dx, dz);
-  if (d > C.tour - DEDANS + r && d < C.tour + LARGE - r) return true;
-  for (const [x0, z0, x1, z1] of COUR) if (dx > x0 + r && dx < x1 - r && dz > z0 + r && dz < z1 - r) return true;
-  const q = procheRoute(x, z, LARGE + 2);
-  return q.d < LARGE - r;
-}
-// le point permis le plus proche d'un point qui ne l'est pas (pour un cercle de rayon r) : sur la route, le tour, la cour
+export function permis(x, z, r = 0) { return x * x + z * z < (MONDE - r) * (MONDE - r); }
 export function ramener(x, z, r) {
-  const C = CHATEAU, dx = x - C.x, dz = z - C.z, d = Math.hypot(dx, dz) || 1, S = SORTIE;
-  let best = Infinity;
-  const essai = (px, pz) => { const e = Math.hypot(px - x, pz - z); if (e < best) { best = e; S.x = px; S.z = pz; } };
-  // le tour : on revient dans l'anneau
-  const dd = Math.max(C.tour - DEDANS + r + 0.01, Math.min(C.tour + LARGE - r - 0.01, d));
-  essai(C.x + dx / d * dd, C.z + dz / d * dd);
-  for (const [x0, z0, x1, z1] of COUR) essai(C.x + Math.max(x0 + r, Math.min(x1 - r, dx)), C.z + Math.max(z0 + r, Math.min(z1 - r, dz)));
-  const q = procheRoute(x, z, 60);
-  if (q.i >= 0) {
-    const ex = x - ROUTE.x[q.i], ez = z - ROUTE.z[q.i], l = Math.hypot(ex, ez) || 1, m = Math.min(l, LARGE - r - 0.01);
-    essai(ROUTE.x[q.i] + ex / l * m, ROUTE.z[q.i] + ez / l * m);
-  }
-  const l = Math.hypot(S.x - x, S.z - z) || 1;
-  S.nx = (S.x - x) / l; S.nz = (S.z - z) / l;
-  return best;
+  const d = Math.hypot(x, z) || 1, k = (MONDE - r - 0.01) / d, S = SORTIE;
+  S.x = x * k; S.z = z * k; S.nx = -x / d; S.nz = -z / d;
+  return Math.max(0, d - (MONDE - r));
 }
 
 // Ce que la route et le château réservent (pas d'arbre des collines, pas de balle de foin) : marge en mètres

@@ -471,13 +471,28 @@ if (scenario === 'chateau') {
           const a0 = Math.atan2(CL.tr.pos.z - C.z, CL.tr.pos.x - C.x), tour = Array.from({ length: 220 }, (_, k) => { const a = a0 + k / 200 * Math.PI * 2; return [C.x + Math.cos(a) * C.tour, C.z + Math.sin(a) * C.tour]; });
           const mt = { sol: 0, cam: 0, chocs: 0, ecart: 0, vmin: 99 }, fini = suivre(tour, 9, 60, mt);
           log.push(['le tour du château, sans choc ni sortie (écart ' + mt.ecart.toFixed(1) + ' m, ' + mt.chocs + ' images de frottement, fini ' + fini + ')', fini && mt.chocs === 0 && mt.ecart < 3.5 && mt.cam === 0]);
-          // hors de la route : on reste retenu au bord
-          const k = 300; CL.teleporter(R.x[k], R.z[k], Math.atan2(R.x[k + 1] - R.x[k], R.z[k + 1] - R.z[k]) + Math.PI / 2); CL.step(5);
-          CL.ctrl.kx = 0; CL.ctrl.ky = -1; CL.step(240); CL.ctrl.ky = 0; CL.step(30);
-          const q = CL.relief.procheRoute(CL.tr.pos.x, CL.tr.pos.z, 60);
-          log.push(['hors de la route, on est retenu au bord (' + q.d.toFixed(1) + ' m de l\'axe)', q.d < CL.relief.LARGE]);
+          // hors de la route : on va dans l'herbe, dans la pente, posé sur le sol
+          // (des deux côtés, en biais : un arbre du bord de route peut arrêter d'un côté)
+          const k = 300; let ecartSol = 0, dMax = 0;
+          for (const cote of [Math.PI / 2 + 0.5, -Math.PI / 2 - 0.5]) {
+            CL.teleporter(R.x[k], R.z[k], Math.atan2(R.x[k + 1] - R.x[k], R.z[k + 1] - R.z[k]) + cote); CL.step(5);
+            CL.ctrl.kx = 0; CL.ctrl.ky = -1;
+            for (let n = 0; n < 240; n++) { CL.step(1); ecartSol = Math.max(ecartSol, Math.abs(CL.tr.pos.y - CL.relief.sol(CL.tr.pos.x, CL.tr.pos.z))); }
+            CL.ctrl.ky = 0; CL.step(30);
+            dMax = Math.max(dMax, CL.relief.procheRoute(CL.tr.pos.x, CL.tr.pos.z, 200).d);
+          }
+          const q = { d: dMax };
+          log.push(['hors de la route, on roule dans l\'herbe (' + q.d.toFixed(0) + ' m de l\'axe), posé sur la pente (' + (ecartSol * 100).toFixed(0) + ' cm)', q.d > CL.relief.LARGE + 6 && ecartSol < 0.5]);
         }
         log.push([genre + ' : descendu', descendre()]);
+        if (genre === 'van') {
+          // à pied, contre une maison de la route du château (tournée de biais) : on ne la traverse pas
+          const M = J.lieux.maisonsRoute[3], vx = Math.sin(M.rot), vz = Math.cos(M.rot);
+          J.joueur.placer(M.x + vx * (M.d / 2 + 3), M.z + vz * (M.d / 2 + 3), M.rot + Math.PI); CL.step(5);
+          CL.ctrl.ky = -1; CL.step(240); CL.ctrl.ky = 0; CL.step(5);
+          const dx = J.joueur.pos.x - M.x, dz = J.joueur.pos.z - M.z, prof = dx * vx + dz * vz;
+          log.push(['à pied, une maison de la route du château arrête (' + J.lieux.maisonsRoute.length + ' maisons ; ' + prof.toFixed(2) + ' m de son centre)', J.lieux.maisonsRoute.length >= 8 && prof > M.d / 2 + 0.2]);
+        }
       }
       // à pied sur la pente : les pieds sur le sol
       { const k = 250; J.joueur.placer(R.x[k], R.z[k], Math.atan2(R.x[k + 1] - R.x[k], R.z[k + 1] - R.z[k])); CL.step(3);
