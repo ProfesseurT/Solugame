@@ -532,24 +532,13 @@ void main() {
     lf.renderOrder = ORDRE.vegetal; lf.name = 'palissage'; scene.add(lf);
     vignes.fine = gFine; vignes.simple = gSimple;
   }
-  // Les rangs selon la saison (main.js) : en automne leurs couleurs d'origine, au printemps de jeunes feuilles vertes (le
-  // chenin plus clair que le cabernet) ; traités (mission2.js), un voile bleuté de cuivre sur les feuilles
-  const PRINTEMPS = { chenin: ['#97bd4e', '#8db446', '#a2c459', '#88ae43'], cabernet: ['#6f9d3d', '#79a744', '#668f37', '#7fa64a'] };
-  const PRINTC = { chenin: PRINTEMPS.chenin.map(h => new THREE.Color(h)), cabernet: PRINTEMPS.cabernet.map(h => new THREE.Color(h)) };
+  // Une travée traitée (mission2.js) : un voile bleuté de cuivre sur ses feuilles
   const VOILE = new THREE.Color('#a3c6c8'), cT = new THREE.Color();
   function teinteTravee(v, b, k) {
     const T = b.t, o = k * 8;
-    if (UNI.uSaison.value < 0.5) cT.setRGB(T[o + 5], T[o + 6], T[o + 7]);
-    else { const pal = PRINTC[v.q.cep]; cT.copy(pal[Math.min(pal.length - 1, Math.floor(bruit(T[o] * 0.09 + 11, T[o + 1] * 0.045) * pal.length))]); }
+    cT.setRGB(T[o + 5], T[o + 6], T[o + 7]);
     if (b.traite[k]) cT.lerp(VOILE, 0.45);
     b.im.setColorAt(k, cT); v.loin.setColorAt(b.i0 + k, cT);
-  }
-  function saison(printemps) {
-    UNI.uSaison.value = printemps ? 1 : 0;
-    for (const v of vignes) {
-      for (const b of v.blocs) { for (let k = 0; k < b.n; k++) teinteTravee(v, b, k); b.im.instanceColor.needsUpdate = true; }
-      v.loin.instanceColor.needsUpdate = true;
-    }
   }
   // Le pulvérisateur passe en (x, z) dans la parcelle v : les travées des rangs à moins de demi mètres de part et d'autre,
   // à hauteur de z, reçoivent le traitement. Rend le nombre de travées traitées à l'instant.
@@ -2084,5 +2073,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, saison, traiter, retraiter };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter };
 }

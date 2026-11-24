@@ -1,6 +1,6 @@
-// Mission 2 : « La journée de traitement » (mai 2027). Après la tournée de Noël, on va dormir ; au réveil, quelques mois
-// plus tard (le printemps : les vignes ont de jeunes feuilles), Claire, la conseillère viticole, écrit : mildiou et
-// oïdium menacent. Un traitement bio, bouillie bordelaise et soufre mouillable, sur trois parcelles.
+// Mission 2 : « La journée de traitement », le lendemain de la tournée de Noël (Teddy, 24/11/2026). Après la tournée, on
+// va dormir ; au réveil, le mercredi 9 décembre, Claire, la conseillère viticole, écrit : le passage d'hiver, bouillie
+// bordelaise seule (un traitement bio), contre le mildiou qui passe l'hiver, sur trois parcelles (l'ETA a fait les autres).
 // 1. Au domaine, en tracteur (le pulvérisateur y est attelé), à l'aire de remplissage : on prépare la bouillie.
 // 2. Dans chaque parcelle, on passe dans les rangs : les rampes se déplient, traitent deux rangs de chaque côté, les
 //    feuilles prennent un voile bleuté. Doigt posé (ou flèche du haut seule), le guidage suit les passages tout seul et
@@ -69,7 +69,7 @@ export class Traitement {
   }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
   // La sauvegarde (sauvegarde.js, main.js) : où en est la journée (message lu, bouillie prête, chaque parcelle et ses
-  // travées traitées, le registre), prise hors des gestes, et sa reprise (le printemps est déjà là : main.js)
+  // travées traitées, le registre), prise hors des gestes, et sa reprise (le pulvérisateur est déjà attelé : main.js)
   get stable() { return ['debut', 'message', 'preparer', 'traiter', 'fin', 'libre'].includes(this.etape) && !this.j.gestes.actif; }
   instantane() {
     return {
@@ -341,8 +341,10 @@ export class Traitement {
     }
     if (s.etape === 'produits') {
       if (TX.produits.some(P => !P.bio && s.doses[P.id] > 0)) return A.pasBio;
-      if (TX.produits.some(P => P.bio && s.doses[P.id] === 0)) return A.manque;
-      for (const P of TX.produits) if (P.bio && s.doses[P.id] !== P.dose) return A.dose(P.nom, `${String(P.dose).replace('.', ',')} ${P.unite}`);
+      const hors = TX.produits.find(P => !P.cuve && s.doses[P.id] > 0); // bio, mais pas dans la cuve aujourd'hui
+      if (hors) return A.pasCuve(hors.nom);
+      if (TX.produits.some(P => P.cuve && s.doses[P.id] === 0)) return A.manque;
+      for (const P of TX.produits) if (P.cuve && s.doses[P.id] !== P.dose) return A.dose(P.nom, `${String(P.dose).replace('.', ',')} ${P.unite}`);
       return null;
     }
     if (s.etape === 'cible') {
@@ -369,8 +371,8 @@ export class Traitement {
     const h = j.heureTxt.replace(/^0/, '').replace(':', ' h ');
     this.registre.unshift({
       quand: `${TX.dateCourte} · ${h}`, parcelles: parcs.map(p => p.nom),
-      produits: TX.produits.filter(P => P.bio).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`),
-      cibles: [...s.cibles], stade: TX.stade, par: `vous, le ${TX.dateCourte.replace(' 2027', '')} à ${h}`, statut: en ? 'envoye' : 'attente',
+      produits: TX.produits.filter(P => P.cuve).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`),
+      cibles: [...s.cibles], stade: TX.stade, par: `vous, le ${TX.dateCourte} à ${h}`, statut: en ? 'envoye' : 'attente',
     });
     for (const p of parcs) p.notee = true;
     this.saisie = null;

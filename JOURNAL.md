@@ -730,3 +730,15 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Vérifié** : nouveau banc `sauvegarde` (dans `npm run verifie`) : une tournée avancée enregistrée, la page rechargée, « Continuer », tout revient (commandes, cartons dans le tracteur, palette, client rentré, chèque, heure, au domaine) ; l'app Missions, la confirmation, la tournée rejouée du début ; la mission 2 avancée (parcelle en partie traitée, registre) reprise au printemps, mêmes travées. Les bancs de la tournée et de la mission 2 vérifient que la mission gagnée est enregistrée. Images : l'accueil avec « Continuer », l'app Missions, la confirmation.
 
 **À savoir** : la sauvegarde est sur l'appareil et dans ce navigateur (pas de compte) ; vider les données du site l'efface.
+
+## 24/11/2026 · Retours de Teddy (21) : la mission 2 le lendemain
+
+**Demande** : « La mission 2 c'est pas quelques mois après, c'est le lendemain ! » Question posée (la saison : un traitement mildiou et oïdium se fait d'avril à fin juillet ; le Registre phyto ouvre le 1er janvier 2027) ; choix de Teddy : en décembre, un traitement d'hiver.
+
+**Fait** :
+- On se réveille le lendemain de la tournée, le mercredi 9 décembre, à 7 h, même saison que la veille. Le décor de printemps est retiré du code (l'uniforme `uSaison` et sa fonction dans le shader du décor, les couleurs de printemps des rangs et des feuilles soulevées).
+- Claire conseille le passage d'hiver : bouillie bordelaise seule, 1,5 kg/ha, pour réduire le mildiou qui passe l'hiver, par temps sec ; l'ETA a fait les trois autres parcelles le 2 décembre. Pratique trouvée seulement sur un site de jardinage, aucune source viticole : c'est le choix de Teddy, noté en tête du bloc `TRAITEMENT`.
+- Le registre : la ligne d'avant est le passage de l'ETA du 2 décembre (stade « chute des feuilles », repris pour aujourd'hui), puis le traitement du 29 juillet. Aucune année affichée (l'appli ouvre le 1er janvier 2027), « Cette campagne ». La cuve ne contient que la bouillie : le soufre, bio, est refusé (« pas dans la cuve aujourd'hui ») ; la cible est le mildiou.
+- Les ouvriers du parvis parlent du traitement le lendemain (« Alors, cette tournée d'hier ? »).
+
+**Vérifié** : bancs `traitement` (refus : parcelle pas traitée, produit pas bio, soufre pas dans la cuve, mauvaise dose, autre cible) et `sauvegarde`.

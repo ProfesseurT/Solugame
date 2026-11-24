@@ -740,13 +740,12 @@ function phares() {
 /* ------------------------------------------------------------------ rentrer dormir
    Devant la porte de la maison du domaine, « Rentrer dormir » : on entre, fondu au noir, et l'on ressort au matin, 7 h, le
    lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
-// Après la tournée de Noël (mission.js : dodo), le réveil se fait quelques mois plus tard, en mai : le printemps (feuillages,
-// champs et rangs reverdissent : modeles.js uSaison, monde.js saison), le tracteur et le van à leur place, le
-// pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
+// Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur et
+// le van à leur place, le pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
 let mission2 = false, resAff = true;
-function printemps() {
+function lendemain() {
   mission.aller('libre');
-  monde.saison(true); parvis.saison(true);
+  parvis.lendemain();
   vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
   const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
   pulve.groupe.visible = true;
@@ -767,7 +766,7 @@ function dormir() {
         jeu.minutes = (h >= 420 ? jour + 1 : jour) * 1440 + 420;
         horloge(0);
         joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
-        if (mission.etape === 'dodo') printemps();
+        if (mission.etape === 'dodo') lendemain();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
@@ -980,7 +979,7 @@ function lancer(m2) { // m2 : faux (la mission 1), vrai (la mission 2), 'reprend
   etat = 'jeu';
   cam.yaw = joueur.h; cam.pret = false;
   if (m2 === 'reprendre') reprendrePartie(SAUVE.partie);
-  else if (m2) { printemps(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, en mai, 7 h
+  else if (m2) { lendemain(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, 7 h
   else mission.demarrer();
   dernier = performance.now();
 }
@@ -1004,7 +1003,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) sauve
 function reprendrePartie(P) {
   jeu.minutes = P.minutes; jeu.ventes = P.ventes || 0; hud.argent(jeu.ventes);
   if (P.mission === 'traitement') {
-    printemps(); mission2 = false; horloge(0);
+    lendemain(); mission2 = false; horloge(0);
     traitement.reprendre(P.etat);
   } else {
     horloge(0);

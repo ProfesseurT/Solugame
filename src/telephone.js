@@ -196,12 +196,12 @@ export class Telephone {
       `<button class="${id === actif ? 'on' : ''}" data-a="ouvrir:${id}">${t}</button>`).join('')}</nav>`;
   }
   accueil() {
-    const R = this.jeu.traitement, mai = R && R.actif;
+    const R = this.jeu.traitement, m2 = R && R.actif; // le lendemain : la journée de traitement
     const n = this.notif === 'bureau'
       ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>`
-      : this.notif === 'messages' && mai ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
+      : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
     return `<div class="ph-accueil">
-      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${mai ? `${esc(TX.date)} · ${R.reseau ? 'après la pluie' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé'}</p>${n}
+      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${m2 ? `${esc(TX.date)} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé'}</p>${n}
       <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
     </div>`;
   }
@@ -382,7 +382,7 @@ export class Telephone {
     const parcs = R.parcelles.filter(p => S.parcelles.has(p.id)), ha = parcs.reduce((s, p) => s + p.ha, 0);
     return this.etapePhyto(5, TX.app.recap, `<div class="rp-ligne"><p class="rp-quand"><b>${esc(TX.dateCourte)} · ${esc(this.jeu.heureTxt.replace(/^0/, '').replace(':', ' h '))}</b></p>
       <p>${esc(parcs.map(p => p.nom).join(', '))} · ${String(ha.toFixed(2)).replace('.', ',')} ha</p>
-      <p class="rp-p">${esc(TX.produits.filter(P => P.bio).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`).join(' ; '))}</p>
+      <p class="rp-p">${esc(TX.produits.filter(P => P.cuve).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`).join(' ; '))}</p>
       <p class="rp-p">${esc([...S.cibles].join(', '))} · ${esc(TX.stade)}</p></div>${R.reseau ? '' : `<p class="consigne rp">${esc(TX.app.horsReseau)}</p>`}`, TX.app.enregistrer);
   }
   phytoX() {

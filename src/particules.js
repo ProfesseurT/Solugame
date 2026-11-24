@@ -3,7 +3,6 @@
 // Réserves fixes d'objets réutilisés : aucune allocation pendant le jeu. Couleurs en nombres (0xrrggbb).
 import * as THREE from 'three';
 import { sol as solEn } from './relief.js';
-import { UNI } from './modeles.js';
 
 const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), pp = new THREE.Vector3(), pe = new THREE.Vector3();
 const AXE_P = new THREE.Vector3(0.6, 1, 0.3).normalize(), AXE_Y = new THREE.Vector3(0, 1, 0);
@@ -127,7 +126,6 @@ const qeu = new THREE.Euler();
    traces de pneus sur l'asphalte et les pavés et fumée des pneus (ou poussière ailleurs) en dérapage, feuilles dans les
    vignes, gravillons sur le gravier et mottes de terre derrière les roues arrière. */
 const FEUILLES = { cabernet: [0xc2562e, 0xb0402c, 0xd0702f], chenin: [0xe2b23a, 0xd9a832, 0xeac24a] };
-const FEUILLES_MAI = { cabernet: [0x6f9d3d, 0x79a744, 0x668f37], chenin: [0x97bd4e, 0x8db446, 0xa2c459] }; // au printemps (mission 2)
 const GRAVIERS = [0xcfc1a0, 0xb9ab88, 0xe0d4b4], MOTTES = [0x6b4a30, 0x5a3e28, 0x7a5c3f];
 const POUSSIERE = { gravier: 0xcfc1a0, herbe: 0x9a8f6a, vigne: 0x7a5c3f };
 const ECH = { x: 0, y: 0, z: 0 };
@@ -160,7 +158,7 @@ export class EffetsVehicule {
     if (tr.vignes && Math.abs(tr.v) > 0.8 && r() < dt * 30) {
       let c = null;
       for (const q of this.col.parcelles) if (tr.pos.x > q.x0 - 2 && tr.pos.x < q.x1 + 2 && tr.pos.z > q.z0 - 2 && tr.pos.z < q.z1 + 2) { c = q; break; }
-      const F = UNI.uSaison.value > 0.5 ? FEUILLES_MAI : FEUILLES, teinte = this.choisir(c && c.cep === 'cabernet' ? F.cabernet : F.chenin);
+      const teinte = this.choisir(c && c.cep === 'cabernet' ? FEUILLES.cabernet : FEUILLES.chenin);
       this.emettre(tr.pos.x + (r() - 0.5) * 2, tr.pos.y + 1.2 + r(), tr.pos.z + (r() - 0.5) * 2, (r() - 0.5) * 3, 2 + r() * 2, (r() - 0.5) * 3, 2.2, teinte, 0.9, 5);
     }
     const av = Math.abs(tr.v);

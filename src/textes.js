@@ -289,11 +289,14 @@ export const FIN = {
    chez vous ; une erreur se corrige avec motif, rien n'est effacé ; en cas de contrôle : PDF, format officiel et fiche
    Stat'Phyto. Parcelles retrouvées depuis le fichier Telepac. Aucune promesse de conformité (jamais « en règle ») :
    l'application enregistre, le contenu du registre reste sous la responsabilité de l'exploitant. Le registre devient
-   numérique le 1er janvier 2027 (fiche de faits). La mission se passe en mai 2027 : l'appli y est ouverte ; avant le
-   1er janvier 2027 (EN_PREVENTE), l'écran le dit (aperçu, données fictives, ouverture le 1er janvier 2027).
-   Bouillie bordelaise et soufre mouillable : utilisables en agriculture biologique. Doses, parcelles, noms : fictifs. */
+   numérique le 1er janvier 2027 (fiche de faits). La mission se passe le lendemain de la tournée de Noël (Teddy,
+   24/11/2026), le mercredi 9 décembre : aucune année n'est affichée dans l'appli ; avant le 1er janvier 2027
+   (EN_PREVENTE), chaque écran dit « aperçu, données fictives, ouverture le 1er janvier 2027 ».
+   Le traitement du jour : un passage d'hiver de bouillie bordelaise seule, présenté comme réduisant le mildiou qui passe
+   l'hiver (choix de Teddy, 24/11/2026 ; pratique trouvée seulement sur un site de jardinage, aucune source viticole). La
+   bouillie bordelaise et le soufre mouillable sont utilisables en agriculture biologique. Doses, parcelles, noms : fictifs. */
 export const TRAITEMENT = {
-  date: 'mardi 4 mai 2027', dateCourte: '4 mai 2027',
+  date: 'mercredi 9 décembre', dateCourte: '9 décembre',
   // les parcelles du domaine dans le registre (i : leur place dans PARCELLES, monde.js), celles du jour d'abord
   parcelles: [
     { id: 'perrieres', nom: 'Les Perrières', cep: 'Chenin', i: 0, jour: true, reseau: true },
@@ -303,25 +306,26 @@ export const TRAITEMENT = {
     { id: 'garenne', nom: 'La Garenne', cep: 'Cabernet franc', i: 5 },
     { id: 'basvignes', nom: 'Le Bas des Vignes', cep: 'Chenin', i: 4 },
   ],
-  // les produits de l'armoire, et ce qu'il faut (dose) ; un fongicide de synthèse que le domaine, en bio, n'utilise pas
+  // les produits de l'armoire, et ce qu'il faut (dose) ; cuve : ce qui va dans la cuve aujourd'hui (la bouillie seule) ;
+  // un fongicide de synthèse que le domaine, en bio, n'utilise pas
   produits: [
-    { id: 'cuivre', nom: 'Bouillie bordelaise', sous: 'Cuivre · utilisable en bio', dose: 1.5, pas: 0.5, unite: 'kg/ha', bio: true },
-    { id: 'soufre', nom: 'Soufre mouillable', sous: 'Soufre · utilisable en bio', dose: 5, pas: 1, unite: 'kg/ha', bio: true },
+    { id: 'cuivre', nom: 'Bouillie bordelaise', sous: 'Cuivre · utilisable en bio', dose: 1.5, pas: 0.5, unite: 'kg/ha', bio: true, cuve: true },
+    { id: 'soufre', nom: 'Soufre mouillable', sous: 'Soufre · utilisable en bio', dose: 5, pas: 1, unite: 'kg/ha', bio: true, cuve: false },
     { id: 'synthese', nom: 'Fongicide de synthèse', sous: 'Non utilisable en bio', dose: 0, pas: 0.5, unite: 'kg/ha', bio: false },
   ],
-  cibles: ['Mildiou', 'Oïdium', 'Black-rot', 'Botrytis'], ciblesDuJour: ['Mildiou', 'Oïdium'],
-  stade: '6 feuilles étalées', stadeDe: 'repris du traitement du 28 avril',
+  cibles: ['Mildiou', 'Oïdium', 'Black-rot', 'Botrytis'], ciblesDuJour: ['Mildiou'],
+  stade: 'Chute des feuilles', stadeDe: 'repris du traitement du 2 décembre',
   // le registre de la campagne avant ce matin (données fictives) ; « par » : qui a saisi
   avant: [
-    { quand: '28 avril 2027 · 8 h 10', parcelles: ['Les Perrières', 'Le Clos', 'Les Grands Champs', 'La Croix'], produits: ['Soufre mouillable · 5 kg/ha'], cibles: ['Oïdium'], stade: '6 feuilles étalées', par: 'ETA des Coteaux, le 28 avril à 11 h 02' },
-    { quand: '15 avril 2027 · 7 h 45', parcelles: ['Les Perrières', 'Le Clos', 'Les Grands Champs'], produits: ['Bouillie bordelaise · 1,5 kg/ha'], cibles: ['Mildiou'], stade: '3 feuilles étalées', par: 'vous, le 15 avril à 9 h 20' },
+    { quand: '2 décembre · 8 h 40', parcelles: ['La Croix', 'La Garenne', 'Le Bas des Vignes'], produits: ['Bouillie bordelaise · 1,5 kg/ha'], cibles: ['Mildiou'], stade: 'Chute des feuilles', par: 'ETA des Coteaux, le 2 décembre à 11 h 15' },
+    { quand: '29 juillet · 7 h 30', parcelles: ['Les Perrières', 'Le Clos', 'Les Grands Champs', 'La Croix'], produits: ['Bouillie bordelaise · 1,5 kg/ha', 'Soufre mouillable · 5 kg/ha'], cibles: ['Mildiou', 'Oïdium'], stade: 'Fermeture de la grappe', par: 'vous, le 29 juillet à 9 h 05' },
   ],
   message: {
-    de: 'Claire, conseillère viticole', apercu: 'Pluie cette nuit : mildiou et oïdium...',
+    de: 'Claire, conseillère viticole', apercu: 'Le passage d\'hiver, aujourd\'hui...',
     fil: [
-      'Bonjour ! Avec la pluie de cette nuit et la douceur, les conditions sont réunies pour le mildiou ; l\'oïdium aussi.',
-      'Je vous conseille un passage aujourd\'hui, avant la pluie de jeudi : bouillie bordelaise à 1,5 kg/ha et soufre mouillable à 5 kg/ha, ensemble.',
-      'Les Perrières, Le Clos et Les Grands Champs d\'abord. Pensez à noter le traitement !',
+      'Bonjour ! Les feuilles tombent et il fait sec jusqu\'à vendredi : c\'est le bon jour pour votre passage d\'hiver.',
+      'Bouillie bordelaise seule, à 1,5 kg/ha, pour réduire le mildiou qui passe l\'hiver. Pas de soufre cette fois.',
+      'L\'ETA a fait vos trois autres parcelles le 2 : il reste Les Perrières, Le Clos et Les Grands Champs. Pensez à noter le traitement !',
     ],
   },
   objectifs: {
@@ -335,10 +339,10 @@ export const TRAITEMENT = {
     fin: 'Journée de traitement finie',
   },
   dialogues: {
-    reveil: [{ qui: '', txt: 'Mardi 4 mai 2027. Il a plu cette nuit.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
-    luMessage: [{ qui: '', txt: 'Cuivre et soufre : c\'est un traitement bio. Le pulvérisateur est attelé au tracteur.' }],
+    reveil: [{ qui: '', txt: 'Mercredi 9 décembre, le lendemain de la tournée.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
+    luMessage: [{ qui: '', txt: 'La bouillie bordelaise, c\'est du cuivre : utilisable en bio. Le pulvérisateur est attelé au tracteur.' }],
     pasTracteur: [{ qui: '', txt: 'Le pulvérisateur est sur le tracteur : il faut le tracteur.' }],
-    remplir: [{ qui: '', txt: 'De l\'eau, la bouillie bordelaise, le soufre mouillable : la cuve est prête.' }, { qui: '', txt: 'Elle suffit pour les trois parcelles.' }],
+    remplir: [{ qui: '', txt: 'De l\'eau et la bouillie bordelaise : la cuve est prête.' }, { qui: '', txt: 'Elle suffit pour les trois parcelles.' }],
     guidage: tactile => [{ qui: '', txt: tactile ? 'Dans les rangs, doigt posé : le tracteur suit les passages tout seul, la scène va plus vite.' : 'Dans les rangs, flèche du haut seule : le tracteur suit les passages tout seul, la scène va plus vite.' }],
     parcelleFinie: nom => [{ qui: '', txt: `${nom} : traitée.` }],
     noter: [{ qui: '', txt: 'Je le note maintenant, sur le téléphone.' }],
@@ -353,21 +357,22 @@ export const TRAITEMENT = {
     produits: 'Produit et dose', stade: 'Stade', cible: 'Cible', recap: 'Vérifier',
     enregistrer: 'Enregistrer', enregistre: 'Enregistré', horsReseau: 'Pas de réseau : noté, envoyé quand ça capte.',
     attente: 'En attente d\'envoi', envoye: 'Envoyé',
-    registre: 'Campagne 2027', registreNote: 'Chaque ligne dit qui a saisi, et quand.',
+    registre: 'Cette campagne', registreNote: 'Chaque ligne dit qui a saisi, et quand.',
     exporter: 'Exporter pour un contrôle', exportNote: 'PDF, format officiel et fiche Stat\'Phyto.', exportOk: 'Export prêt.',
     apercu: 'Aperçu de l\'application, données fictives. Ouverture le 1er janvier 2027.',
     apercuApres: 'Données fictives.',
     // ce que le téléphone rappelle quand la saisie ne correspond pas à ce qui a été fait
     pasTraitee: (noms, n) => `${noms} : pas encore traitée${n > 1 ? 's' : ''} aujourd'hui.`,
     aucune: 'Cochez les parcelles traitées.',
-    pasBio: 'Le domaine est en bio : bouillie bordelaise et soufre mouillable.',
+    pasBio: 'Le domaine est en bio : pas de fongicide de synthèse.',
+    pasCuve: p => `${p} : pas dans la cuve aujourd'hui.`,
     dose: (p, d) => `${p} : la dose de la cuve, ${d}.`,
-    manque: 'Il manque un produit de la cuve.',
-    cibleJour: 'La cible : ce que dit Claire, mildiou et oïdium.',
+    manque: 'Il manque le produit de la cuve : la bouillie bordelaise.',
+    cibleJour: 'La cible : ce que dit Claire, le mildiou.',
   },
   bannieres: {
-    titre: ['Quelques mois plus tard', 'Mai 2027 · mission 2 : la journée de traitement'],
-    prete: ['Bouillie prête', 'Bouillie bordelaise 1,5 kg/ha · soufre mouillable 5 kg/ha'],
+    titre: ['Le lendemain', 'Mission 2 : la journée de traitement'],
+    prete: ['Bouillie prête', 'Bouillie bordelaise 1,5 kg/ha'],
     traitee: nom => ['Parcelle traitée', nom],
     note: n => ['Traitement noté', `${n} parcelle${n > 1 ? 's' : ''} dans le registre`],
     attente: ['Noté sans réseau', 'Envoyé quand ça capte'],
@@ -390,16 +395,16 @@ export const TRAITEMENT = {
   },
 };
 
-// Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. En hiver, le soir
-// de la tournée ; au printemps, le matin du traitement.
+// Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la
+// tournée ; le lendemain matin, jour du traitement.
 export const PARVIS = {
   rinceur: {
-    hiver: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
-    printemps: ['Bon courage pour le traitement !', 'Je rince les barriques ce matin, elles seront prêtes pour le soutirage.'],
+    tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
+    traitement: ['Bon courage pour le traitement !', 'Je rince les barriques ce matin, elles seront prêtes pour le soutirage.'],
   },
   porteuse: {
-    hiver: ['Je range les caisses de vendange pour l\'hiver.', 'Bonne tournée ! Les clients vont être contents.', 'Attention, ça glisse près du nettoyeur.'],
-    printemps: ['Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
+    tournee: ['Je range les caisses de vendange pour l\'hiver.', 'Bonne tournée ! Les clients vont être contents.', 'Attention, ça glisse près du nettoyeur.'],
+    traitement: ['Alors, cette tournée d\'hier ? Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
   },
 };
 

@@ -58,7 +58,7 @@ export class Parvis {
   // c : { scene, camera, emettre } (main.js). Construit au démarrage (les géométries sont finies avec la scène) ; les
   // ouvriers arrivent avec les autres habitants (peupler).
   constructor(c) {
-    this.c = c; this.hiver = true; this.k = 6; this.porte = false; this.tFumee = 0; this.tObs = 0;
+    this.c = c; this.jour = 'tournee'; this.k = 6; this.porte = false; this.tFumee = 0; this.tObs = 0;
     const sc = c.scene;
     // les caisses : 24 places sur la remorque, 24 sur les palettes
     // (et une de plus, la caisse qu'on porte : dans le même appel de dessin)
@@ -144,8 +144,8 @@ export class Parvis {
     if (!this.porte) poser(2 * N, PAL[0], false);
     im.instanceMatrix.clearUpdateRanges(); im.instanceMatrix.needsUpdate = true; this.plein = true; // tout le tampon part, cette image
   }
-  // printemps : la cheminée ne fume plus
-  saison(printemps) { this.hiver = !printemps; }
+  // le lendemain de la tournée (mission 2) : ils en parlent, et du traitement
+  lendemain() { this.jour = 'traitement'; }
 
   // vu : (x, z) est devant la caméra, à moins de 45 m
   vu(x, z) {
@@ -162,8 +162,8 @@ export class Parvis {
     const cam = this.c.camera.position, m = ((c.minutes % 1440) + 1440) % 1440;
     this.plein = false;
     const loin = Math.abs(cam.x + 80) + Math.abs(cam.z + 45) > 110;
-    // la cheminée de la maison fume, en hiver
-    if (this.hiver && Math.abs(cam.x + 95) + Math.abs(cam.z + 64) < 220) {
+    // la cheminée de la maison fume (décembre)
+    if (Math.abs(cam.x + 95) + Math.abs(cam.z + 64) < 220) {
       this.tFumee += dt;
       while (this.tFumee > 0.28) {
         this.tFumee -= 0.28;
@@ -198,7 +198,7 @@ export class Parvis {
     o.tParle -= dt;
     if (!c.aPied || d > 3.4 || o.tParle > 0) return;
     o.tParle = 40;
-    const l = PARVIS[o.nom][this.hiver ? 'hiver' : 'printemps'];
+    const l = PARVIS[o.nom][this.jour];
     o.p.saluer(); this.hud.bulle(o.p.etq, l[o.i++ % l.length], 3);
   }
 
