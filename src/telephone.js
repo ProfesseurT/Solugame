@@ -2,20 +2,55 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, EN_PREVENTE, MISSIONS } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, HABILLAGE as HX, EN_PREVENTE, MISSIONS } from './textes.js';
 import { son } from './audio.js';
 import { SAUVE } from './sauvegarde.js';
 import { $, esc, eur } from './outils.js';
 
 export const ICONES = {
   bureau: '<svg viewBox="0 0 24 24"><path d="M9 7V5.5h6V7" fill="none" stroke="#fff" stroke-width="2"/><rect x="3" y="7" width="18" height="12" rx="2.5" fill="#fff"/><rect x="3" y="11.5" width="18" height="1.6" fill="#8e2a3b" opacity=".35"/></svg>',
-  viticode: '<svg viewBox="0 0 24 24"><g fill="#fff"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></g><g fill="#ff3d8b"><path d="M5 5h3v3H5zM16 5h3v3h-3zM5 16h3v3H5z"/></g></svg>',
+  viticode: '<svg viewBox="0 0 24 24"><g fill="#fff"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></g><g fill="#e84e1b"><path d="M5 5h3v3H5zM16 5h3v3h-3zM5 16h3v3H5z"/></g></svg>',
   phyto: '<svg viewBox="0 0 24 24"><path d="M5 19C5 10 11 4 20 4c0 9-6 15-15 15z" fill="#fff"/><path d="M5 19L15 9" stroke="#2fc6e0" stroke-width="1.8"/></svg>',
   messages: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="#fff"/></svg>',
   missions: '<svg viewBox="0 0 24 24"><path d="M6.5 21V3.5" stroke="#fff" stroke-width="2.2"/><path d="M7.5 4h11l-2.6 4 2.6 4h-11z" fill="#fff"/></svg>',
   reglages: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2" fill="none" stroke="#fff" stroke-width="3.2" stroke-dasharray="3.4 2.2"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>',
 };
 const APPS = [['bureau', 'Le bureau'], ['viticode', 'Viticode'], ['phyto', 'Registre phyto'], ['messages', 'Messages'], ['missions', 'Missions'], ['reglages', 'Réglages']];
+// Un QR code dessiné pour l'œil (trois repères aux coins, des modules tirés d'une graine) : n x n modules, en SVG
+function qrSvg(c = '#1d1a26', fond = '#fff', n = 25, graine = 7) {
+  let h = (graine * 2654435761) >>> 0, d = '';
+  const r = () => { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let on;
+    if ((x < 8 && y < 8) || (x > n - 9 && y < 8) || (x < 8 && y > n - 9)) {
+      const lx = x > n - 9 ? x - (n - 7) : x, ly = y > n - 9 ? y - (n - 7) : y;
+      on = lx >= 0 && ly >= 0 && lx < 7 && ly < 7 && (lx === 0 || ly === 0 || lx === 6 || ly === 6 || (lx > 1 && lx < 5 && ly > 1 && ly < 5));
+    } else on = r() < 0.48;
+    if (on) d += `M${x} ${y}h1v1h-1z`;
+  }
+  return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" shape-rendering="crispEdges" aria-hidden="true"><rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="${fond}"/><path d="${d}" fill="${c}"/></svg>`;
+}
+// Viticode : icônes des sections (comme sur viticode.fr), la feuille du bio, les pictogrammes de la consommation
+// responsable, la bouteille de la fiche
+const VC = {
+  fiche: '<svg viewBox="0 0 24 24" fill="none" stroke="#1f2a3c" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+  ingr: '<svg viewBox="0 0 24 24" fill="none" stroke="#1f2a3c" stroke-width="1.8"><path d="M5 19L19 5"/><path d="M9 15c-3 0-4-2-4-4 2 0 4 1 4 4zM12 12c-3 0-4-2-4-4 2 0 4 1 4 4zM15 9c-3 0-4-2-4-4 2 0 4 1 4 4zM9 15c0-3 2-4 4-4 0 2-1 4-4 4zM12 12c0-3 2-4 4-4 0 2-1 4-4 4z"/></svg>',
+  nutri: '<svg viewBox="0 0 24 24" fill="#1f2a3c"><rect x="4" y="13" width="3" height="7"/><rect x="9" y="9" width="3" height="11"/><rect x="14" y="11" width="3" height="9"/><rect x="19" y="5" width="2" height="15"/><rect x="3" y="20" width="19" height="1.4"/></svg>',
+  conso: '<svg viewBox="0 0 24 24" fill="none" stroke="#1f2a3c" stroke-width="1.8"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/><path d="M5 12h4l1.5-2.5 2 5 1.5-2.5H19"/></svg>',
+  labels: '<svg viewBox="0 0 24 24" fill="none" stroke="#1f2a3c" stroke-width="1.8"><circle cx="12" cy="10" r="6"/><path d="M8.5 15l-1.5 6 5-3 5 3-1.5-6"/></svg>',
+  qr: '<svg viewBox="0 0 24 24" fill="#1f2a3c"><path d="M3 3h7v7H3zm2 2v3h3V5zM14 3h7v7h-7zm2 2v3h3V5zM3 14h7v7H3zm2 2v3h3v-3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></svg>',
+  feuille: '<svg viewBox="0 0 24 24"><path d="M5 19C5 10 11 4 20 4c0 9-6 15-15 15z" fill="#2f9e63"/><path d="M5 19L15 9" stroke="#fff" stroke-width="1.6"/></svg>',
+  bouteille: c => `<svg class="vc-bouteille" viewBox="0 0 40 110" aria-hidden="true"><path d="M16 4h8v26c0 4 9 8 9 20v52a4 4 0 0 1-4 4H11a4 4 0 0 1-4-4V50c0-12 9-16 9-20z" fill="${c}"/><path d="M7 60h12v22H7z" fill="#fff"/></svg>`,
+  barre: '<path d="M8 8l32 32" stroke="#e5303a" stroke-width="4"/><circle cx="24" cy="24" r="21" fill="none" stroke="#e5303a" stroke-width="4"/>',
+};
+VC.enceinte = `<svg viewBox="0 0 48 48" aria-label="Femme enceinte"><circle cx="24" cy="24" r="21" fill="#fff"/><circle cx="23" cy="11" r="4" fill="#111"/><path d="M20 16h6l2 7c4 1 5 6 2 9l-2 2v8h-3v-8h-3v8h-3V31l-2-7z" fill="#111"/><path d="M28 24c4 0 5 5 3 8" stroke="#111" stroke-width="3" fill="none"/>${VC.barre}</svg>`;
+VC.volant = `<svg viewBox="0 0 48 48" aria-label="Pas d'alcool au volant"><circle cx="24" cy="24" r="21" fill="#fff"/><path d="M12 28l3-8c1-2 2-3 4-3h10c2 0 3 1 4 3l3 8v6h-3v-2H15v2h-3z" fill="#111"/><circle cx="17" cy="29" r="2" fill="#fff"/><circle cx="31" cy="29" r="2" fill="#fff"/>${VC.barre}</svg>`;
+VC.majeur = '<svg viewBox="0 0 48 48" aria-label="Interdit aux mineurs"><circle cx="24" cy="24" r="21" fill="#fff" stroke="#e5303a" stroke-width="4"/><text x="24" y="31" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="19" fill="#111">18+</text></svg>';
+VC.personne = '<svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="36" fill="#ffe36b"/><circle cx="40" cy="27" r="11" fill="#1f2a3c"/><path d="M20 70c2-16 10-24 20-24s18 8 20 24z" fill="#7fb2d8"/><rect x="46" y="38" width="9" height="16" rx="2" fill="#fff" stroke="#1f2a3c" stroke-width="2"/></svg>';
+const COULEURS_VC = { Rouge: '#f06b5e', Blanc: '#f1e2b6', Rosé: '#f7c3c6', Orange: '#f0a37a', Jaune: '#f2e64f', Aucune: '#6f6a60' };
+const BOUTEILLE_VC = { Rouge: '#5b1424', Blanc: '#c9b25e', Rosé: '#e6909b', Orange: '#d9772f', Jaune: '#d8c13a', Aucune: '#2c3166' };
+const fr = x => String(x).replace('.', ',');
+
 const STATUTS = {
   a_traiter: ['jour', 'À traiter'], proposee: ['decroche', 'Message envoyé'], commande: ['jour', 'Commande à préparer'],
   envoyee: ['decroche', 'Signature en attente'], signee: ['ok', 'Signée en ligne'], chargee: ['ok', 'Chargée'],
@@ -60,9 +95,10 @@ export class Telephone {
     if (this.ouvert && ['accueil', 'bureau', 'commande', 'tournee'].includes(this.app)) this.afficher();
   }
 
+  get H() { return this.jeu.habillage; }
   action(a) {
     const [nom, arg, arg2] = a.split(':');
-    const m = this.jeu.mission, R = this.jeu.traitement;
+    const m = this.jeu.mission, R = this.jeu.traitement, H = this.H;
     if (!m.peutFermer() && (nom === 'accueil' || nom === 'ouvrir')) return; // pendant un appel, on reste en ligne
     switch (nom) {
       case 'accueil': this.app = 'accueil'; this.fil = null; break;
@@ -116,6 +152,39 @@ export class Telephone {
       }
       case 'rp-export': this.app = 'phytoX'; break;
       case 'rp-exporter': son.jouer('envoye'); this.toast(TX.app.exportOk); return;
+      // Viticode (mission 3) : la fiche, son QR code, le test, la personnalisation, l'envoi à l'imprimerie
+      case 'vc-fiche': this.app = 'vcFiche'; break;
+      case 'vc-remplir': H.remplir(arg); break;
+      case 'vc-degre': H.degre(Number(arg)); break;
+      case 'vc-couleur': H.couleur(arg); break;
+      case 'vc-ingr': H.ingredient(arg); break;
+      case 'vc-bio': H.bio(); break;
+      case 'vc-label': { const l = H.fiche.labels, i = l.indexOf(arg); if (H.publiee) return; if (i >= 0) l.splice(i, 1); else l.push(arg); break; }
+      case 'vc-val': H.valeur(arg, Number(arg2)); break;
+      case 'vc-negl': H.negligeable(); break;
+      case 'vc-calculer': if (!H.calculer()) { son.jouer('erreur'); this.toast(HX.app.degre(HX.vin)); return; } break;
+      case 'vc-publier': {
+        const err = H.publier();
+        if (err) { son.jouer('erreur'); this.toast(err); return; }
+        this.app = 'vcQr'; break;
+      }
+      case 'vc-qr': this.app = 'vcQr'; break;
+      case 'vc-copier': this.toast(HX.app.copie); return;
+      case 'vc-tester': this.app = 'vcTest'; this.majeur = false; this.depuisScan = false; this.langue = 'fr'; this.menuLangues = false; break;
+      case 'vc-scan': this.app = 'vcTest'; this.majeur = false; this.depuisScan = true; this.langue = 'fr'; this.menuLangues = false; break;
+      case 'vc-age': if (arg === 'oui') { this.majeur = true; H.vue(); } else { this.toast(HX.app.mineur); return; } break;
+      case 'vc-langues': this.menuLangues = !this.menuLangues; break;
+      case 'vc-lg': this.langue = arg; this.menuLangues = false; break;
+      case 'vc-fermer-test': this.app = this.depuisScan && H.etape === 'scanner' ? 'scan' : H.publiee ? 'vcQr' : 'viticode'; break;
+      case 'vc-telecharger': this.app = 'vcPerso'; break;
+      case 'vc-regler': H.regler(arg, arg2 === '1' ? true : arg2 === '0' ? false : arg2); break;
+      case 'vc-dl': {
+        const err = H.telecharger();
+        if (err) { son.jouer('erreur'); this.toast(err); return; }
+        son.jouer('envoi'); this.app = 'vcPartage'; this.afficher(); this.toast(HX.app.telecharge); return;
+      }
+      case 'vc-envoyer': H.envoyer(); this.app = 'messages'; this.fil = 'imprimerie'; break;
+      case 'vc-accord': H.accord(); break;
     }
     this.afficher();
   }
@@ -196,12 +265,14 @@ export class Telephone {
       `<button class="${id === actif ? 'on' : ''}" data-a="ouvrir:${id}">${t}</button>`).join('')}</nav>`;
   }
   accueil() {
-    const R = this.jeu.traitement, m2 = R && R.actif; // le lendemain : la journée de traitement
+    const R = this.jeu.traitement, H = this.H, m3 = H && H.actif, m2 = !m3 && R && R.actif; // le lendemain : la journée de traitement ; le jour d'après : l'habillage
     const n = this.notif === 'bureau'
       ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>`
-      : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
+      : this.notif === 'messages' && m3 ? `<button class="ph-notif" data-a="fil:${H.fil}"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(HX.messages[H.fil].de)}</b><br>${esc(H.message)}</span></button>`
+        : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
+    const lieu = m3 ? `${esc(HX.date)} · ciel dégagé` : m2 ? `${esc(TX.date)} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé';
     return `<div class="ph-accueil">
-      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${m2 ? `${esc(TX.date)} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé'}</p>${n}
+      <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${lieu}</p>${n}
       <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
     </div>`;
   }
@@ -318,17 +389,165 @@ export class Telephone {
     const c = this.jeu.mission.client(this.client);
     return `<div class="ph-appel"><p class="ap-sur">Appel en cours</p><span class="av grand" style="background:${c.coul}">${c.ini}</span><b>${esc(c.nom)}</b><span id="ph-duree">00:00</span><div class="onde"><i></i><i></i><i></i><i></i><i></i></div><p id="ph-ligne" class="ph-ligne"></p></div>`;
   }
+  /* ------------------------------------------------------------ Viticode (mission 3), comme viticode.fr
+     La fiche produit (les champs, les ingrédients préchargés par catégorie, la déclaration nutritionnelle et sa
+     calculatrice, la consommation responsable), publiée : son QR code (télécharger, copier) ; la personnalisation du QR
+     code ; la fiche côté consommateur (« Avez-vous plus de 18 ans ? », sa langue). Ce que le jeu rappelle (le bulletin
+     du labo) est en consigne, pas dans l'appli. */
   viticode() {
-    let qr = '';
-    for (let i = 0; i < 121; i++) {
-      const x = i % 11, y = Math.floor(i / 11), coin = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
-      const on = coin ? !(x % 10 === 1 && y % 10 === 1) && !((x === 1 || x === 9) && y === 1) && !(x === 1 && y === 9) : ((x * 7 + y * 13 + x * y) % 5) < 2;
-      qr += `<i${on ? ' class="n"' : ''}></i>`;
-    }
-    return this.entete('Viticode', 'viticode') + `<div class="ap-corps">
+    const H = this.H;
+    if (!H || !H.actif) return this.entete('Viticode', 'viticode') + `<div class="ap-corps">
       <p class="ap-sur">${esc(VITICODE.titre)}</p><h3>Cuvée du Clos, rouge</h3>
-      <div class="qr" aria-hidden="true">${qr}</div>
-      <p class="ap-txt">${esc(VITICODE.texte)}</p><p class="ap-note">${esc(VITICODE.chiffre)} · mission dans le jeu complet</p></div>`;
+      <div class="vc-qr">${qrSvg('#e84e1b')}</div>
+      <p class="ap-txt">${esc(VITICODE.texte)}</p><p class="ap-note">${esc(VITICODE.chiffre)} · mission 3 : l'habillage, le jour d'après le traitement</p></div>`;
+    const F = H.fiche, v = HX.vin, brouillon = F.nom || F.degre !== null || F.ingr.size;
+    const etat = H.publiee ? '<span class="tag ok">Publiée</span>' : `<span class="tag decroche">${brouillon ? 'Brouillon' : 'À créer'}</span>`;
+    return this.entete('Viticode', 'viticode') + `<div class="ap-corps">${this.consigneVc()}
+      <p class="ap-sur">${esc(HX.domaine)}</p><h3>Mes fiches produit</h3>
+      <div class="vc-fic"><span class="rq"><b>Les Perrières 2024, blanc</b><small>Son QR code est déjà sur les bouteilles</small></span><span class="tag ok">Publiée</span></div>
+      <button class="vc-fic" data-a="${H.publiee ? 'vc-qr' : 'vc-fiche'}"><span class="rq"><b>${esc(v.nom)}, ${esc(v.couleur)}</b><small>${H.publiee ? 'Son QR code' : 'Nouvelle fiche produit'}</small></span>${etat}</button>
+      ${H.publiee ? '' : `<button class="vc-bt large" data-a="vc-fiche">${brouillon ? 'Reprendre la fiche' : '+ Créer la fiche produit'}</button>`}
+      <p class="ap-note">${esc(VITICODE.titre)} · nombre de fiches illimité</p></div>`;
+  }
+  // la consigne du jeu au-dessus de la fiche : les valeurs du bulletin (ou qu'il n'est pas encore arrivé)
+  consigneVc() {
+    const H = this.H;
+    if (H.publiee) return '';
+    return `<p class="consigne vc">${esc(H.bulletin ? HX.app.consigne(HX.vin) : HX.app.attente)}</p>`;
+  }
+  vcFiche() {
+    const H = this.H, F = H.fiche, fini = H.publiee, d = fini ? ' disabled' : '';
+    const champ = (k, lab, val) => `<button class="vc-champ${val ? '' : ' vide'}" data-a="vc-remplir:${k}"${d}><small>${lab}</small>${val ? esc(val) : '<i>Toucher pour saisir</i>'}</button>`;
+    const pas = (a, val, min) => `<div class="pas"><button data-a="${a}:-1" aria-label="Moins"${val === null || val <= min || fini ? ' disabled' : ''}>−</button><b>${val === null ? '·' : fr(val)}</b><button data-a="${a}:1" aria-label="Plus"${d}>+</button></div>`;
+    const zero = lab => `<div class="vc-ligne"><span class="vc-lab">${lab} *</span><span>0 grammes</span></div>`;
+    const e = F.energie, perime = e && F.base && (F.base.degre !== F.degre || F.base.glucides !== F.glucides);
+    const cats = HX.categories.map(C => `<div class="vc-cat"><b>Catégorie d'ingrédient · ${esc(C.nom)}</b>${C.ingredients.map(i => {
+      const on = F.ingr.has(i.id);
+      return `<div class="vc-ing"><button class="vc-puce${on ? ' on' : ''}" data-a="vc-ingr:${i.id}"${d}>${on ? '✓' : '+'} ${esc(i.nom)}</button>${i.allergene ? '<span class="vc-allerg">Allergène</span>' : ''}${i.id === 'raisins' ? `<button class="vc-feuille${F.bio ? ' on' : ''}" data-a="vc-bio" aria-label="Ingrédient bio"${on && !fini ? '' : ' disabled'}>${VC.feuille}</button>` : ''}</div>`;
+    }).join('')}</div>`).join('');
+    const labels = ['Bio', 'HVE', 'Demeter'].map(l => `<button class="vc-puce${F.labels.includes(l) ? ' on' : ''}" data-a="vc-label:${l}"${d}>${esc(l)}</button>`).join('');
+    return this.entete('Viticode', 'viticode', 'ouvrir:viticode') + `<div class="ap-corps">${this.consigneVc()}
+      <section class="vc-sec"><h4>${VC.fiche} Fiche produit</h4>
+        ${champ('nom', 'Nom du produit * (50 caractères max)', F.nom)}
+        <div class="vc-ligne"><span class="vc-lab">Degré d'alcool</span>${pas('vc-degre', F.degre, 9)}<span>degrés</span></div>
+        ${champ('millesime', 'Millésime', F.millesime)}${champ('appellation', 'Appellation', F.appellation)}${champ('lot', 'Lot', F.lot)}
+        ${VC.bouteille(BOUTEILLE_VC[F.couleur] || BOUTEILLE_VC.Aucune)}
+        <span class="vc-lab" style="text-align:center">Couleurs</span>
+        <div class="vc-puces" style="justify-content:center">${HX.couleurs.map(c => `<button class="vc-puce${F.couleur === c ? ' on' : ''}" data-a="vc-couleur:${c}"${d}><i class="pt" style="background:${COULEURS_VC[c]};color:${COULEURS_VC[c]}"></i>${c}</button>`).join('')}</div></section>
+      <section class="vc-sec"><h4>${VC.ingr} Ingrédients</h4>${cats}
+        <p class="ap-note">La feuille : un ingrédient issu de l'agriculture biologique.</p></section>
+      <section class="vc-sec"><h4>${VC.nutri} Déclaration nutritionnelle (pour 100 ml)</h4>
+        ${zero('Graisse')}${zero('dont acides gras saturés')}${zero('Sel')}${zero('Protéines')}
+        <div class="vc-ligne"><span class="vc-lab">Glucides *</span>${pas('vc-val:glucides', F.glucides, 0)}<span>g</span></div>
+        <div class="vc-ligne"><span class="vc-lab">dont sucres *</span>${pas('vc-val:sucres', F.sucres, 0)}<span>g</span></div>
+        <span class="vc-lab">Energie *</span>
+        <span class="vc-energie"><b>${e && !perime ? fr(e.kj) : ''}</b> kj - <b>${e && !perime ? fr(e.kcal) : ''}</b> kcal</span>
+        <button class="vc-bt" style="justify-self:start" data-a="vc-calculer"${d}>Calculer mon energie</button>
+        <button class="vc-inter${F.negligeable ? ' on' : ''}" data-a="vc-negl"${d}><i></i>Afficher les valeurs à zéro comme quantité négligeable.</button></section>
+      <section class="vc-sec"><h4>${VC.labels} Labels</h4><div class="vc-puces">${labels}</div></section>
+      <section class="vc-sec"><h4>${VC.conso} Consommation responsable</h4>
+        <div class="vc-ligne"><span>Afficher les pictogrammes :</span><span class="vc-pictos">${VC.volant}${VC.enceinte}${VC.majeur}</span></div>
+        <span class="vc-inter on"><i></i>Afficher le message : « L'abus d'alcool est dangereux pour la santé ».</span></section>
+      ${fini ? '<button class="vc-bt large" data-a="vc-qr">Son QR code</button>' : `<button class="vc-bt large" data-a="vc-publier"${H.bulletin ? '' : ' disabled'}>Publier la fiche</button>`}</div>`;
+  }
+  // le bloc du QR code tel qu'il sera imprimé : le titre « Ingrédients / Nutrition » au-dessus, la valeur énergétique
+  // en pied de page (selon la personnalisation)
+  qrBloc(P) {
+    const e = this.H.fiche.energie, c = P.couleur;
+    const t = P.titre ? `<span class="t" style="background:${c}">INGRÉDIENTS / NUTRITION</span>` : '';
+    const p = P.pied && e ? `<span class="p" style="background:${c}">E (100 ml) = ${Math.round(e.kj)} kJ / ${Math.round(e.kcal)} kcal</span>` : '';
+    return `<div class="vc-qr${P.bordures ? ' bord' : ''}" style="color:${c}">${t}${qrSvg(c)}${p}</div>`;
+  }
+  vcQr() {
+    const H = this.H, v = HX.vin;
+    return this.entete('Viticode', 'viticode', 'ouvrir:viticode') + `<div class="ap-corps">
+      <p class="ap-sur">${esc(v.nom)}, ${esc(v.couleur)} · fiche publiée</p>
+      <section class="vc-sec"><h4>${VC.qr} QR Code</h4>
+        <div class="vc-qr">${qrSvg('#1d1a26')}</div>
+        <p class="ap-note">Scanner ce QR code avec votre mobile pour consulter votre page produit. Vous pouvez également télécharger le QR code ou copier l'url avec les boutons ci-dessous.</p>
+        <div class="reg-choix"><button class="vc-bt${H.testee ? '' : ' clair'}" data-a="vc-telecharger">Télécharger</button><button class="vc-bt clair" data-a="vc-copier">Copier</button></div></section>
+      <button class="vc-bt large${H.testee ? ' clair' : ''}" data-a="vc-tester">Testez-moi !</button>
+      ${H.envoye ? '<span class="tag ok" style="justify-self:center">Envoyé à l\'imprimerie</span>' : H.telecharge ? '<button class="ap-bt large" data-a="vc-dl">Envoyer à l\'imprimerie</button>' : ''}</div>`;
+  }
+  vcPerso() {
+    const P = this.H.fiche.perso, opt = (k, val, txt) => `<button class="vc-puce${P[k] === val ? ' on' : ''}" data-a="vc-regler:${k}:${val === true ? 1 : val === false ? 0 : val}">${txt}</button>`;
+    const ligne = (lab, h) => `<div class="vc-reglage"><span class="vc-lab">${lab} :</span><span class="vc-puces">${h}</span></div>`;
+    const teintes = ['#e84e1b', '#8e2a3b', '#1d1a26', '#2c3e66'].map(c => `<button class="vc-puce${P.couleur === c ? ' on' : ''}" data-a="vc-regler:couleur:${c}" aria-label="${c}"><i class="pt" style="background:${c};color:${c}"></i></button>`).join('');
+    return this.entete('Viticode', 'viticode', 'vc-qr') + `<div class="ap-corps"><section class="vc-sec"><h4>Personnalisation du QrCode</h4>
+      ${ligne('Appliquer le paramétrage du domaine', opt('domaine', true, 'Oui') + opt('domaine', false, 'Non'))}
+      ${P.domaine ? '' : '<p class="ap-note">Vous n\'avez pas de paramétrage par défaut, vous pouvez le créer depuis la page de modification du domaine sur la page profil.</p>'}
+      ${ligne('Format du fichier', opt('format', 'svg', 'Svg') + opt('format', 'pdf', 'Pdf') + opt('format', 'png', 'Png'))}
+      ${ligne('Afficher les bordures', opt('bordures', true, 'Oui') + opt('bordures', false, 'Non'))}
+      ${ligne('Couleur du QrCode', teintes)}
+      ${ligne('Titre des sections', opt('titre', true, 'Oui') + opt('titre', false, 'Non'))}
+      ${ligne('Pied de page : la valeur énergétique', opt('pied', true, 'Oui') + opt('pied', false, 'Non'))}
+      ${this.qrBloc(P)}
+      <div class="reg-choix"><button class="vc-bt clair" data-a="vc-qr">✕ Annuler</button><button class="vc-bt" data-a="vc-dl">✓ Télécharger le QR code</button></div></section></div>`;
+  }
+  get nomFichier() { return `QR code ${HX.vin.nom}.${this.H.fiche.perso.format}`; }
+  // la feuille de partage du téléphone, juste après le téléchargement
+  vcPartage() {
+    const H = this.H;
+    return this.entete('Viticode', 'viticode', 'vc-qr') + `<div class="ap-corps" style="min-height:calc(100% - 60px);align-content:end">
+      ${this.qrBloc(H.fiche.perso)}
+      <div class="partage"><div class="fichier"><span class="doc">${esc(H.fiche.perso.format.toUpperCase())}</span><span><b>${esc(this.nomFichier)}</b><br><small>Téléchargé</small></span></div>
+        <p class="ap-sur">Envoyer à</p>
+        <button class="contact" data-a="vc-envoyer"><span class="av" style="background:#3c5a8a">IS</span><span>${esc(HX.imprimerie)}<br><small>Messages</small></span></button>
+        <button class="vc-bt clair" data-a="vc-qr">Plus tard</button></div></div>`;
+  }
+  // les ingrédients tels que la fiche les affiche : par catégorie, les allergènes en gras, l'astérisque du bio
+  ingredientsTexte(L) {
+    const F = this.H.fiche, parts = [];
+    const nom = i => {
+      const n = i.id === 'raisins' ? L.raisins : i.id === 'sulfites' ? L.sulfites : i.nom;
+      return (i.allergene ? `<b>${esc(n)}</b>` : esc(n)) + (i.id === 'raisins' && F.bio ? '*' : '');
+    };
+    for (const C of HX.categories) {
+      const ins = C.ingredients.filter(i => F.ingr.has(i.id));
+      if (!ins.length) continue;
+      if (C.id === 'principaux') parts.push(...ins.map(nom));
+      else parts.push(`${esc(C.id === 'conservateurs' ? L.conservateurs : C.nom)} (${ins.map(nom).join(', ')})`);
+    }
+    return parts.join(', ') + '.';
+  }
+  // La fiche côté consommateur, dans le navigateur du téléphone (comme viticode.fr/fiche-produit) : d'abord « Avez-vous
+  // plus de 18 ans ? », puis la fiche dans la langue choisie (celle du téléphone au départ)
+  vcTest() {
+    const H = this.H, F = H.fiche, L = HX.langues[this.langue || 'fr'];
+    const nav = `<div class="vc-nav"><button class="ap-ret" data-a="vc-fermer-test" aria-label="Retour">‹</button><span class="url">viticode.fr/fiche-produit</span></div>`;
+    if (!this.majeur) return nav + `<div class="vc-age"><div class="jaune">${VC.personne}</div><h3>${esc(L.age)}</h3>
+      <div class="reg-choix" style="padding:0 16px"><button class="vc-bt" data-a="vc-age:oui">${esc(L.oui)} ✓</button><button class="vc-bt" data-a="vc-age:non">${esc(L.non)} ✕</button></div></div>`;
+    const e = F.energie || { kj: 0, kcal: 0 }, langues = this.menuLangues ? `<div class="vc-langues">${Object.entries(HX.langues).map(([k, l]) => `<button class="vc-puce${k === (this.langue || 'fr') ? ' on' : ''}" data-a="vc-lg:${k}">${esc(l.nom)}</button>`).join('')}<p class="ap-note">${esc(HX.languesNote)}</p></div>` : '';
+    const labels = F.labels.map(l => `<span class="vc-label">${l === 'Bio' ? VC.feuille + ' ' + esc(L.labelBio) : esc(l)}</span>`).join('');
+    return nav + `<div class="vc-cons"><h2>${esc(F.nom)}</h2>
+      <button class="vc-trad" data-a="vc-langues" aria-label="Changer de langue">A文</button>${langues}
+      <div><div class="vc-rang"><span>${esc(L.couleur)}</span><b>${esc(L.rouge)}</b></div><div class="vc-rang"><span>${esc(L.alcool)}</span><b>${F.degre}%</b></div>
+        <div class="vc-rang"><span>${esc(L.millesime)}</span><b>${esc(F.millesime)}</b></div><div class="vc-rang"><span>${esc(L.appellation)}</span><b>${esc(F.appellation)}</b></div></div>
+      <div class="vc-carte"><h3>${esc(L.ingredients)}</h3><p style="margin:0">${this.ingredientsTexte(L)}</p>${F.bio ? `<small>${esc(L.bio)}</small>` : ''}</div>
+      <div class="vc-carte"><h3>${esc(L.decl)}</h3><div class="n"><span>${esc(L.energie)}</span><span>${e.kj} kj / ${e.kcal} kcal</span></div>
+        <div class="n"><span>${esc(L.glucides)}</span><span>${F.glucides} g</span></div><div class="n"><span>${esc(L.sucres)}</span><span>${F.sucres} g</span></div>
+        ${F.negligeable ? `<small>${esc(L.negl)}</small>` : ''}</div>
+      ${labels ? `<h3 style="margin:0;text-align:center;font:500 20px/1.2 var(--ui)">${esc(L.labels)}</h3><div class="vc-puces" style="justify-content:center">${labels}</div>` : ''}
+      <h3 style="margin:0;text-align:center;font:500 20px/1.2 var(--ui)">${esc(L.conso)}</h3>
+      <div class="vc-pictos" style="justify-content:center">${VC.enceinte}${VC.volant}${VC.majeur}</div>
+      <p style="margin:0;text-align:center;font-size:12px">${esc(L.abus)}</p>
+      <div class="vc-pied"><span style="display:block;width:30px;height:30px">${ICONES.viticode}</span>Viticode</div></div>`;
+  }
+  // La contre-étiquette du Clos 2025 (le BAT de l'imprimerie, la bouteille habillée) : le QR code, la valeur
+  // énergétique, les allergènes et les mentions de l'étiquette (données fictives)
+  contreEtiquette() {
+    const v = HX.vin;
+    return `<div class="ce"><span class="nom">LE CLOS</span><span class="ao">Appellation Anjou Contrôlée</span><span>${esc(v.millesime)}</span>
+      <span>${esc(HX.domaine)}<br>Mis en bouteille au domaine, Le Bourg, France</span>
+      ${this.qrBloc(this.H.fiche.perso)}
+      <span class="mentions"><span>Contient des sulfites</span></span>
+      <span class="mentions"><span>75 cl</span><span>${fr(v.degre)} % vol</span><span>Lot ${esc(v.lot)}</span></span>
+      <span class="mentions"><span>Produit de France</span>${VC.enceinte.replace('<svg ', '<svg class="fe" ')}</span></div>`;
+  }
+  // L'appareil photo, sur la contre-étiquette de la première bouteille habillée : le lien de la fiche apparaît
+  scan() {
+    return `<div class="scan"><p class="vise">Visez le QR code de la contre-étiquette</p>${this.contreEtiquette()}
+      <button class="lien" data-a="vc-scan">viticode.fr · Ouvrir la fiche</button></div>`;
   }
   phyto() {
     const R = this.jeu.traitement;
@@ -392,13 +611,42 @@ export class Telephone {
       <button class="ap-bt plein cyan large" data-a="rp-exporter">Exporter</button>${this.apercuPhyto()}</div>`;
   }
   messages() {
-    const R = this.jeu.traitement, fils = R && R.actif ? [{ id: 'claire', ...TX.message }, ...MESSAGES] : MESSAGES;
+    const R = this.jeu.traitement, H = this.H, fils = R && R.actif ? [{ id: 'claire', ...TX.message }, ...MESSAGES] : [...MESSAGES];
+    // mission 3 : l'imprimerie (son message du matin, puis l'envoi du QR code et le BAT), le labo (le bulletin)
+    if (H && H.actif) {
+      if (H.bulletin) fils.unshift({ id: 'labo', ...HX.messages.labo });
+      fils.unshift({ id: 'imprimerie', ...HX.messages.imprimerie, apercu: H.bat === 'ok' ? HX.messages.imprimerie.imprime : H.bat === 'recu' ? HX.messages.imprimerie.recu : HX.messages.imprimerie.apercu });
+    }
     if (this.fil) {
       const t = fils.find(x => x.id === this.fil);
+      if (!t) { this.fil = null; return this.messages(); }
+      if (t.id === 'imprimerie') return this.filImprimerie();
+      if (t.id === 'labo') return this.filLabo();
       if (t.id === 'claire') R.messageLu();
       return this.entete(t.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil">${t.fil.map(x => `<p class="bulle">${esc(x)}</p>`).join('')}</div>`;
     }
     return this.entete('Messages', 'messages') + `<div class="ap-corps">${fils.map(t => `<button class="msg" data-a="fil:${t.id}"><b>${esc(t.de)}</b><span>${esc(t.apercu)}</span></button>`).join('')}</div>`;
+  }
+  // Le fil de l'imprimerie (mission 3) : son message du matin ; le QR code envoyé ; le BAT de la contre-étiquette, à
+  // valider ; l'impression lancée
+  filImprimerie() {
+    const H = this.H, I = HX.messages.imprimerie;
+    H.messageLu();
+    let b = I.fil.map(x => `<p class="bulle">${esc(x)}</p>`).join('');
+    if (H.envoye) b += `<div class="bulle moi"><span class="fichier"><span class="doc">${esc(H.fiche.perso.format.toUpperCase())}</span>${esc(this.nomFichier)}</span></div>`;
+    else if (H.telecharge) b += `<button class="ap-bt plein large" data-a="vc-envoyer">Joindre « ${esc(this.nomFichier)} »</button>`;
+    if (H.bat !== 'aucun') b += `<p class="bulle">${esc(I.recu)}</p><div class="bat">${this.contreEtiquette()}</div>`;
+    if (H.bat === 'recu') b += `<button class="ap-bt plein large" data-a="vc-accord">${esc(I.accord)}</button>`;
+    if (H.bat === 'ok') { b += `<p class="bulle moi">${esc(I.accord)}</p>`; if (H.tImprime <= 0) b += `<p class="bulle">${esc(I.imprime)}</p>`; }
+    return this.entete(I.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil">${b}</div>`;
+  }
+  // Le fil du labo d'œnologie (mission 3) : le bulletin d'analyse du Clos 2025
+  filLabo() {
+    const H = this.H, L = HX.messages.labo, v = HX.vin;
+    const lignes = HX.bulletin(v).map(([k, x]) => `<div class="cd-ligne"><span>${esc(k)}</span><b>${esc(x)}</b></div>`).join('');
+    return this.entete(L.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil"><p class="bulle">${esc(L.intro)}</p>
+      <div class="bat"><p class="ap-sur">Bulletin d'analyse · ${esc(v.nom)}, ${esc(v.couleur)} · lot ${esc(v.lot)}</p>${lignes}</div>
+      <p class="bulle">${esc(L.fin)}</p>${H.publiee ? '' : '<button class="ap-bt plein large" data-a="ouvrir:viticode">Ouvrir Viticode</button>'}</div>`;
   }
   // Missions : où l'on en est (gagnée, en cours, à venir) ; une mission gagnée se rejoue, après confirmation
   missions() {

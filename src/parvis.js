@@ -144,8 +144,8 @@ export class Parvis {
     if (!this.porte) poser(2 * N, PAL[0], false);
     im.instanceMatrix.clearUpdateRanges(); im.instanceMatrix.needsUpdate = true; this.plein = true; // tout le tampon part, cette image
   }
-  // le lendemain de la tournée (mission 2) : ils en parlent, et du traitement
-  lendemain() { this.jour = 'traitement'; }
+  // le lendemain de la tournée (mission 2) : ils en parlent, et du traitement ; le jour d'après (mission 3), de l'habillage
+  lendemain(jour = 'traitement') { this.jour = jour; }
 
   // vu : (x, z) est devant la caméra, à moins de 45 m
   vu(x, z) {

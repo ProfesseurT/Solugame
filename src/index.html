@@ -8,7 +8,7 @@
 /* Monde 3D plein écran ; l'interface flotte par-dessus. Un seul univers visuel (sombre), assumé. */
 :root{
   --nuit:#14121e; --nuit-2:#221d31; --encre:#1d1a26; --papier:#f6f1e8; --blanc:#fffaf2; --gris:#6f6a7a; --trait:#e4dccd;
-  --or:#ffc35a; --vin:#8e2a3b; --vitisoft:#ff7a2f; --viticode:#ff3d8b; --phyto:#2fc6e0; --ok:#2f9e63; --alerte:#e5484d; --bleu:#2c3e66;
+  --or:#ffc35a; --vin:#8e2a3b; --vitisoft:#ff7a2f; --viticode:#e84e1b; --phyto:#2fc6e0; --ok:#2f9e63; --alerte:#e5484d; --bleu:#2c3e66;
   --titre:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
   --ui:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --ombre:0 1px 2px rgba(0,0,0,.85),0 0 12px rgba(0,0,0,.45);
@@ -204,6 +204,82 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .carte-a-faire.rp{background:#e6f6f9;border-color:#a9dde7} .consigne.rp{border-color:#1fa9c2;background:#e6f6f9;color:#14707f} .rp-apercu a{color:#14707f;font-weight:700}
 .reg-choix .ap-bt{flex:1}
 .bulle.moi{margin-left:auto;background:#e3ecff;border-color:#c9d7f5;border-radius:16px 16px 4px 16px}
+/* Viticode (mission 3) : l'interface de viticode.fr, d'après ses captures (rouge orangé, champs soulignés, puces saumon) */
+.app-vcFiche,.app-vcQr,.app-vcPerso,.app-viticode{background:#faf6ec}
+.vc-sec{display:grid;gap:10px;padding:14px;border-radius:14px;background:#fff;box-shadow:0 1px 4px rgba(60,40,20,.08)}
+.vc-sec>h4{margin:0;display:flex;align-items:center;gap:10px;font:500 20px/1.15 var(--ui);color:#1f2a3c}
+.vc-sec>h4 svg{width:22px;height:22px;flex:none}
+.vc-champ{display:grid;gap:2px;text-align:left;border:0;border-bottom:1.5px solid #e3dccd;background:none;padding:4px 0 6px;color:#1f2a3c;font:400 15px/1.3 var(--ui)}
+.vc-champ small,.vc-lab{font:700 9.5px/1.2 var(--ui);letter-spacing:.04em;text-transform:uppercase;color:var(--viticode)}
+.vc-champ i{font-style:normal;color:#b3aa98} .vc-champ.vide{animation:vc-pulse 1.6s ease-in-out infinite}
+@keyframes vc-pulse{50%{border-bottom-color:var(--viticode)}}
+.vc-ligne{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vc-reglage{display:grid;gap:6px}
+.lien-m2+.lien-m2{margin-top:-10px}
+.vc-puces{display:flex;flex-wrap:wrap;gap:6px}
+.vc-puce{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;background:#f6f0e0;padding:8px 10px;font:500 13px/1 var(--ui);color:#6c6457}
+.vc-puce.on{background:#e6a585;color:#1f2a3c;box-shadow:0 2px 6px rgba(160,80,40,.25)}
+.vc-puce .pt{width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px currentColor}
+.vc-cat{display:grid;gap:6px;padding:10px;border-radius:10px;background:#f7f4ec}
+.vc-cat b{font:700 12px/1.2 var(--ui);color:var(--viticode)}
+.vc-ing{display:flex;align-items:center;gap:8px}
+.vc-ing .vc-puce{flex:1;justify-content:flex-start}
+.vc-feuille{display:grid;place-items:center;width:38px;height:34px;border:1.5px solid #d7d0c0;border-radius:9px;background:#fff;padding:0}
+.vc-feuille svg{width:18px;height:18px;opacity:.35} .vc-feuille.on{border-color:#2f9e63;background:#e7f6ec} .vc-feuille.on svg{opacity:1}
+.vc-allerg{font:700 10px/1 var(--ui);padding:3px 6px;border-radius:6px;background:#fde2d6;color:#b13a12}
+.vc-bt{border:0;border-radius:999px;background:var(--viticode);color:#fff;padding:10px 16px;font:700 14px/1.1 var(--ui)}
+.vc-bt.large{width:100%;padding:14px;font-size:15px} .vc-bt.clair{background:#ece8df;color:#3b3a40} .vc-bt:disabled{opacity:.5}
+.vc-energie{display:flex;align-items:baseline;gap:6px;font:400 15px/1.2 var(--ui);color:#1f2a3c} .vc-energie b{min-width:3.6em;border-bottom:1.5px solid #e3dccd;padding:2px 0;text-align:center}
+.vc-inter{display:flex;align-items:center;gap:10px;border:0;background:none;padding:2px 0;text-align:left;font:400 13px/1.3 var(--ui);color:#3b3a40}
+.vc-inter i{flex:none;width:36px;height:20px;border-radius:10px;background:#d8d2c4;position:relative;transition:background .2s}
+.vc-inter i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.vc-inter.on i{background:var(--viticode)} .vc-inter.on i::after{left:18px}
+.vc-pictos{display:flex;gap:10px;align-items:center} .vc-pictos svg{width:38px;height:38px}
+.vc-bouteille{width:64px;justify-self:center}
+.vc-qr{display:grid;gap:4px;justify-items:center;width:max-content;justify-self:center;padding:10px;background:#fff;border-radius:6px}
+.vc-qr svg{width:150px;height:150px;display:block}
+.vc-qr .t,.vc-qr .p{width:150px;text-align:center;font:700 10px/1.25 var(--ui);color:#fff;padding:3px 0}
+.vc-qr.bord{outline:2px solid currentColor;outline-offset:-2px}
+.vc-fic{display:flex;gap:10px;align-items:center;padding:12px;border-radius:12px;background:#fff;box-shadow:0 1px 4px rgba(60,40,20,.08)}
+.vc-fic .rq{flex:1;display:grid;gap:2px} .vc-fic small{color:var(--gris)}
+.consigne.vc{border-color:var(--viticode);background:#fdeee6;color:#a3360f}
+/* la fiche produit côté consommateur (navigateur du téléphone) : comme viticode.fr/fiche-produit */
+.app-vcTest,.app-scan{background:#fff;color:#1f2a3c}
+.vc-nav{position:sticky;top:-34px;z-index:1;display:flex;align-items:center;gap:8px;margin-top:-34px;padding:40px 12px 8px;background:#f1f1f3;color:#3b3a40;font:500 13px/1 var(--ui);border-bottom:1px solid #ddd}
+.vc-nav .url{flex:1;padding:8px 10px;border-radius:10px;background:#fff;text-align:center} .vc-nav .ap-ret{background:#e2e2e6;color:#3b3a40}
+.vc-cons{display:grid;gap:14px;padding:18px 16px 0;font:400 14px/1.45 var(--ui)}
+.vc-cons h2{margin:0;text-align:center;font:500 24px/1.2 var(--ui)}
+.vc-trad{justify-self:end;width:40px;height:40px;border:0;border-radius:50%;background:var(--viticode);color:#fff;font:700 13px/1 var(--ui)}
+.vc-rang{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #ccc}
+.vc-rang span{color:var(--viticode)}
+.vc-carte{display:grid;gap:8px;padding:18px 16px;background:#eaf0f8}
+.vc-carte h3{margin:0;font:500 21px/1.2 var(--ui)}
+.vc-carte .n{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #c9cfd8}
+.vc-carte small{font-size:12px}
+.vc-label{display:inline-flex;align-items:center;gap:6px;justify-self:center;padding:8px 12px;border-radius:10px;border:2px solid #2f9e63;color:#1f7a49;font:700 13px/1 var(--ui)}
+.vc-pied{display:grid;place-items:center;gap:6px;margin:6px -16px 0;padding:18px;background:#1f2a3c;color:#fff;font:500 14px/1 var(--ui);letter-spacing:.12em}
+.vc-age{display:grid;gap:14px;margin:20px 16px;padding:0 0 18px;border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.18);text-align:center}
+.vc-age .jaune{height:120px;background:#ffd400;display:grid;place-items:center} .vc-age .jaune svg{width:84px;height:84px}
+.vc-age h3{margin:0;padding:0 16px;font:500 24px/1.2 var(--ui)}
+.vc-langues{display:grid;gap:6px;padding:10px;border-radius:12px;background:#f7f4ec}
+/* la contre-étiquette (le BAT de l'imprimerie, la bouteille scannée) */
+.ce{display:grid;gap:6px;justify-items:center;width:210px;justify-self:center;padding:14px 12px;background:#fbf8f1;color:#2a2521;border-radius:4px;box-shadow:0 3px 14px rgba(0,0,0,.2);font:400 10px/1.35 Georgia,'Times New Roman',serif;text-align:center}
+.ce .nom{font:700 18px/1 Georgia,serif;letter-spacing:.18em} .ce .ao{font-style:italic}
+.ce .vc-qr{padding:0;background:none} .ce .vc-qr svg{width:96px;height:96px} .ce .vc-qr .t,.ce .vc-qr .p{width:96px;font-size:7px}
+.ce .mentions{display:flex;gap:12px;font-weight:700} .ce svg.fe{width:22px;height:22px}
+.bat{display:grid;gap:8px;max-width:92%;padding:10px;border-radius:16px;background:#fff;border:1px solid var(--trait)}
+.app-scan{background:#14110e}
+.scan{position:relative;display:grid;place-items:center;min-height:100%;box-sizing:border-box;margin:-34px 0 0;padding:34px 0 90px;background:radial-gradient(circle at 50% 40%,#4a4136,#14110e 75%)}
+.scan .ce{transform:rotate(-4deg) scale(1.15)}
+.scan .ce .vc-qr{outline:3px solid #ffd400;outline-offset:5px;border-radius:2px;animation:vc-vise 1.2s ease-in-out infinite}
+@keyframes vc-vise{50%{outline-offset:9px}}
+.scan .lien{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;border:0;border-radius:999px;background:#ffd400;color:#1d1a26;padding:12px 18px;font:700 14px/1 var(--ui);white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.35);animation:vc-entre .4s .9s both}
+.scan .vise{position:absolute;top:44px;left:0;right:0;text-align:center;color:#fff;font:500 13px/1.3 var(--ui);opacity:.85}
+@keyframes vc-entre{from{opacity:0;transform:translate(-50%,12px)}}
+.partage{display:grid;gap:12px;margin-top:auto;padding:16px;border-radius:18px 18px 0 0;background:#f1f1f3;color:#1d1a26}
+.partage .contact{display:flex;align-items:center;gap:12px;border:0;background:#fff;border-radius:14px;padding:10px 12px;text-align:left;font:600 14px/1.2 var(--ui)}
+.partage .fichier{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#fff;font:500 13px/1.2 var(--ui)}
+.fichier .doc{display:grid;place-items:center;width:34px;height:42px;border-radius:6px;background:#fdeee6;color:var(--viticode);font:700 10px/1 var(--ui)}
 .pad-cadre{position:relative;height:150px;border-radius:14px;background:#fff;border:1.5px dashed #c9bfae}
 #pad{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
 .pad-trait{position:absolute;left:16px;right:16px;bottom:30px;border-top:1px solid #d8d0c2;padding-top:4px;font:500 11px/1 var(--ui);color:var(--gris);pointer-events:none}
@@ -381,6 +457,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .carte-fin ul{margin:0;padding:0;list-style:none;display:grid;gap:6px;text-align:left;font:500 14px/1.4 var(--ui)}
 .carte-fin li{padding-left:22px;position:relative} .carte-fin li::before{content:"";position:absolute;left:4px;top:.45em;width:9px;height:9px;border-radius:2px;background:var(--vitisoft)}
 .carte-fin #fin-phyto{font-size:13px;opacity:.85} a.cta{text-decoration:none} .cta.cyan{background:#1fa9c2;color:#fff;font-size:20px;padding:12px 26px;box-shadow:0 8px 24px rgba(31,169,194,.35)}
+.cta.viticode{background:var(--viticode);color:#fff;font-size:20px;padding:12px 26px;box-shadow:0 8px 24px rgba(232,78,27,.35)}
 #erreur{position:absolute;inset:0;margin:0;display:grid;place-items:center;padding:24px;text-align:center;font:500 16px/1.5 var(--ui);background:var(--nuit)}
 @media (min-width:600px) and (min-aspect-ratio:23/20){
   #accueil{align-items:flex-start;text-align:left;padding-left:max(7vw,var(--sl));
@@ -436,6 +513,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
     <p id="reprendre-t" class="reprise" hidden></p>
     <button id="jouer" class="cta" disabled>Jouer</button>
     <button id="jouer2" class="lien-m2" disabled>Ou directement la mission 2 : la journée de traitement</button>
+    <button id="jouer3" class="lien-m2" disabled>Ou la mission 3 : l'habillage, avec Viticode</button>
     <p class="aide" id="aide"><span class="tactile">Glissez le doigt n'importe où pour marcher, plus loin pour courir. Près du tracteur ou du van, touchez « Monter ». Près d'un passant, « Servir un verre ». Au volant : gardez le doigt posé pour avancer, le véhicule suit l'itinéraire de la mission ; glissez sur le côté pour tourner, vers le bas pour freiner, en bas et sur le côté pour déraper. Deux doigts : tourner la caméra. Le téléphone est en bas à droite.</span><span class="clavier">Flèches ou ZQSD : marcher, avec Maj : courir. Au volant, espace : frein à main (ça dérape). E : monter, descendre, servir un verre, emprunter une voiture, rentrer dormir, ouvrir le PC. T : téléphone. M : son. R : radio. J et L, ou clic droit glissé : tourner la caméra ; C : la remettre derrière. Manette : stick gauche, gâchettes, A, Y ; RB : frein à main.</span></p>
     <p class="version">Démo 1.0 · un jeu original de l'équipe Solumatic</p>
   </section>

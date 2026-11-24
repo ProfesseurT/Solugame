@@ -36,6 +36,7 @@ const TYPES = new Map(Object.entries({
   '#4f5158': T.enrobe, // l'enrobé neuf de la route du château : sans plaques de reprise
   '#6e4227': T.bois, // douelles plus sombres des barriques (parvis du chai)
   '#8f877a': T.eau, // les flaques du parvis : elles reflètent le ciel
+  '#eef0f2': T.lampe, // les néons de l'entrepôt de l'imprimeur (mission 3)
 }));
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
@@ -612,22 +613,26 @@ export function compacter(g) {
   return g;
 }
 
-// Intérieurs où le soleil n'entre pas (le chai) : dans la boîte (min, max), la lumière directe du soleil est coupée (la
-// carte d'ombre plongerait tout dans le noir sous le toit) et des suspensions éclairent (lampes : [x, y, z]) ; le ciel
-// n'y donne qu'un peu. Toutes les matières éclairées passent par ce morceau de shader de three.js : personnages, véhicules
-// et décor sont éclairés pareil. Fondu de 25 cm aux murs. À appeler avant la compilation des shaders.
-export function definirInterieur(min, max, lampes) {
+// Intérieurs où le soleil n'entre pas (le chai, l'entrepôt de l'imprimeur) : dans chaque boîte (min, max), la lumière
+// directe du soleil est coupée (la carte d'ombre plongerait tout dans le noir sous le toit) et des lampes éclairent
+// (lampes : [x, y, z], de la couleur de la boîte : suspensions chaudes du chai, néons froids de l'entrepôt) ; le ciel n'y
+// donne qu'un peu. Toutes les matières éclairées passent par ce morceau de shader de three.js : personnages, véhicules et
+// décor sont éclairés pareil. Fondu de 25 cm aux murs. Un seul appel, avec toutes les boîtes, avant la compilation des
+// shaders. boites : [{ min, max, lampes, couleur }].
+export function definirInterieur(boites) {
   const C = THREE.ShaderChunk, v = p => `vec3(${p.map(n => n.toFixed(2)).join(', ')})`;
+  const dans = boites.map(b => `{ vec3 cl_di = max( ${v(b.min)} - cl_pm, cl_pm - ${v(b.max)} ); cl_dehors = min( cl_dehors, smoothstep( -0.12, 0.12, max( cl_di.x, max( cl_di.y, cl_di.z ) ) ) ); }`);
+  const lampes = boites.flatMap(b => b.lampes.map(p => `{ vec3 d = cl_pm - ${v(p)}; cl_l += ${v(b.couleur || [1.0, 0.86, 0.68])} * 1.5 / ( 1.0 + dot( d, d ) * 0.05 ); }`));
   C.lights_fragment_begin = C.lights_fragment_begin
     .replace('vec3 geometryPosition = - vViewPosition;', `vec3 geometryPosition = - vViewPosition;
 vec3 cl_pm = ( vec4( geometryPosition - viewMatrix[ 3 ].xyz, 0.0 ) * viewMatrix ).xyz;
-vec3 cl_di = max( ${v(min)} - cl_pm, cl_pm - ${v(max)} );
-float cl_dehors = smoothstep( -0.12, 0.12, max( cl_di.x, max( cl_di.y, cl_di.z ) ) );`)
+float cl_dehors = 1.0;
+${dans.join('\n')}`)
     .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cl_dehors;') + `
 #if defined( RE_IndirectDiffuse )
 if ( cl_dehors < 1.0 ) {
   vec3 cl_l = vec3( 0.0 );
-  ${lampes.map(p => `{ vec3 d = cl_pm - ${v(p)}; cl_l += vec3( 1.0, 0.86, 0.68 ) * 1.5 / ( 1.0 + dot( d, d ) * 0.05 ); }`).join('\n  ')}
+  ${lampes.join('\n  ')}
   irradiance = mix( vec3( 0.5, 0.49, 0.47 ) + cl_l, irradiance, cl_dehors ); // dedans : une pénombre neutre, pas le ciel
 }
 #endif`;

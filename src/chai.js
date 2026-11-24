@@ -26,7 +26,8 @@ function cheminSortie(D) {
 }
 
 export class Chai {
-  // c : { jeu, monde, mission, gestes, cam, hud, tactile, conduite : { couperMoteur(), auVolant(v), aPied() } (main.js) }
+  // c : { jeu, monde, mission, gestes, cam, hud, tactile, conduite : { couperMoteur(), auVolant(v), aPied() },
+  // aCharger() : la mission en cours attend qu'on vienne charger (main.js) }
   constructor(c) {
     this.c = c;
     this.auChai = false;   // le chargement se joue (le véhicule entre, on charge, il ressort)
@@ -53,8 +54,8 @@ export class Chai {
   // À chaque image : la grande porte s'ouvre ou se ferme, la halle n'est dessinée que de près ; on bascule dans la halle
   // ou dehors (ego : le joueur ou son véhicule, cap : son cap ; position : celle de la caméra)
   maj(dt, ego, cap, position) {
-    const { jeu, monde, mission, cam } = this.c, PC = monde.porteChai;
-    const charge = mission.aCharger.length > 0 || mission.etape === 'chargement';
+    const { jeu, monde, cam } = this.c, PC = monde.porteChai;
+    const charge = this.c.aCharger(); // on vient charger (la mission en cours : main.js)
     const ouvrir = this.auChai || this.dansChai || (charge && jeu.distance(jeu.lieux.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
     PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
     const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a;

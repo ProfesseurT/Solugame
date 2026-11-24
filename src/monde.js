@@ -328,6 +328,17 @@ void main() {
     [145, -110, 178, -10, 'cabernet'], [-160, 25, -112, 100, 'chenin'], [-106, 25, -60, 100, 'cabernet'],
     [-50, 30, -8, 108, 'cabernet'], [-2, 30, 36, 108, 'chenin'], [60, 34, 172, 110, 'cabernet'],
   ];
+  // L'entrepôt de l'imprimeur-étiqueteur (mission 3, l'habillage), au sud-est, après la dernière maison du bourg : le
+  // hangar (x de 151,5 à 171,5, z de 20,5 à 32,5 ; murs de h mètres ; grande porte sectionnelle au pignon est, z de p0 à
+  // p1, ph de haut), sa cour en enrobé à l'est (deux rectangles, le second le long de la vigne) et l'accès depuis la
+  // départementale, entre deux poteaux. Bâti plus bas (entrepot) ; aucun tirage au sort.
+  const EN = { x0: 151.5, x1: 171.5, z0: 20.5, z1: 32.5, h: 6.6, p0: 25, p1: 30, ph: 4.6, LX: 163 };
+  const COUR_EN = [[171.5, 19.5, 186, 32.5], [173.5, 32.5, 186, 47], [175.2, 13.5, 183.2, 19.5]];
+  // un point (à m mètres près) dans le hangar, sa cour ou son accès : ni herbe haute ni arbre n'y poussent
+  const dansEntrepot = (x, z, m) => (x > EN.x0 - m && x < EN.x1 + m && z > EN.z0 - m && z < EN.z1 + m)
+    || COUR_EN.some(([x0, z0, x1, z1]) => x > x0 - m && x < x1 + m && z > z0 - m && z < z1 + m);
+  const plusTard = []; // des collisions posées une fois les herbes semées (elles ne changent pas leur tirage au sort)
+  const interieurs = []; // les intérieurs où le soleil n'entre pas : le chai, l'entrepôt (modeles.js : definirInterieur)
   const MAISONS_ROUTE = [];
   {
     const R = TRACE, rr = hasard(9127);
@@ -441,6 +452,20 @@ void main() {
   // il commence au bord de la chaussée (z = 13,5) : il ne recouvre ni la route ni sa ligne de rive
   surf.push(B(4.6, 0.06, 111, '#c9b993', -55, 0, 69), B(27, 0.062, 19, '#c9b993', -56, 0, 133));
   rect(-57.3, 13.5, -52.7, 124.5, '#c9b993'); rect(-69.5, 123.5, -42.5, 142.5, '#c9b993');
+  // la cour de l'entrepôt de l'imprimeur : un enrobé neuf (pas de plaques de reprise), son accès depuis la départementale ;
+  // devant la grande porte, un seuil de béton et la zone de chargement hachurée de jaune ; les places du personnel ; des
+  // bordures le long de la vigne et au bord de la cour
+  {
+    const ENR = '#4f5158', JAUNE = '#e0b13a';
+    for (const [x0, z0, x1, z1] of COUR_EN) { surf.push(B(x1 - x0, 0.06, z1 - z0, ENR, (x0 + x1) / 2, 0, (z0 + z1) / 2)); rect(x0, z0, x1, z1, '#5d6068'); }
+    surf.push(B(1.4, 0.075, EN.p1 - EN.p0 + 1.2, '#a9a399', EN.x1 + 0.7, 0, (EN.p0 + EN.p1) / 2));
+    const zc = (EN.p0 + EN.p1) / 2;
+    for (const z of [EN.p0 - 0.3, EN.p1 + 0.3]) surf.push(B(3.6, 0.07, 0.12, JAUNE, EN.x1 + 2.2, 0, z));
+    surf.push(B(0.12, 0.07, EN.p1 - EN.p0 + 0.72, JAUNE, EN.x1 + 4.0, 0, zc));
+    for (let k = -2; k <= 2; k++) surf.push(B(0.1, 0.068, 2.3, JAUNE, EN.x1 + 2.7, 0, zc + k * 1.15, 0.7));
+    for (const x of [182.7, 185.7]) surf.push(B(0.1, 0.066, 5, '#ece6d4', x, 0, 38.5));
+    for (const [x0, z0, x1, z1] of [[171.5, 19.4, 175.2, 19.6], [183.2, 19.4, 186, 19.6], [173.4, 32.5, 173.6, 47], [173.5, 46.9, 186, 47.1]]) surf.push(B(x1 - x0, 0.14, z1 - z0, BORDURE, (x0 + x1) / 2, 0, (z0 + z1) / 2));
+  }
 
   // vignes d'automne : chenin (jaune) et cabernet franc (rouge)
   const PAL = {
@@ -704,6 +729,26 @@ void main() {
     } else if (genre === 'bar') {
       for (const y of [1.33]) for (let x = g0 + 0.1; x < g1 - 0.06; x += 0.18) { const h = 0.2 + r() * 0.1; L.push(C(0.03, 0.034, h, 5, coul(['#a8662a', '#2f5d3a', '#cfe0ea', '#6e1f2e', '#d9a832']), x, y + h / 2 + 0.015, z)); }
       L.push(C(0.15, 0.12, 0.3, 8, '#b5532e', g0 + 0.3, 0.83, z0 + 0.11), S(0.22, '#4f7a32', g0 + 0.3, 1.15, z0 + 0.11, 1, 1.2, 0.55));
+    } else if (genre === 'labo') {
+      // le laboratoire d'œnologie : en haut, des flacons d'échantillon (du rouge, une étiquette blanche, un bouchon) ; au
+      // milieu, des erlenmeyers à moitié pleins et un portoir d'éprouvettes ; en bas, l'ébulliomètre de laiton et sa lampe,
+      // un analyseur blanc à l'écran allumé
+      const VERRE_L = '#d6e6ea', VIN = ['#6e1f2e', '#7a2233', '#a8662a', '#d9c27a'];
+      for (let x = g0 + 0.12; x < g1 - 0.08; x += 0.17) {
+        L.push(C(0.027, 0.027, 0.13, 6, coul(['#3a1820', '#4a1f28', '#26301f']), x, 1.85 + 0.08, z), C(0.012, 0.012, 0.035, 6, '#f4f1ea', x, 1.85 + 0.165, z));
+        L.push(B(0.045, 0.04, 0.008, '#f7f5ef', x, 1.85 + 0.075, z + 0.028));
+      }
+      for (let x = g0 + 0.2, k = 0; x < g1 - 0.2; x += 0.34, k++) {
+        if (k % 3 === 2) {
+          // portoir : sa planche, cinq éprouvettes debout, du vin au fond
+          L.push(B(0.3, 0.025, 0.08, '#f4f1ea', x, 1.38, z), B(0.3, 0.02, 0.08, '#f4f1ea', x, 1.43, z));
+          for (let i = -2; i <= 2; i++) L.push(C(0.009, 0.009, 0.12, 5, VERRE_L, x + i * 0.055, 1.385 + 0.06, z), C(0.0085, 0.0085, 0.05, 5, coul(VIN), x + i * 0.055, 1.385 + 0.025, z));
+          continue;
+        }
+        L.push(C(0.013, 0.05, 0.1, 8, VERRE_L, x, 1.315 + 0.05, z), C(0.013, 0.013, 0.045, 8, VERRE_L, x, 1.315 + 0.12, z), C(0.034, 0.048, 0.035, 8, coul(VIN), x, 1.315 + 0.018, z));
+      }
+      L.push(C(0.045, 0.055, 0.2, 8, '#c9a55a', g0 + 0.3, 0.68 + 0.1, z0 + 0.1), C(0.007, 0.007, 0.26, 5, '#f4f1ea', g0 + 0.3, 0.68 + 0.33, z0 + 0.1), C(0.035, 0.03, 0.05, 8, '#2b2b30', g0 + 0.3, 0.68 + 0.025, z0 + 0.1));
+      L.push(B(0.36, 0.24, 0.18, '#e8eaec', g1 - 0.35, 0.68 + 0.12, z0 + 0.1), B(0.2, 0.1, 0.01, '#dfeef8', g1 - 0.38, 0.68 + 0.16, z0 + 0.195), B(0.06, 0.03, 0.01, '#2f9e63', g1 - 0.22, 0.68 + 0.07, z0 + 0.195));
     } else { // restaurant, auberge : une plante, l'ardoise du menu, des bougies
       L.push(C(0.15, 0.12, 0.3, 8, '#b5532e', g0 + 0.3, 0.83, z0 + 0.11), S(0.24, '#4f7a32', g0 + 0.3, 1.2, z0 + 0.11, 1, 1.3, 0.55));
       L.push(B(0.42, 0.58, 0.03, '#2b2b30', g1 - 0.4, 1.0, z0 + 0.12, 0), B(0.46, 0.04, 0.05, '#6b4a30', g1 - 0.4, 1.3, z0 + 0.12));
@@ -714,14 +759,49 @@ void main() {
   // bouteilles, de pains ou de bocaux, un comptoir, ou une salle de restaurant (tables nappées, chaises, cadres)
   function peindreInterieur(c, W, H, genre, porte) {
     const k = W / 512; c.scale(k, k); W /= k; H /= k; // dessinée pour 512 px de large, mise à l'échelle
-    const r = hasard(W * 31 + H + (genre || '').length * 7), sol = H * 0.82;
+    const r = hasard(W * 31 + H + (genre || '').length * 7), sol = H * 0.82, labo = genre === 'labo';
     let g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#f7dfb2'); g.addColorStop(0.55, '#e3b47a'); g.addColorStop(0.82, '#b07a46'); g.addColorStop(1, '#6e4a2c');
+    if (labo) { g.addColorStop(0, '#f4f7f8'); g.addColorStop(0.6, '#dde6e9'); g.addColorStop(0.82, '#b8c5cb'); g.addColorStop(1, '#7d8a90'); }
+    else { g.addColorStop(0, '#f7dfb2'); g.addColorStop(0.55, '#e3b47a'); g.addColorStop(0.82, '#b07a46'); g.addColorStop(1, '#6e4a2c'); }
     c.fillStyle = g; c.fillRect(0, 0, W, H);
-    c.fillStyle = '#7a5434'; c.fillRect(0, sol, W, H - sol); // parquet
-    for (let x = 0; x < W; x += 18) { c.fillStyle = x % 36 ? '#6a4a2e' : '#83603e'; c.fillRect(x, sol, 9, H - sol); }
     const lampes = porte ? [W / 2] : [W * 0.2, W * 0.5, W * 0.8];
-    for (const x of lampes) {
+    if (labo) {
+      // un laboratoire : faïence blanche aux murs, sol de résine grise, néons
+      c.strokeStyle = 'rgba(110,130,140,0.22)'; c.lineWidth = 1;
+      for (let x = 0; x < W; x += 22) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, sol); c.stroke(); }
+      for (let y = 0; y < sol; y += 22) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+      c.fillStyle = '#6f7c84'; c.fillRect(0, sol, W, H - sol);
+      for (const x of lampes) {
+        const rg = c.createRadialGradient(x, H * 0.08, 2, x, H * 0.08, H * 0.6);
+        rg.addColorStop(0, 'rgba(240,248,255,0.9)'); rg.addColorStop(1, 'rgba(240,248,255,0)');
+        c.fillStyle = rg; c.fillRect(0, 0, W, H);
+        c.fillStyle = '#fbfdff'; c.fillRect(x - 34, H * 0.05, 68, 7);
+      }
+      // étagères de flacons et de verrerie
+      for (const y of [H * 0.24, H * 0.4]) {
+        c.fillStyle = '#c9d3d8'; c.fillRect(W * 0.04, y, W * 0.92, 4);
+        for (let x = W * 0.06; x < W * 0.93; x += 9 + r() * 5) {
+          const h = 10 + r() * 9;
+          c.fillStyle = ['#3a1820', '#4a1f28', '#cfe0ea', '#26301f', '#a8662a'][Math.floor(r() * 5)]; c.fillRect(x, y - h, 6, h);
+          c.fillStyle = '#f7f5ef'; c.fillRect(x, y - h * 0.6, 6, 3);
+        }
+      }
+      // la paillasse : plan de travail noir, placards blancs ; dessus, un analyseur à l'écran allumé, une centrifugeuse, des
+      // flacons d'échantillon en rang
+      const yp = sol - H * 0.22;
+      c.fillStyle = '#e8ecee'; c.fillRect(W * 0.03, yp + 6, W * 0.94, sol - yp - 6);
+      c.strokeStyle = 'rgba(90,100,110,0.45)'; for (let x = W * 0.03; x < W * 0.97; x += 46) { c.strokeRect(x + 2, yp + 10, 42, sol - yp - 14); }
+      c.fillStyle = '#2b2d33'; c.fillRect(W * 0.02, yp, W * 0.96, 7);
+      if (!porte) {
+        c.fillStyle = '#f2f4f5'; c.fillRect(W * 0.12, yp - 34, 64, 34); c.fillStyle = '#7fc4e0'; c.fillRect(W * 0.12 + 8, yp - 28, 30, 18);
+        c.fillStyle = '#d8dde0'; c.beginPath(); c.ellipse(W * 0.62, yp - 12, 24, 12, 0, 0, 7); c.fill(); c.fillStyle = '#9aa6ad'; c.fillRect(W * 0.62 - 24, yp - 12, 48, 12);
+      }
+      for (let x = W * (porte ? 0.2 : 0.32); x < W * (porte ? 0.8 : 0.5); x += 11) { c.fillStyle = '#3a1820'; c.fillRect(x, yp - 16, 7, 16); c.fillStyle = '#f7f5ef'; c.fillRect(x, yp - 10, 7, 4); }
+    } else {
+      c.fillStyle = '#7a5434'; c.fillRect(0, sol, W, H - sol); // parquet
+      for (let x = 0; x < W; x += 18) { c.fillStyle = x % 36 ? '#6a4a2e' : '#83603e'; c.fillRect(x, sol, 9, H - sol); }
+    }
+    if (!labo) for (const x of lampes) {
       const rg = c.createRadialGradient(x, H * 0.16, 2, x, H * 0.16, H * 0.55);
       rg.addColorStop(0, 'rgba(255,244,214,0.95)'); rg.addColorStop(1, 'rgba(255,244,214,0)');
       c.fillStyle = rg; c.fillRect(0, 0, W, H);
@@ -734,7 +814,7 @@ void main() {
         for (let x = W * 0.05; x < W * 0.94; x += larg + 2 + r() * 3) { const h = hMin + r() * (hMax - hMin); c.fillStyle = couleurs[Math.floor(r() * couleurs.length)]; c.fillRect(x, y - h, larg, h); }
       }
     };
-    if (genre === 'cave') {
+    if (labo) { /* (dessiné plus haut) */ } else if (genre === 'cave') {
       etageres(['#1f3b2a', '#3a1820', '#26301f', '#4a1f28'], 18, 24, 7);
       c.fillStyle = '#6e4a2c'; for (const x of [W * 0.15, W * 0.78]) { c.beginPath(); c.ellipse(x, sol - 18, 22, 18, 0, 0, 7); c.fill(); c.strokeStyle = '#3b2a20'; c.lineWidth = 2; c.stroke(); }
     } else if (genre === 'boulangerie') {
@@ -769,7 +849,8 @@ void main() {
     }
     // les bords plus sombres : de la profondeur
     g = c.createLinearGradient(0, 0, W, 0);
-    g.addColorStop(0, 'rgba(40,24,12,0.45)'); g.addColorStop(0.12, 'rgba(40,24,12,0)'); g.addColorStop(0.88, 'rgba(40,24,12,0)'); g.addColorStop(1, 'rgba(40,24,12,0.45)');
+    const t = labo ? '30,40,48' : '40,24,12';
+    g.addColorStop(0, `rgba(${t},0.45)`); g.addColorStop(0.12, `rgba(${t},0)`); g.addColorStop(0.88, `rgba(${t},0)`); g.addColorStop(1, `rgba(${t},0.45)`);
     c.fillStyle = g; c.fillRect(0, 0, W, H);
   }
   // o : x, z, w (façade), d (profondeur), h, rot (0 : façade vers +z), options (mur : couleur imposée)
@@ -803,7 +884,9 @@ void main() {
     for (let e = 0; e < etages; e++) for (let i = 0; i < nf; i++) {
       const x = colX(i), y = 1.75 + e * 2.8;
       fenetre(L, x, y, -d / 2, -1, o.volets, pierre);
-      if (e === 0 && o.vitrine) continue;
+      // (tirage : une maison qui reçoit une devanture après coup, le laboratoire : on tire quand même au sort les fenêtres
+      // qu'elle remplace, la suite du tirage du monde ne bouge pas)
+      if (e === 0 && o.vitrine) { if (o.tirage && i !== porte) rnd(); continue; }
       if (e === 0 && i === porte) {
         if (pierre) plaque(x, 1.24, d / 2 + 0.006, 'z', 1, 1.45, 2.48);
         L.push(B(1.15, 2.25, 0.12, o.porteC || '#5b3a2a', x, 1.12, d / 2 + 0.04), B(1.5, 0.14, 0.42, '#cbbf9f', x, 0.07, d / 2 + 0.21));
@@ -903,10 +986,15 @@ void main() {
       plan.push({ t: 'p', pts: [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => [o.x + x * co + z * si, o.z + z * co - x * si]) });
       return o;
     }
-    // collision : la maison, et sa devanture (36 cm devant la façade)
-    const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5, av = o.vitrine ? 0.36 : 0, r0 = o.rot || 0;
+    // collision : la maison, et sa devanture (36 cm devant la façade) ; une devanture ajoutée après coup (le laboratoire) a
+    // sa boîte à part, posée une fois les herbes semées (leur tirage au sort ne bouge pas)
+    const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5, av = o.vitrine && !o.tirage ? 0.36 : 0, r0 = o.rot || 0;
     const bx = col.boiteC(o.x + Math.sin(r0) * av / 2, o.z + Math.cos(r0) * av / 2, tourne ? d + av : w, tourne ? w : d + av);
     bx.haut = true;
+    if (o.vitrine && o.tirage) {
+      const a = d / 2 + 0.18, cx = o.x + Math.sin(r0) * a, cz = o.z + Math.cos(r0) * a;
+      plusTard.push(() => { col.boiteC(cx, cz, tourne ? 0.36 : w, tourne ? w : 0.36).haut = true; });
+    }
     plan.push({ t: 'b', x0: bx.x0, z0: bx.z0, x1: bx.x1, z1: bx.z1 });
     contact.jupe(bx.x0 - 0.07, bx.z0 - 0.07, bx.x1 + 0.07, bx.z1 + 0.07, 1.7, 0.5);
     return o;
@@ -1024,7 +1112,7 @@ void main() {
     };
     o.porteChai = { a: vantail(1), b: vantail(-1), k: 0, col: col.boite(-76.4, -53.8, -75.6, -50.2) }; // épaisse comme le mur : la caméra du dehors ne passe pas entre deux relevés
     o.porteChai.col.haut = true;
-    definirInterieur([-75.8, -1, -59.4], [-64.2, 6.3, -39.2], [-56.5, -51.5, -46.5, -41.5].map(z => [-70, 5.0, z]));
+    interieurs.push({ min: [-75.8, -1, -59.4], max: [-64.2, 6.3, -39.2], lampes: [-56.5, -51.5, -46.5, -41.5].map(z => [-70, 5.0, z]) });
 
 
     /* -- l'intérieur (coordonnées monde) */
@@ -1428,8 +1516,23 @@ void main() {
       col.boiteC(x - 1.6, 2.2, 2.9, 0.6);
     }
   }
-  for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]])
-    maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS) });
+  // Côté sud ; en x = 128, le laboratoire d'œnologie (mission 3 : on y dépose l'échantillon de la cuvée) : une devanture
+  // bleu-gris, sa verrerie en vitrine, l'intérieur carrelé de blanc, l'enseigne et une plaque de laiton près de la porte
+  let labo = null;
+  for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]]) {
+    const o = maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS), ...(x === 128 ? { vitrine: '#4f6272', boutique: 'labo', porteC: '#4f6272', tirage: true } : {}) });
+    if (x !== 128) continue;
+    labo = o; portes.labo = o.entree;
+    enseigne('LABORATOIRE D\'ŒNOLOGIE', facade(o, -w * 0.14, 0.37), 3.05, 6.2, 0.54, '#4f6272', '#f3efe6');
+    const p = facade(o, w / 2 - 0.42, 0.012);
+    atlas.poser(160, 112, (c, W, H) => {
+      const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#e4c578'); g.addColorStop(0.5, '#c9a55a'); g.addColorStop(1, '#a8873e');
+      c.fillStyle = g; c.fillRect(0, 0, W, H); c.strokeStyle = '#7d6328'; c.lineWidth = 4; c.strokeRect(5, 5, W - 10, H - 10);
+      c.fillStyle = '#2b2414'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 19px Georgia, serif'; c.fillText('LABORATOIRE', W / 2, H * 0.33);
+      c.font = '14px Georgia, serif'; c.fillText('Analyses des vins', W / 2, H * 0.57); c.fillText('Dépôt d\'échantillons', W / 2, H * 0.76);
+    }, 0.5, 0.35, p.x, 1.55, p.z, p.rot);
+  }
   // murs de clôture en moellons entre les maisons de la rue, chaperon de tuffeau, portail de bois dans les plus longs
   function cloture(x0, x1, z, portail) {
     const H = 2.1, mc = MOELLONS[Math.floor(hache(x0, z) * 3)], seg = (u0, u1) => {
@@ -1915,6 +2018,9 @@ void main() {
       tr.applyMatrix4(m.compose(p.set(x, y, z), q, e.set(k * (t === 'cedre' ? 1.8 : 1), th * k, k * (t === 'cedre' ? 1.8 : 1))));
       const fe = copie(y ? modele.fe0 : modele.fe1, pick(FEU[t]));
       fe.applyMatrix4(m.compose(p.set(x, y + fy * k, z), q, e.set(fx * k, fyS * k, fx * k * (0.9 + rnd() * 0.2))));
+      // le chêne qui poussait là où est maintenant l'entrepôt de l'imprimeur : ses tirages sont faits (le reste du monde ne
+      // bouge pas), il n'est pas planté
+      if (y === 0 && dansEntrepot(x, z, 0)) continue;
       bati.push(tr, fe);
       col.boiteC(x, z, 0.6 * k * (t === 'cedre' ? 1.8 : 1), 0.6 * k * (t === 'cedre' ? 1.8 : 1)); // tous arrêtent : les collines se parcourent
       if (y === 0) {
@@ -1983,6 +2089,246 @@ void main() {
   panneau((c, W, H) => { c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.fillStyle = '#c8202a'; c.fill(); c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 30, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#111'; c.font = 'bold 110px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('50', W / 2, H / 2 + 6); }, 0.7, 0.7, 24, 2.2, 16.6, -Math.PI / 2);
   panneau(direction('Domaine du Clos Libre', 30), 2.2, 0.36, -86.2, 2.0, 5.6, 0);
   panneau(direction('Château', 34), 1.5, 0.34, -172.2, 2.0, 5.6, 0); // à l'embranchement de la route du château
+
+  /* ------------------------------------------------------------ l'entrepôt de l'imprimeur-étiqueteur (mission 3)
+     Un prestataire d'habillage, au sud-est après la dernière maison du bourg : un hangar moderne en bardage métallique
+     nervuré, sa grande porte sectionnelle ouverte sur la cour (pignon est), la porte de service et le bureau vitré dans
+     l'angle nord-est, l'enseigne tournée vers la départementale. Dedans, vue par la porte : la ligne d'habillage (table
+     d'entrée des bouteilles nues, tirées-bouchées ; convoyeur ; le monobloc : distributeur de capsules et étiqueteuse,
+     ses bobines d'étiquettes ; table de sortie des bouteilles habillées), l'imprimante d'étiquettes, les rayonnages de
+     bobines, palettes de cartons, établi, néons. L'intérieur est un maillage à part, sans ombre portée, dessiné de près
+     seulement (maj) ; le soleil y est coupé, les néons éclairent (definirInterieur). Les bouteilles qui avancent sont des
+     instances : une bouteille nue passe dans le monobloc et en ressort habillée (ligne.maj). Dans la cour (son enrobé :
+     plus haut) : chariot élévateur, palettes, bobines sur palette, benne, mât d'éclairage ; la voiture du personnel est
+     garée (lieux.garees). Coordonnées du monde ; rien n'est tiré au sort ; les collisions sont posées après les herbes. */
+  function entrepot() {
+    const { x0, x1, z0, z1, h, p0, p1, ph, LX } = EN, L = [], I = [], ep = 0.2, xm = (x0 + x1) / 2, zm = (z0 + z1) / 2;
+    const BARD = '#b9c0c6', NERV = '#aab2b9', BANDE = '#3f5a73', SOCLE = '#8f8a80', ALU = '#c9ccd1', GRIS = '#5f656d';
+    const VERRE_E = '#2d3846', INOX = '#a3aab2', JAUNE = '#e0b13a', NOIR = '#2b2b30', PANNEAU = '#e3e7ea', PLAFOND = '#dde2e6', PAL = '#9a7b55', CARTON = '#b98a55';
+    // un pan : le long de x (en z = c) ou de z (en x = c), de u0 à u1, de y0 à y1, d'épaisseur e
+    const pan = (liste, axe, c, u0, u1, y0, y1, coul, e) => liste.push(axe === 'x' ? B(u1 - u0, y1 - y0, e, coul, (u0 + u1) / 2, (y0 + y1) / 2, c) : B(e, y1 - y0, u1 - u0, coul, c, (y0 + y1) / 2, (u0 + u1) / 2));
+    // Les quatre murs et leurs baies : les fenêtres du bureau (long pan nord, x de 167,2 à 171 ; pignon est, z de 21 à
+    // 22,4), la porte de service (pignon est, z de 22,9 à 23,9), la grande porte (z de p0 à p1). [u0, u1, ouverture (y0, y1)]
+    const BAIES = {
+      nord: [[x0, 167.2], [167.2, 171.0, 1.0, 2.3], [171.0, x1]],
+      sud: [[x0, x1]], ouest: [[z0, z1]],
+      est: [[z0, 21.0], [21.0, 22.4, 1.0, 2.3], [22.4, 22.9], [22.9, 23.9, 0, 2.2], [23.9, p0], [p0, p1, 0, ph], [p1, z1]],
+    };
+    const MURS = { nord: ['x', z0, -1], sud: ['x', z1, 1], ouest: ['z', x0, -1], est: ['z', x1, 1] }; // axe, face extérieure, sens
+    for (const [nom, [axe, f, s]] of Object.entries(MURS)) {
+      const cm = f - s * ep / 2, ci = f - s * (ep + 0.01); // le milieu du mur, sa face intérieure (panneaux clairs)
+      for (const [u0, u1, a, b] of BAIES[nom]) {
+        const morceaux = a === undefined ? [[0, h]] : [[0, a], [b, h]].filter(([y0, y1]) => y1 - y0 > 0.01);
+        for (const [y0, y1] of morceaux) {
+          pan(L, axe, cm, u0, u1, y0, y1, BARD, ep);
+          pan(I, axe, ci, Math.max(u0, (axe === 'x' ? x0 : z0) + ep), Math.min(u1, (axe === 'x' ? x1 : z1) - ep), y0, Math.min(y1, 5.95), PANNEAU, 0.02);
+        }
+        // nervures du bardage (sur les pans pleins), soubassement de béton (sauf aux portes)
+        if (a === undefined) for (let u = u0 + 0.3; u < u1 - 0.2; u += 0.6) L.push(axe === 'x' ? B(0.09, h - 1.2, 0.04, NERV, u, 0.45 + (h - 1.2) / 2, f + s * 0.02) : B(0.04, h - 1.2, 0.09, NERV, f + s * 0.02, 0.45 + (h - 1.2) / 2, u));
+        if (a !== 0) pan(L, axe, f + s * 0.03, u0, u1, 0, 0.45, SOCLE, 0.06);
+      }
+      // le bandeau bleu en haut du mur, la couvertine ; une plinthe grise côté intérieur (sauf au pignon des portes)
+      const [lo, hi] = axe === 'x' ? [x0, x1] : [z0, z1];
+      pan(L, axe, f + s * 0.025, lo - 0.05, hi + 0.05, h - 0.75, h, BANDE, 0.05);
+      pan(L, axe, cm, lo - 0.08, hi + 0.08, h, h + 0.06, ALU, 0.32);
+      if (nom !== 'est') pan(I, axe, f - s * (ep + 0.025), lo + ep, hi - ep, 0, 1.0, '#9aa3aa', 0.02);
+    }
+    // le toit plat derrière l'acrotère, ses lanterneaux ; les descentes d'eau aux angles
+    L.push(B(x1 - x0 - 0.4, 0.2, z1 - z0 - 0.4, '#8a9098', xm, 6.1, zm));
+    for (const x of [156, 161.5, 167]) L.push(B(1.3, 0.12, 3.1, ALU, x, 6.26, zm), B(1.2, 0.3, 3.0, '#dfe8ee', x, 6.4, zm));
+    for (const [x, z] of [[x0 - 0.1, z0 - 0.1], [x1 + 0.1, z0 - 0.1], [x0 - 0.1, z1 + 0.1], [x1 + 0.1, z1 + 0.1]]) L.push(C(0.06, 0.06, h, 6, '#8a9098', x, h / 2, z));
+    // la grande porte : son cadre, deux appliques, deux bornes jaunes ; la porte de service, son auvent, sa lampe
+    const pc = (p0 + p1) / 2;
+    L.push(B(0.12, ph + 0.1, 0.14, GRIS, x1 + 0.06, (ph + 0.1) / 2, p0 - 0.07), B(0.12, ph + 0.1, 0.14, GRIS, x1 + 0.06, (ph + 0.1) / 2, p1 + 0.07), B(0.12, 0.14, p1 - p0 + 0.28, GRIS, x1 + 0.06, ph + 0.07, pc));
+    for (const z of [p0 - 0.55, p1 + 0.55]) L.push(B(0.3, 0.14, 0.2, NOIR, x1 + 0.15, ph + 0.5, z), B(0.2, 0.05, 0.14, '#ffe1a0', x1 + 0.2, ph + 0.42, z));
+    for (const z of [p0 - 0.35, p1 + 0.35]) L.push(C(0.09, 0.09, 1.0, 8, JAUNE, x1 + 0.5, 0.5, z), C(0.093, 0.093, 0.12, 8, NOIR, x1 + 0.5, 0.75, z));
+    L.push(B(0.05, 2.15, 0.96, GRIS, x1 - ep / 2, 1.075, 23.4), B(0.04, 0.03, 0.12, ALU, x1 - 0.05, 1.05, 23.75));
+    L.push(B(1.0, 0.08, 1.5, ALU, x1 + 0.5, 2.55, 23.4), B(0.6, 0.04, 0.04, GRIS, x1 + 0.3, 2.35, 22.75), B(0.6, 0.04, 0.04, GRIS, x1 + 0.3, 2.35, 24.05));
+    L.push(B(0.2, 0.12, 0.14, NOIR, x1 + 0.1, 2.85, 23.4), B(0.14, 0.05, 0.1, '#ffe1a0', x1 + 0.14, 2.8, 23.4));
+    // les fenêtres du bureau : vitrage teinté, montants d'aluminium, appui
+    L.push(B(3.8, 1.3, 0.04, VERRE_E, 169.1, 1.65, z0 + ep / 2), B(3.9, 0.06, 0.28, ALU, 169.1, 0.98, z0 + 0.04));
+    for (const x of [167.2, 168.47, 169.73, 171.0]) L.push(B(0.06, 1.3, 0.24, ALU, x, 1.65, z0 + ep / 2));
+    L.push(B(0.04, 1.3, 1.4, VERRE_E, x1 - ep / 2, 1.65, 21.7), B(0.28, 0.06, 1.5, ALU, x1 - 0.04, 0.98, 21.7));
+    for (const z of [21.0, 22.4]) L.push(B(0.24, 1.3, 0.06, ALU, x1 - ep / 2, 1.65, z));
+    // l'enseigne, tournée vers la départementale ; celle de la grande porte
+    enseigne('IMPRIMERIE SAINT-VINCENT', { x: 160.5, z: z0 - 0.07, rot: Math.PI }, 4.55, 10.4, 1.0, BANDE, '#f4f1ea');
+    enseigne('ÉTIQUETTES · HABILLAGE', { x: 160.5, z: z0 - 0.07, rot: Math.PI }, 3.6, 5.4, 0.5, '#f4f1ea', BANDE);
+    enseigne('IMPRIMERIE SAINT-VINCENT', { x: x1 + 0.07, z: pc, rot: Math.PI / 2 }, 5.25, 5.0, 0.55, BANDE, '#f4f1ea');
+
+    /* -- la cour : le chariot élévateur garé (fourches vers l'ouest), deux piles de palettes vides, une palette de bobines
+       d'étiquettes filmées près de l'angle du hangar, la benne à cartons, un mât d'éclairage */
+    {
+      const fx = 184.0, fz = 23.0;
+      L.push(B(1.6, 0.55, 1.05, JAUNE, fx + 0.5, 0.62, fz), B(0.45, 0.75, 1.05, NOIR, fx + 1.45, 0.75, fz));
+      L.push(B(0.45, 0.12, 0.45, NOIR, fx + 0.85, 1.0, fz), B(0.08, 0.45, 0.45, NOIR, fx + 1.1, 1.28, fz), C(0.15, 0.15, 0.03, 8, NOIR, fx + 0.45, 1.3, fz));
+      for (const x of [fx, fx + 1.2]) for (const z of [fz - 0.45, fz + 0.45]) L.push(C(0.03, 0.03, 1.3, 5, NOIR, x, 1.55, z));
+      L.push(B(1.3, 0.05, 1.0, NOIR, fx + 0.6, 2.2, fz));
+      for (const z of [fz - 0.3, fz + 0.3]) L.push(B(0.08, 2.3, 0.1, NOIR, fx - 0.45, 1.2, z), B(1.0, 0.04, 0.1, GRIS, fx - 1.05, 0.1, z));
+      L.push(B(0.08, 0.08, 0.7, NOIR, fx - 0.45, 2.3, fz), B(0.06, 0.5, 0.9, GRIS, fx - 0.55, 0.4, fz));
+      for (const x of [fx - 0.15, fx + 1.2]) for (const z of [fz - 0.55, fz + 0.55]) L.push(C(0.27, 0.27, 0.2, 10, '#1d1d1d', x, 0.27, z, 'z'));
+      contact.tache(fx + 0.3, fz, 1.6, 0.9, 0.35);
+      for (const [x, z, n] of [[184.9, 27.9, 7], [184.9, 29.2, 4]]) {
+        for (let i = 0; i < n; i++) L.push(B(0.8, 0.13, 1.2, i % 2 ? PAL : '#8a6e4c', x, 0.07 + i * 0.145, z));
+        contact.tache(x, z, 0.6, 0.8, 0.3);
+      }
+      L.push(B(1.2, 0.14, 0.8, PAL, 172.75, 0.07, 31.75));
+      for (const dx of [-0.29, 0.29]) for (const dz of [-0.2, 0.2]) for (let k = 0; k < 3; k++) {
+        L.push(C(0.19, 0.19, 0.12, 12, k === 2 ? '#efe4c8' : '#f7f5ef', 172.75 + dx, 0.2 + k * 0.125, 31.75 + dz));
+        if (k === 2) L.push(C(0.055, 0.055, 0.012, 8, '#8d7c66', 172.75 + dx, 0.39, 31.75 + dz));
+      }
+      contact.tache(172.75, 31.75, 0.8, 0.6, 0.3);
+      L.push(B(2.0, 1.3, 3.8, '#3d5a4a', 182.8, 0.8, 44.0), B(2.1, 0.1, 3.9, '#2f4a3c', 182.8, 1.5, 44.0), B(1.8, 0.1, 3.6, '#c9a87a', 182.8, 1.4, 44.0));
+      for (const z of [42.4, 45.6]) L.push(B(2.2, 0.15, 0.3, '#2f4a3c', 182.8, 0.08, z));
+      contact.tache(182.8, 44.0, 1.4, 2.2, 0.35);
+      L.push(C(0.07, 0.1, 6.4, 6, GRIS, 185.6, 3.2, 33.6), B(1.1, 0.08, 0.1, GRIS, 185.1, 6.35, 33.6), B(0.5, 0.12, 0.3, NOIR, 184.6, 6.3, 33.6), B(0.4, 0.04, 0.22, '#ffe1a0', 184.6, 6.23, 33.6));
+    }
+    bati.push(...L);
+    contact.jupe(x0 - 0.07, z0 - 0.07, x1 + 0.07, z1 + 0.07, 1.6, 0.45);
+    plan.push({ t: 'b', x0, z0, x1, z1 });
+
+    /* -- dedans : le sol de béton et ses allées jaunes, le plafond, la charpente, les néons, la porte sectionnelle
+       enroulée sous le plafond, le bureau vitré */
+    I.push(B(x1 - x0 - 0.4, 0.04, z1 - z0 - 0.4, SOCLE, xm, 0.02, zm), B(x1 - x0 - 0.4, 0.04, z1 - z0 - 0.4, PLAFOND, xm, 5.95, zm));
+    for (const x of [LX + 1.25, LX - 2.1]) I.push(B(0.09, 0.006, z1 - z0 - 1.4, JAUNE, x, 0.043, zm));
+    I.push(B(x1 - LX - 1.6, 0.006, 0.09, JAUNE, (x1 + LX + 1.25) / 2 - 0.1, 0.043, 24.8));
+    for (const x of [156.5, 161.5, 166.5]) {
+      for (const z of [z0 + ep + 0.13, z1 - ep - 0.13]) I.push(B(0.24, 5.9, 0.24, BANDE, x, 2.95, z));
+      I.push(B(0.2, 0.4, z1 - z0 - 0.4, BANDE, x, 5.7, zm));
+    }
+    for (const x of [154.5, 158.5, 162.5, 166.5, 170.0]) for (const z of [24.0, 29.0]) {
+      I.push(B(1.5, 0.07, 0.2, '#8a9098', x, 5.42, z), B(1.4, 0.04, 0.12, '#eef0f2', x, 5.37, z));
+      for (const d of [-0.6, 0.6]) I.push(C(0.006, 0.006, 0.5, 4, NOIR, x + d, 5.7, z));
+    }
+    I.push(B(4.4, 0.06, p1 - p0 + 0.1, ALU, x1 - 2.45, ph + 0.32, pc));
+    for (const z of [p0 - 0.02, p1 + 0.02]) I.push(B(4.4, 0.06, 0.06, GRIS, x1 - 2.45, ph + 0.26, z), B(0.06, ph + 0.3, 0.08, GRIS, x1 - ep - 0.05, (ph + 0.3) / 2, z + (z < pc ? 0.06 : -0.06)));
+    I.push(B(0.35, 0.3, 0.45, GRIS, x1 - 4.75, ph + 0.32, pc + 1.0));
+    {
+      // le bureau vitré, dans l'angle nord-est : allège, vitrage, montants ; sa porte ; son plafond ; dedans, un bureau,
+      // l'écran, la chaise, un classeur, une plante
+      const bx0 = 166.6, bx1 = x1 - ep, bz0 = z0 + ep, bz1 = 24.4;
+      I.push(B(bx1 - bx0, 1.0, 0.1, PANNEAU, (bx0 + bx1) / 2, 0.5, bz1), B(bx1 - bx0, 1.55, 0.03, '#3d5f8e', (bx0 + bx1) / 2, 1.78, bz1), B(bx1 - bx0, 0.08, 0.12, ALU, (bx0 + bx1) / 2, 2.6, bz1));
+      for (const x of [bx0, 168.2, 169.8, bx1]) I.push(B(0.06, 1.6, 0.12, ALU, x, 1.8, bz1));
+      I.push(B(0.1, 1.0, 23.2 - bz0, PANNEAU, bx0, 0.5, (bz0 + 23.2) / 2), B(0.03, 1.55, 23.2 - bz0, '#3d5f8e', bx0, 1.78, (bz0 + 23.2) / 2), B(0.12, 0.08, bz1 - bz0, ALU, bx0, 2.6, (bz0 + bz1) / 2));
+      I.push(B(0.04, 2.1, 0.92, '#3d5f8e', bx0, 1.05, 23.7), B(0.07, 2.16, 0.06, ALU, bx0, 1.08, 23.22), B(0.07, 2.16, 0.06, ALU, bx0, 1.08, 24.2), B(0.06, 0.04, 0.14, ALU, bx0 + 0.04, 1.05, 23.35));
+      I.push(B(bx1 - bx0, 0.05, bz1 - bz0, PLAFOND, (bx0 + bx1) / 2, 2.68, (bz0 + bz1) / 2));
+      I.push(B(1.6, 0.05, 0.7, PAL, 169.4, 0.75, 21.15));
+      for (const [x, z] of [[168.7, 20.88], [170.1, 20.88], [168.7, 21.42], [170.1, 21.42]]) I.push(B(0.05, 0.73, 0.05, NOIR, x, 0.365, z));
+      I.push(B(0.5, 0.32, 0.03, NOIR, 169.3, 1.0, 20.95), B(0.46, 0.28, 0.035, '#dfeef8', 169.3, 1.0, 20.965), B(0.06, 0.16, 0.06, NOIR, 169.3, 0.84, 20.95));
+      I.push(B(0.46, 0.06, 0.46, '#3b3f48', 169.4, 0.47, 21.95), B(0.46, 0.5, 0.05, '#3b3f48', 169.4, 0.78, 22.2), C(0.025, 0.025, 0.4, 6, NOIR, 169.4, 0.24, 21.95));
+      I.push(B(0.46, 1.2, 0.5, '#8d949c', 167.0, 0.6, 21.0), C(0.15, 0.12, 0.3, 8, '#b5532e', 170.9, 0.15, 23.9), S(0.25, '#4f7a32', 170.9, 0.55, 23.9, 1, 1.3, 1, 1));
+    }
+    /* -- la ligne d'habillage, le long de z en x = LX : la table d'entrée (z de 21,7 à 23,4), le convoyeur (de 23,4 à
+       29,4), le monobloc autour de z = 26,7 (corps sur le côté ouest, capot au-dessus du convoyeur, bobines d'étiquettes
+       sur sa face ouest, distributeur de capsules au-dessus, écran de commande côté est), la table de sortie (de 29,4 à
+       31,3) ; une palette de cartons de bouteilles nues pour la nourrir, une de cartons vides pour ranger les habillées */
+    const ZM = 26.7, ZC0 = 23.4, LC = 6.0, YB = 0.892;
+    const table = (zc, lz) => {
+      I.push(B(1.2, 0.05, lz, INOX, LX, 0.875, zc), B(0.03, 0.05, lz, ALU, LX - 0.6, 0.925, zc), B(0.03, 0.05, lz, ALU, LX + 0.6, 0.925, zc));
+      for (const dx of [-0.55, 0.55]) for (const dz of [-lz / 2 + 0.05, lz / 2 - 0.05]) I.push(B(0.05, 0.85, 0.05, GRIS, LX + dx, 0.425, zc + dz));
+    };
+    table(22.55, 1.7); table(30.35, 1.9);
+    I.push(B(1.2, 0.05, 0.03, ALU, LX, 0.925, 21.72), B(1.2, 0.05, 0.03, ALU, LX, 0.925, 31.28));
+    I.push(B(0.36, 0.1, LC, '#8e959c', LX, 0.84, ZC0 + LC / 2), B(0.26, 0.012, LC, '#3a3c42', LX, 0.886, ZC0 + LC / 2));
+    for (const s of [-1, 1]) I.push(B(0.02, 0.05, LC, ALU, LX + s * 0.13, 0.95, ZC0 + LC / 2));
+    for (const z of [23.6, 25.1, 28.1, 29.2]) for (const s of [-1, 1]) I.push(B(0.05, 0.8, 0.05, GRIS, LX + s * 0.15, 0.4, z));
+    I.push(C(0.08, 0.08, 0.25, 8, GRIS, LX + 0.3, 0.72, 23.65, 'x'));
+    I.push(B(0.95, 1.3, 2.2, '#e8eaec', LX - 0.68, 0.65, ZM), B(1.35, 0.32, 2.2, '#e8eaec', LX - 0.45, 1.62, ZM), B(0.97, 0.06, 2.22, BANDE, LX - 0.68, 1.3, ZM));
+    for (const dz of [-1.05, 1.05]) I.push(B(0.06, 0.62, 0.06, ALU, LX + 0.19, 1.15, ZM + dz));
+    for (const dz of [-0.45, 0.35]) I.push(B(0.3, 0.32, 0.22, '#c9ccd1', LX - 0.26, 1.18, ZM + dz));
+    for (const dz of [-0.5, 0.55]) I.push(C(0.3, 0.3, 0.02, 14, ALU, LX - 1.17, 0.95, ZM + dz, 'x'), C(0.26, 0.26, 0.09, 14, '#f7f5ef', LX - 1.23, 0.95, ZM + dz, 'x'), C(0.07, 0.07, 0.1, 8, '#8d7c66', LX - 1.235, 0.95, ZM + dz, 'x'));
+    I.push(C(0.2, 0.1, 0.45, 10, INOX, LX - 0.5, 2.0, ZM - 0.8), C(0.19, 0.19, 0.03, 10, '#7d2333', LX - 0.5, 2.215, ZM - 0.8), B(0.06, 0.3, 0.06, ALU, LX - 0.3, 1.78, ZM - 0.8));
+    I.push(B(0.3, 0.04, 0.04, GRIS, LX + 0.4, 1.5, ZM + 1.25), B(0.04, 0.32, 0.46, NOIR, LX + 0.55, 1.5, ZM + 1.25), B(0.045, 0.26, 0.4, '#dfeef8', LX + 0.57, 1.5, ZM + 1.25));
+    I.push(C(0.035, 0.035, 0.1, 8, '#2f9e63', LX - 0.3, 1.83, ZM + 0.9), C(0.035, 0.035, 0.1, 8, JAUNE, LX - 0.3, 1.93, ZM + 0.9), C(0.035, 0.035, 0.1, 8, '#c0392b', LX - 0.3, 2.03, ZM + 0.9));
+    const palette = (x, z, n, couches, vide) => {
+      I.push(B(0.8, 0.14, 1.2, PAL, x, 0.07, z));
+      for (let k = 0; k < couches; k++) for (let i = 0; i < n; i++) I.push(B(0.38, vide ? 0.04 : 0.3, 0.54, (i + k) % 2 ? CARTON : '#ad7f4c', x + (i % 2 ? 0.2 : -0.2), 0.14 + (vide ? 0.02 + k * 0.045 : 0.15 + k * 0.31), z + (i < 2 ? -0.28 : 0.28)));
+    };
+    palette(165.0, 22.3, 4, 3, false); palette(LX + 1.55, 30.6, 4, 6, true);
+    I.push(B(0.4, 0.3, 0.27, CARTON, LX + 0.95, 0.15, 31.2), B(0.4, 0.02, 0.27, '#8a6a3a', LX + 0.95, 0.31, 31.2));
+    // à l'ouest : rayonnages de bobines d'étiquettes et de cartons, l'imprimante d'étiquettes, l'établi, des palettes
+    {
+      const r = hasard(7781), BOB = ['#f7f5ef', '#efe4c8', '#f4f1ea', '#c9a87a', '#e8eaec'];
+      for (const z of [21.2, 23.85, 26.5, 29.15, 31.8]) for (const x of [151.8, 153.1]) I.push(B(0.08, 4.3, 0.08, BANDE, x, 2.15, z));
+      for (const y of [1.4, 2.75, 4.1]) {
+        for (const x of [151.8, 153.1]) I.push(B(0.06, 0.1, 10.6, '#d0702f', x, y, 26.5));
+        I.push(B(1.3, 0.03, 10.6, '#9a8a72', 152.45, y + 0.065, 26.5));
+        for (let z = 21.5; z < 31.6; z += 0.5) {
+          if (r() < 0.25) continue;
+          if (r() < 0.6) { const c = BOB[Math.floor(r() * BOB.length)]; for (let k = 0; k < 1 + Math.floor(r() * 3); k++) I.push(C(0.2, 0.2, 0.1, 10, c, 152.45, y + 0.13 + k * 0.105, z)); }
+          else I.push(B(0.55, 0.3 + r() * 0.25, 0.42, r() < 0.5 ? CARTON : '#ad7f4c', 152.45, y + 0.25, z));
+        }
+      }
+      for (let z = 21.9; z < 31.5; z += 1.3) { I.push(B(1.0, 0.13, 1.2, PAL, 152.45, 0.07, z)); for (let k = 0; k < 2; k++) I.push(B(0.9, 0.42, 1.1, k ? CARTON : '#ad7f4c', 152.45, 0.35 + k * 0.43, z)); }
+      I.push(B(3.0, 1.15, 1.1, '#e8eaec', 155.6, 0.575, 21.65), B(2.8, 0.3, 0.9, '#c9ccd1', 155.6, 1.3, 21.65), B(3.02, 0.06, 1.12, BANDE, 155.6, 1.15, 21.65));
+      I.push(C(0.28, 0.28, 0.32, 14, '#f7f5ef', 153.85, 0.85, 21.65, 'z'), C(0.22, 0.22, 0.32, 14, '#efe4c8', 157.35, 0.85, 21.65, 'z'));
+      I.push(B(0.5, 0.32, 0.04, NOIR, 156.6, 1.62, 22.22), B(0.44, 0.26, 0.045, '#dfeef8', 156.6, 1.62, 22.24));
+      I.push(B(2.4, 0.06, 0.6, PAL, 156.2, 0.9, 31.95), B(2.4, 1.0, 0.03, '#8d7c66', 156.2, 1.65, 32.27));
+      for (const x of [155.1, 157.3]) I.push(B(0.06, 0.87, 0.5, GRIS, x, 0.435, 31.95));
+      for (let i = 0; i < 6; i++) I.push(B(0.05, 0.25 + (i % 3) * 0.08, 0.04, ['#c0392b', NOIR, '#c9a55a'][i % 3], 155.4 + i * 0.35, 1.7, 32.24));
+      palette(159.8, 31.5, 4, 2, false);
+    }
+    const inte = new THREE.Mesh(fusion(I), MAT);
+    inte.receiveShadow = true; inte.castShadow = false; inte.name = 'entrepôt'; inte.visible = false;
+    scene.add(inte);
+    interieurs.push({ min: [x0 + 0.1, -1, z0 + 0.1], max: [x1 - 0.1, 6.0, z1 - 0.1], lampes: [155, 161, 167].flatMap(x => [[x, 5.2, 24], [x, 5.2, 29]]), couleur: [0.92, 0.96, 1.0] });
+
+    /* -- les bouteilles : nues (verre sombre, bouchon apparent : tirées-bouchées) et habillées (capsule bordeaux, étiquette
+       crème devant, côté ouest ; contre-étiquette blanche et son QR code derrière, côté est, vers la porte). Deux maillages
+       en instances : les 24 premières avancent sur le convoyeur (ligne.maj) ; les autres attendent sur la table d'entrée
+       ou sont rangées sur la table de sortie. Une bouteille cachée est réduite à rien, à sa place. */
+    const corps = () => [C(0.037, 0.037, 0.21, 7, '#1f3b2a', 0, 0.105, 0), C(0.016, 0.037, 0.06, 7, '#1f3b2a', 0, 0.24, 0), C(0.016, 0.016, 0.06, 7, '#1f3b2a', 0, 0.3, 0)];
+    const nue = fusion([...corps(), C(0.0135, 0.0135, 0.012, 6, '#c9a86a', 0, 0.336, 0)]);
+    const habillee = fusion([...corps(), C(0.0175, 0.0175, 0.066, 7, '#7d2333', 0, 0.312, 0), B(0.006, 0.085, 0.058, '#efe4c8', -0.036, 0.118, 0),
+      B(0.007, 0.012, 0.05, '#7d2333', -0.0365, 0.137, 0), B(0.006, 0.07, 0.05, '#f7f5ef', 0.036, 0.108, 0), B(0.007, 0.024, 0.024, '#2b2b30', 0.0365, 0.1, 0.009)]);
+    const NF = 24, PAS = LC / NF;
+    const nues = new THREE.InstancedMesh(nue, MAT, NF + 35), habs = new THREE.InstancedMesh(habillee, MAT, NF + 40), mm = new THREE.Matrix4();
+    let k = NF;
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 7; j++) nues.setMatrixAt(k++, mm.makeTranslation(LX - 0.4 + i * 0.2, 0.9, 21.9 + j * 0.2));
+    k = NF;
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 8; j++) habs.setMatrixAt(k++, mm.makeTranslation(LX - 0.4 + i * 0.2, 0.9, 29.65 + j * 0.2));
+    for (let i = 0; i < NF; i++) { nues.setMatrixAt(i, mm.identity()); habs.setMatrixAt(i, mm); }
+    const A = nues.instanceMatrix.array, H = habs.instanceMatrix.array;
+    // les bouteilles du convoyeur, avancées de d mètres : avant le monobloc nues, après habillées
+    const placer = d => {
+      for (let i = 0; i < NF; i++) {
+        const z = ZC0 + (d + i * PAS) % LC, fait = z > ZM ? 1 : 0, o = i * 16;
+        A[o] = A[o + 5] = A[o + 10] = 1 - fait; A[o + 12] = LX; A[o + 13] = YB; A[o + 14] = z;
+        H[o] = H[o + 5] = H[o + 10] = fait; H[o + 12] = LX; H[o + 13] = YB; H[o + 14] = z;
+      }
+      for (const im of [nues, habs]) { const m = im.instanceMatrix; m.clearUpdateRanges(); m.addUpdateRange(0, NF * 16); m.needsUpdate = true; }
+    };
+    placer(0.1);
+    for (const im of [nues, habs]) { im.castShadow = false; im.receiveShadow = true; im.name = 'bouteilles'; im.visible = false; im.computeBoundingSphere(); scene.add(im); }
+    let parcouru = 0.1;
+    const ligne = {
+      faites: 0, // bouteilles passées dans le monobloc depuis le début
+      // dt ; marche : la ligne tourne ; cx, cz : la caméra (de loin, rien n'est calculé)
+      maj(dt, marche, cx, cz) {
+        if (!marche || !nues.visible) return;
+        const dx = cx - LX, dz = cz - ZM;
+        if (dx * dx + dz * dz > 2500) return;
+        parcouru += dt * 0.32; // 32 cm/s : une bouteille toutes les trois quarts de seconde
+        placer(parcouru % LC);
+        ligne.faites = Math.floor(parcouru / PAS);
+      },
+      // dessinés seulement de près (monde.maj)
+      voir(cx, cz) { const dx = cx - xm, dz = cz - zm, d2 = dx * dx + dz * dz; inte.visible = d2 < 4900; nues.visible = habs.visible = d2 < 2500; },
+    };
+
+    /* -- les collisions (posées après les herbes) : les murs (la grande porte laisse passer), le bureau, la ligne et le
+       matériel ; dans la cour, le chariot, les palettes, les bobines, la benne, le mât, les bornes */
+    plusTard.push(() => {
+      for (const [a, b, c, d] of [[x0, z0, x1, z0 + ep], [x0, z1 - ep, x1, z1], [x0, z0, x0 + ep, z1], [x1 - ep, z0, x1, p0], [x1 - ep, p1, x1, z1]]) col.boite(a, b, c, d).haut = true;
+      for (const [a, b, c, d] of [[166.55, z0, x1, 24.47], [LX - 0.62, 21.68, LX + 0.62, 23.42], [LX - 0.2, 23.4, LX + 0.2, 29.4], [LX - 1.42, ZM - 1.1, LX + 0.25, ZM + 1.1],
+        [LX - 0.62, 29.4, LX + 0.62, 31.32], [164.6, 21.7, 165.4, 22.9], [LX + 1.15, 30.0, LX + 1.95, 31.2], [151.7, 21.1, 153.2, 31.9], [153.6, 21.05, 157.55, 22.25],
+        [154.95, 31.6, 157.45, z1 - ep], [159.4, 30.9, 160.2, 32.1], [182.4, 22.4, 185.7, 23.6], [184.5, 27.3, 185.3, 29.8], [172.15, 31.35, 173.35, 32.15],
+        [181.75, 42.05, 183.85, 45.95], [185.5, 33.5, 185.7, 33.7]]) col.boite(a, b, c, d);
+      for (const z of [p0 - 0.35, p1 + 0.35]) col.boiteC(x1 + 0.5, z, 0.2, 0.2);
+    });
+    return ligne;
+  }
+  const ligne = entrepot();
+  definirInterieur(interieurs); // le chai et l'entrepôt : le soleil coupé, les lampes
   const moulin = hameau();
   const enseignes = atlas.maillage();
   scene.add(enseignes);
@@ -2038,7 +2384,10 @@ void main() {
         const x = l[i * 2], z = l[i * 2 + 1], k = 0.7 + rnd() * 0.8;
         sx += x; sz += z;
         q.setFromAxisAngle(axe, rnd() * 6.28);
-        m.compose(pv.set(x, 0, z), q, e.set(k, k * (0.8 + rnd() * 0.5), k));
+        // dans l'entrepôt de l'imprimeur, sa cour et son accès (mission 3) : tirée au sort comme avant (la suite du tirage
+        // ne bouge pas), mais réduite à rien
+        const s = dansEntrepot(x, z, 0.6) ? 0 : 1;
+        m.compose(pv.set(x, 0, z), q, e.set(k * s, k * (0.8 + rnd() * 0.5) * s, k * s));
         im.setMatrixAt(i, m); im.setColorAt(i, c.copy(pick(TEINTES)));
       }
       im.receiveShadow = true; im.renderOrder = ORDRE.herbe; im.name = 'herbe'; im.computeBoundingSphere();
@@ -2154,6 +2503,11 @@ void main() {
       [[-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],              // la cour, jusqu'au bureau du chai
       [[-90, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],              // la cour, jusqu'à la grande porte du chai
       [[-90, 10], [-55, 10], [95, 10], [110.5, 9.4]],                      // la départementale (l'épicerie, La Treille)
+      [[110.5, 9.4], [176, 10]],                                           // vers l'est : le laboratoire, l'entrepôt de l'imprimeur
+      // l'accès de l'entrepôt, jusqu'à la porte (lieux.entrepot.arret) : en biais, sans angle droit (la conduite assistée
+      // ne passe au tronçon suivant qu'une fois le bout du précédent dépassé : dans un angle droit coupé court, elle
+      // croirait le point visé derrière elle et ferait demi-tour), puis tout droit vers le sud, le long de la porte
+      [[176, 10], [179, 14.8], [175.6, 19.8], [175.2, 21.8], [175.2, 31.6]],
       [[95, 10], [95, -30]],                                               // la rue de la place, en montant
       // la boucle du bourg, à sens unique : la place, la Cave du Pressoir, le Bar Le Cep, et l'on redescend
       { sens: true, points: [[95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [95, 10]] },
@@ -2171,7 +2525,32 @@ void main() {
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
-  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e']];
+  // la voiture du personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
+  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [184.2, 38.5, 0, '#2f4a6b']];
+  /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,
+     à côté de sa porte, tourné vers la route ; le véhicule s'arrête sur la départementale, devant. L'entrepôt de
+     l'imprimeur-étiqueteur : arret, la balise et le bout de l'itinéraire, dans la cour, cap au sud ; la conduite assistée
+     s'arrête 4,2 m avant (pilote.js) : le van se gare vers z = 27,4, le long de la grande porte, son flanc droit (porte
+     coulissante) tourné vers elle ; figurant, l'étiqueteur qui attend au nord de la porte, devant la porte de service,
+     tourné vers la cour (les piles déchargées se posent devant lui, au nord de l'arrière du van) ; porte, devant le seuil
+     de la grande porte (rot : la façade tournée vers l'est) ; ligne, une caméra posée dans le hangar, près de la porte,
+     qui regarde la ligne d'habillage tourner (monde.ligne.maj) ; bouteille, la première bouteille habillée sur la table de
+     sortie ; zone, le hangar. */
+  {
+    const p = portes.labo;
+    lieux.figurants.labo = { x: +(p.x + 0.77).toFixed(2), z: 17.35, h: Math.PI };
+    lieux.arrets.labo = { x: lieux.figurants.labo.x, z: 11.2 };
+  }
+  lieux.entrepot = {
+    arret: { x: 175.2, z: 31.6, h: 0 },
+    figurant: { x: 172.9, z: 23.4, h: Math.PI / 2 },
+    porte: { x: 172.1, z: (EN.p0 + EN.p1) / 2, rot: Math.PI / 2 },
+    ligne: { camera: { x: 169.9, y: 2.5, z: 31.0 }, centre: { x: EN.LX, y: 1.0, z: 26.6 } },
+    bouteille: { x: EN.LX, y: 0.9, z: 29.65 },
+    zone: { x0: EN.x0, z0: EN.z0, x1: EN.x1, z1: EN.z1 },
+  };
+  // les collisions qui attendaient que les herbes soient semées : la devanture du laboratoire, l'entrepôt et sa cour
+  for (const f of plusTard) f();
 
   /* ------------------------------------------------------------ réglages selon la qualité, mise à jour par image */
   let herbeLoin = 70, vigneLoin = 60, parcelleLoin = 90, dernierX = 1e9, dernierZ = 1e9;
@@ -2185,6 +2564,7 @@ void main() {
   function maj(cx, cz) {
     if (Math.abs(cx - dernierX) + Math.abs(cz - dernierZ) < 2) return;
     dernierX = cx; dernierZ = cz;
+    ligne.voir(cx, cz); // l'intérieur de l'entrepôt et ses bouteilles : de près seulement
     const d2 = (herbeLoin + 34) * (herbeLoin + 34), v2 = (vigneLoin + 21) * (vigneLoin + 21);
     for (const h of herbes) h.im.visible = (h.x - cx) * (h.x - cx) + (h.z - cz) * (h.z - cz) < d2;
     for (const m of proches.maillages) { const c = m.geometry.boundingSphere.center, r = m.geometry.boundingSphere.radius + 45; m.visible = (c.x - cx) * (c.x - cx) + (c.z - cz) * (c.z - cz) < r * r; }
@@ -2210,5 +2590,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter, ligne };
 }

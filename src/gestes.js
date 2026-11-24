@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { son } from './audio.js';
 import { versAngle, angle, lisse, mix } from './outils.js';
 import { MAT } from './modeles.js';
-import { geoCarton, geoCheque, PAS_CARTON } from './engins.js';
+import { geoCarton, geoCheque, geoBouteille, PAS_CARTON } from './engins.js';
 
 const angleVers = (a, b) => angle(b - a); // le plus court chemin de l'angle a à l'angle b
 const OUVERTE = -1.15;  // angle de la portière du van grande ouverte (rad)
@@ -536,16 +536,77 @@ export class Gestes {
     this.lancer(etapes);
   }
 
+  /* ------------------------------------------------------------ une bouteille du Clos (mission 3 : l'habillage) */
+  // la bouteille dans les mains de l'acteur (créée une fois par personnage, à l'échelle du monde) : nue (tirée-bouchée)
+  // ou habillée. Un groupe : les mains la tiennent par le milieu (anim.js : porte), le verre dépasse au-dessus.
+  bouteille(habillee) {
+    const m = this.j.m, k = habillee ? 'btH' : 'btN';
+    if (!m[k]) {
+      const g = new THREE.Group(), b = new THREE.Mesh(geoBouteille(habillee), MAT);
+      b.position.y = -0.12 / m.echelle; b.scale.setScalar(1 / m.echelle); b.castShadow = false; g.add(b);
+      g.userData.demi = 0.05; g.visible = false; m.groupe.add(g); m[k] = g;
+    }
+    return m[k];
+  }
+  // L'échantillon : on va au carton ouvert (src : { x, y, z } dans le monde, le haut des bouteilles), on en sort une
+  // bouteille, on la regarde, on la range ; fin() quand c'est fait
+  echantillon(src, fin) {
+    const devant = { x: 0, z: 0 }, w = new THREE.Vector3();
+    this.lancer([
+      ...this.allerA(() => {
+        const j = this.j, dx = j.pos.x - src.x, dz = j.pos.z - src.z, l = Math.hypot(dx, dz) || 1;
+        devant.x = src.x + dx / l * 0.55; devant.z = src.z + dz / l * 0.55; return devant;
+      }, () => Math.atan2(src.x - devant.x, src.z - devant.z)),
+      {
+        duree: 2.1,
+        debut: () => { const b = this.bouteille(false); b.visible = true; this.j.porte = b; son.jouer('tap'); },
+        maj: (dt, t, u, T) => {
+          const b = this.bouteille(false), s = this.local(w.set(src.x, src.y, src.z), vT);
+          // sortie du carton, montée jusqu'aux yeux, regardée, puis rangée (dans la poche de la veste)
+          b.position.copy(s).lerp(vB.set(0, 1.1, 0.3), lisse(T / 0.7));
+          b.position.y -= lisse((T - 1.6) / 0.4) * 0.3;
+          if (T > 1.7) this.j.porte = null;
+          this.immobile(dt, t);
+          if (T + dt >= 2.1 && b.visible) { b.visible = false; this.j.porte = null; }
+        },
+      },
+    ], fin);
+  }
+  // cadrer une scène entre deux points (monde), la caméra du côté opposé au véhicule v (le geste en cours la garde)
+  cadrerEntre(a, b, v) { this.cadre = cadreEntre(a, b, v); }
+  // tendre la bouteille qu'on tient (habillée ou nue) à celui qui est devant soi : donne() quand elle change de main
+  tendre(habillee, donne) {
+    return {
+      duree: 1.5,
+      debut: () => { const b = this.bouteille(habillee); b.visible = true; b.position.set(0, 0.95, 0.3); this.j.porte = b; son.jouer('tap'); },
+      maj: (dt, t, u, T) => {
+        const b = this.bouteille(habillee), k = lisse(T / 0.6);
+        b.position.set(0, 0.95 + k * 0.12, 0.3 + k * 0.22);
+        this.immobile(dt, t);
+        if (T > 1.05 && b.visible) { b.visible = false; this.j.porte = null; donne(); }
+      },
+    };
+  }
+  // Donner l'échantillon à quelqu'un devant chez lui (f : { x, z, h }) : arrêté devant (v), on descend ; on va le voir,
+  // il parle (dire) ; on lui tend la bouteille (donne) ; on remonte (installe) ; fin()
+  donner(v, f, { sorti, installe, dire, donne, fin }) {
+    const etapes = this.etapesAborder(v, f, 1.15, sorti, dire);
+    etapes.push(this.tendre(false, donne), { duree: 0.5, maj: (dt, t) => this.immobile(dt, t) });
+    if (v) etapes.push(...this.etapesMonter(v, installe));
+    this.lancer(etapes, fin);
+  }
+
   /* ------------------------------------------------------------ entrer dans une boutique, en ressortir (clients.js) */
   // porte : { x, z, rot } devant le seuil, la façade tournée de rot. On va devant la porte, on la passe (sans buter sur le
   // mur : on traverse la vitre peinte, qui le cache peu à peu) et l'on disparaît dedans, avec ce qu'on porte
-  entrer(porte) {
-    const dedans = { x: porte.x - Math.sin(porte.rot) * 1.1, z: porte.z - Math.cos(porte.rot) * 1.1 };
+  // (loin : jusqu'où l'on va après le seuil avant de disparaître ; plus loin quand la porte est grande ouverte)
+  entrer(porte, loin = 1.1) {
+    const dedans = { x: porte.x - Math.sin(porte.rot) * loin, z: porte.z - Math.cos(porte.rot) * loin };
     return [...this.allerA(() => porte, () => porte.rot + Math.PI), {
       maj: (dt, t, u, T) => {
         const j = this.j, dx = dedans.x - j.pos.x, dz = dedans.z - j.pos.z, d = Math.hypot(dx, dz);
         j.update(dt, dx, dz, 1, false, SANS_MURS, t, Math.min(1.3, 0.3 + d * 2));
-        return d < 0.15 || T > 3;
+        return d < 0.15 || T > 2 + loin;
       },
     }, { action: () => { const j = this.j; j.m.groupe.visible = false; if (j.m.pile) j.m.pile.visible = false; j.porte = null; j.v = 0; } }];
   }

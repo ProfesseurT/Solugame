@@ -13,6 +13,9 @@
 //             la mission 2 reprise
 //   traitement la mission 2 : rentrer dormir, le lendemain, la bouillie, trois parcelles au guidage, le Registre phyto
 //             (refus, enregistrement, sans réseau puis envoyé), la carte de fin
+//   habillage la mission 3 : rentrer dormir après le traitement, l'échantillon, le labo, la fiche Viticode (refus,
+//             énergie, test, langue), le QR code personnalisé et envoyé, le BAT, les cartons livrés à l'entrepôt, la
+//             ligne, la bouteille scannée, la carte de fin (VEHICULE=tracteur : en tracteur)
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
@@ -45,7 +48,7 @@ page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') er
 const LENT = Number(process.env.LENT || 1);
 if (LENT > 1) await page.emulateCPUThrottling(LENT);
 await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load' });
-await page.waitForFunction(() => window.CL, { timeout: 20000 });
+await page.waitForFunction(() => window.CL, { timeout: 60000 }); // (sous la charge des bancs en parallèle, le démarrage peut dépasser 20 s)
 const ev = (f, ...a) => page.evaluate(f, ...a);
 const capture = async nom => { await new Promise(r => setTimeout(r, 250)); await page.screenshot({ path: join(sortie, nom + '.jpg'), type: 'jpeg', quality: 85 }); console.log('capture', join('essais', dossier, nom + '.jpg')); };
 const ok = (cond, msg) => { console.log((cond ? 'OK   ' : 'ÉCHEC ') + msg); if (!cond) erreurs.push('échec : ' + msg); };
@@ -524,7 +527,7 @@ if (scenario === 'sauvegarde') {
   // récupéré, le prospect ajouté) s'enregistre ; la page rechargée, « Continuer » la reprend telle quelle, au domaine ; la
   // mission 1 gagnée se rejoue depuis le téléphone (app Missions, avec confirmation) ; la mission 2 avancée (une parcelle
   // en partie traitée, le registre) se reprend aussi
-  const attendre = () => page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 20000 });
+  const attendre = () => page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 60000 });
   const r1 = await ev(() => {
     const m = CL.mission, J = CL.jeu, log = [];
     CL.jouer(); CL.step(260);
@@ -590,6 +593,37 @@ if (scenario === 'sauvegarde') {
     return log;
   }, [r3[1], r3[2]]);
   for (const [msg, c] of r4) ok(c, msg);
+  // la mission 3, avancée : l'échantillon donné, la fiche publiée et envoyée, le BAT validé, les cartons dans le van
+  const r5 = await ev(() => {
+    const H = CL.habillage, log = [];
+    CL.versMission3(); CL.step(300);
+    const van = CL.vehicule('van');
+    H.messageLu(); H.echantillon = 'depose'; H.bulletin = true;
+    for (const k of ['nom', 'millesime', 'appellation', 'lot']) H.remplir(k);
+    H.couleur('Rouge'); for (let i = 0; i < 4; i++) H.degre(1); H.ingredient('raisins'); H.bio(); H.ingredient('sulfites');
+    for (let i = 0; i < 8; i++) H.valeur('glucides', 1); for (let i = 0; i < 2; i++) H.valeur('sucres', 1);
+    H.calculer(); H.publier(); H.telecharger(); H.envoyer(); H.bat = 'recu'; H.accord();
+    H.veh = van; H.cols = [0, 1, 2, 3].map(c => ({ c, n: 3 })); for (let i = 0; i < 12; i++) van.m.cartons[i].visible = true; van.p.charge = 12;
+    for (const p of CL.piles3) p.groupe.visible = false;
+    CL.step(60 * 4);
+    const P = CL.sauver();
+    log.push(['l\'habillage s\'enregistre (fiche publiée, BAT validé, cartons dans le van)', !!P && P.mission === 'habillage' && P.etat.publiee && P.etat.bat === 'ok' && P.etat.veh === 'van']);
+    return log;
+  });
+  for (const [msg, c] of r5) ok(c, msg);
+  await page.reload({ waitUntil: 'load' }); await attendre();
+  const r6 = await ev(() => {
+    const q = s => document.querySelector(s), H = CL.habillage, log = [];
+    log.push(['à l\'accueil : « Continuer » l\'habillage', !q('#reprendre').hidden && q('#reprendre-t').textContent.includes('habillage')]);
+    q('#reprendre').click(); CL.step(60);
+    const van = CL.vehicule('van');
+    log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, 12 cartons dans le van, la palette vide, l\'œnologue rentrée ; la balise : l\'entrepôt',
+      H.etape === 'jour' && H.publiee && H.fiche.degre === 12.5 && H.fiche.energie.kj === 299.6 && H.fiche.ingr.has('sulfites') && H.bat === 'ok' && H.veh === van
+      && van.m.cartons.filter(c => c.visible).length === 12 && van.p.charge === 12 && CL.piles3.every(p => !p.groupe.visible) && CL.gens3.liste[0].etat === 'dedans'
+      && H.cible === CL.jeu.lieux.entrepot.arret && CL.jeu.minutes > 2 * 1440]);
+    return log;
+  });
+  for (const [msg, c] of r6) ok(c, msg);
 }
 
 if (scenario === 'traitement') {
@@ -659,6 +693,118 @@ if (scenario === 'traitement') {
     return log;
   });
   for (const [msg, c] of r) ok(c, msg);
+  await capture('fin');
+}
+
+if (scenario === 'habillage') {
+  // la mission 3 : après la journée de traitement, on rentre dormir ; au réveil, le message de l'imprimerie ; l'échantillon
+  // au chai, à pied ; l'œnologue au labo ; le bulletin ; la fiche Viticode, refusée tant qu'elle ne correspond pas au
+  // bulletin, publiée, testée (l'âge, la langue) ; le QR code personnalisé (le titre et la valeur énergétique gardés),
+  // téléchargé, envoyé ; le BAT validé ; les cartons chargés au chai, livrés à l'entrepôt ; la ligne ; la bouteille
+  // scannée ; la carte de fin
+  const VEH = process.env.VEHICULE || 'van';
+  const r = await ev(async VEH => {
+    const J = CL.jeu, H = CL.habillage, tel = J.tel, L = J.lieux, log = [], shots = [];
+    const obj = () => document.querySelector('#objectif')?.textContent || '', toast = () => document.querySelector('#app .ph-toast')?.textContent || '', app = () => document.querySelector('#app').textContent;
+    const essai = (a, attendu) => { tel.action(a); return toast().includes(attendu); };
+    try {
+      CL.jouer(); CL.step(30);
+      tel.ouvrir('viticode');
+      log.push(['avant la mission 3, Viticode l\'annonce', app().includes('mission 3') && !H.actif]);
+      tel.fermer();
+      CL.versMission2(); CL.step(60); CL.versMission3(); CL.step(300);
+      log.push(['au réveil, le jeudi : la mission 3, le pulvérisateur dételé, les cartons du Clos sur la palette, le carton ouvert, le message de l\'imprimerie',
+        H.actif && J.minutes >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 480 && !CL.pulve.groupe.visible && CL.piles3.every(p => p.groupe.visible) && CL.cartonOuvert.visible && tel.notif === 'messages' && obj().includes('imprimerie')]);
+      tel.ouvrir('messages'); tel.action('fil:imprimerie'); tel.fermer(); CL.step(60);
+      log.push(['message lu : l\'échantillon, au chai', H.etape === 'jour' && obj().includes('échantillon') && H.cible === L.chai]);
+      // l'échantillon, à pied, au carton ouvert de la halle
+      const C = CL.CARTON3;
+      CL.teleporter(C.x - 1.4, C.z - 0.6, 1); CL.step(10);
+      log.push(['près du carton ouvert : « Prendre un échantillon »', H.echantillonProche]);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['échantillon pris ; ensuite les cartons, au chai (le labo et l\'imprimerie sont du même côté)', H.echantillon === 'pris' && H.cible === L.chai && obj().includes('Chargez aussi')]);
+      // les cartons du Clos : en van (ou en tracteur), au chai
+      { const p = CL.vehicule(VEH).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
+      CL.teleporter(-83.4, -47.4, 2.83); CL.step(30);
+      log.push(['au chai, le chargement commence', H.chargement && J.gestes.actif]);
+      CL.finirGeste(4000); CL.step(5);
+      log.push([`chargé (${CL.tr.charge} cartons) dans le ${VEH}, la palette vide, de nouveau au volant ; la balise : le labo`, H.veh && H.veh.genre === VEH && CL.tr.charge === 12 && CL.piles3.every(p => !p.groupe.visible) && J.auVolant && H.cible === L.arrets.labo]);
+      // au labo, en véhicule : arrêté devant, on descend, on va voir l'œnologue, on lui donne l'échantillon, on remonte
+      { const a = L.arrets.labo; CL.teleporter(a.x - 4, a.z, Math.PI / 2); } CL.step(20);
+      log.push(['au labo, on descend voir l\'œnologue', J.gestes.actif && H.occupe]);
+      CL.finirGeste(3000); CL.step(60 * 4);
+      log.push(['échantillon donné, l\'œnologue le rentre au labo, remonté au volant ; le labo analyse', H.echantillon === 'depose' && CL.gens3.liste[0].etat !== 'dehors' && J.auVolant && obj().includes('bulletin')]);
+      CL.step(60 * 26);
+      log.push(['le bulletin arrive (Messages)', H.bulletin && tel.notif === 'messages' && H.fil === 'labo']);
+      tel.ouvrir('messages'); tel.action('fil:labo');
+      log.push(['le bulletin : 12,5 % vol, glucides 0,8 g, sucres 0,2 g', app().includes('12,5 % vol') && app().includes('0,8 g') && app().includes('0,2 g')]);
+      shots.push('bulletin');
+      tel.action('ouvrir:viticode'); tel.action('vc-fiche');
+      const refus = [];
+      refus.push(essai('vc-publier', 'Remplissez'));
+      for (const k of ['nom', 'millesime', 'appellation', 'lot']) tel.action('vc-remplir:' + k);
+      tel.action('vc-couleur:Blanc'); refus.push(essai('vc-publier', 'rouge'));
+      tel.action('vc-couleur:Rouge'); for (let i = 0; i < 4; i++) tel.action('vc-degre:1');
+      refus.push(essai('vc-publier', 'raisins'));
+      tel.action('vc-ingr:raisins'); refus.push(essai('vc-publier', 'feuille'));
+      tel.action('vc-bio'); refus.push(essai('vc-publier', 'sulfites'));
+      tel.action('vc-ingr:sulfites'); tel.action('vc-ingr:gomme'); refus.push(essai('vc-publier', 'Gomme arabique'));
+      tel.action('vc-ingr:gomme'); refus.push(essai('vc-publier', 'Glucides'));
+      for (let i = 0; i < 8; i++) tel.action('vc-val:glucides:1');
+      for (let i = 0; i < 2; i++) tel.action('vc-val:sucres:1');
+      refus.push(essai('vc-publier', 'énergie'));
+      tel.action('vc-label:Bio'); tel.action('vc-calculer');
+      const e = H.fiche.energie;
+      log.push(['la fiche refuse ce qui ne correspond pas au bulletin : champs, couleur, raisins, bio, sulfites, un ingrédient en trop, glucides, énergie', refus.length === 8 && refus.every(x => x)]);
+      log.push([`l'énergie calculée : ${e.kj} kJ, ${e.kcal} kcal (alcool 29 kJ/g, glucides 17 kJ/g)`, e.kj === 299.6 && e.kcal === 72.24]);
+      shots.push('fiche');
+      tel.action('vc-publier'); CL.step(2);
+      log.push(['publiée : son QR code', H.publiee && tel.app === 'vcQr' && obj().includes('testez')]);
+      tel.action('vc-tester');
+      log.push(['« Testez-moi ! » : d\'abord « Avez-vous plus de 18 ans ? »', app().includes('Avez-vous plus de 18 ans')]);
+      tel.action('vc-age:oui');
+      const fiche = document.querySelector('#app').innerHTML;
+      log.push(['la fiche : raisins bio, sulfites en gras, 299.6 kj / 72.24 kcal, le label bio', H.testee && fiche.includes('Raisins*') && fiche.includes('<b>Sulfites</b>') && fiche.includes('299.6 kj / 72.24 kcal') && fiche.includes('Agriculture biologique')]);
+      shots.push('test');
+      tel.action('vc-langues'); tel.action('vc-lg:de');
+      log.push(['en allemand : Zutaten, Nährwertdeklaration', app().includes('Zutaten') && app().includes('Nährwertdeklaration')]);
+      tel.action('vc-fermer-test'); tel.action('vc-telecharger');
+      tel.action('vc-regler:titre:0'); const sansTitre = essai('vc-dl', 'Ingrédients');
+      tel.action('vc-regler:titre:1'); tel.action('vc-regler:pied:0'); const sansPied = essai('vc-dl', 'valeur énergétique');
+      tel.action('vc-regler:pied:1'); tel.action('vc-regler:couleur:#8e2a3b');
+      shots.push('perso');
+      log.push(['le QR code ne se télécharge pas sans le titre « Ingrédients » ni sans la valeur énergétique', sansTitre && sansPied && !H.telecharge]);
+      tel.action('vc-dl');
+      log.push(['téléchargé : la feuille de partage, l\'imprimerie', H.telecharge && tel.app === 'vcPartage' && app().includes('Imprimerie Saint-Vincent')]);
+      tel.action('vc-envoyer'); CL.step(60 * 6);
+      log.push(['envoyé ; le BAT de l\'imprimerie arrive', H.envoye && H.bat === 'recu' && tel.app === 'messages']);
+      tel.afficher(); shots.push('bat');
+      tel.action('vc-accord'); CL.step(120);
+      log.push(['BAT validé : les cartons (déjà chargés), à l\'entrepôt', H.bat === 'ok' && H.cible === L.entrepot.arret && app().includes('j\'imprime')]);
+      tel.fermer();
+      // à l'entrepôt de l'imprimerie
+      { const A = L.entrepot.arret; CL.teleporter(A.x, A.z, A.h); } CL.step(30);
+      log.push(['à l\'entrepôt, on décharge devant l\'étiqueteur', J.gestes.actif && H.occupe]);
+      for (let n = 0; n < 4000 && !H.livre; n++) CL.step(1); // (puis on reste là, immobile, à regarder la ligne : un geste aussi)
+      CL.step(5);
+      log.push(['livré : la ligne d\'habillage', H.livre && H.etape === 'ligne' && H.deposes.length === 4]);
+      let vue = false;
+      for (let n = 0; n < 60 * 90 && H.etape === 'ligne'; n++) { CL.step(1); if (H.vueLigne) vue = true; if (n === 60 * 4) shots.push('ligne'); }
+      { const f = CL.gens3.liste[1], S = H.scene || {};
+        log.push([`la ligne regardée ; l'étiqueteur a rentré les cartons et nous tend la première bouteille (étape ${H.etape}, étiqueteur ${f.etat}, scène t ${(S.t || 0).toFixed(1)} vu ${S.vu} rendu ${S.rendu}, piles visibles ${H.deposes.filter(p => p.visible).length})`, vue && H.etape === 'scanner' && H.deposes.every(p => !p.visible)]); }
+      CL.step(120);
+      log.push(['le téléphone s\'ouvre sur l\'appareil photo', tel.ouvert && tel.app === 'scan']);
+      shots.push('scan');
+      tel.action('vc-scan'); tel.action('vc-age:oui');
+      log.push(['scannée : la fiche du Clos', H.scanne && app().includes('Ingrédients')]);
+      tel.fermer(); CL.step(60);
+      log.push(['l\'habillage est fini ; la mission 3 est gagnée', H.etape === 'fin' && CL.SAUVE.gagnees.habillage === true]);
+      CL.step(60 * 7);
+      log.push(['la carte de fin, avec viticode.fr', J.finVue && document.querySelector('#fin-titre').textContent.includes('Viticode') && !document.querySelector('#fin-cta').hidden && document.querySelector('#fin-cta').href.startsWith('https://viticode.fr')]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return { log, shots };
+  }, VEH);
+  for (const [msg, c] of r.log) ok(c, msg);
   await capture('fin');
 }
 

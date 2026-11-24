@@ -275,8 +275,8 @@ export const FIN = {
   h: 'La suite',
   suite: [
     'Mission 2 : la journée de traitement, avec le Registre phyto',
+    'Mission 3 : l\'habillage, avec Viticode et ses QR codes nutritionnels',
     'Dans le jeu complet : le DAE du transporteur, sur GAMMA 2, avec Vitisoft',
-    'Dans le jeu complet : les QR codes nutritionnels de Viticode',
   ],
   bouton: 'Continuer',
 };
@@ -337,6 +337,7 @@ export const TRAITEMENT = {
     noterIci: noms => `Notez-le sur place, dans le Registre phyto : ${noms}`,
     envoyer: 'Remontez vers la route : le traitement partira quand ça capte',
     fin: 'Journée de traitement finie',
+    dodo: 'Rentrez dormir : demain, l\'habillage du Clos 2025',
   },
   dialogues: {
     reveil: [{ qui: '', txt: 'Mercredi 9 décembre, le lendemain de la tournée.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
@@ -382,7 +383,7 @@ export const TRAITEMENT = {
   finCarte: {
     sur: 'Fin de la mission 2',
     titre: 'C\'est ça, le Registre phyto.',
-    texte: 'Un traitement se note sur place, dans la vigne, sur le téléphone. Sans réseau, il est noté et part quand ça capte.',
+    texte: 'Un traitement se note sur place, dans la vigne, sur le téléphone. Sans réseau, il est noté et part quand ça capte. Rentrez dormir : demain, l\'habillage du Clos 2025.',
     h: 'Dans l\'application',
     suite: [
       'Vous cochez les parcelles traitées, le produit et la dose',
@@ -395,16 +396,199 @@ export const TRAITEMENT = {
   },
 };
 
+/* ---------------------------------------------------------------- mission 3 : l'habillage, avec Viticode
+   Ce que fait Viticode, d'après viticode.fr (la page d'accueil, ses captures d'écran et la fiche produit d'exemple, lues
+   le 24/11/2026) : gratuit, nombre de fiches produit illimité ; la fiche produit (nom du produit, 50 caractères au plus ;
+   description ; degré d'alcool ; millésime ; appellation ; lot ; couleur : rouge, blanc, rosé, orange, jaune, aucune) ;
+   les ingrédients par catégorie, préchargés (on peut ajouter les siens), ingrédients bio et allergènes ; la déclaration
+   nutritionnelle pour 100 ml, la calculatrice de l'énergie (« Calculer mon énergie »), les valeurs à zéro affichées
+   comme quantités négligeables ; la consommation responsable (pictogrammes, message) ; une fois la fiche publiée, son QR
+   code unique (« Scanner ce QR code avec votre mobile... », Télécharger, Copier) ; la personnalisation du QR code
+   (paramétrage du domaine, format Svg, Pdf ou Png, bordures, couleurs ; titre des sections, pied de page de la valeur
+   énergétique), à télécharger pour l'imprimeur ; côté consommateur, après le scan : « Avez-vous plus de 18 ans ? »,
+   puis la fiche dans sa langue (24 langues européennes) : couleur, alcool, millésime, appellation, ingrédients et
+   allergènes, déclaration nutritionnelle, labels (Bio...), consommation responsable ; fiches stockées sans limite de
+   temps, aucune donnée collectée sur les consommateurs qui les visitent. « Testez-moi ! » : sous le QR code d'exemple.
+   Les catégories et ingrédients de la liste du jeu : un extrait, d'après le règlement délégué (UE) 2019/934 (cité par
+   vitisoft.fr) et la fiche d'exemple ; la base préchargée de Viticode n'est pas recopiée.
+   La loi : règlement (UE) 2021/2117 (article 119 du règlement 1308/2013 modifié, §4 et §5, lu sur EUR-Lex le
+   24/11/2026) : sur l'étiquette, la déclaration nutritionnelle peut se limiter à la valeur énergétique (« E »), la
+   déclaration complète et la liste des ingrédients étant fournies par voie électronique, sans information commerciale
+   ni collecte de données d'utilisateur ; les allergènes restent sur l'étiquette. Fiche de faits : vins produits depuis
+   le 8 décembre 2023 ; QR code possible avec la mention « ingrédients ». C'est l'information qui est obligatoire, pas le
+   QR code. L'énergie : coefficients de l'annexe XIV du règlement (UE) 1169/2011 (lu le 24/11/2026) : alcool 29 kJ/g et
+   7 kcal/g, glucides 17 kJ/g et 4 kcal/g ; l'éthanol pèse 0,789 g/ml. « 3 500 comptes Viticode » : la page de prévente
+   du registre (fiche de faits), jamais additionné aux domaines de Vitisoft.
+   La mission (Teddy, 24/11/2026) : un échantillon chez l'œnologue, qui donne les valeurs ; la fiche et le QR code dans
+   Viticode, testés sur le téléphone ; l'étiquette envoyée à l'imprimeur-étiqueteur ; les bouteilles tirées-bouchées à
+   son entrepôt, pour l'habillage. Le lendemain de la journée de traitement : jeudi 10 décembre. Le BAT (bon à tirer) :
+   l'épreuve que l'imprimeur fait valider avant d'imprimer. Cuvée, analyse, lot, noms : fictifs. */
+export const HABILLAGE = {
+  date: 'jeudi 10 décembre', dateCourte: '10 décembre',
+  // la cuvée à habiller et son analyse (le bulletin du labo) : degré en % vol, le reste pour 100 ml ; so2 en mg/L
+  vin: { nom: 'Le Clos 2025', cuvee: 'Le Clos', millesime: '2025', couleur: 'rouge', appellation: 'Anjou', lot: 'L25CL1', degre: 12.5, glucides: 0.8, sucres: 0.2, so2: 64 },
+  domaine: 'Domaine du Clos Libre',
+  // Viticode : les couleurs de la fiche, les catégories d'ingrédients et leurs ingrédients (un extrait), les langues
+  couleurs: ['Rouge', 'Blanc', 'Rosé', 'Orange', 'Jaune', 'Aucune'],
+  categories: [
+    { id: 'principaux', nom: 'Ingrédients principaux', ingredients: [{ id: 'raisins', nom: 'Raisins' }, { id: 'mout', nom: 'Moût de raisin concentré' }] },
+    { id: 'conservateurs', nom: 'Conservateurs et antioxydants', ingredients: [{ id: 'sulfites', nom: 'Sulfites', allergene: true }, { id: 'ascorbique', nom: 'Acide ascorbique' }, { id: 'sorbate', nom: 'Sorbate de potassium' }] },
+    { id: 'stabilisateurs', nom: 'Agents stabilisateurs', ingredients: [{ id: 'citrique', nom: 'Acide citrique' }, { id: 'gomme', nom: 'Gomme arabique' }] },
+    { id: 'acidite', nom: 'Régulateurs d\'acidité', ingredients: [{ id: 'tartrique', nom: 'Acide tartrique' }, { id: 'malique', nom: 'Acide malique' }] },
+  ],
+  // ce qu'il y a dans le vin (dit par l'œnologue) : raisins bio, et le soufre ajouté à la mise en bouteille
+  ingredients: ['raisins', 'sulfites'],
+  fichier: 'QR code Le Clos 2025.svg',
+  imprimerie: 'Imprimerie Saint-Vincent', oeno: 'Hélène', etiqueteur: 'Julien',
+  messages: {
+    imprimerie: {
+      de: 'Imprimerie Saint-Vincent', apercu: 'L\'habillage du Clos, c\'est aujourd\'hui...',
+      fil: [
+        'Bonjour ! L\'habillage du Clos 2025, c\'est aujourd\'hui : la ligne est libre cet après-midi.',
+        'Il me manque le fichier de la contre-étiquette : le QR code des ingrédients et de la déclaration nutritionnelle.',
+        'Envoyez-le-moi, puis amenez les bouteilles à l\'entrepôt, à la sortie du bourg.',
+      ],
+      recu: 'Bien reçu ! Voici le BAT (bon à tirer) de la contre-étiquette :',
+      accord: 'Bon pour accord !',
+      imprime: 'C\'est parti, j\'imprime. Amenez-moi les bouteilles à l\'entrepôt : la ligne d\'habillage vous attend.',
+    },
+    labo: {
+      de: 'Laboratoire d\'œnologie', apercu: 'Le bulletin d\'analyse du Clos 2025...',
+      intro: 'Bonjour, voici le bulletin d\'analyse du Clos 2025, rouge.',
+      fin: 'Ingrédients : raisins (bio) et sulfites, rien d\'autre n\'a été ajouté. Bonne mise en bouteille ! Hélène',
+    },
+  },
+  // le bulletin d'analyse : les lignes affichées dans Messages (pour 100 ml, sauf mention)
+  bulletin: v => [
+    ['Titre alcoométrique', `${String(v.degre).replace('.', ',')} % vol`],
+    ['Glucides', `${String(v.glucides).replace('.', ',')} g / 100 ml`],
+    ['dont sucres', `${String(v.sucres).replace('.', ',')} g / 100 ml`],
+    ['Matières grasses, acides gras saturés, protéines, sel', 'négligeables'],
+    ['SO2 total', `${v.so2} mg/L`],
+  ],
+  objectifs: {
+    message: 'Lisez le message de l\'imprimerie (Messages)',
+    echantillon: 'Au chai, à pied : prenez une bouteille du Clos, l\'échantillon pour le labo',
+    chargerAvant: 'Chargez aussi les cartons du Clos, en van ou en tracteur : après le labo, ils iront à l\'imprimerie',
+    labo: 'Apportez l\'échantillon au labo d\'œnologie, dans le bourg',
+    analyse: 'Le labo analyse le vin : le bulletin arrive sur votre téléphone',
+    fiche: 'Viticode : créez la fiche du Clos 2025 avec le bulletin du labo',
+    tester: 'Viticode : testez la fiche, « Testez-moi ! »',
+    telecharger: 'Viticode : téléchargez le QR code pour l\'imprimeur',
+    envoyer: 'Envoyez le QR code à l\'imprimerie',
+    bat: 'Messages : validez le BAT de l\'imprimerie',
+    charger: 'Chargez les cartons du Clos au chai, en van ou en tracteur',
+    entrepot: 'Apportez les bouteilles à l\'entrepôt de l\'imprimerie',
+    habillage: 'L\'habillage du Clos 2025',
+    scanner: 'Scannez la contre-étiquette avec votre téléphone',
+    fin: 'Le Clos 2025 est habillé',
+  },
+  dialogues: {
+    reveil: [{ qui: '', txt: 'Jeudi 10 décembre. Aujourd\'hui, on habille le Clos 2025.' }, { qui: '', txt: 'Un message de l\'imprimerie.' }],
+    luMessage: [{ qui: '', txt: 'Pour le QR code, il me faut les valeurs du labo : un échantillon à l\'œnologue d\'abord.' }, { qui: '', txt: 'Les bouteilles tirées-bouchées attendent au chai, en cartons.' }],
+    echantillon: [{ qui: '', txt: 'Une bouteille du lot : l\'échantillon pour le labo.' }, { qui: '', txt: 'Je charge aussi les cartons : le labo et l\'imprimerie sont du même côté, après le bourg.' }],
+    aPied: [{ qui: '', txt: 'L\'échantillon : à pied, dans le chai, le carton ouvert près de la palette.' }],
+    labo: [
+      { qui: 'Hélène', txt: 'Bonjour ! C\'est l\'échantillon du Clos ?' },
+      { qui: '', txt: 'Oui, pour la déclaration nutritionnelle. Rien d\'ajouté à part le soufre, à la mise.' },
+      { qui: 'Hélène', txt: 'Alors en ingrédients : raisins et sulfites. Je lance l\'analyse, le bulletin arrive sur votre téléphone dans la demi-heure.' },
+    ],
+    sansEchantillon: [{ qui: 'Hélène', txt: 'Bonjour ! Pour l\'analyse, il me faut un échantillon : une bouteille du lot.' }],
+    bulletin: [{ qui: '', txt: 'Le bulletin du labo est arrivé. Direction Viticode, sur le téléphone.' }],
+    publiee: [{ qui: '', txt: 'La fiche est publiée : elle a son QR code. Je la teste.' }],
+    teste: [{ qui: '', txt: 'Ce que lira le client en scannant la bouteille, dans sa langue.' }],
+    envoye: [{ qui: '', txt: 'Le fichier est parti à l\'imprimerie.' }],
+    bat: [{ qui: '', txt: 'Le BAT de l\'imprimerie : la contre-étiquette, avec le QR code.' }],
+    batOk: [{ qui: '', txt: 'Les bouteilles maintenant : au chai, puis à l\'entrepôt.' }],
+    charge: [{ qui: '', txt: 'Les cartons du Clos sont chargés : direction l\'entrepôt de l\'imprimerie.' }],
+    chargeAvant: [{ qui: '', txt: 'Les cartons du Clos sont chargés. Reste la contre-étiquette, dans Viticode.' }],
+    chargeLabo: [{ qui: '', txt: 'Les cartons du Clos sont chargés. D\'abord le labo, avec l\'échantillon.' }],
+    entrepot: [{ qui: 'Julien', txt: 'Salut ! Posez les cartons là, je les passe sur la ligne.' }],
+    pasFichier: [{ qui: 'Julien', txt: 'Salut ! Il me faut d\'abord la contre-étiquette validée : le fichier du QR code, puis le BAT.' }],
+    pasCartons: [{ qui: 'Julien', txt: 'Et les bouteilles ? Elles sont au chai, en cartons.' }],
+    autreVehicule: g => [{ qui: '', txt: `Les cartons sont dans le ${g === 'van' ? 'van' : 'tracteur'}.` }],
+    ligne: [
+      { qui: 'Julien', txt: 'Capsule, étiquette, contre-étiquette : tout se fait sur la ligne.' },
+      { qui: 'Julien', txt: 'Votre QR code est bien net, avec « Ingrédients » au-dessus et la valeur énergétique en dessous.' },
+      { qui: 'Julien', txt: 'Tenez, la première bouteille. Scannez-la, pour voir !' },
+    ],
+    scanne: [{ qui: '', txt: 'Ingrédients, déclaration nutritionnelle : tout y est, en un scan.' }],
+    fin: [{ qui: '', txt: 'Le Clos 2025 est habillé, et chaque bouteille dit ce qu\'elle contient.' }],
+  },
+  // l'appli : ce que le jeu rappelle (consignes, pas Viticode) et les refus quand la fiche ne correspond pas au bulletin
+  app: {
+    consigne: v => `Le bulletin du labo : ${String(v.degre).replace('.', ',')} % vol ; pour 100 ml, glucides ${String(v.glucides).replace('.', ',')} g dont sucres ${String(v.sucres).replace('.', ',')} g, le reste négligeable. Ingrédients : raisins bio et sulfites.`,
+    attente: 'Le bulletin du labo n\'est pas encore arrivé : la fiche attendra les valeurs.',
+    nom: 'Touchez les champs pour les remplir.',
+    degre: v => `Degré d'alcool : le bulletin dit ${String(v.degre).replace('.', ',')} % vol.`,
+    couleur: 'La couleur : c\'est un rouge.',
+    champs: 'Remplissez le nom, le millésime, l\'appellation et le lot.',
+    glucides: v => `Glucides : le bulletin dit ${String(v.glucides).replace('.', ',')} g pour 100 ml.`,
+    sucres: v => `Dont sucres : le bulletin dit ${String(v.sucres).replace('.', ',')} g pour 100 ml.`,
+    energie: 'Calculez l\'énergie (« Calculer mon énergie ») avec les valeurs saisies.',
+    raisins: 'Il manque les raisins.',
+    bio: 'Les raisins sont bio : cochez la feuille.',
+    sulfites: 'Il manque les sulfites : le soufre ajouté à la mise.',
+    enTrop: n => `${n} : pas dans ce vin (l'œnologue l'a dit : raisins et sulfites).`,
+    titre: 'Gardez le titre « Ingrédients » : il dit à quoi sert le QR code.',
+    pied: 'Gardez le pied de page : la valeur énergétique doit rester sur l\'étiquette.',
+    telecharge: 'QR code téléchargé.',
+    copie: 'Lien copié.',
+    mineur: 'Cette fiche est réservée aux personnes majeures.',
+  },
+  // la fiche côté consommateur, dans sa langue (la langue du téléphone par défaut)
+  langues: {
+    fr: { nom: 'Français', couleur: 'Couleur', rouge: 'rouge', alcool: 'Alcool', millesime: 'Millésime', appellation: 'Appellation', ingredients: 'Ingrédients', raisins: 'Raisins', conservateurs: 'Conservateurs et antioxydants', sulfites: 'Sulfites', bio: '(*) Issus de l\'agriculture biologique.', decl: 'Déclaration nutritionnelle (/ 100 ml)', energie: 'Energie', glucides: 'Glucides', sucres: 'dont Sucres', negl: 'Contient des quantités négligeables de : Matières grasses, Acides gras saturés, Protéines, Sel', labels: 'Labels', labelBio: 'Agriculture biologique', conso: 'Consommation responsable', abus: 'L\'abus d\'alcool est dangereux pour la santé. Toujours consommer avec modération.', age: 'Avez-vous plus de 18 ans ?', oui: 'oui', non: 'non' },
+    en: { nom: 'English', couleur: 'Colour', rouge: 'red', alcool: 'Alcohol', millesime: 'Vintage', appellation: 'Appellation', ingredients: 'Ingredients', raisins: 'Grapes', conservateurs: 'Preservatives and antioxidants', sulfites: 'Sulphites', bio: '(*) From organic farming.', decl: 'Nutrition declaration (/ 100 ml)', energie: 'Energy', glucides: 'Carbohydrate', sucres: 'of which sugars', negl: 'Contains negligible amounts of: fat, saturates, protein, salt', labels: 'Labels', labelBio: 'Organic farming', conso: 'Responsible drinking', abus: 'Alcohol abuse is dangerous for your health. Always drink in moderation.', age: 'Are you over 18?', oui: 'yes', non: 'no' },
+    de: { nom: 'Deutsch', couleur: 'Farbe', rouge: 'rot', alcool: 'Alkohol', millesime: 'Jahrgang', appellation: 'Ursprungsbezeichnung', ingredients: 'Zutaten', raisins: 'Trauben', conservateurs: 'Konservierungsstoffe und Antioxidationsmittel', sulfites: 'Sulfite', bio: '(*) Aus ökologischer Landwirtschaft.', decl: 'Nährwertdeklaration (/ 100 ml)', energie: 'Energie', glucides: 'Kohlenhydrate', sucres: 'davon Zucker', negl: 'Enthält geringfügige Mengen von: Fett, gesättigten Fettsäuren, Eiweiß, Salz', labels: 'Siegel', labelBio: 'Ökologischer Landbau', conso: 'Verantwortungsvoller Genuss', abus: 'Alkoholmissbrauch ist gesundheitsschädlich. Immer in Maßen genießen.', age: 'Sind Sie über 18 Jahre alt?', oui: 'ja', non: 'nein' },
+    it: { nom: 'Italiano', couleur: 'Colore', rouge: 'rosso', alcool: 'Alcol', millesime: 'Annata', appellation: 'Denominazione', ingredients: 'Ingredienti', raisins: 'Uve', conservateurs: 'Conservanti e antiossidanti', sulfites: 'Solfiti', bio: '(*) Da agricoltura biologica.', decl: 'Dichiarazione nutrizionale (/ 100 ml)', energie: 'Energia', glucides: 'Carboidrati', sucres: 'di cui zuccheri', negl: 'Contiene quantità trascurabili di: grassi, acidi grassi saturi, proteine, sale', labels: 'Marchi', labelBio: 'Agricoltura biologica', conso: 'Consumo responsabile', abus: 'L\'abuso di alcol è pericoloso per la salute. Consumare sempre con moderazione.', age: 'Hai più di 18 anni?', oui: 'sì', non: 'no' },
+    es: { nom: 'Español', couleur: 'Color', rouge: 'tinto', alcool: 'Alcohol', millesime: 'Añada', appellation: 'Denominación', ingredients: 'Ingredientes', raisins: 'Uvas', conservateurs: 'Conservadores y antioxidantes', sulfites: 'Sulfitos', bio: '(*) Procedentes de la agricultura ecológica.', decl: 'Información nutricional (/ 100 ml)', energie: 'Valor energético', glucides: 'Hidratos de carbono', sucres: 'de los cuales azúcares', negl: 'Contiene cantidades insignificantes de: grasas, grasas saturadas, proteínas, sal', labels: 'Sellos', labelBio: 'Agricultura ecológica', conso: 'Consumo responsable', abus: 'El abuso de alcohol es peligroso para la salud. Consumir siempre con moderación.', age: '¿Tiene más de 18 años?', oui: 'sí', non: 'no' },
+  },
+  languesNote: 'La fiche s\'affiche dans la langue du téléphone ; 24 langues européennes.',
+  bannieres: {
+    titre: ['Le surlendemain', 'Mission 3 : l\'habillage'],
+    bulletin: ['Bulletin du labo', 'Le Clos 2025, rouge'],
+    publiee: ['Fiche publiée', 'Le QR code du Clos 2025'],
+    envoye: ['Envoyé', 'Le QR code est chez l\'imprimeur'],
+    bat: ['BAT validé', 'La contre-étiquette part à l\'impression'],
+    charge: ['Chargé', 'Les cartons du Clos 2025'],
+    livre: ['Livré', 'Les bouteilles sont à l\'entrepôt'],
+    fin: ['Habillé', 'Le Clos 2025, avec son QR code'],
+  },
+  finCarte: {
+    sur: 'Fin de la mission 3',
+    titre: 'C\'est ça, Viticode.',
+    texte: 'Une fiche produit et son QR code, gratuitement. On scanne la bouteille : les ingrédients et la déclaration nutritionnelle, dans sa langue. 3 500 comptes Viticode.',
+    h: 'Dans Viticode',
+    suite: [
+      'Gratuit, nombre de fiches produit illimité',
+      'Les ingrédients préchargés, le bio et les allergènes',
+      'La calculatrice de l\'énergie',
+      'Le QR code en Svg, Pdf ou Png, pour l\'imprimeur',
+      'La fiche en 24 langues européennes, sans données collectées sur les consommateurs',
+    ],
+    cta: 'Créer mes QR codes sur viticode.fr', url: 'https://viticode.fr/',
+    bouton: 'Continuer la balade',
+  },
+};
+// L'énergie de la fiche (pour 100 ml) : l'alcool (degré x 0,789 g/ml) et les glucides, coefficients de l'annexe XIV
+export const energie = (degre, glucides) => {
+  const alcool = degre * 0.789;
+  return { kj: Math.round((alcool * 29 + glucides * 17) * 10) / 10, kcal: Math.round((alcool * 7 + glucides * 4) * 100) / 100 };
+};
+
 // Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la
 // tournée ; le lendemain matin, jour du traitement.
 export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
     traitement: ['Bon courage pour le traitement !', 'Je rince les barriques ce matin, elles seront prêtes pour le soutirage.'],
+    habillage: ['C\'est aujourd\'hui, l\'habillage du Clos ?', 'Les cartons du Clos sont sur la palette, dans le chai.'],
   },
   porteuse: {
     tournee: ['Je range les caisses de vendange pour l\'hiver.', 'Bonne tournée ! Les clients vont être contents.', 'Attention, ça glisse près du nettoyeur.'],
     traitement: ['Alors, cette tournée d\'hier ? Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
+    habillage: ['Le traitement d\'hier s\'est bien passé ? Bon habillage !', 'Le carton ouvert près de la palette, c\'est pour l\'échantillon du labo.'],
   },
 };
 
@@ -414,10 +598,11 @@ export const MISSIONS = {
   liste: [
     { id: 'tournee', n: 'Mission 1', titre: 'La tournée de Noël', texte: 'Les commandes au téléphone, les livraisons au bourg, le chèque, la dégustation, puis Vitisoft au bureau du chai.' },
     { id: 'traitement', n: 'Mission 2', titre: 'La journée de traitement', texte: 'Un traitement bio sur trois parcelles, noté dans le Registre phyto.' },
+    { id: 'habillage', n: 'Mission 3', titre: 'L\'habillage', texte: 'Un échantillon au labo, la fiche et le QR code dans Viticode, les bouteilles habillées à l\'entrepôt de l\'imprimerie.' },
   ],
   note: 'La partie s\'enregistre toute seule sur cet appareil. À l\'accueil, « Continuer » la reprend, au domaine.',
   confirme: t => `Rejouer « ${t} » ? La partie en cours sera remplacée ; les missions gagnées le restent.`,
   // à l'accueil, sous « Continuer » ; la bannière à la reprise
-  enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', libre: 'Les deux missions gagnées : le domaine est à vous' },
+  enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', dodo: 'La journée de traitement finie : rentrez dormir', habillage: 'L\'habillage, en cours', libre: 'Les trois missions gagnées : le domaine est à vous' },
   reprise: 'Partie reprise',
 };

@@ -288,6 +288,30 @@ export function geoCarton() {
 // Le chèque de l'épicerie, dans les mains puis posé sur le bureau du chai : une feuille (géométrie partagée)
 let geoChequeP = null;
 export function geoCheque() { return geoChequeP || (geoChequeP = compacter(B(0.17, 0.004, 0.08, '#f4efe2'))); }
+// Une bouteille de 75 cl (mission 3 : l'habillage), debout, le fond à l'origine : tirée-bouchée (nue : le verre et le
+// bouchon), ou habillée (capsule bordeaux, étiquette crème devant, contre-étiquette blanche et son QR code derrière)
+const geoBouteilleP = {};
+export function geoBouteille(habillee) {
+  const k = habillee ? 'h' : 'n';
+  if (geoBouteilleP[k]) return geoBouteilleP[k];
+  const V = '#1f3b2a', L = [C(0.037, 0.037, 0.2, 8, V, 0, 0.1, 0), C(0.014, 0.037, 0.05, 8, V, 0, 0.225, 0), C(0.0135, 0.0145, 0.07, 6, V, 0, 0.285, 0)];
+  if (habillee) L.push(C(0.016, 0.016, 0.05, 6, '#8e2a3b', 0, 0.3, 0), B(0.05, 0.075, 0.012, '#f1e8d2', 0, 0.1, 0.034), B(0.044, 0.06, 0.012, '#fbfaf6', 0, 0.1, -0.034), B(0.02, 0.02, 0.004, '#1d1a26', 0, 0.105, -0.0415));
+  else L.push(C(0.012, 0.012, 0.012, 6, '#c9a46a', 0, 0.322, 0));
+  return (geoBouteilleP[k] = compacter(fusion(L)));
+}
+// Le carton ouvert du chai (mission 3) : celui où l'on prend l'échantillon ; rabats ouverts, les cols et les bouchons
+// des bouteilles tirées-bouchées dépassent. Le fond à l'origine.
+export function geoCartonOuvert() {
+  const K = '#b98a55', L = [B(0.36, 0.28, 0.32, K, 0, 0.14, 0)];
+  // les quatre rabats, ouverts vers l'extérieur
+  L.push(B(0.36, 0.01, 0.14, '#a97c4b', 0, 0.3, 0.22, 0), B(0.36, 0.01, 0.14, '#a97c4b', 0, 0.3, -0.22, 0));
+  L.push(B(0.14, 0.01, 0.32, '#a97c4b', 0.24, 0.3, 0, 0), B(0.14, 0.01, 0.32, '#a97c4b', -0.24, 0.3, 0, 0));
+  // cinq bouteilles sur six (une est partie au labo, ou le sera) : le col et le bouchon
+  for (const [x, z] of [[-0.11, -0.08], [0, -0.08], [0.11, -0.08], [-0.11, 0.08], [0.11, 0.08]]) {
+    L.push(C(0.014, 0.03, 0.06, 6, '#1f3b2a', x, 0.27, z), C(0.0135, 0.0145, 0.07, 6, '#1f3b2a', x, 0.33, z), C(0.012, 0.012, 0.012, 6, '#c9a46a', x, 0.37, z));
+  }
+  return compacter(fusion(L));
+}
 // Les cartons d'un véhicule : 6 colonnes de 3 (colonne c : cartons 3c, 3c + 1, 3c + 2, de bas en haut), cachés tant
 // qu'ils ne sont pas chargés. Dessinés d'un seul appel (instances : seulement les cartons visibles). Chaque carton est un
 // petit objet { position, visible } (repère de la caisse) : le montrer ou le cacher met les instances à jour.

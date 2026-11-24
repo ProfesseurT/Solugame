@@ -2,9 +2,9 @@
 import * as relief from './relief.js';
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, compacter, indexer } from './modeles.js';
+import { UNI, compacter, indexer, MAT } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture, voitureConduite, allumerPhares, pulverisateur, deplier } from './engins.js';
+import { tracteur, van, voiture, voitureConduite, allumerPhares, pulverisateur, deplier, geoCartonOuvert } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -15,11 +15,12 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { Traitement } from './mission2.js';
+import { Habillage } from './mission3.js';
 import { son } from './audio.js';
 import { hasard, lisse, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, PHYTO, LP_URL, MISSIONS } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -170,6 +171,9 @@ const CLIENTS_3D = {
   epicerie: { peau: '#d9a27e', cheveux: '#5a4a3a', coiffure: 'court', barbe: true, haut: '#7a5c3f', col: '#e9e1cf', bas: '#2f3440', tablier: '#2f4a6b' },
   // le patron de l'Auberge du Moulin, le prospect, en veste de cuisine
   auberge: { peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
+  // mission 3 : Hélène, l'œnologue, en blouse blanche ; Julien, l'étiqueteur de l'imprimerie, en bleu de travail
+  labo: { femme: true, peau: '#f0c8a0', cheveux: '#3b2a1a', coiffure: 'chignon', haut: '#f4f6f8', col: '#f4f6f8', bas: '#3a3f4a', tablier: '#f4f6f8', lunettes: true },
+  entrepot: { peau: '#d9a27e', cheveux: '#2b1d0e', coiffure: 'court', barbe: true, tenue: 'salopette', haut: '#3c5a8a', col: '#e9e1cf', bas: '#3c5a8a', chapeau: 'casquette', chapeauC: '#e84e1b' },
 };
 function peupler() {
   if (peuple) return;
@@ -206,6 +210,13 @@ function peupler() {
   // les conducteurs des voitures de la départementale
   for (const vo of voitures) asseoirConducteur(vo);
   parvis.peupler(hud); // le rinceur et la porteuse du parvis du chai (tenues fixées : rien ne change pour les autres)
+  // l'œnologue devant son labo, l'étiqueteur devant l'entrepôt de l'imprimerie (mission 3), créés en derniers
+  for (const [id, l] of [['labo', L.figurants.labo], ['entrepot', L.entrepot.figurant]]) {
+    const p = new Pieton(perso(CLIENTS_3D[id]));
+    scene.add(p.m.groupe); p.placer(l.x, l.z, l.h);
+    gens3.ajouter(p, l, id);
+  }
+  habillage.c.oeno = gens3.liste[0]; habillage.c.etiq = gens3.liste[1];
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
@@ -333,15 +344,18 @@ const jeu = {
   finDemo() { montrerFin(FIN, false); },
   // une mission gagnée (sauvegarde.js : on pourra la rejouer depuis le téléphone) ; la mission du moment
   gagner(id) { SAUVE.gagner(id); sauver(); },
-  get enCoursId() { return traitement.actif ? 'traitement' : 'tournee'; },
+  get enCoursId() { return habillage.actif ? 'habillage' : traitement.actif ? 'traitement' : 'tournee'; },
   finMission2() { montrerFin(TRAITEMENT.finCarte, true); },
+  finMission3() { montrerFin(HABILLAGE.finCarte, false); },
 };
+// la carte de fin d'une mission : son lien (la prévente du registre après la 2, viticode.fr après la 3)
 function montrerFin(F, phyto) {
   $('fin-sur').textContent = F.sur; $('fin-titre').textContent = F.titre; $('fin-texte').textContent = F.texte; $('fin-h').textContent = F.h;
   $('fin-suite').replaceChildren(...F.suite.map(s => { const li = document.createElement('li'); li.textContent = s; return li; }));
-  const cta = $('fin-cta');
-  cta.hidden = !phyto;
-  if (phyto) { cta.textContent = PHYTO.cta; cta.href = LP_URL; $('fin-phyto').textContent = PHYTO.titre + ' ' + PHYTO.texte; }
+  const cta = $('fin-cta'), lien = phyto ? { t: PHYTO.cta, u: LP_URL, c: 'cta cyan' } : F.cta ? { t: F.cta, u: F.url, c: 'cta viticode' } : null;
+  cta.hidden = !lien;
+  if (lien) { cta.textContent = lien.t; cta.href = lien.u; cta.className = lien.c; }
+  if (phyto) $('fin-phyto').textContent = PHYTO.titre + ' ' + PHYTO.texte;
   $('fin-phyto').hidden = !phyto;
   $('continuer').textContent = F.bouton;
   $('fin').hidden = false; jeu.finVue = true; ctrl.relacher();
@@ -353,8 +367,28 @@ const pulve = pulverisateur();
 pulve.groupe.visible = false; vTracteur.m.caisse.add(pulve.groupe); deplier(pulve, 0);
 const traitement = new Traitement(jeu, { monde, particules, pulve, deplier, v: new THREE.Vector3(), rnd: hasard(97) });
 jeu.traitement = traitement;
+// La mission 3 (mission3.js) : les cartons du Clos 2025 sur la palette du chai (quatre piles de trois, cachées jusqu'au
+// matin de l'habillage) et, à côté, le carton ouvert où l'on prend l'échantillon
+const piles3 = [];
+{
+  const pal = new THREE.Group(); pal.position.set(L.palette.x, 0, L.palette.z); scene.add(pal);
+  for (const [x, z] of [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]]) {
+    const g = pileCartons(3); g.position.set(x, L.palette.y + 0.14, z); g.visible = false; pal.add(g);
+    piles3.push({ groupe: g, n: 3, client: 'clos' });
+  }
+}
+const CARTON3 = { x: L.palette.x, y: 0.36, z: L.palette.z + 1.05 }; // le haut des bouteilles du carton ouvert
+const cartonOuvert = new THREE.Mesh(geoCartonOuvert(), MAT);
+cartonOuvert.position.set(CARTON3.x, 0, CARTON3.z); cartonOuvert.castShadow = true; cartonOuvert.receiveShadow = true; cartonOuvert.visible = false;
+scene.add(cartonOuvert);
+const habillage = new Habillage(jeu, { palette: piles3, carton: CARTON3, ligne: monde.ligne });
+jeu.habillage = habillage;
+// l'œnologue et l'étiqueteur (créés dans peupler) : comme les clients, ils se tournent vers vous et font signe ; leur
+// affaire faite (l'échantillon donné, les cartons livrés), ils rentrent au labo ou à l'entrepôt (clients.js)
+L.portes.entrepot = L.entrepot.porte;
+const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: habillage.deposes } });
 // la mission qui mène la balise, l'itinéraire et l'objectif
-const enCours = () => (traitement.actif ? traitement : mission);
+const enCours = () => (habillage.actif ? habillage : traitement.actif ? traitement : mission);
 const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
 const pc = new PC(jeu);
 const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
@@ -371,10 +405,11 @@ jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
 const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
+const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le carton ouvert du chai
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
-const ETQ_ACTION = [...bureau.etiquettes, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
+const ETQ_ACTION = [...bureau.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -425,7 +460,9 @@ function descendre() {
 }
 // Les cartons (mission.js) : charger ceux de la palette du chai (chai.js : le véhicule entre, on charge dedans, il
 // ressort), décharger ceux d'un client, puis remonter au volant
-const chai = new Chai({ jeu, monde, mission, gestes, cam, hud, tactile, conduite: { couperMoteur, auVolant, aPied } });
+const chai = new Chai({ jeu, monde, mission, gestes, cam, hud, tactile, conduite: { couperMoteur, auVolant, aPied },
+  // on vient charger : la grande porte s'ouvre (la tournée : ce qui est signé ; l'habillage : les cartons du Clos)
+  aCharger: () => (enCours() === habillage ? habillage.aCharger || habillage.chargement : mission.aCharger.length > 0 || mission.etape === 'chargement') });
 jeu.charger = (piles, place, fin) => chai.charger(piles, place, fin);
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 // À l'épicerie : arrêté devant, on descend, on va au comptoir, l'épicier parle et donne le chèque, on remonte ; à pied, on
@@ -442,6 +479,13 @@ jeu.aborder = (f, dialogue) => {
   if (v) couperMoteur();
   gestes.aborder(v, f, { sorti: aPied, dire: fin => hud.dire(dialogue, fin) });
   return v;
+};
+// Au labo (mission 3) : arrêté devant, on descend ; on va voir l'œnologue, elle parle, on lui tend l'échantillon
+// (donne()), on remonte ; fin() quand tout est fait. À pied, on y va.
+jeu.donner = (f, dialogue, donne, fin) => {
+  const v = jeu.auVolant ? veh : null;
+  if (v) couperMoteur();
+  gestes.donner(v, f, { sorti: aPied, installe: () => auVolant(v), dire: fin2 => hud.dire(dialogue, fin2), donne, fin });
 };
 // Retourner au volant après une livraison ou une visite : seulement si l'on est encore à côté du véhicule (le bon de
 // livraison peut se signer plus tard, ailleurs : au bureau du chai, assis au portable...)
@@ -507,6 +551,7 @@ function prendreVoiture(c) {
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
+  if (habillage.echantillonProche) { habillage.prendreEchantillon(); return; } // mission 3 : le carton ouvert du chai
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (verres.servable) { verres.servir(verres.servable); return; }
   if (presMaison()) { dormir(); return; }
@@ -603,7 +648,7 @@ function conduire(dt, dtm, dernier = true) {
   if (ctrl.clavier && libre) {
     gaz = -ctrl.ky; braq = -ctrl.kx;
     // dans une parcelle du jour, la bouillie prête (mission2.js) : flèche du haut seule, le guidage suit les passages
-    if (traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, voitures, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
+    if (M === traitement && traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, voitures, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
   }
   else if (ctrl.id !== null && libre) {
     const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
@@ -621,7 +666,7 @@ function conduire(dt, dtm, dernier = true) {
   } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0;
   if (ctrl.fm && libre) fm = true;
   tr.update(dtm, gaz, braq, col, voitures, temps, fm);
-  if (traitement.actif) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
+  if (M === traitement) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
   if (!dernier) return;
   joueur.volant = tr.braq; // les mains suivent la direction
   joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
@@ -671,6 +716,7 @@ function bourg(dtm, ego) {
     if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
   }
   clients.maj(dtm, temps, ego, jeu.auVolant);
+  gens3.maj(dtm, temps, ego, jeu.auVolant);
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
@@ -742,15 +788,36 @@ function phares() {
    lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
 // Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur et
 // le van à leur place, le pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
-let mission2 = false, resAff = true;
+let mission2 = false, mission3 = false, resAff = true;
+const EMPRISE_PULVE = [-0.75, 0.75, -3.45, -2.2]; // le pulvérisateur attelé, qu'on contourne à pied (gestes.js)
 function lendemain() {
   mission.aller('libre');
   parvis.lendemain();
   vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
   const vv = VEHICULES.find(v => v.genre === 'van'); vv.p.placer(L.van.x, L.van.z, L.van.h);
   pulve.groupe.visible = true;
-  vTracteur.m.dims.emprise.push([-0.75, 0.75, -3.45, -2.2]); // le pulvérisateur, qu'on contourne à pied (gestes.js)
+  if (!vTracteur.m.dims.emprise.includes(EMPRISE_PULVE)) vTracteur.m.dims.emprise.push(EMPRISE_PULVE);
   mission2 = true;
+}
+// Après la journée de traitement (mission2.js : dodo), le réveil se fait le jeudi (Teddy, 24/11/2026) : le pulvérisateur
+// est dételé, le tracteur et le van à leur place, vides ; les cartons du Clos 2025 sur la palette du chai, le carton
+// ouvert à côté ; la mission 3 commence (mission3.js)
+function surlendemain() {
+  mission.aller('libre');
+  if (traitement.actif) traitement.aller('libre');
+  parvis.lendemain('habillage');
+  for (const v of VEHICULES) {
+    const l = v.genre === 'tracteur' ? L.tracteur : v.genre === 'van' ? L.van : null;
+    if (l) v.p.placer(l.x, l.z, l.h);
+    if (v.m.cartons) for (const c of v.m.cartons) c.visible = false;
+    v.p.charge = 0;
+  }
+  pulve.groupe.visible = false;
+  const E = vTracteur.m.dims.emprise, i = E.indexOf(EMPRISE_PULVE); if (i >= 0) E.splice(i, 1);
+  for (const p of mission.palette) p.groupe.visible = false;
+  for (const p of piles3) p.groupe.visible = true;
+  cartonOuvert.visible = true;
+  mission3 = true;
 }
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
 function dormir() {
@@ -767,13 +834,14 @@ function dormir() {
         horloge(0);
         joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
         if (mission.etape === 'dodo') lendemain();
+        else if (traitement.etape === 'dodo') surlendemain();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
     {
       action: () => {
         $('fondu').classList.remove('noir'); son.jouer('claque');
-        if (mission2) { mission2 = false; traitement.demarrer(); } else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
+        if (mission2) { mission2 = false; traitement.demarrer(); } else if (mission3) { mission3 = false; habillage.demarrer(); } else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
       },
     },
   ]);
@@ -799,6 +867,7 @@ function reperes(dt, ego, cible) {
   // devant la porte de la maison du domaine : rentrer dormir
   const dodo = !pcPres && !servable && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
+  hud.placer(etqEchantillon, CARTON3.x, 1.2, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
@@ -833,7 +902,8 @@ function miseAJour(dt) {
   bourg(dtm, ego);
   phares();
   particules.fontaine(dtm, L.fontaine);
-  if (traitement.actif) traitement.update(dt); else mission.update(dt);
+  enCours().update(dt);
+  if (monde.ligne) monde.ligne.maj(dtm, habillage.livre, camera.position.x, camera.position.z); // la ligne d'habillage (mission 3)
   // la barre d'état du téléphone : sans réseau en bas des Grands Champs (mission 2)
   { const res = !traitement.actif || traitement.reseau; if (res !== resAff) { resAff = res; $('tel-res').textContent = res ? '4G' : 'Pas de service'; } }
   tel.update(dt);
@@ -848,6 +918,7 @@ function miseAJour(dt) {
   if (camLibre) { /* posée à la main (captures) */ }
   else if (jeu.dedans) bureau.camera(dt);
   else if (chai.camera(dt, ego)) { /* posée au fond de la halle */ }
+  else if (habillage.vueLigne && !gestes.cadre) { const S = L.entrepot.ligne; cam.salle(dt, S, S.centre.x, S.centre.z, false); } // la ligne d'habillage (mission 3)
   else if (gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
   else {
     // en dérive, la caméra suit à moitié la direction où l'on glisse (on voit le véhicule de trois quarts, en travers)
@@ -894,6 +965,7 @@ function majTaches() {
   for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre], g = v.m.groupe; t.poser(g.position.x, g.position.z, lx, lz, 0, g.position.y, g.quaternion); }
   for (const p of passants) if (ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z)) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0, p.p.pos.y);
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
+  for (const f of gens3.liste) if (gens3.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
   parvis.taches(t, ombrePerso);
@@ -969,8 +1041,8 @@ for (const b of document.querySelectorAll('.perso')) {
   b.setAttribute('aria-pressed', String(b.dataset.h === choixHeros));
   b.addEventListener('click', () => jeu.changerHeros(b.dataset.h));
 }
-// Jouer : la mission 1 ; ou directement la mission 2 (l'accueil propose les deux : la tournée prend un bon quart d'heure)
-function lancer(m2) { // m2 : faux (la mission 1), vrai (la mission 2), 'reprendre' (la partie enregistrée)
+// Jouer : la mission 1 ; ou directement la mission 2 ou la 3 (la tournée prend un bon quart d'heure)
+function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la partie enregistrée)
   peupler();
   ctrl.actions.length = 0; ctrl.touchers.length = 0; // rien de ce qui a été tapé sur l'accueil n'est rejoué
   son.demarrer();
@@ -978,8 +1050,9 @@ function lancer(m2) { // m2 : faux (la mission 1), vrai (la mission 2), 'reprend
   $('accueil').hidden = true; $('hud').hidden = false;
   etat = 'jeu';
   cam.yaw = joueur.h; cam.pret = false;
-  if (m2 === 'reprendre') reprendrePartie(SAUVE.partie);
-  else if (m2) { lendemain(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, 7 h
+  if (m === 'reprendre') reprendrePartie(SAUVE.partie);
+  else if (m === 'traitement') { lendemain(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, 7 h
+  else if (m === 'habillage') { surlendemain(); mission3 = false; jeu.minutes = 2 * 1440 + 420; horloge(0); habillage.demarrer(); } // le jour d'après, 7 h
   else mission.demarrer();
   dernier = performance.now();
 }
@@ -991,9 +1064,9 @@ function lancer(m2) { // m2 : faux (la mission 1), vrai (la mission 2), 'reprend
 let tSauve = 0;
 function sauver() {
   if (etat !== 'jeu' || gestes.actif || chai.auChai || chai.dansChai) return;
-  const m2 = traitement.actif, M = m2 ? traitement : mission;
+  const M = enCours();
   if (!M.stable) return;
-  SAUVE.enregistrer({ mission: m2 ? 'traitement' : 'tournee', minutes: jeu.minutes, ventes: jeu.ventes, etat: M.instantane(), quand: Date.now() });
+  SAUVE.enregistrer({ mission: jeu.enCoursId, minutes: jeu.minutes, ventes: jeu.ventes, etat: M.instantane(), quand: Date.now() });
 }
 addEventListener('pagehide', sauver);
 document.addEventListener('visibilitychange', () => { if (document.hidden) sauver(); });
@@ -1002,7 +1075,15 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) sauve
 // bureau, l'argent, les étoiles) ; on est au domaine, à pied, les véhicules à leur place.
 function reprendrePartie(P) {
   jeu.minutes = P.minutes; jeu.ventes = P.ventes || 0; hud.argent(jeu.ventes);
-  if (P.mission === 'traitement') {
+  if (P.mission === 'habillage') {
+    surlendemain(); mission3 = false; horloge(0);
+    habillage.reprendre(P.etat);
+    // les cartons du Clos : sur la palette, dans leur véhicule, ou déjà livrés
+    for (const p of piles3) p.groupe.visible = !habillage.veh && !habillage.livre;
+    const v = habillage.veh;
+    if (v) { for (const { c, n } of habillage.cols) for (let l = 0; l < n; l++) v.m.cartons[3 * c + l].visible = true; v.p.charge = habillage.cols.reduce((s, x) => s + x.n, 0); }
+    gens3.reprendre();
+  } else if (P.mission === 'traitement') {
     lendemain(); mission2 = false; horloge(0);
     traitement.reprendre(P.etat);
   } else {
@@ -1019,35 +1100,41 @@ function reprendrePartie(P) {
     hud.etoiles(mission.etoiles);
   }
   joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false;
-  hud.banniere(MISSIONS.reprise, MISSIONS.enCours[P.etat.etape === 'libre' && P.mission === 'traitement' ? 'libre' : P.mission], 3);
+  hud.banniere(MISSIONS.reprise, MISSIONS.enCours[libelle(P)], 3);
 }
-$('jouer').addEventListener('click', () => lancer(false));
+// ce qu'on dit de la partie enregistrée (à l'accueil, à la reprise) : la mission, ou rentrer dormir, ou tout est gagné
+const libelle = P => (P.mission === 'traitement' && ['dodo', 'libre'].includes(P.etat.etape) ? 'dodo' : P.mission === 'habillage' && P.etat.etape === 'libre' ? 'libre' : P.mission);
+$('jouer').addEventListener('click', () => lancer('tournee'));
 $('reprendre').addEventListener('click', () => lancer('reprendre'));
-$('jouer2').addEventListener('click', () => lancer(true));
+$('jouer2').addEventListener('click', () => lancer('traitement'));
+$('jouer3').addEventListener('click', () => lancer('habillage'));
 $('poche').addEventListener('click', () => { if (etat === 'jeu' && $('fin').hidden && !pc.ouvert) { son.jouer('tap'); tel.basculer(); } });
 // (la carte de fin se remplit quand elle s'affiche : montrerFin)
 $('continuer').addEventListener('click', () => { $('fin').hidden = true; jeu.finVue = false; ctrl.actions.length = 0; });
 
 document.addEventListener('gesturestart', e => e.preventDefault());
 requestAnimationFrame(boucle);
-$('jouer').disabled = false; $('jouer2').disabled = false; $('reprendre').disabled = false;
+$('jouer').disabled = false; $('jouer2').disabled = false; $('jouer3').disabled = false; $('reprendre').disabled = false;
 {
   // une partie enregistrée : « Continuer » d'abord, « Nouvelle partie » ensuite ; une mission rejouée : lancée tout de suite
   const P = SAUVE.partie, aLancer = SAUVE.aLancer();
   if (P && P.etat && !aLancer) {
     $('reprendre').hidden = false; $('reprendre-t').hidden = false;
-    $('reprendre-t').textContent = MISSIONS.enCours[P.etat.etape === 'libre' && P.mission === 'traitement' ? 'libre' : P.mission];
+    $('reprendre-t').textContent = MISSIONS.enCours[libelle(P)];
     $('jouer').textContent = 'Nouvelle partie'; $('jouer').classList.add('second');
   }
-  if (aLancer) lancer(aLancer === 'traitement');
+  if (aLancer) lancer(aLancer);
 }
 mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis,
+  habillage, gens3, piles3, CARTON3, cartonOuvert, tel,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
+  // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil
+  versMission3() { traitement.etape = 'dodo'; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },
   sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
   get tr() { return tr; },

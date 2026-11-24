@@ -70,10 +70,10 @@ export class Traitement {
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
   // La sauvegarde (sauvegarde.js, main.js) : où en est la journée (message lu, bouillie prête, chaque parcelle et ses
   // travées traitées, le registre), prise hors des gestes, et sa reprise (le pulvérisateur est déjà attelé : main.js)
-  get stable() { return ['debut', 'message', 'preparer', 'traiter', 'fin', 'libre'].includes(this.etape) && !this.j.gestes.actif; }
+  get stable() { return ['debut', 'message', 'preparer', 'traiter', 'fin', 'dodo', 'libre'].includes(this.etape) && !this.j.gestes.actif; }
   instantane() {
     return {
-      etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'libre' : this.etape, lu: this.lu, prete: this.prete,
+      etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'dodo' : this.etape, lu: this.lu, prete: this.prete,
       parcelles: this.parcelles.map(p => ({ f: p.faites, t: p.traitee, n: p.notee, b: p.v.blocs.map(b => Array.from(b.traite).join('')) })),
       registre: this.registre.map(l => ({ ...l })),
     };
@@ -82,7 +82,8 @@ export class Traitement {
     this.lu = o.lu; this.prete = o.prete; this.dit = true; this.guideDit = o.etape !== 'preparer' && o.etape !== 'message';
     this.registre = o.registre.map(l => ({ ...l }));
     this.parcelles.forEach((p, i) => { const x = o.parcelles[i]; if (!x) return; p.faites = x.f; p.traitee = x.t; p.notee = x.n; this.c.monde.retraiter(p.v, x.b); });
-    this.aller(o.etape === 'message' && this.lu ? 'preparer' : o.etape);
+    // (une partie d'avant la mission 3 finissait en « libre » : la journée finie, on rentre dormir)
+    this.aller(o.etape === 'message' && this.lu ? 'preparer' : o.etape === 'libre' ? 'dodo' : o.etape);
     if (this.etape === 'message') this.notifier('messages', TX.message.apercu);
   }
   aider(lignes, cle) {
@@ -100,6 +101,7 @@ export class Traitement {
   // La balise : l'aire de remplissage, la prochaine parcelle à traiter (son bout nord), la route pour retrouver le réseau
   get cible() {
     const e = this.etape, L = this.j.lieux;
+    if (e === 'dodo') return this.j.finVue ? null : L.maison;
     if (e === 'preparer') return L.aire;
     if (e !== 'traiter') return null;
     if (this.aNoter.length && !this.j.auVolant) return null; // à pied : on note, rien à rejoindre
@@ -115,6 +117,7 @@ export class Traitement {
   }
   get nomCible() {
     const e = this.etape;
+    if (e === 'dodo') return 'Maison';
     if (e === 'preparer') return 'Aire de remplissage';
     const p = this.prochaine;
     return p ? p.nom : 'Réseau';
@@ -177,6 +180,7 @@ export class Traitement {
     if (e === 'avant') return null;
     if (e === 'debut' || e === 'message') return O.message;
     if (e === 'preparer') return this.enTracteur ? O.aire : O.tracteur;
+    if (e === 'dodo') return O.dodo;
     if (e === 'fin' || e === 'libre') return O.fin;
     if (e === 'remplir') return O.aire;
     // traiter : noter ce qui est traité dès qu'on s'arrête ; sinon traiter ce qui reste ; envoyer ce qui attend
@@ -222,7 +226,7 @@ export class Traitement {
       }
       case 'traiter': this.traiter(dt); break;
       case 'fin':
-        if (this.t > 6) { this.aller('libre'); j.finMission2(); }
+        if (this.t > 6) { this.aller('dodo'); j.finMission2(); } // la carte de fin ; puis rentrer dormir (la mission 3 au réveil)
         break;
     }
     this.rampes(dt);
