@@ -553,6 +553,15 @@ void main() {
   }
   // Le pulvérisateur passe en (x, z) dans la parcelle v : les travées des rangs à moins de demi mètres de part et d'autre,
   // à hauteur de z, reçoivent le traitement. Rend le nombre de travées traitées à l'instant.
+  // une partie reprise (sauvegarde.js) : les travées déjà traitées (une chaîne de 0 et de 1 par bloc), repeintes d'un coup
+  function retraiter(v, etats) {
+    v.blocs.forEach((b, j) => {
+      const e = etats[j] || '';
+      for (let k = 0; k < b.n; k++) if (e[k] === '1' && !b.traite[k]) { b.traite[k] = 1; teinteTravee(v, b, k); }
+      const ci = b.im.instanceColor; ci.clearUpdateRanges(); ci.needsUpdate = true;
+    });
+    const cl = v.loin.instanceColor; cl.clearUpdateRanges(); cl.needsUpdate = true;
+  }
   function traiter(v, x, z, demi) {
     let n = 0;
     for (const b of v.blocs) {
@@ -2075,5 +2084,5 @@ void main() {
     }
   }
 
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, saison, traiter };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, saison, traiter, retraiter };
 }

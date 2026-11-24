@@ -53,6 +53,11 @@ export class Clients {
     if (!piles.length) etapes.push(...G.entrer(f.porte));
     G.lancer(etapes, () => { f.etat = 'dedans'; });
   }
+  // une partie reprise (sauvegarde.js) : ceux dont l'affaire est faite sont déjà rentrés chez eux
+  reprendre() {
+    const m = this.c.mission;
+    for (const f of this.liste) if (f.porte && m.fait(m.arretDe(f.id))) { f.etat = 'dedans'; f.p.m.groupe.visible = false; }
+  }
   // le client est-il dehors, à sa place (ombre de contact, servir un verre) ?
   dehors(f) { return f.p.m.groupe.visible; }
 }

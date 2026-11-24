@@ -2,8 +2,9 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, EN_PREVENTE } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, EN_PREVENTE, MISSIONS } from './textes.js';
 import { son } from './audio.js';
+import { SAUVE } from './sauvegarde.js';
 import { $, esc, eur } from './outils.js';
 
 export const ICONES = {
@@ -11,9 +12,10 @@ export const ICONES = {
   viticode: '<svg viewBox="0 0 24 24"><g fill="#fff"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></g><g fill="#ff3d8b"><path d="M5 5h3v3H5zM16 5h3v3h-3zM5 16h3v3H5z"/></g></svg>',
   phyto: '<svg viewBox="0 0 24 24"><path d="M5 19C5 10 11 4 20 4c0 9-6 15-15 15z" fill="#fff"/><path d="M5 19L15 9" stroke="#2fc6e0" stroke-width="1.8"/></svg>',
   messages: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="#fff"/></svg>',
+  missions: '<svg viewBox="0 0 24 24"><path d="M6.5 21V3.5" stroke="#fff" stroke-width="2.2"/><path d="M7.5 4h11l-2.6 4 2.6 4h-11z" fill="#fff"/></svg>',
   reglages: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2" fill="none" stroke="#fff" stroke-width="3.2" stroke-dasharray="3.4 2.2"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>',
 };
-const APPS = [['bureau', 'Le bureau'], ['viticode', 'Viticode'], ['phyto', 'Registre phyto'], ['messages', 'Messages'], ['reglages', 'Réglages']];
+const APPS = [['bureau', 'Le bureau'], ['viticode', 'Viticode'], ['phyto', 'Registre phyto'], ['messages', 'Messages'], ['missions', 'Missions'], ['reglages', 'Réglages']];
 const STATUTS = {
   a_traiter: ['jour', 'À traiter'], proposee: ['decroche', 'Message envoyé'], commande: ['jour', 'Commande à préparer'],
   envoyee: ['decroche', 'Signature en attente'], signee: ['ok', 'Signée en ligne'], chargee: ['ok', 'Chargée'],
@@ -64,7 +66,7 @@ export class Telephone {
     if (!m.peutFermer() && (nom === 'accueil' || nom === 'ouvrir')) return; // pendant un appel, on reste en ligne
     switch (nom) {
       case 'accueil': this.app = 'accueil'; this.fil = null; break;
-      case 'ouvrir': this.app = arg; this.fil = null; if (arg === this.notif) this.notifier(null); break;
+      case 'ouvrir': this.app = arg; this.fil = null; this.confirme = null; if (arg === this.notif) this.notifier(null); break;
       case 'rappel': m.rappel(arg); return;
       case 'cmd': this.client = arg; this.app = 'commande'; break;
       case 'qte': m.quantite(this.client, Number(arg)); break;
@@ -84,6 +86,10 @@ export class Telephone {
       case 'wtf': this.jeu.basculerWtf(); break;
       case 'heros': this.jeu.changerHeros(arg); break;
       case 'bientot': this.toast('Dans le jeu complet.'); return;
+      // Missions : rejouer une mission gagnée, après confirmation (la page se recharge : sauvegarde.js)
+      case 'rejouer': this.confirme = arg; break;
+      case 'rejouerNon': this.confirme = null; break;
+      case 'rejouerOk': SAUVE.rejouer(arg); return;
       // le Registre phyto (mission 2) : une saisie en cinq écrans, que l'appli vérifie à chaque étape
       case 'rp-nouveau': R.nouvelleSaisie(); this.app = 'phytoP'; break;
       case 'rp-cocher': R.cocher(arg); break;
@@ -393,6 +399,16 @@ export class Telephone {
       return this.entete(t.de, 'messages', 'ouvrir:messages') + `<div class="ap-corps fil">${t.fil.map(x => `<p class="bulle">${esc(x)}</p>`).join('')}</div>`;
     }
     return this.entete('Messages', 'messages') + `<div class="ap-corps">${fils.map(t => `<button class="msg" data-a="fil:${t.id}"><b>${esc(t.de)}</b><span>${esc(t.apercu)}</span></button>`).join('')}</div>`;
+  }
+  // Missions : où l'on en est (gagnée, en cours, à venir) ; une mission gagnée se rejoue, après confirmation
+  missions() {
+    const G = SAUVE.gagnees, cours = this.jeu.enCoursId, c = MISSIONS.liste.find(x => x.id === this.confirme);
+    const conf = c ? `<div class="carte-a-faire ms-conf"><p>${esc(MISSIONS.confirme(c.titre))}</p><div class="reg-choix"><button class="ap-bt plein" data-a="rejouerOk:${c.id}">Rejouer</button><button class="ap-bt" data-a="rejouerNon">Annuler</button></div></div>` : '';
+    const lignes = MISSIONS.liste.map(M => {
+      const gagnee = !!G[M.id], etat = gagnee ? '<b class="ms-e ok">Gagnée ✓</b>' : M.id === cours ? '<b class="ms-e cours">En cours</b>' : '<b class="ms-e">À venir</b>';
+      return `<div class="ms"><p class="ms-n">${esc(M.n)}${etat}</p><p class="ms-t">${esc(M.titre)}</p><p class="ap-note">${esc(M.texte)}</p>${gagnee ? `<button class="ap-bt" data-a="rejouer:${M.id}">Rejouer</button>` : ''}</div>`;
+    }).join('');
+    return this.entete('Missions', 'missions') + `<div class="ap-corps">${conf}${lignes}<p class="ap-note">${esc(MISSIONS.note)}</p></div>`;
   }
   reglages() {
     const h = this.jeu.choixHeros;

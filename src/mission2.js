@@ -68,6 +68,23 @@ export class Traitement {
     this.j.hud.banniere(...TX.bannieres.titre, 4.5);
   }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
+  // La sauvegarde (sauvegarde.js, main.js) : où en est la journée (message lu, bouillie prête, chaque parcelle et ses
+  // travées traitées, le registre), prise hors des gestes, et sa reprise (le printemps est déjà là : main.js)
+  get stable() { return ['debut', 'message', 'preparer', 'traiter', 'fin', 'libre'].includes(this.etape) && !this.j.gestes.actif; }
+  instantane() {
+    return {
+      etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'libre' : this.etape, lu: this.lu, prete: this.prete,
+      parcelles: this.parcelles.map(p => ({ f: p.faites, t: p.traitee, n: p.notee, b: p.v.blocs.map(b => Array.from(b.traite).join('')) })),
+      registre: this.registre.map(l => ({ ...l })),
+    };
+  }
+  reprendre(o) {
+    this.lu = o.lu; this.prete = o.prete; this.dit = true; this.guideDit = o.etape !== 'preparer' && o.etape !== 'message';
+    this.registre = o.registre.map(l => ({ ...l }));
+    this.parcelles.forEach((p, i) => { const x = o.parcelles[i]; if (!x) return; p.faites = x.f; p.traitee = x.t; p.notee = x.n; this.c.monde.retraiter(p.v, x.b); });
+    this.aller(o.etape === 'message' && this.lu ? 'preparer' : o.etape);
+    if (this.etape === 'message') this.notifier('messages', TX.message.apercu);
+  }
   aider(lignes, cle) {
     if (!lignes || this.tRappel > 0 || (cle === this.aideCle && this.horloge - this.aideT < 25)) return;
     this.j.hud.dire(lignes); this.tRappel = RAPPEL; this.aideCle = cle; this.aideT = this.horloge;
@@ -264,7 +281,7 @@ export class Traitement {
       }
     } else this.tEnvoi = 0;
     if (this.fini) {
-      this.aller('fin');
+      this.aller('fin'); j.gagner('traitement'); // la mission 2 est gagnée (sauvegarde.js)
       hud.banniere(...TX.bannieres.fin, 4.5);
       setTimeout(() => hud.dire(TX.dialogues.fin), 900);
     }

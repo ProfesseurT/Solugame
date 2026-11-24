@@ -9,6 +9,8 @@
 //   nuit      au clavier, marcher et courir (Maj) ; la nuit qui tombe, les phares ; rentrer dormir, le matin revient
 //   voitures  les voitures des autres : conducteurs, emprunt, remplacement, pas de cartons ; mode WTF : vol, passant aplati
 //   chateau   la route du château : monter en tracteur et en van, le tour, retenu au bord, à pied sur la pente ; la glisse
+//   sauvegarde la partie enregistrée puis reprise (« Continuer »), une mission gagnée rejouée depuis le téléphone,
+//             la mission 2 reprise au printemps
 //   traitement la mission 2 : rentrer dormir, le printemps, la bouillie, trois parcelles au guidage, le Registre phyto
 //             (refus, enregistrement, sans réseau puis envoyé), la carte de fin
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
@@ -150,7 +152,7 @@ if (scenario === 'parcours') {
     clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
     log.push(['DRM du mois dernier calculée, le pense-bête coché', m.drm === 'faite' && q('.pc-note').querySelectorAll('span.ok').length === 3]);
     clic('[data-a="fermerF:vitisoft"]'); CL.step(560);
-    log.push(['carte de fin', !q('#fin').hidden]);
+    log.push(['carte de fin ; la mission 1 est enregistrée comme gagnée', !q('#fin').hidden && CL.SAUVE.gagnees.tournee === true]);
     // le soir : les ouvriers du parvis sont partis pendant la tournée, les moineaux dorment
     { const P = CL.parvis, h = CL.jeu.minutes % 1440; log.push(['le soir (' + Math.floor(h / 60) + ' h), le parvis est calme : ouvriers partis, moineaux couchés', h < 1110 || (P.ouvriers.every(o => !o.present && !o.p.m.groupe.visible) && P.oiseaux.count === 0)]); }
     log.push(['les clients ont rangé leurs cartons et sont rentrés dans leur boutique', CL.clients.liste.length === 5 && CL.clients.liste.every(f => f.etat === 'dedans' && !f.p.m.groupe.visible) && m.deposes.every(p => !p.visible)]);
@@ -502,6 +504,79 @@ if (scenario === 'chateau') {
   await capture('fin');
 }
 
+if (scenario === 'sauvegarde') {
+  // la sauvegarde : une tournée avancée (commande chargée dans le tracteur, une signée sur la palette, une livrée, le chèque
+  // récupéré, le prospect ajouté) s'enregistre ; la page rechargée, « Continuer » la reprend telle quelle, au domaine ; la
+  // mission 1 gagnée se rejoue depuis le téléphone (app Missions, avec confirmation) ; la mission 2 avancée (une parcelle
+  // en partie traitée, le registre) se reprend aussi, au printemps
+  const attendre = () => page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 20000 });
+  const r1 = await ev(() => {
+    const m = CL.mission, J = CL.jeu, log = [];
+    CL.jouer(); CL.step(260);
+    const tr = CL.vehicule('tracteur'), [cave, bar, treille] = m.clients;
+    cave.cartons = 6; cave.statut = 'chargee'; cave.veh = tr; m.places.tracteur = [...Array(6).fill('cave'), ...Array(12).fill(null)];
+    for (let i = 0; i < 6; i++) tr.m.cartons[i].visible = true;
+    bar.cartons = 2; bar.statut = 'signee'; treille.cartons = 3; treille.statut = 'livree';
+    m.retardataire.statut = 'recupere'; m.prospect.statut = 'attendu'; m.etoiles = 1; J.minutes = 18 * 60 + 12;
+    const P = CL.sauver();
+    log.push(['la partie s\'enregistre (tournée, à 18 h 12)', !!P && P.mission === 'tournee' && P.etat.clients[0].s === 'chargee' && P.minutes === 18 * 60 + 12]);
+    return log;
+  });
+  for (const [msg, c] of r1) ok(c, msg);
+  await page.reload({ waitUntil: 'load' }); await attendre();
+  const r2 = await ev(() => {
+    const q = s => document.querySelector(s), m = CL.mission, J = CL.jeu, log = [];
+    log.push(['à l\'accueil : « Continuer » la tournée en cours, « Nouvelle partie » ensuite', !q('#reprendre').hidden && q('#reprendre-t').textContent.includes('tournée') && q('#jouer').textContent === 'Nouvelle partie']);
+    // (la page a pu tourner quelques secondes avant de se recharger : la sauvegarde faite en la quittant a l'heure d'alors)
+    const H = Math.floor(CL.SAUVE.partie.minutes);
+    q('#reprendre').click(); CL.step(30);
+    const tr = CL.vehicule('tracteur'), [cave, bar, treille] = m.clients;
+    log.push(['reprise : les commandes où elles en étaient, le chèque, le prospect, l\'heure', cave.statut === 'chargee' && cave.veh === tr && bar.statut === 'signee' && treille.statut === 'livree'
+      && m.retardataire.statut === 'recupere' && m.prospect.statut === 'attendu' && Math.floor(J.minutes) === H && H >= 18 * 60 + 12 && m.etape === 'journee']);
+    log.push(['ce qui se voit : 6 cartons dans le tracteur, la commande du bar sur la palette, La Treille rentrée chez elle', tr.m.cartons.filter(c => c.visible).length === 6 && tr.p.charge === 6
+      && m.palette.filter(p => p.groupe.visible).every(p => p.client === 'bar') && m.palette.some(p => p.groupe.visible)
+      && CL.clients.liste.find(f => f.id === 'treille').etat === 'dedans' && CL.clients.liste.find(f => f.id === 'cave').etat === 'dehors']);
+    log.push(['reprise au domaine, à pied', !J.auVolant && Math.hypot(J.joueur.pos.x - J.lieux.depart.x, J.joueur.pos.z - J.lieux.depart.z) < 1]);
+    // la mission 1 gagnée : le téléphone propose de la rejouer
+    CL.SAUVE.gagner('tournee');
+    q('#poche').click(); J.tel.action('ouvrir:missions');
+    const t = q('#app').textContent;
+    log.push(['le téléphone, app Missions : la tournée gagnée, la journée de traitement à venir', t.includes('Gagnée') && t.includes('À venir') && !!q('#app [data-a="rejouer:tournee"]') && !q('#app [data-a="rejouer:traitement"]')]);
+    q('#app [data-a="rejouer:tournee"]').click();
+    log.push(['rejouer demande confirmation', !!q('#app [data-a="rejouerOk:tournee"]') && q('#app').textContent.includes('remplacée')]);
+    return log;
+  });
+  for (const [msg, c] of r2) ok(c, msg);
+  await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), ev(() => document.querySelector('#app [data-a="rejouerOk:tournee"]').click())]);
+  await attendre(); await new Promise(r => setTimeout(r, 300));
+  const r3 = await ev(() => {
+    const q = s => document.querySelector(s), m = CL.mission, log = [];
+    CL.step(300);
+    log.push(['la tournée rejouée : lancée tout de suite, du début, la mission gagnée le reste', q('#accueil').hidden && m.clients.every(c => c.statut === 'a_traiter') && m.retardataire.statut === 'a_planifier'
+      && Math.floor(CL.jeu.minutes) < 17 * 60 + 50 && CL.SAUVE.gagnees.tournee === true]);
+    // la mission 2, avancée : la bouillie prête, les Perrières en partie traitées, une ligne au registre
+    CL.versMission2(); CL.step(400);
+    const T = CL.traitement, p = T.parcelles[0], q0 = p.q;
+    T.messageLu(); T.prete = true; T.aller('traiter');
+    for (let x = q0.x0 + 2; x < (q0.x0 + q0.x1) / 2; x += 2.5) p.faites += CL.monde.traiter(p.v, x, (q0.z0 + q0.z1) / 2, 3.6);
+    T.registre.unshift({ quand: 'essai', parcelles: ['Les Perrières'], produits: [], cibles: [], stade: '', par: 'essai', statut: 'attente' });
+    const P = CL.sauver(), b = p.v.blocs.map(x => Array.from(x.traite).join(''));
+    log.push(['la journée de traitement s\'enregistre (' + p.faites + ' travées traitées)', !!P && P.mission === 'traitement' && P.etat.prete && P.etat.parcelles[0].f === p.faites && p.faites > 0]);
+    return [log, b, p.faites];
+  });
+  for (const [msg, c] of r3[0]) ok(c, msg);
+  await page.reload({ waitUntil: 'load' }); await attendre();
+  const r4 = await ev(([b, f]) => {
+    const q = s => document.querySelector(s), log = [];
+    q('#reprendre').click(); CL.step(60);
+    const T = CL.traitement, p = T.parcelles[0];
+    log.push(['reprise au printemps : la bouillie prête, la parcelle traitée en partie (mêmes travées), le registre', T.etape === 'traiter' && T.prete && p.faites === f
+      && p.v.blocs.every((x, j) => Array.from(x.traite).join('') === b[j]) && T.registre[0].par === 'essai' && T.registre[0].statut === 'attente' && CL.jeu.minutes > 1440]);
+    return log;
+  }, [r3[1], r3[2]]);
+  for (const [msg, c] of r4) ok(c, msg);
+}
+
 if (scenario === 'traitement') {
   // la mission 2 : après la tournée, on rentre dormir ; au réveil, en mai, le message de Claire ; en tracteur, la bouillie
   // à l'aire de remplissage ; les Perrières et le Clos traités au guidage (flèche du haut) ; le Registre phyto refuse ce
@@ -563,7 +638,7 @@ if (scenario === 'traitement') {
       CL.teleporter(-55, 12, Math.PI); CL.step(200);
       log.push(['le réseau revient : envoyé, la journée de traitement est finie', T.registre[0].statut === 'envoye' && T.etape === 'fin']);
       CL.step(60 * 7);
-      log.push(['la carte de fin, avec la prévente du registre', J.finVue && document.querySelector('#fin-titre').textContent.includes('Registre phyto') && !document.querySelector('#fin-cta').hidden]);
+      log.push(['la carte de fin, avec la prévente du registre ; la mission 2 est enregistrée comme gagnée', J.finVue && document.querySelector('#fin-titre').textContent.includes('Registre phyto') && !document.querySelector('#fin-cta').hidden && CL.SAUVE.gagnees.traitement === true]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });

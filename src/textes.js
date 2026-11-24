@@ -402,3 +402,17 @@ export const PARVIS = {
     printemps: ['Bonne journée, et bon traitement !', 'Je range les caisses, la remorque doit repartir.'],
   },
 };
+
+// Les missions : le téléphone (app Missions : où l'on en est, rejouer une mission gagnée) et l'accueil (Continuer). La
+// partie s'enregistre toute seule sur l'appareil (sauvegarde.js).
+export const MISSIONS = {
+  liste: [
+    { id: 'tournee', n: 'Mission 1', titre: 'La tournée de Noël', texte: 'Les commandes au téléphone, les livraisons au bourg, le chèque, la dégustation, puis Vitisoft au bureau du chai.' },
+    { id: 'traitement', n: 'Mission 2', titre: 'La journée de traitement', texte: 'Un traitement bio sur trois parcelles, noté dans le Registre phyto.' },
+  ],
+  note: 'La partie s\'enregistre toute seule sur cet appareil. À l\'accueil, « Continuer » la reprend, au domaine.',
+  confirme: t => `Rejouer « ${t} » ? La partie en cours sera remplacée ; les missions gagnées le restent.`,
+  // à l'accueil, sous « Continuer » ; la bannière à la reprise
+  enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', libre: 'Les deux missions gagnées : le domaine est à vous' },
+  reprise: 'Partie reprise',
+};

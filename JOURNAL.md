@@ -715,3 +715,18 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Rendu** : la caisse que porte la porteuse est une instance des caisses (un appel de dessin et une passe d'ombre de moins ; seule sa matrice part à la carte graphique) ; la sphère englobante des caisses est calculée une fois, serrée autour des piles (les caisses cachées restent à leur place, réduites à rien : avant, elles l'étiraient jusqu'à l'origine du monde). Devant le chai, au palier moyen : 104 appels de dessin (106 hier, jet d'eau compris), préparation du rendu 0,7 à 0,8 ms (0,95 hier).
 
 **Vérifié** : `npm run verifie` (le banc de la route du château vérifie aussi le gyrophare et les feux stop) ; images du parvis, du rinceur de près, du chien, des feux du van et du gyrophare.
+
+## 24/11/2026 · Retours de Teddy (20) : la partie sauvegardée, les missions rejouées depuis le téléphone
+
+**Demande** : « Fais en sorte de sauvegarder dans le cache (ou ailleurs) les parties, et une fois que c'est gagné les missions, on puisse choisir de refaire la mission (à partir du téléphone). »
+
+**Fait** :
+- Sauvegarde dans le navigateur (localStorage, sur l'appareil ; sauvegarde.js). En navigation privée, rien n'est gardé et le jeu marche comme avant.
+- La partie s'enregistre toute seule, toutes les quatre secondes de jeu et quand on quitte la page, seulement à un moment sûr : jamais pendant un geste (monter, charger, livrer), au chai, une livraison, le chèque, la dégustation ou un appel. Elle garde l'avancement : mission 1, les commandes et où elles en sont (quantités, signées, chargées et dans quel véhicule, livrées, facturées, transmises), la tournée lancée, le chèque, le prospect, la DRM, les étoiles ; mission 2, le message lu, la bouillie, chaque parcelle et ses travées traitées, le registre ; l'heure et l'argent.
+- À l'accueil, « Continuer » (avec la mission en cours) reprend la partie, puis « Nouvelle partie ». On reprend au domaine, à pied, les véhicules à leur place, avec ce qui se voit remis : les piles signées sur la palette, les cartons dans leur véhicule, les clients servis rentrés chez eux, le chèque sur le bureau, le printemps et les rangs traités.
+- Une mission est retenue comme gagnée quand on ferme Vitisoft, tout fait (mission 1), ou quand la journée de traitement est finie (mission 2).
+- Le téléphone a une app Missions : chaque mission, gagnée, en cours ou à venir ; une mission gagnée se rejoue (« Rejouer », puis une confirmation : la partie en cours est remplacée, les missions gagnées le restent). La page se recharge et la mission se lance aussitôt, du début : tout repart de zéro, rien n'est oublié (saison, rangs, cartons, clients). Le son reprend au premier toucher.
+
+**Vérifié** : nouveau banc `sauvegarde` (dans `npm run verifie`) : une tournée avancée enregistrée, la page rechargée, « Continuer », tout revient (commandes, cartons dans le tracteur, palette, client rentré, chèque, heure, au domaine) ; l'app Missions, la confirmation, la tournée rejouée du début ; la mission 2 avancée (parcelle en partie traitée, registre) reprise au printemps, mêmes travées. Les bancs de la tournée et de la mission 2 vérifient que la mission gagnée est enregistrée. Images : l'accueil avec « Continuer », l'app Missions, la confirmation.
+
+**À savoir** : la sauvegarde est sur l'appareil et dans ce navigateur (pas de compte) ; vider les données du site l'efface.

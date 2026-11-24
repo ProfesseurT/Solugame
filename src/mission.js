@@ -90,6 +90,36 @@ export class Mission {
   }
 
   demarrer() { this.etape = 'debut'; this.t = 0; }
+  // La sauvegarde (sauvegarde.js, main.js) : ce qui fait l'avancement de la tournée, pris à un moment sûr (rien en cours :
+  // ni chargement, ni livraison, ni chèque, ni dégustation, ni appel), et sa reprise. Les commandes envoyées ou proposées
+  // repartent de leur attente ; à la reprise, on est au domaine (main.js remet ce qui se voit : palette, cartons, clients).
+  get stable() {
+    return ['journee', 'livraisons', 'retour', 'pc', 'fin', 'dodo'].includes(this.etape) && !this.attenteBL && !this.attenteCheque && !this.appelEnCours
+      && !['visite', 'deguste'].includes(this.prospect.statut);
+  }
+  instantane() {
+    return {
+      etape: this.etape === 'fin' ? 'dodo' : this.etape, etoiles: this.etoiles, tour: [...this.tour],
+      clients: this.clients.map(c => ({ s: c.statut, n: c.cartons, v: c.veh ? c.veh.genre : null })),
+      r: this.retardataire.statut, p: this.prospect.statut, drm: this.drm === 'calcul' ? 'a_faire' : this.drm,
+      places: Object.fromEntries(Object.entries(this.places).map(([g, P]) => [g, [...P]])),
+    };
+  }
+  reprendre(o) {
+    const vs = this.j.vehicules;
+    this.clients.forEach((c, i) => {
+      const x = o.clients[i];
+      c.statut = x.s; c.cartons = x.n; c.veh = x.v ? vs.find(v => v.genre === x.v) || null : null;
+      if (c.statut === 'proposee') c.tRep = 5;
+      if (c.statut === 'envoyee') c.tSign = 8;
+      if (c.statut === 'chargee' && !c.veh) c.statut = 'signee'; // (ne devrait pas arriver) : la commande attend sur la palette
+    });
+    this.retardataire.statut = o.r; this.prospect.statut = o.p; this.drm = o.drm; this.etoiles = o.etoiles;
+    this.places = {}; for (const g in o.places) this.places[g] = [...o.places[g]];
+    this.tour = o.tour.filter(id => this.pret(this.arretDe(id)));
+    this.introDite = true;
+    this.aller(o.etape === 'livraisons' && !this.tour.length ? 'journee' : o.etape);
+  }
   peutFermer() { return !this.appelEnCours; }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
   // une nouvelle du bureau : la pastille du téléphone, son aperçu sur l'écran d'accueil ; le portable se met à jour
@@ -478,6 +508,7 @@ export class Mission {
   fermerPC() {
     if (this.etape !== 'pc' || !this.toutFait) return;
     const j = this.j;
+    j.gagner('tournee'); // la mission 1 est gagnée (sauvegarde.js : on pourra la rejouer)
     this.aller('fin'); this.dec = 0;
     j.hud.banniere(...BANNIERES.fin(this.ht), 4.5);
     setTimeout(() => j.hud.dire(DIALOGUES.merci), 900);

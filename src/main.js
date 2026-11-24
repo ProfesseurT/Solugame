@@ -19,7 +19,7 @@ import { son } from './audio.js';
 import { hasard, lisse, $ } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, PHYTO, LP_URL } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, PHYTO, LP_URL, MISSIONS } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -27,6 +27,7 @@ import { Chai } from './chai.js';
 import { Verres } from './verres.js';
 import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
+import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
@@ -330,6 +331,9 @@ const jeu = {
   tactile,
   // la carte de fin d'une mission (F : textes.js, FIN ou TRAITEMENT.finCarte), avec la prévente du registre après la 2
   finDemo() { montrerFin(FIN, false); },
+  // une mission gagnée (sauvegarde.js : on pourra la rejouer depuis le téléphone) ; la mission du moment
+  gagner(id) { SAUVE.gagner(id); sauver(); },
+  get enCoursId() { return traitement.actif ? 'traitement' : 'tournee'; },
   finMission2() { montrerFin(TRAITEMENT.finCarte, true); },
 };
 function montrerFin(F, phyto) {
@@ -932,7 +936,7 @@ function boucle(maintenant) {
     cam.orbite(temps, joueur.pos.x, joueur.pos.z, largeur > hauteurE * 1.15);
     joueur.sync(dt, temps);
     for (const { p } of clients.liste) p.sync(dt, temps);
-  } else miseAJour(dt);
+  } else { miseAJour(dt); if ((tSauve += dt) > 4) { tSauve = 0; sauver(); } }
   particules.maj(dt);
   if (monde.nuages) monde.nuages.rotation.y += dt * 0.004; // les nuages dérivent
   monde.moulin.rotation.x -= dt * 0.35; // les ailes du moulin des Grands Champs
@@ -967,7 +971,7 @@ for (const b of document.querySelectorAll('.perso')) {
   b.addEventListener('click', () => jeu.changerHeros(b.dataset.h));
 }
 // Jouer : la mission 1 ; ou directement la mission 2 (l'accueil propose les deux : la tournée prend un bon quart d'heure)
-function lancer(m2) {
+function lancer(m2) { // m2 : faux (la mission 1), vrai (la mission 2), 'reprendre' (la partie enregistrée)
   peupler();
   ctrl.actions.length = 0; ctrl.touchers.length = 0; // rien de ce qui a été tapé sur l'accueil n'est rejoué
   son.demarrer();
@@ -975,11 +979,51 @@ function lancer(m2) {
   $('accueil').hidden = true; $('hud').hidden = false;
   etat = 'jeu';
   cam.yaw = joueur.h; cam.pret = false;
-  if (m2) { printemps(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, en mai, 7 h
+  if (m2 === 'reprendre') reprendrePartie(SAUVE.partie);
+  else if (m2) { printemps(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, en mai, 7 h
   else mission.demarrer();
   dernier = performance.now();
 }
+
+/* ------------------------------------------------------------------ sauvegarde (sauvegarde.js)
+   La partie s'enregistre toute seule, toutes les quatre secondes de jeu et quand on quitte la page, à un moment sûr :
+   aucun geste en cours (monter, charger, livrer), rien au chai, et la mission dans un état qu'on sait reprendre
+   (mission.js, mission2.js : stable, instantane). À l'accueil, « Continuer » la reprend, au domaine. */
+let tSauve = 0;
+function sauver() {
+  if (etat !== 'jeu' || gestes.actif || chai.auChai || chai.dansChai) return;
+  const m2 = traitement.actif, M = m2 ? traitement : mission;
+  if (!M.stable) return;
+  SAUVE.enregistrer({ mission: m2 ? 'traitement' : 'tournee', minutes: jeu.minutes, ventes: jeu.ventes, etat: M.instantane(), quand: Date.now() });
+}
+addEventListener('pagehide', sauver);
+document.addEventListener('visibilitychange', () => { if (document.hidden) sauver(); });
+// Reprendre la partie enregistrée : l'avancement (mission.js, mission2.js : reprendre), puis ce qui se voit (les piles
+// signées sur la palette, les cartons chargés dans leur véhicule, les clients servis rentrés chez eux, le chèque sur le
+// bureau, l'argent, les étoiles) ; on est au domaine, à pied, les véhicules à leur place.
+function reprendrePartie(P) {
+  jeu.minutes = P.minutes; jeu.ventes = P.ventes || 0; hud.argent(jeu.ventes);
+  if (P.mission === 'traitement') {
+    printemps(); mission2 = false; horloge(0);
+    traitement.reprendre(P.etat);
+  } else {
+    horloge(0);
+    mission.reprendre(P.etat);
+    for (const p of mission.palette) p.groupe.visible = mission.client(p.client).statut === 'signee';
+    for (const v of VEHICULES) {
+      const Pl = mission.places[v.genre];
+      if (!Pl || !v.m.cartons) continue;
+      let n = 0; Pl.forEach((id, i) => { v.m.cartons[i].visible = !!id; if (id) n++; }); v.p.charge = n;
+    }
+    clients.reprendre();
+    bureau.cheque.visible = ['depose', 'saisi'].includes(mission.retardataire.statut);
+    hud.etoiles(mission.etoiles);
+  }
+  joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false;
+  hud.banniere(MISSIONS.reprise, MISSIONS.enCours[P.etat.etape === 'libre' && P.mission === 'traitement' ? 'libre' : P.mission], 3);
+}
 $('jouer').addEventListener('click', () => lancer(false));
+$('reprendre').addEventListener('click', () => lancer('reprendre'));
 $('jouer2').addEventListener('click', () => lancer(true));
 $('poche').addEventListener('click', () => { if (etat === 'jeu' && $('fin').hidden && !pc.ouvert) { son.jouer('tap'); tel.basculer(); } });
 // (la carte de fin se remplit quand elle s'affiche : montrerFin)
@@ -987,7 +1031,17 @@ $('continuer').addEventListener('click', () => { $('fin').hidden = true; jeu.fin
 
 document.addEventListener('gesturestart', e => e.preventDefault());
 requestAnimationFrame(boucle);
-$('jouer').disabled = false; $('jouer2').disabled = false;
+$('jouer').disabled = false; $('jouer2').disabled = false; $('reprendre').disabled = false;
+{
+  // une partie enregistrée : « Continuer » d'abord, « Nouvelle partie » ensuite ; une mission rejouée : lancée tout de suite
+  const P = SAUVE.partie, aLancer = SAUVE.aLancer();
+  if (P && P.etat && !aLancer) {
+    $('reprendre').hidden = false; $('reprendre-t').hidden = false;
+    $('reprendre-t').textContent = MISSIONS.enCours[P.etat.etape === 'libre' && P.mission === 'traitement' ? 'libre' : P.mission];
+    $('jouer').textContent = 'Nouvelle partie'; $('jouer').classList.add('second');
+  }
+  if (aLancer) lancer(aLancer === 'traitement');
+}
 mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
@@ -996,6 +1050,7 @@ window.CL = {
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },
+  sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },
   passants() { return passants.map(p => p.p); },
