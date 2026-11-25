@@ -123,9 +123,9 @@ joueur.placer(L.depart.x, L.depart.z, L.depart.h);
 // empruntées (ou volées, en mode WTF). tr (physique) et tm (modèle) désignent le véhicule courant : celui qu'on conduit,
 // ou le dernier conduit. VEH_CARTE : repérés sur la mini-carte quand on est à pied ; OBSTACLES : ce que voient les
 // voitures de la départementale (le joueur, puis chaque véhicule, avec son emprise).
-const VEHICULES = [], VEH_CARTE = [], OBSTACLES = [null];
+const VEHICULES = [], VEH_CARTE = [], OBSTACLES = [null], LOINS = []; // (LOINS : cachés au-delà de la brume, voirLoin)
 function creerVehicule(genre, modele, lieu, poste) {
-  scene.add(modele.groupe);
+  scene.add(modele.groupe); LOINS.push(modele.groupe);
   const p = new Tracteur(modele, genre);
   p.placer(lieu.x, lieu.z, lieu.h);
   p.pos.veh = p;
@@ -146,7 +146,7 @@ let veh = vTracteur, tr = veh.p, tm = veh.m;
 // La remorque de palox du Clos 2025 (mission 3 ; remorque.js), garée au domaine, chargée ; seul le tracteur la tire.
 // Posée, c'est une boîte du décor ; attelée, elle suit le tracteur (Attelage.maj, à chaque image) et repousse les piétons.
 const mRem = remorque();
-scene.add(mRem.groupe);
+scene.add(mRem.groupe); LOINS.push(mRem.groupe);
 const att = new Attelage(mRem, col);
 att.poser(L.remorque.x, L.remorque.z, L.remorque.h);
 OBSTACLES.push(att.pos); // les voitures de la départementale la voient
@@ -626,8 +626,11 @@ function sousVehicule(e, p) {
   return false;
 }
 // les véhicules du joueur, même garés, sont des obstacles : on repousse un cercle (x, z, r) hors de leurs deux cercles
+// (appelé pour chaque passant à chaque image : un véhicule loin du cercle est écarté avant tout calcul d'angle)
 function horsDesVehicules(p, r) {
-  for (const { p: e } of VEHICULES) {
+  for (let i = 0; i < VEHICULES.length; i++) {
+    const e = VEHICULES[i].p, lim = 2.4 + e.d.r + r;
+    if (Math.abs(p.x - e.pos.x) > lim || Math.abs(p.z - e.pos.z) > lim) continue;
     const ax = Math.sin(e.h), az = Math.cos(e.h);
     for (const off of e.d.off) {
       const cx = e.pos.x + ax * off, cz = e.pos.z + az * off;
@@ -835,8 +838,8 @@ function phares() {
 /* ------------------------------------------------------------------ rentrer dormir
    Devant la porte de la maison du domaine, « Rentrer dormir » : on entre, fondu au noir, et l'on ressort au matin, 7 h, le
    lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
-// Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur et
-// le van à leur place, le pulvérisateur attelé au tracteur ; la mission 2 commence (mission2.js)
+// Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur, le
+// van et l'enjambeur à leur place ; la mission 2 commence (mission2.js)
 let mission2 = false, mission3 = false, resAff = true;
 function lendemain() {
   mission.aller('libre');
@@ -893,6 +896,7 @@ function dormir() {
 
 // La balise de la mission et son étiquette (nom, distance) ; les étiquettes d'action : le bureau du chai d'abord (les
 // autres s'effacent devant elles), servir un verre, monter, descendre
+const HAUT_MONTER = { van: 3.0, voiture: 2.3, enjambeur: 4.9 }; // hauteur de l'étiquette « Monter » (le tracteur : 3,6 m)
 function reperes(dt, ego, cible) {
   marque.visible = !!cible && !jeu.dedans;
   if (cible) {
@@ -914,7 +918,7 @@ function reperes(dt, ego, cible) {
   { const ok = habillage.echantillonProche && !tel.ouvert && !pcPres, P = ok ? jeu.remorque.pointEchantillon() : null; hud.placer(etqEchantillon, P ? P.x : 0, P ? P.y + 0.6 : 0, P ? P.z : 0, ok); }
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
-  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + ({ van: 3.0, voiture: 2.3, enjambeur: 4.9 }[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
+  hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
   const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
@@ -1022,11 +1026,26 @@ function majTaches() {
   parvis.taches(t, ombrePerso);
   t.fin();
 }
+// Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
+// (modeles.js) se compte dans l'axe de la caméra ; sous 5 m de haut, à 6 m de sa fin, elle couvre déjà tout à moins d'un
+// demi-ton près (smoothstep) ; plus haut (sur les collines), elle n'est pleine qu'à 1,6 fois sa fin. R : la
+// demi-longueur du plus long (la remorque, timon compris), de la marge.
+const AXE = new THREE.Vector3();
+function voirLoin() {
+  camera.getWorldDirection(AXE);
+  const c = camera.position, fin = scene.fog.far, R = 6;
+  for (let i = 0; i < LOINS.length; i++) {
+    const g = LOINS[i], p = g.position, prof = (p.x - c.x) * AXE.x + (p.y - c.y) * AXE.y + (p.z - c.z) * AXE.z - R;
+    const vu = prof < (p.y + 4.6 < 5 ? fin - 6 : fin * 1.6);
+    if (g.visible !== vu) g.visible = vu;
+  }
+}
 // Tout ce qui précède le dessin d'une image : décor animé, ombre, herbe proche
 function avantRendu(ego) {
   UNI.uTemps.value = temps;
   if (camLibre) ego = camera.position; // caméra posée à la main (captures) : l'ombre suit ce qu'on regarde
   placerLumiere(ego.x, ego.z, camLibre ? 0 : ego.y);
+  voirLoin();
   majTaches();
   monde.maj(camera.position.x, camera.position.z);
   // dans le bureau, la pièce ne reçoit pas d'ombre portée : on ne recalcule pas la carte d'ombre

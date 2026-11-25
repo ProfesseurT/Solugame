@@ -12,14 +12,14 @@
 // chariot : origine au sol au milieu de l'empattement, les fourches vers +z, +x à gauche. Rien n'est alloué par image.
 import * as THREE from 'three';
 import { B, C, T, MAT, fusion, teinter, compacter } from './modeles.js';
-import { Atelier, barre, bloc, roue, feuxDomaine, gyrophare } from './engins.js';
+import { Atelier, barre, bloc, roue, feuxDomaine, gyrophare, fixe } from './engins.js';
 import { sol } from './relief.js';
 import { angle, borne, lisse, mix } from './outils.js';
 
 const TAU = Math.PI * 2;
 // la remorque : l'anneau du timon (z, y), le plateau (dessus à BY), les six palox (centres le long de z, de l'arrière vers
 // l'avant), le tandem (deux essieux), ses roues
-export const REMORQUE = { RZ: 5.0, RY: 0.55, BY: 1.06, Z0: -3.25, Z1: 2.95, W: 2.3, PZ: [-2.735, -1.705, -0.675, 0.355, 1.385, 2.415] };
+const REMORQUE = { RZ: 5.0, RY: 0.55, BY: 1.06, Z0: -3.25, Z1: 2.95, W: 2.3, PZ: [-2.735, -1.705, -0.675, 0.355, 1.385, 2.415] };
 const ESSIEUX = [0.58, -0.58], VOIE = 0.86, RR = 0.42;
 const PALOX = { w: 1.2, l: 1.0, h: 0.76, plancher: 0.1 }; // en travers, le long, de haut ; dessous du plancher (patins)
 const MAXI = 1.25;    // angle de portefeuille (rad) : la remorque ne tourne pas plus par rapport au tracteur
@@ -34,8 +34,10 @@ const bois = (g, c) => teinter(g, c, T.bois);
    Caisse-palette de bois à claire-voie, 1,2 m (en travers) sur 1 m (le long) et 0,76 m, sur trois patins dans le sens des
    fourches ; dedans, les bouteilles couchées, tête-bêche, se devinent entre les planches (une masse de verre sombre) et
    se voient dessus : la couche du haut, 14 rangées de 3, le bouchon au bout du col. Géométrie partagée par tous les
-   palox ; origine au sol sous le milieu. */
-let geoPaloxP = null;
+   palox ; origine au sol sous le milieu. Les bouteilles sont rangées en dernier : la passe d'ombre s'arrête avant elles
+   (ombrePalox), la caisse et la masse de verre font déjà toute l'ombre ; leurs bouts cachés (contre l'épaule, le col, le
+   bouchon) n'ont pas de couvercle. */
+let geoPaloxP = null, nOmbrePalox = 0;
 function geoPalox() {
   if (geoPaloxP) return geoPaloxP;
   const { w: W, l: D, h: H } = PALOX, L = [], B1 = '#c9a46a', B2 = '#b48c56', B3 = '#9c7646', V = '#1f3b2a', BOUCHON = '#c9a46a';
@@ -49,19 +51,29 @@ function geoPalox() {
   }
   // la masse des bouteilles, et la couche du dessus : couchées le long de z, tête-bêche d'une rangée à l'autre
   L.push(B(W - 0.07, 0.5, D - 0.07, '#152a1d', 0, 0.125 + 0.25, 0));
+  for (const g of L) nOmbrePalox += g.attributes.position.count;
   const y = 0.625 + 0.036;
   for (let r = 0; r < 14; r++) {
     const x = -W / 2 + 0.075 + r * 0.0808;
     for (let k = 0; k < 3; k++) {
       const s = (r + k) % 2 ? 1 : -1, zc = -D / 2 + 0.035 + 0.155 + k * 0.31; // le milieu de la bouteille
-      // corps (0,2 m), épaule, col, bouchon ; le fond vers -s, le col vers +s
-      L.push(C(0.036, 0.036, 0.2, 5, V, x, y, zc - s * 0.05, 'z'));
-      L.push(C(s > 0 ? 0.015 : 0.036, s > 0 ? 0.036 : 0.015, 0.045, 5, V, x, y, zc + s * 0.0725, 'z'));
-      L.push(C(0.0145, 0.0145, 0.06, 5, V, x, y, zc + s * 0.125, 'z'));
-      L.push(C(0.012, 0.012, 0.012, 5, BOUCHON, x, y, zc + s * 0.159, 'z'));
+      // corps (0,2 m), épaule, col, bouchon ; le fond vers -s, le col vers +s. Couvercles : le fond du corps, le bout
+      // du col autour du bouchon, le bout du bouchon (le haut du cylindre couché est son bout vers +z)
+      const versCol = s > 0 ? 1 : 2, versFond = s > 0 ? 2 : 1;
+      L.push(C(0.036, 0.036, 0.2, 5, V, x, y, zc - s * 0.05, 'z', 0, versFond));
+      L.push(C(s > 0 ? 0.015 : 0.036, s > 0 ? 0.036 : 0.015, 0.045, 5, V, x, y, zc + s * 0.0725, 'z', 0, 0));
+      L.push(C(0.0145, 0.0145, 0.06, 5, V, x, y, zc + s * 0.125, 'z', 0, versCol));
+      L.push(C(0.012, 0.012, 0.012, 5, BOUCHON, x, y, zc + s * 0.159, 'z', 0, versCol));
     }
   }
   return (geoPaloxP = compacter(fusion(L)));
+}
+// la passe d'ombre d'un palox (ou de plusieurs, en instances) : la caisse seule (les bouteilles sont dedans)
+function ombrePalox(m) {
+  const g = m.geometry;
+  m.onBeforeShadow = () => g.setDrawRange(0, nOmbrePalox);
+  m.onAfterShadow = () => g.setDrawRange(0, Infinity);
+  return m;
 }
 
 // deux roues d'un essieu (géométries de roue(), centrées) fusionnées en une, à ± voie
@@ -72,7 +84,7 @@ function paire(gG, gD, voie) {
 }
 const M4 = new THREE.Matrix4(), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 // montrer ou cacher le palox k de la remorque (caché : réduit à rien, à sa place)
-export function montrerPalox(R, k, vu) {
+function montrerPalox(R, k, vu) {
   const P = R.palox;
   if (P.userData.vu[k] === vu) return;
   P.userData.vu[k] = vu;
@@ -138,7 +150,7 @@ export function remorque() {
     barre(at, [x, 0.72, 3.8], [x * 0.8, 0.71, 4.4], 0.012, NOIR, 0);
     L.push(B(0.05, 0.05, 0.08, c, x * 0.8, 0.71, 4.44));
   }
-  const corps = new THREE.Mesh(compacter(fusion([...at.geos(), ...L])), MAT);
+  const corps = fixe(new THREE.Mesh(compacter(fusion([...at.geos(), ...L])), MAT));
   corps.castShadow = true; corps.receiveShadow = true; corps.name = 'remorque';
   groupe.add(corps);
 
@@ -147,18 +159,17 @@ export function remorque() {
   const roues = ESSIEUX.map(z => { const m = new THREE.Mesh(paire(roue(RR, 0.3, 14, 1, true, '#c9ccd1'), roue(RR, 0.3, 14, -1, true, '#c9ccd1'), VOIE), MAT); m.position.set(0, RR, z); m.castShadow = true; groupe.add(m); return m; });
   // la béquille : elle pivote sous le timon (baissée : debout, pied au sol ; levée : couchée vers l'arrière) ; sa manivelle
   const bequille = new THREE.Group(); bequille.position.set(0.1, 0.62, 4.15); groupe.add(bequille);
-  bequille.add(new THREE.Mesh(compacter(fusion([
+  bequille.add(fixe(new THREE.Mesh(compacter(fusion([
     peint(B(0.075, 0.42, 0.075, GRIS, 0, -0.21, 0), GRIS), B(0.05, 0.22, 0.05, '#7d828a', 0, -0.5, 0), B(0.2, 0.025, 0.2, FONCE, 0, -0.605, 0),
     B(0.12, 0.06, 0.06, GRIS, 0, 0.02, 0), B(0.02, 0.02, 0.16, '#9a9da3', 0.07, 0.06, 0.08), C(0.022, 0.022, 0.06, 6, NOIR, 0.07, 0.06, 0.17, 'x'),
-  ])), MAT));
-  bequille.children[0].castShadow = false;
+  ])), MAT)));
   // la goupille de l'attelage, au-dessus de l'anneau (sortie) ou à travers (mise)
   const goupille = new THREE.Mesh(compacter(fusion([C(0.017, 0.017, 0.24, 6, '#9a9da3', 0, 0, 0), C(0.03, 0.03, 0.025, 8, '#c0392b', 0, 0.12, 0), B(0.006, 0.08, 0.04, '#9a9da3', 0, 0.06, 0.03)])), MAT);
   goupille.position.set(0, RY + 0.2, RZ); groupe.add(goupille);
   // les ridelles latérales : une charnière au bas de la rive, elles se rabattent vers l'extérieur ; feux stop
   const ridelles = [1, -1].map(s => {
     const g = new THREE.Group(); g.position.set(s * (W / 2 + 0.01), BY, zc); groupe.add(g);
-    g.add(new THREE.Mesh(compacter(fusion([peint(B(0.03, 0.3, lg - 0.1, GALVA, 0, 0.15, 0), GALVA), ...[0.07, 0.23].map(y => peint(B(0.045, 0.03, lg - 0.1, '#959ca4', s * 0.008, y, 0), '#959ca4'))])), MAT));
+    g.add(fixe(new THREE.Mesh(compacter(fusion([peint(B(0.03, 0.3, lg - 0.1, GALVA, 0, 0.15, 0), GALVA), ...[0.07, 0.23].map(y => peint(B(0.045, 0.03, lg - 0.1, '#959ca4', s * 0.008, y, 0), '#959ca4'))])), MAT)));
     g.children[0].receiveShadow = true;
     g.userData.s = s;
     return g;
@@ -166,7 +177,7 @@ export function remorque() {
   const feux = feuxDomaine(groupe, [[0.14, 0.07, 0.01, 0.88, 0.74, Z0 - 0.118]], null);
   // les six palox, sur le plateau : un seul appel de dessin (instances) ; ils partent un par un sur le chariot
   // (Dechargement : montrerPalox)
-  const palox = new THREE.InstancedMesh(geoPalox(), MAT, 6);
+  const palox = fixe(ombrePalox(new THREE.InstancedMesh(geoPalox(), MAT, 6)));
   palox.castShadow = true; palox.receiveShadow = true; palox.name = 'palox';
   palox.userData.vu = [true, true, true, true, true, true];
   REMORQUE.PZ.forEach((z, k) => palox.setMatrixAt(k, M4.makeTranslation(0, BY, z)));
@@ -174,9 +185,8 @@ export function remorque() {
   groupe.add(palox);
   return {
     groupe, corps, roues, bequille, goupille, ridelles, feux, palox,
-    // emprise au sol (repère de la remorque) : ce que le personnage contourne (gestes.js : contourner) ; cercles de
-    // collision le long de l'axe ; la largeur, la longueur
-    dims: { emprise: [[-W / 2 - 0.05, W / 2 + 0.05, Z0 - 0.15, Z1 + 0.1], [-0.3, 0.3, Z1, RZ + 0.1]], off: [2.08, 0.66, -0.76, -2.13], r: 1.12, l: RZ - Z0, w: W },
+    // emprise au sol (repère de la remorque) : ce que le personnage contourne, attelée (gestes.js : contourner)
+    dims: { emprise: [[-W / 2 - 0.05, W / 2 + 0.05, Z0 - 0.15, Z1 + 0.1], [-0.3, 0.3, Z1, RZ + 0.1]] },
   };
 }
 
@@ -185,6 +195,7 @@ export function remorque() {
    pos : le milieu du tandem, au sol (et pos.veh : elle-même, pour les voitures de la départementale, comme un véhicule
    du joueur : h, d.off, d.r) ; h : son cap ; tr : le tracteur (vehicules.js) quand elle est attelée. */
 const V1 = new THREE.Vector3(), V2 = new THREE.Vector3();
+const PE = { x: 0, y: 0, z: 0, debout: { x: 0, z: 0, h: 0 }, cap: 0 }; // (pointEchantillon)
 // Deux rectangles orientés se recouvrent-ils ? Centre, demi-largeur (le long de l'axe x du rectangle : (co, -si)),
 // demi-profondeur (le long de son axe z : (si, co)), comme les boîtes tournées du décor (collisions.js : boiteO).
 // Séparés si, sur l'un des quatre axes, l'écart des centres dépasse la somme des demi-projections.
@@ -314,8 +325,9 @@ export class Attelage {
   }
   // un personnage (cercle p, r) repoussé hors de la remorque attelée (posée, c'est sa boîte du décor qui l'arrête)
   pousser(p, r) {
-    if (!this.tr) return false;
-    const { Z0, Z1, W } = REMORQUE, c = Math.cos(this.h), s = Math.sin(this.h), dx = p.x - this.pos.x, dz = p.z - this.pos.z;
+    const dx = p.x - this.pos.x, dz = p.z - this.pos.z, lim = 3.5 + r; // (le plateau tient dans un carré de 3,5 m autour du tandem)
+    if (!this.tr || dx > lim || dx < -lim || dz > lim || dz < -lim) return false;
+    const { Z0, Z1, W } = REMORQUE, c = Math.cos(this.h), s = Math.sin(this.h);
     let lx = dx * c - dz * s, lz = dx * s + dz * c;
     const qx = borne(lx, -W / 2, W / 2), qz = borne(lz, Z0, Z1), ex = lx - qx, ez = lz - qz, d2 = ex * ex + ez * ez;
     if (d2 >= r * r) return false;
@@ -326,13 +338,15 @@ export class Attelage {
     return true;
   }
   // Le point où l'on prend un échantillon, à pied : le dessus du palox de l'arrière, au bord du côté le plus proche de
-  // (px, pz) ; debout : où se tenir, au sol à côté de la remorque, tourné vers elle
-  pointEchantillon(px, pz) {
-    const { W, PZ } = REMORQUE, fx = Math.sin(this.h), fz = Math.cos(this.h), gx = Math.cos(this.h), gz = -Math.sin(this.h);
-    const s = (px - this.pos.x) * gx + (pz - this.pos.z) * gz >= 0 ? 1 : -1, z = PZ[0];
-    const p = this.versMonde(s * 0.42, REMORQUE.BY + 0.69, z, { x: 0, y: 0, z: 0 });
-    const d = this.versMonde(s * (W / 2 + 0.55), 0, z, { x: 0, y: 0, z: 0 });
-    return { x: p.x, y: p.y, z: p.z, debout: { x: d.x, z: d.z, h: Math.atan2(-s * gx, -s * gz) }, cap: Math.atan2(fx, fz) };
+  // (px, pz) ; debout : où se tenir, au sol à côté de la remorque, tourné vers elle. Rempli dans out (par défaut, le même
+  // objet à chaque appel : main.js le demande à chaque image pour placer l'étiquette).
+  pointEchantillon(px, pz, out = PE) {
+    const { W, PZ, BY } = REMORQUE, gx = Math.cos(this.h), gz = -Math.sin(this.h);
+    const s = (px - this.pos.x) * gx + (pz - this.pos.z) * gz >= 0 ? 1 : -1, z = PZ[0], d = out.debout;
+    this.versMonde(s * 0.42, BY + 0.69, z, out);
+    this.versMonde(s * (W / 2 + 0.55), 0, z, V1); d.x = V1.x; d.z = V1.z; d.h = Math.atan2(-s * gx, -s * gz);
+    out.cap = this.h; // (le cap de la remorque)
+    return out;
   }
   // Posée sur le relief : le tandem au sol ; attelée, l'avant tenu par l'attelage du tracteur ; posée, par la béquille.
   // Les roues tournent, la béquille, la goupille et les ridelles suivent leur état.
@@ -458,10 +472,16 @@ export function etapesDeteler(G, v, att, o) {
     mains(G, att, 0, REMORQUE.RY + 0.2, REMORQUE.RZ, 0.9, u => { att.goupilleK = 1 - lisse((u - 0.2) / 0.5); }, () => att.deteler()),
     ...G.etapesMonter(v, o.installe));
   // le tracteur avance de 6 m (ce chemin-là est calculé au moment d'avancer : le tracteur peut avoir bougé)
-  const av = { pts: null };
-  e.push({ action: () => { av.pts = []; for (let k = 0; k <= 12; k++) av.pts.push([tr.pos.x + Math.sin(tr.h) * k * 0.5, tr.pos.z + Math.cos(tr.h) * k * 0.5]); } });
-  const rouler = G.rouler(v, [[0, 0], [0, 1]], 2.6, false);
-  e.push({ duree: rouler.duree, debut: () => { const r = G.rouler(v, av.pts, 2.6, false); rouler.maj = r.maj; r.debut(); }, maj: (...a) => rouler.maj(...a) });
+  let r = null;
+  e.push({
+    duree: 2.6,
+    debut: () => {
+      const pts = [];
+      for (let k = 0; k <= 12; k++) pts.push([tr.pos.x + Math.sin(tr.h) * k * 0.5, tr.pos.z + Math.cos(tr.h) * k * 0.5]);
+      r = G.rouler(v, pts, 2.6, false); r.debut();
+    },
+    maj: (dt, t, u, T) => r.maj(dt, t, u, T),
+  });
   return e;
 }
 
@@ -470,7 +490,7 @@ export function etapesDeteler(G, v, att, o) {
    conducteur à quatre montants et toit à barreaux (phares de travail, gyrophare orange), planche de bord, colonne et
    volant ; le mât à deux étages (le second monte quand les fourches passent 1,2 m), ses vérins d'inclinaison et de
    levée, ses chaînes ; le tablier, son dosseret et deux fourches ; roues motrices à l'avant, directrices à l'arrière. */
-export const CHARIOT = { FZ: 1.74, assise: 1.04, plancher: 0.74 }; // FZ : le milieu des fourches (repère du chariot)
+const CHARIOT = { FZ: 1.74, assise: 1.04, plancher: 0.74 }; // FZ : le milieu des fourches (repère du chariot)
 export function chariot() {
   const groupe = new THREE.Group(), caisse = new THREE.Group(); groupe.add(caisse);
   const JAUNE = '#e0b13a', CONTRE = '#3a3c42', MAT_C = '#3b3d44', at = new Atelier(), L = [], j = g => peint(g, JAUNE);
@@ -505,21 +525,21 @@ export function chariot() {
   }
   for (const y of [0.2, 2.15]) L.push(B(0.7, 0.08, 0.08, MAT_C, 0, y, 0.98));
   L.push(C(0.05, 0.05, 1.7, 8, '#8a9098', 0, 0.95, 0.92));
-  const corps = new THREE.Mesh(compacter(fusion([...at.geos(), ...L])), MAT); corps.castShadow = true; corps.receiveShadow = true; caisse.add(corps);
+  const corps = fixe(new THREE.Mesh(compacter(fusion([...at.geos(), ...L])), MAT)); corps.castShadow = true; corps.receiveShadow = true; caisse.add(corps);
   // le mât intérieur : il monte avec les fourches au-delà de 1,2 m ; les chaînes
   const mat2 = new THREE.Group(); caisse.add(mat2);
-  mat2.add(new THREE.Mesh(compacter(fusion([B(0.06, 2.0, 0.09, '#4a4c54', 0.235, 1.12, 1.03), B(0.06, 2.0, 0.09, '#4a4c54', -0.235, 1.12, 1.03), B(0.56, 0.07, 0.07, '#4a4c54', 0, 2.1, 1.03),
-    C(0.06, 0.06, 0.12, 8, FONCE, 0, 2.1, 1.0, 'x'), B(0.025, 1.6, 0.02, '#26272b', 0.08, 1.3, 1.07), B(0.025, 1.6, 0.02, '#26272b', -0.08, 1.3, 1.07)])), MAT));
+  mat2.add(fixe(new THREE.Mesh(compacter(fusion([B(0.06, 2.0, 0.09, '#4a4c54', 0.235, 1.12, 1.03), B(0.06, 2.0, 0.09, '#4a4c54', -0.235, 1.12, 1.03), B(0.56, 0.07, 0.07, '#4a4c54', 0, 2.1, 1.03),
+    C(0.06, 0.06, 0.12, 8, FONCE, 0, 2.1, 1.0, 'x'), B(0.025, 1.6, 0.02, '#26272b', 0.08, 1.3, 1.07), B(0.025, 1.6, 0.02, '#26272b', -0.08, 1.3, 1.07)])), MAT)));
   // le tablier : origine au-dessus des fourches (leur dessus, à la hauteur de levée), dosseret, deux fourches
   const tablier = new THREE.Group(); tablier.position.set(0, 0.08, 1.08); caisse.add(tablier);
   const T2 = [B(0.92, 0.36, 0.06, GRIS, 0, 0.27, -0.01)];
   for (const y of [0.62, 0.88, 1.12]) T2.push(B(0.92, 0.04, 0.04, FONCE, 0, y, -0.01));
   for (const x of [-0.44, -0.15, 0.15, 0.44]) T2.push(B(0.04, 0.72, 0.04, FONCE, x, 0.8, -0.01));
   for (const s of [1, -1]) T2.push(B(0.1, 0.56, 0.045, NOIR, s * 0.3, 0.255, 0.04), B(0.1, 0.045, 1.16, NOIR, s * 0.3, -0.0225, 0.62), B(0.1, 0.02, 0.06, NOIR, s * 0.3, -0.035, 1.2));
-  tablier.add(new THREE.Mesh(compacter(fusion(T2)), MAT));
+  tablier.add(fixe(new THREE.Mesh(compacter(fusion(T2)), MAT)));
   tablier.children[0].castShadow = true;
   // volant (il tourne), roues motrices à l'avant, directrices à l'arrière (sur leurs pivots)
-  const support = new THREE.Group(); support.position.set(0, 1.33, 0.15); support.rotation.x = -0.8; caisse.add(support);
+  const support = new THREE.Group(); support.position.set(0, 1.33, 0.15); support.rotation.x = -0.8; caisse.add(fixe(support));
   const volant = new THREE.Mesh(compacter(fusion([teinter(new THREE.TorusGeometry(0.16, 0.018, 4, 12).rotateX(Math.PI / 2), '#1f1f23'), B(0.3, 0.02, 0.035, '#2a2a2e'), C(0.035, 0.035, 0.04, 8, JAUNE, 0, 0.01, 0), C(0.018, 0.018, 0.07, 6, '#2a2a2e', 0.12, 0.04, 0)])), MAT);
   support.add(volant);
   const rouesAv = [new THREE.Mesh(paire(roue(0.3, 0.22, 12, 1, true, '#c9ccd1'), roue(0.3, 0.22, 12, -1, true, '#c9ccd1'), 0.43), MAT)];
@@ -531,11 +551,10 @@ export function chariot() {
     groupe, caisse, corps, mat2, tablier, volant, rouesAv, rouesAr, pivots, gyro,
     siege: new THREE.Vector3(0, CHARIOT.plancher - 0.62, -0.4),
     poste: { assise: CHARIOT.assise, plancher: CHARIOT.plancher, volant: new THREE.Vector3(0, 1.33, 0.15), rayon: 0.16, inclinaison: -0.8 },
-    dims: { l: 2.45, w: 1.12, emprise: [[-0.6, 0.6, -1.25, 1.0]] },
   };
 }
 // la hauteur des fourches (le dessus des lames, au-dessus du sol) ; le mât intérieur suit au-delà de 1,2 m
-export function lever(ch, y) {
+function lever(ch, y) {
   ch.tablier.position.y = y;
   ch.mat2.position.y = Math.max(0, y - 1.2);
 }
@@ -567,10 +586,11 @@ export class Dechargement {
   constructor({ ch, att, L, conducteur = null, col, scene, vite = 1 }) {
     this.ch = ch; this.att = att; this.p = conducteur; this.col = col; this.scene = scene; this.vite = vite;
     this.x = L.chariot.x; this.z = L.chariot.z; this.h = L.chariot.h; this.y = 0.08; this.braq = 0; this.rotAv = 0; this.rotAr = 0;
-    this.i = 0; this.T = 0; this.fini = false; this.boites = []; this.rel = 0;
+    this.i = 0; this.T = 0; this.fini = false; this.rel = 0;
+    this.boites = []; // les palox posés au sol, boîtes du décor (gardées : on pourra les retirer)
     // le palox sur les fourches (un maillage, rattaché au tablier) ; ceux posés dans le hangar (instances, un appel)
-    this.porte = new THREE.Mesh(geoPalox(), MAT); this.porte.castShadow = true; this.porte.visible = false; ch.tablier.add(this.porte);
-    this.stock = new THREE.InstancedMesh(geoPalox(), MAT, 6); this.stock.count = 0; this.stock.castShadow = true; this.stock.receiveShadow = true; this.stock.name = 'palox posés';
+    this.porte = ombrePalox(new THREE.Mesh(geoPalox(), MAT)); this.porte.castShadow = true; this.porte.visible = false; ch.tablier.add(this.porte);
+    this.stock = ombrePalox(new THREE.InstancedMesh(geoPalox(), MAT, 6)); this.stock.count = 0; this.stock.castShadow = true; this.stock.receiveShadow = true; this.stock.name = 'palox posés';
     scene.add(this.stock);
     const { RZ, PZ, BY } = REMORQUE, FZ = CHARIOT.FZ;
     att.r.groupe.updateMatrixWorld(true);
@@ -579,7 +599,6 @@ export class Dechargement {
     for (const s of L.stock) { sx += s.x / L.stock.length; sz += s.z / L.stock.length; }
     const gx = Math.cos(att.h), gz = -Math.sin(att.h), cote = (sx - att.pos.x) * gx + (sz - att.pos.z) * gz >= 0 ? 1 : -1;
     const hf = Math.atan2(-cote * gx, -cote * gz), fx = Math.sin(hf), fz = Math.cos(hf);
-    this.cote = cote;
     // les palox, du plus proche du milieu des places au plus loin ; chacun sa place (deux par deux, en rang)
     const palox = PZ.map((z, k) => { const w = att.versMonde(0, BY, z, { x: 0, y: 0, z: 0 }); return { k, x: w.x, z: w.z, y: w.y }; });
     palox.sort((a, b) => a.z - b.z || a.x - b.x);
@@ -633,8 +652,9 @@ export class Dechargement {
     for (const g of ch.pivots) g.rotation.y = this.braq;
     ch.volant.rotation.y = -this.braq * 4;
     if (ch.gyro.visible) ch.gyro.rotation.y += dt * 8;
+    // le conducteur (assis, enfant du chariot) : animé seulement quand le chariot se voit (voirChariot)
     const p = this.p;
-    if (p) { p.pos.set(this.x, 0, this.z); p.volant = -this.braq * 3; p.sync(dt, t); }
+    if (p && ch.groupe.visible) { p.pos.set(this.x, 0, this.z); p.volant = -this.braq * 3; p.sync(dt, t); }
   }
   maj(dt, t) {
     if (this.fini) return;

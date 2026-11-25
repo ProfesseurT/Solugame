@@ -2271,10 +2271,11 @@ void main() {
     /* -- les bouteilles : nues (verre sombre, bouchon apparent : tirées-bouchées) et habillées (capsule bordeaux, étiquette
        crème devant, côté ouest ; contre-étiquette blanche et son QR code derrière, côté est, vers la porte). Deux maillages
        en instances : les 24 premières avancent sur le convoyeur (ligne.maj) ; les autres attendent sur la table d'entrée
-       ou sont rangées sur la table de sortie. Une bouteille cachée est réduite à rien, à sa place. */
-    const corps = () => [C(0.037, 0.037, 0.21, 7, '#1f3b2a', 0, 0.105, 0), C(0.016, 0.037, 0.06, 7, '#1f3b2a', 0, 0.24, 0), C(0.016, 0.016, 0.06, 7, '#1f3b2a', 0, 0.3, 0)];
-    const nue = fusion([...corps(), C(0.0135, 0.0135, 0.012, 6, '#c9a86a', 0, 0.336, 0)]);
-    const habillee = fusion([...corps(), C(0.0175, 0.0175, 0.066, 7, '#7d2333', 0, 0.312, 0), B(0.006, 0.085, 0.058, '#efe4c8', -0.036, 0.118, 0),
+       ou sont rangées sur la table de sortie. Une bouteille cachée est réduite à rien, à sa place. Pas de couvercle aux
+       bouts cachés (le fond sur la table, contre l'épaule, sous le bouchon ou la capsule). */
+    const corps = col => [C(0.037, 0.037, 0.21, 7, '#1f3b2a', 0, 0.105, 0, 'y', 0, 0), C(0.016, 0.037, 0.06, 7, '#1f3b2a', 0, 0.24, 0, 'y', 0, 0), C(0.016, 0.016, 0.06, 7, '#1f3b2a', 0, 0.3, 0, 'y', 0, col)];
+    const nue = fusion([...corps(1), C(0.0135, 0.0135, 0.012, 6, '#c9a86a', 0, 0.336, 0, 'y', 0, 1)]);
+    const habillee = fusion([...corps(0), C(0.0175, 0.0175, 0.066, 7, '#7d2333', 0, 0.312, 0, 'y', 0, 1), B(0.006, 0.085, 0.058, '#efe4c8', -0.036, 0.118, 0),
       B(0.007, 0.012, 0.05, '#7d2333', -0.0365, 0.137, 0), B(0.006, 0.07, 0.05, '#f7f5ef', 0.036, 0.108, 0), B(0.007, 0.024, 0.024, '#2b2b30', 0.0365, 0.1, 0.009)]);
     const NF = 24, PAS = LC / NF;
     const nues = new THREE.InstancedMesh(nue, MAT, NF + 35), habs = new THREE.InstancedMesh(habillee, MAT, NF + 40), mm = new THREE.Matrix4();
@@ -2291,21 +2292,21 @@ void main() {
         A[o] = A[o + 5] = A[o + 10] = 1 - fait; A[o + 12] = LX; A[o + 13] = YB; A[o + 14] = z;
         H[o] = H[o + 5] = H[o + 10] = fait; H[o + 12] = LX; H[o + 13] = YB; H[o + 14] = z;
       }
-      for (const im of [nues, habs]) { const m = im.instanceMatrix; m.clearUpdateRanges(); m.addUpdateRange(0, NF * 16); m.needsUpdate = true; }
+      envoyer(nues); envoyer(habs);
     };
+    // seules les matrices des bouteilles du convoyeur partent vers la carte graphique
+    const envoyer = im => { const m = im.instanceMatrix; m.clearUpdateRanges(); m.addUpdateRange(0, NF * 16); m.needsUpdate = true; };
     placer(0.1);
     for (const im of [nues, habs]) { im.castShadow = false; im.receiveShadow = true; im.name = 'bouteilles'; im.visible = false; im.computeBoundingSphere(); scene.add(im); }
     let parcouru = 0.1;
     const ligne = {
-      faites: 0, // bouteilles passées dans le monobloc depuis le début
-      // dt ; marche : la ligne tourne ; cx, cz : la caméra (de loin, rien n'est calculé)
+      // dt ; marche : la ligne tourne ; cx, cz : la caméra (de loin, ou bouteilles cachées, rien n'est calculé)
       maj(dt, marche, cx, cz) {
         if (!marche || !nues.visible) return;
         const dx = cx - LX, dz = cz - ZM;
         if (dx * dx + dz * dz > 2500) return;
         parcouru += dt * 0.32; // 32 cm/s : une bouteille toutes les trois quarts de seconde
         placer(parcouru % LC);
-        ligne.faites = Math.floor(parcouru / PAS);
       },
       // dessinés seulement de près (monde.maj)
       voir(cx, cz) { const dx = cx - xm, dz = cz - zm, d2 = dx * dx + dz * dz; inte.visible = d2 < 4900; nues.visible = habs.visible = d2 < 2500; },

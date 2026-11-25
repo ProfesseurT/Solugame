@@ -12,7 +12,7 @@
 // au milieu de l'empattement (comme le tracteur, engins.js).
 import * as THREE from 'three';
 import { B, C, T, MAT, MAT_VITRE, fusion, teinter, deplacer } from './modeles.js';
-import { Atelier, bloc, barre, coque, decor, fond, plaque, pneuAgricole, eclairage, feuxDomaine, gyrophare, VITRE } from './engins.js';
+import { Atelier, bloc, barre, coque, decor, fond, plaque, pneuAgricole, roues, eclairage, feuxDomaine, gyrophare, fixe, VITRE } from './engins.js';
 
 const TAU = Math.PI * 2;
 // voie (demi), rayon des roues, position des essieux, jambes (x), bas du portique, dessus du plancher
@@ -195,31 +195,28 @@ export function enjambeur() {
      qu'elle traite. */
   const pulve = pulverisateurEnjambeur(caisse, corps, { BLANC, NOIR, ACIER, GRIS, CANARD_F, PEINT });
 
-  const c = new THREE.Mesh(fusion([...at.geos(), ...corps]), MAT); c.castShadow = true; c.receiveShadow = true; caisse.add(c);
-  const vitres = new THREE.Mesh(fusion(atV.geos()), MAT_VITRE); vitres.receiveShadow = true; caisse.add(vitres);
+  const c = fixe(new THREE.Mesh(fusion([...at.geos(), ...corps]), MAT)); c.castShadow = true; c.receiveShadow = true; caisse.add(c);
+  const vitres = fixe(new THREE.Mesh(fusion(atV.geos()), MAT_VITRE)); vitres.receiveShadow = true; caisse.add(vitres);
 
   // le volant : incliné vers le conducteur, il tourne autour de sa colonne (tm.volant.rotation.y)
   const volantCentre = new THREE.Vector3(0, 3.34, 1.14), volantInclinaison = -0.55;
-  const support = new THREE.Group(); support.position.copy(volantCentre); support.rotation.x = volantInclinaison; caisse.add(support);
+  const support = new THREE.Group(); support.position.copy(volantCentre); support.rotation.x = volantInclinaison; caisse.add(fixe(support));
   const volant = new THREE.Mesh(fusion([
     teinter(new THREE.TorusGeometry(0.18, 0.021, 4, 14).rotateX(Math.PI / 2), '#1f1f23'),
     B(0.34, 0.024, 0.04, '#2a2a2e'), B(0.04, 0.024, 0.19, '#2a2a2e', 0, 0, -0.085), C(0.045, 0.045, 0.05, 8, CANARD, 0, 0.01, 0),
   ]), MAT);
   support.add(volant);
 
-  /* -- les roues : à l'arrière sur le châssis ; à l'avant, chacune sur un pivot dans sa jambe (la roue déportée vers
-     l'extérieur, le bas de la jambe et le garde-boue tournent avec elle), les deux pivots sur un essieu qui oscille */
-  const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  /* -- les roues (engins.js : roues) : à l'arrière sur le châssis ; à l'avant, chacune sur un pivot dans sa jambe (la roue
+     déportée vers l'extérieur, le bas de la jambe et le garde-boue tournent avec elle), les deux pivots sur un essieu qui
+     oscille */
   const P = [pneuAgricole(R, 0.26, 18, 1, 14), pneuAgricole(R, 0.26, 18, -1, 14)];
-  const rouesAr = [mk(P[0], groupe, VOIE, R, ZR), mk(P[1], groupe, -VOIE, R, ZR)];
-  const essieu = new THREE.Group(); essieu.position.set(0, R, ZV); groupe.add(essieu);
-  const pivots = [1, -1].map(s => { const p = new THREE.Group(); p.position.set(s * XJ, 0, 0); essieu.add(p); return p; });
-  const rouesAv = [mk(P[0], pivots[0], VOIE - XJ, 0, 0), mk(P[1], pivots[1], -(VOIE - XJ), 0, 0)];
+  const { rouesAr, rouesAv, pivots, essieu } = roues(groupe, [P[0], P[1], P[0], P[1]], VOIE, R, ZR, VOIE, R, ZV, XJ);
   [1, -1].forEach((s, i) => {
     const atJ = new Atelier();
     gardeBoue(atJ, s * (VOIE - XJ), 0, 0, 0.17, 0.6, CANARD, PEINT);
     const g = [...atJ.geos(), B(0.1, 0.66, 0.14, FONCE, 0, 0.3, 0), C(0.16, 0.16, 0.16, 10, GRIS, s * 0.06, 0, 0, 'x'), B(0.2, 0.05, 0.06, FONCE, s * 0.12, 0.56, 0)];
-    pivots[i].add(new THREE.Mesh(fusion(g), MAT)); // (sans ombre portée : sous le portique, elle ne se voit pas)
+    pivots[i].add(fixe(new THREE.Mesh(fusion(g), MAT))); // (sans ombre portée : sous le portique, elle ne se voit pas)
   });
 
   // emprise au sol (repère de la caisse) : tout l'enjambeur, bras repliés compris (gestes.js : on le contourne)
@@ -251,12 +248,12 @@ export function enjambeur() {
   };
 }
 
-// Le pulvérisateur de l'enjambeur : ce qui ne bouge pas va dans fixe (fondu avec la caisse) ; le groupe (enfant de la
-// caisse, à son origine : sa matrixWorld place les buses) porte les bras. Rend { groupe, bras, buses, z, demi,
-// remplissage, ouvert }.
-function pulverisateurEnjambeur(caisse, fixe, { BLANC, NOIR, ACIER, GRIS, CANARD_F, PEINT }) {
-  const groupe = new THREE.Group(); caisse.add(groupe);
-  const at = new Atelier(), corps = fixe;
+// Le pulvérisateur de l'enjambeur : ce qui ne bouge pas va dans corps (fondu avec la caisse) ; le groupe (enfant de la
+// caisse, à son origine : sa matrixWorld place les buses) porte les bras. Rend { groupe, bras, buses, z, demi } (mission2.js :
+// z, demi, la rampe et ce qu'elle traite de part et d'autre).
+function pulverisateurEnjambeur(caisse, corps, { BLANC, NOIR, ACIER, GRIS, CANARD_F, PEINT }) {
+  const groupe = fixe(new THREE.Group()); caisse.add(groupe);
+  const at = new Atelier();
   // la cuve de 1 000 L, à l'arrière du plancher : arrondie, ses deux sangles, son couvercle jaune (le point de remplissage),
   // sa jauge, sa vanne
   const zsC = [-2.1, -2.04, -0.98, -0.92];
@@ -298,20 +295,18 @@ function pulverisateurEnjambeur(caisse, fixe, { BLANC, NOIR, ACIER, GRIS, CANARD
     descente(L, s * (DESC[1] - XCH), 0, s, YR);
     descente(L, s * (DESC[2] - XCH), 0, -s, YR);
     const ch = new THREE.Group(); ch.position.set(s * XCH, YR, ZRA); ch.userData.s = s; groupe.add(ch);
-    ch.add(new THREE.Mesh(fusion([...atB.geos(), ...L]), MAT)); // (tubes fins : sans ombre portée)
+    ch.add(fixe(new THREE.Mesh(fusion([...atB.geos(), ...L]), MAT))); // (tubes fins : sans ombre portée)
     return ch;
   });
   // les buses (repère du groupe, bras dépliés) : une par descente, à mi-hauteur des feuilles
   const buses = [];
   for (const s of [1, -1]) for (const d of DESC) buses.push(new THREE.Vector3(s * d, 1.08, ZRA));
-  return { groupe, bras, buses, z: ZRA, demi: 3.0, remplissage: new THREE.Vector3(0, 3.56, -1.5), ouvert: 1 };
+  return { groupe, bras, buses, z: ZRA, demi: 3.0 };
 }
 
 // Les bras s'ouvrent (k 1) ou se replient (k 0) : repliés, ils se rangent le long du portique, vers l'avant ; en route, ils
 // se soulèvent un peu (le vérin). Sans allocation.
 export function deplierEnjambeur(m, k) {
-  const P = m.pulve;
-  P.ouvert = k;
-  const a = (1 - k) * Math.PI / 2 * 0.98, lev = Math.sin(Math.PI * k) * 0.12;
+  const P = m.pulve, a = (1 - k) * Math.PI / 2 * 0.98, lev = Math.sin(Math.PI * k) * 0.12;
   for (const b of P.bras) { const s = b.userData.s; b.rotation.set(0, -s * a, s * lev); }
 }

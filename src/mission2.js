@@ -25,9 +25,17 @@ const RAPPEL = 8;           // secondes au moins entre deux aides dites en route
 const ENVOI = 1.5;          // secondes de réseau retrouvé avant l'envoi de ce qui attend
 // pas de réseau en bas des Grands Champs (le chemin, la parcelle, le hameau)
 export const sansReseau = p => p.x > -72 && p.x < 4 && p.z > 22;
+// l'entrée de chaque parcelle du jour, au bout nord des rangs, sur le chemin ou la tournière ; là où l'on retrouve le
+// réseau (des objets fixes : l'itinéraire jusqu'à eux n'est calculé qu'une fois, la conduite assistée garde son fil)
+const ENTREES = { perrieres: { x: -147, z: -114 }, clos: { x: -36, z: -114 }, grandschamps: { x: -29, z: 26 } };
+const RESEAU = { x: -55, z: 14 };
+const STABLES = new Set(['debut', 'message', 'preparer', 'traiter', 'fin', 'dodo', 'libre']);
+
+const aNoter = p => p.traitee && !p.notee;
 
 export class Traitement {
-  // c : { monde (vignes, traiter), particules, pulve (le pulvérisateur, engins.js) } ; jeu : main.js
+  // c : { monde (vignes, traiter), particules, pulve (le pulvérisateur de l'enjambeur, enjambeur.js), deplier (ses bras),
+  // v (un vecteur de travail), rnd } ; jeu : main.js
   constructor(jeu, c) {
     this.j = jeu; this.c = c; this.etape = 'avant'; this.t = 0; this.horloge = 0;
     const L = jeu.lieux;
@@ -35,6 +43,7 @@ export class Traitement {
       const q = L.parcelles[p.i], v = c.monde.vignes[p.i];
       return { ...p, q, v, ha: (q.x1 - q.x0) * (q.z1 - q.z0) / 1e4, total: v.blocs.reduce((s, b) => s + b.n, 0), faites: 0, traitee: false, notee: false };
     });
+    this.jour = this.parcelles.filter(p => p.jour); // les trois parcelles du jour (lues à chaque image : une fois pour toutes)
     this.registre = TX.avant.map(l => ({ ...l, statut: 'envoye' }));
     this.saisie = null;          // la saisie en cours dans l'appli (telephone.js)
     this.prete = false;          // la bouillie est dans la cuve
@@ -49,19 +58,22 @@ export class Traitement {
     this.tEnvoi = 0; this.tSon = 0; this.guideDit = false; this.dit = false; this.tObj = 0;
   }
   get actif() { return this.etape !== 'avant'; }
-  get jour() { return this.parcelles.filter(p => p.jour); }
+  // (des listes neuves : pour l'objectif, dix fois par seconde, et le téléphone ; à chaque image, voir premiereATraiter,
+  // attend)
   get aTraiter() { return this.jour.filter(p => !p.traitee); }
   get aNoter() { return this.parcelles.filter(p => p.traitee && !p.notee); }
   get enAttente() { return this.registre.filter(l => l.statut === 'attente'); }
-  get fini() { return this.jour.every(p => p.notee) && !this.enAttente.length; }
+  get attend() { for (const l of this.registre) if (l.statut === 'attente') return true; return false; }
+  get premiereATraiter() { for (const p of this.jour) if (!p.traitee) return p; return null; }
+  get fini() { for (const p of this.jour) if (!p.notee) return false; return !this.attend; }
   noms(l) { const n = l.map(p => p.nom); return n.length > 1 ? n.slice(0, -1).join(', ') + ' et ' + n[n.length - 1] : n[0]; }
-  // le tracteur conduit (le pulvérisateur est dessus)
+  // l'enjambeur conduit (le pulvérisateur est dessus)
   get enEnjambeur() { return this.j.auVolant && this.j.veh.genre === 'enjambeur'; }
-  // la parcelle du jour où se trouve le tracteur (élargie de m mètres), ou null
+  // la parcelle du jour où se trouve le véhicule conduit (élargie de m mètres), ou null
   dans(m = 0) {
     if (!this.j.auVolant) return null;
-    const o = this.j.tr.pos;
-    for (const p of this.jour) { const q = p.q; if (o.x > q.x0 - m && o.x < q.x1 + m && o.z > q.z0 - m - 1 && o.z < q.z1 + m + 1) return p; }
+    const o = this.j.tr.pos, J = this.jour;
+    for (let i = 0; i < J.length; i++) { const q = J[i].q; if (o.x > q.x0 - m && o.x < q.x1 + m && o.z > q.z0 - m - 1 && o.z < q.z1 + m + 1) return J[i]; }
     return null;
   }
   get reseau() { return !sansReseau(this.j.auVolant ? this.j.tr.pos : this.j.joueur.pos); }
@@ -74,8 +86,8 @@ export class Traitement {
   }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
   // La sauvegarde (sauvegarde.js, main.js) : où en est la journée (message lu, bouillie prête, chaque parcelle et ses
-  // travées traitées, le registre), prise hors des gestes, et sa reprise (le pulvérisateur est déjà attelé : main.js)
-  get stable() { return ['debut', 'message', 'preparer', 'traiter', 'fin', 'dodo', 'libre'].includes(this.etape) && !this.j.gestes.actif; }
+  // travées traitées, le registre), prise hors des gestes, et sa reprise (l'enjambeur à sa place, ses bras repliés : main.js)
+  get stable() { return STABLES.has(this.etape) && !this.j.gestes.actif; }
   instantane() {
     return {
       etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'dodo' : this.etape, lu: this.lu, prete: this.prete,
@@ -109,15 +121,15 @@ export class Traitement {
     if (e === 'dodo') return this.j.finVue ? null : L.maison;
     if (e === 'preparer') return L.aire;
     if (e !== 'traiter') return null;
-    if (this.aNoter.length && !this.j.auVolant) return null; // à pied : on note, rien à rejoindre
+    if (!this.j.auVolant && this.parcelles.some(aNoter)) return null; // à pied : on note, rien à rejoindre
     const p = this.prochaine;
     if (p) {
-      if (this.dans(8) !== p) return this.entree(p);
+      if (this.dans(8) !== p) return ENTREES[p.id];
       // dans la parcelle : le bout des passages qui restent
       const it = this.serpentine(p), f = it.pts[it.pts.length - 1];
       return it.fin || (it.fin = { x: f[0], z: f[1] });
     }
-    if (this.enAttente.length && !this.reseau) return { x: -55, z: 14 };
+    if (this.attend && !this.reseau) return RESEAU;
     return null;
   }
   get nomCible() {
@@ -128,9 +140,7 @@ export class Traitement {
     return p ? p.nom : 'Réseau';
   }
   // la prochaine parcelle à traiter : celle où l'on est, sinon les deux près du domaine, puis les Grands Champs
-  get prochaine() { const d = this.dans(8); return d && !d.traitee ? d : this.aTraiter[0] || null; }
-  // l'entrée d'une parcelle : au bout nord des rangs, sur le chemin ou la tournière
-  entree(p) { return p.id === 'grandschamps' ? { x: -29, z: 26 } : { x: p.id === 'perrieres' ? -147 : -36, z: -114 }; }
+  get prochaine() { const d = this.dans(8); return d && !d.traitee ? d : this.premiereATraiter; }
   // les passages qui restent dans la parcelle p (gardés tant qu'on y est)
   serpentine(p) {
     const o = this.j.auVolant ? this.j.tr.pos : this.j.joueur.pos;
@@ -207,7 +217,7 @@ export class Traitement {
       return O.traiter(this.noms(liste), pc);
     }
     if (aN.length) return (this.reseau ? O.noter : O.noterIci)(this.noms(aN));
-    if (this.enAttente.length) return O.envoyer;
+    if (this.attend) return O.envoyer;
     return O.fin;
   }
 
@@ -252,7 +262,7 @@ export class Traitement {
     }
   }
 
-  // À l'aire : on descend, on remplit la cuve (eau, bouillie bordelaise, soufre mouillable), on remonte
+  // À l'aire : on descend, on remplit la cuve (l'eau et la bouillie bordelaise), on remonte
   remplir() {
     const j = this.j, L = j.lieux;
     this.aller('remplir');
@@ -278,7 +288,7 @@ export class Traitement {
       else if (this.aTraiter.some(x => x.reseau)) hud.dire(TX.dialogues.parcelleFinie(p.nom));
       else hud.dire(TX.dialogues.noter);
     }
-    // arrivé dans une parcelle du jour avec la bouillie : le guidage ; avec un autre véhicule : il faut le tracteur
+    // arrivé dans une parcelle du jour avec la bouillie : le guidage ; avec un autre véhicule : il faut l'enjambeur
     if (this.guidage && !this.guideDit) { this.guideDit = true; hud.dire(TX.dialogues.guidage(j.tactile)); }
     if (j.auVolant && j.veh.genre !== 'enjambeur' && this.dans(2)) this.aider(TX.dialogues.pasEnjambeur, 'parcelle');
     // au bout des passages sans avoir tout traité (on en a sauté, à la main), ou loin d'eux : on refait le plan depuis ici
@@ -288,7 +298,7 @@ export class Traitement {
       if ((Math.hypot(o.x - f[0], o.z - f[1]) < 5 && Math.abs(j.tr.v) < 0.5) || ecart(this.itin.pts, o) > 7) this.itin = null;
     }
     // le réseau revient : ce qui attend part
-    if (this.enAttente.length && this.reseau) {
+    if (this.attend && this.reseau) {
       if ((this.tEnvoi += dt) > ENVOI) {
         this.tEnvoi = 0;
         for (const l of this.enAttente) l.statut = 'envoye';
@@ -305,10 +315,11 @@ export class Traitement {
     }
   }
 
-  // Les rampes : dépliées dans une parcelle du jour (la bouillie prête, le tracteur au volant), repliées ailleurs ; elles
-  // traitent les rangs qu'elles survolent en roulant. pas : appelé à chaque pas de la conduite (main.js), même accélérée.
+  // Les bras du pulvérisateur : dépliés dans une parcelle du jour (la bouillie prête, l'enjambeur au volant), repliés
+  // ailleurs. pas : ses descentes traitent les rangs qu'elles longent en roulant ; appelé à chaque pas de la conduite
+  // (main.js), même accélérée.
   rampes(dt) {
-    const j = this.j, P = this.c.pulve, p = this.prete && this.enEnjambeur ? this.dans(8) : null;
+    const P = this.c.pulve, p = this.prete && this.enEnjambeur ? this.dans(8) : null;
     this.guidage = !!p && !p.traitee;
     // engagé dans un rang, il le reste jusqu'au bout de la parcelle (ou si l'on en sort, ou qu'on descend)
     if (!this.guidage) this.engage = false;
@@ -328,18 +339,18 @@ export class Traitement {
       if (dx < ENGAGE_X && aligne && dedans && Math.abs(tr.v) > 0.3) { this.engage = true; j.hud.dire(TX.dialogues.engage(j.tactile)); }
     }
     if (Math.abs(tr.v) < 0.4) return;
-    const q = p.q, z = P.z ?? -3.05;
+    const q = p.q, z = P.z;
     const bx = tr.pos.x + Math.sin(tr.h) * z, bz = tr.pos.z + Math.cos(tr.h) * z;
     if (bx < q.x0 - 1 || bx > q.x1 + 1 || bz < q.zr0 - 0.6 || bz > q.zr1 + 0.6) return;
     this.pulverise = true;
-    p.faites += this.c.monde.traiter(p.v, bx, bz, P.demi ?? 3.3);
-    // la bouillie : un brouillard fin qui sort des buses vers les feuilles, et son souffle
-    const E = this.c.particules.emettre, M = this.c.pulve.groupe.matrixWorld, V = this.c.v, rnd = this.c.rnd;
-    for (const b of this.c.pulve.buses) {
+    p.faites += this.c.monde.traiter(p.v, bx, bz, P.demi);
+    // la bouillie : un brouillard fin qui sort des buses (de part et d'autre de chaque descente) vers les feuilles, et son
+    // souffle
+    const E = this.c.particules.emettre, M = P.groupe.matrixWorld, V = this.c.v, rnd = this.c.rnd, lx = Math.cos(tr.h), lz = -Math.sin(tr.h);
+    for (const b of P.buses) {
       if (rnd() > dt * 16) continue;
       V.copy(b).applyMatrix4(M);
-      const s = b.x > 0.1 ? 1 : b.x < -0.1 ? -1 : 0, lx = Math.cos(tr.h), lz = -Math.sin(tr.h), k = s === 0 ? (rnd() - 0.5) * 2 : s;
-      for (const d of s === 0 ? [k] : [1, -1]) {
+      for (let d = -1; d <= 1; d += 2) {
         const sp = 0.9 + rnd() * 0.9;
         E(V.x, V.y + (rnd() - 0.5) * 0.4, V.z, lx * d * sp, 0.15 + rnd() * 0.3, lz * d * sp, 0.85, rnd() < 0.5 ? 0xe4f2f0 : 0xc9e2e2, 0.55, -0.2);
       }

@@ -517,10 +517,12 @@ export function B(w, h, d, c, x = 0, y = 0, z = 0, ry = 0) {
   return geo(p, n, c);
 }
 // Cylindre (axe y par défaut, 'x' ou 'z' pour le coucher). Même ordre de sommets que CylinderGeometry :
-// le flanc, puis le couvercle du haut et celui du bas (absents si leur rayon est nul).
-export function C(rh, rb, h, seg, c, x = 0, y = 0, z = 0, axe = 'y', ry = 0) {
+// le flanc, puis le couvercle du haut et celui du bas (absents si leur rayon est nul). bouts : les couvercles gardés
+// (1 le haut, 2 le bas, 3 les deux ; 0 aucun : un tube dont les bouts sont cachés, contre une autre pièce).
+export function C(rh, rb, h, seg, c, x = 0, y = 0, z = 0, axe = 'y', ry = 0, bouts = 3) {
   const G = gabarit('c' + seg, () => new THREE.CylinderGeometry(1, 1, 1, seg));
-  const nCote = seg * 6, nCap = seg * 3, nv = nCote + (rh > 0 ? nCap : 0) + (rb > 0 ? nCap : 0);
+  const haut = rh > 0 && (bouts & 1), bas = rb > 0 && (bouts & 2);
+  const nCote = seg * 6, nCap = seg * 3, nv = nCote + (haut ? nCap : 0) + (bas ? nCap : 0);
   const p = new Float32Array(nv * 3), n = new Float32Array(nv * 3), pente = (rb - rh) / h, co = Math.cos(ry), si = Math.sin(ry);
   let o = 0;
   const copier = (debut, fin, flanc) => {
@@ -536,8 +538,8 @@ export function C(rh, rb, h, seg, c, x = 0, y = 0, z = 0, axe = 'y', ry = 0) {
     }
   };
   copier(0, nCote, true);
-  if (rh > 0) copier(nCote, nCote + nCap, false);
-  if (rb > 0) copier(nCote + nCap, nCote + 2 * nCap, false);
+  if (haut) copier(nCote, nCote + nCap, false);
+  if (bas) copier(nCote + nCap, nCote + 2 * nCap, false);
   return geo(p, n, c);
 }
 // Boule à facettes, déformable
