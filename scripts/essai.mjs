@@ -50,7 +50,7 @@ const HORS_JEU = /Failed to load resource: net::ERR_|AudioContext encountered an
 page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !HORS_JEU.test(m.text())) erreurs.push(m.type() + ': ' + m.text()); });
 const LENT = Number(process.env.LENT || 1);
 if (LENT > 1) await page.emulateCPUThrottling(LENT);
-await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load' });
+await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction(() => window.CL, { timeout: 60000 }); // (sous la charge des bancs en parallèle, le démarrage peut dépasser 20 s)
 const ev = (f, ...a) => page.evaluate(f, ...a);
 const capture = async nom => { await new Promise(r => setTimeout(r, 250)); await page.screenshot({ path: join(sortie, nom + '.jpg'), type: 'jpeg', quality: 85 }); console.log('capture', join('essais', dossier, nom + '.jpg')); };
@@ -550,7 +550,7 @@ if (scenario === 'sauvegarde') {
     return log;
   });
   for (const [msg, c] of r1) ok(c, msg);
-  await page.reload({ waitUntil: 'load' }); await attendre();
+  await page.reload({ waitUntil: 'load', timeout: 120000 }); await attendre();
   const r2 = await ev(() => {
     const q = s => document.querySelector(s), m = CL.mission, J = CL.jeu, log = [];
     log.push(['à l\'accueil : « Continuer » la tournée en cours ; la mission 2 toujours fermée', q('#jouer-t').textContent === 'Continuer' && q('#jouer-s').textContent.includes('tournée') && q('.mi[data-m="traitement"]').disabled]);
@@ -592,7 +592,7 @@ if (scenario === 'sauvegarde') {
     return [log, b, p.faites];
   });
   for (const [msg, c] of r3[0]) ok(c, msg);
-  await page.reload({ waitUntil: 'load' }); await attendre();
+  await page.reload({ waitUntil: 'load', timeout: 120000 }); await attendre();
   const r4 = await ev(([b, f]) => {
     const q = s => document.querySelector(s), log = [];
     q('#jouer').click(); CL.step(60);
@@ -619,7 +619,7 @@ if (scenario === 'sauvegarde') {
     return log;
   });
   for (const [msg, c] of r5) ok(c, msg);
-  await page.reload({ waitUntil: 'load' }); await attendre();
+  await page.reload({ waitUntil: 'load', timeout: 120000 }); await attendre();
   const r6 = await ev(() => {
     const q = s => document.querySelector(s), H = CL.habillage, J = CL.jeu, L = J.lieux, log = [];
     log.push(['à l\'accueil : « Continuer » l\'habillage ; la tournée gagnée (médaille), la mission 2 ouverte, la 3 fermée (la 2 pas encore gagnée)', q('#jouer-t').textContent === 'Continuer' && q('#jouer-s').textContent.includes('habillage')
