@@ -167,7 +167,7 @@ export class Anim {
     else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
-    if (p.echelle) this.poseEchelle(p.echelle);
+    if (p.appuis) this.poseAppuis(p.appuis);
 
     /* ------------------------------------------------ la pile de cartons, tenue des deux mains par le carton du bas */
     if (this.wPorte > 0.01) {
@@ -426,32 +426,40 @@ export class Anim {
     }
   }
 
-  /* ---------------------------------------------------------------- à l'échelle (l'enjambeur : gestes.js) : face à elle, les
-     pieds sur les barreaux, les mains plus haut sur les montants ; un pied et la main de l'autre côté montent ensemble,
-     d'un barreau sur deux, pendant que le corps s'élève. E = { h : hauteur gravie depuis le pied de l'échelle (m), pas :
-     entre deux barreaux }. Le reste de la pose : debout (poseTransition). */
-  poseEchelle(E) {
-    const o = this.o, s = this.m.echelle, pas = E.pas, xh = this.m.dim.xh;
-    // le buste droit contre l'échelle, la tête levée vers où l'on va
-    o[OS.ventre].rotation.x += 0.07; o[OS.poitrine].rotation.x += 0.05; o[OS.tete].rotation.x -= 0.28;
-    this.reperes();
-    const ZP = 0.2 / s, ZM = 0.24 / s;
-    for (let j = 0; j < 2; j++) {
-      const sg = JAMBES[j][1];
-      // le pied : posé sur son barreau, il redescend (le corps monte) de 2 pas à un demi-pas au-dessus du repère, puis
-      // remonte au barreau d'après, 2 pas plus haut, en s'écartant un peu de l'échelle
-      const c = E.h / pas + j, ph = c / 2 - Math.floor(c / 2);
-      let y, z = ZP;
-      if (ph < 0.75) y = 2 * pas * (1 - ph);
-      else { const w = (ph - 0.75) / 0.25; y = mix(0.5 * pas, 2 * pas, lisse(w)) + Math.sin(PI * w) * 0.05; z = ZP - Math.sin(PI * w) * 0.07 / s; }
-      this.jambe(JAMBES[j][0], sg, sg * (xh + 0.04), y / s + DIM.cheville, z, 0.12, 0, 0.5);
-      // la main du même côté monte avec l'autre pied : en phase avec lui
-      const ch = E.h / pas + (1 - j), pm = ch / 2 - Math.floor(ch / 2);
-      let ym, zm = ZM;
-      if (pm < 0.75) ym = 1.25 + 2 * pas * (1 - pm);
-      else { const w = (pm - 0.75) / 0.25; ym = mix(1.25 + 0.5 * pas, 1.25 + 2 * pas, lisse(w)) + Math.sin(PI * w) * 0.04; zm = ZM - Math.sin(PI * w) * 0.06 / s; }
-      this.brasIK(j === 0 ? 0 : 3, sg * 0.19 / s, ym / s, zm, sg * 0.8, -0.4, -0.5, 1);
+  /* ---------------------------------------------------------------- monter dans un véhicule, en descendre, temps par temps
+     (gestes.js : appuis) : les pieds posés sur le sol, les marches, les barreaux, le plancher, les mains sur les poignées ;
+     le bassin jamais plus haut que ce que les pieds posés permettent : le corps ne monte que quand la jambe d'en haut
+     pousse et que celle d'en bas quitte sa marche (Teddy, 25/11/2026 : « on dirait qu'il fait du toboggan »).
+     A (repère du personnage, Float64Array) : [0] poids des jambes posées, [1] buste penché, [2] poids du bassin retenu,
+     puis chaque pied (x, y de la semelle, z, tangage, lacet ; gauche à 3, droit à 8) et chaque main (x, y, z du poignet,
+     poids ; gauche à 13, droite à 17). */
+  poseAppuis(A) {
+    const o = this.o, dm = this.m.dim, wj = A[0], pen = A[1];
+    if (pen) { o[OS.ventre].rotation.x += pen * 0.55; o[OS.poitrine].rotation.x += pen * 0.45; o[OS.tete].rotation.x -= pen * 0.55; }
+    if (wj > 0.001 && A[2] > 0.001) {
+      const bp = o[OS.bassin].position, Lm = (L1 + L2) * 0.975;
+      let yb = bp.y;
+      for (let j = 0; j < 2; j++) {
+        // la hanche au plus haut pour que la jambe atteigne sa cheville (raccordé sans cassure sur 3 cm)
+        const k = 3 + 5 * j, dx = A[k] - bp.x - JAMBES[j][1] * dm.xh, dz = A[k + 2] - bp.z;
+        const haut = A[k + 1] + CH + Math.sqrt(Math.max(0.0025, Lm * Lm - dx * dx - dz * dz)) - DIM.yHanche;
+        const h = Math.max(0.03 - Math.abs(yb - haut), 0) / 0.03;
+        yb = Math.min(yb, haut) - h * h * 0.0075;
+      }
+      bp.y += (yb - bp.y) * wj * A[2];
     }
+    this.reperes();
+    if (wj > 0.001) for (let j = 0; j < 2; j++) { const k = 3 + 5 * j; this.jambeW(JAMBES[j][0], JAMBES[j][1], A[k], A[k + 1] + CH, A[k + 2], A[k + 3], A[k + 4], wj); }
+    if (A[16] > 0.01) this.brasIK(0, A[13], A[14], A[15], 0.8, -0.45, -0.5, A[16]);
+    if (A[20] > 0.01) this.brasIK(3, A[17], A[18], A[19], -0.8, -0.45, -0.5, A[20]);
+  }
+  // une jambe (jambe) mélangée à la pose déjà posée, de w
+  jambeW(i, sg, x, y, z, tangage, lacet, w) {
+    const o = this.o;
+    if (w >= 0.999) { this.jambe(i, sg, x, y, z, tangage, lacet); return; }
+    for (let k = 0; k < 3; k++) FK[k].copy(o[i + k].quaternion);
+    this.jambe(i, sg, x, y, z, tangage, lacet);
+    for (let k = 0; k < 3; k++) { q1.copy(o[i + k].quaternion); o[i + k].quaternion.copy(FK[k]).slerp(q1, w); }
   }
 
   /* ---------------------------------------------------------------- monter dans un véhicule, en descendre ; s'asseoir sur une

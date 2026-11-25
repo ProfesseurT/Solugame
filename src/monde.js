@@ -1251,7 +1251,7 @@ void main() {
     maison({ x: -74, z: 146, w: 8, d: 7, h: 5.6, rot: Math.PI / 2, volets: '#8e6f5a' });
     // quelques arbres, un banc, un puits
     for (const [x, z, r] of [[-62.5, 119.5, 2.1], [-47.5, 120.5, 1.8], [-30, 136, 2.4], [-79, 136, 2.2], [-45, 152, 2.0]]) {
-      bati.push(C(0.2, 0.28, 2.6, 6, '#5e4a36', x, 1.3, z), S(r, pick(['#c9a23a', '#b8642c', '#7f9046']), x, 3.4 + r * 0.6, z, 1, 0.9, 1, 1));
+      bati.push(C(0.2, 0.28, 3.5, 6, '#5e4a36', x, 1.75, z), S(r, pick(['#c9a23a', '#b8642c', '#7f9046']), x, 3.4 + r * 0.6, z, 1, 0.9, 1, 1)); // (le tronc entre dans le feuillage)
       col.boiteC(x, z, 0.6, 0.6);
     }
     bati.push(B(1.6, 0.08, 0.4, '#6b4a30', -63.5, 0.45, 137, Math.PI / 2), B(0.1, 0.45, 0.4, '#3a3a3e', -63.5, 0.22, 136.4), B(0.1, 0.45, 0.4, '#3a3a3e', -63.5, 0.22, 137.6));
@@ -2017,7 +2017,10 @@ void main() {
     };
     for (const [x, z, t, y = 0] of arbres) {
       const k = 0.85 + rnd() * 0.35;
-      const [th, fy, fx, fyS] = t === 'peuplier' ? [5.5, 8.2, 1.3, 4.2] : t === 'platane' ? [3.6, 5.6, 2.7, 2.1] : t === 'cedre' ? [3, 6, 4.2, 2.6] : [2.8, 4.6, 2.6, 2.2];
+      // tronc (th), centre, largeur et demi-hauteur du feuillage : le tronc monte jusqu'au milieu du bas du feuillage (Teddy,
+      // 25/11/2026 : « il y a un espace entre le tronc et les feuilles » ; le bas d'un feuillage peu facetté est plus haut
+      // que son rayon, et le vent le balance)
+      const [th, fy, fx, fyS] = t === 'peuplier' ? [5.5, 8.2, 1.3, 4.2] : t === 'platane' ? [4.5, 5.6, 2.7, 2.1] : t === 'cedre' ? [4.6, 6, 4.2, 2.6] : [3.4, 4.6, 2.6, 2.2];
       q.setFromAxisAngle(axe, rnd() * 6.28);
       const tr = copie(modele.tronc, t === 'platane' ? '#a99a7c' : '#6a5441');
       tr.applyMatrix4(m.compose(p.set(x, y, z), q, e.set(k * (t === 'cedre' ? 1.8 : 1), th * k, k * (t === 'cedre' ? 1.8 : 1))));

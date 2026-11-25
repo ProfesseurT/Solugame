@@ -1,5 +1,5 @@
 // La caméra : elle suit le personnage ou le véhicule, cadre une scène (gestes.js), se pose dans une pièce (le bureau et
-// la halle du chai), tourne autour du personnage sur l'accueil.
+// la halle du chai), enchaîne les plans de l'accueil.
 import * as THREE from 'three';
 import { angle, borne, amortir as lisser } from './outils.js';
 import { sol } from './relief.js';
@@ -138,15 +138,16 @@ export class Camera {
     this.fovPose = this.c.fov; this.fovPlus = 0;
     this.pret = true;
   }
-  // vue de l'accueil : tour lent autour d'un point
-  // large : le personnage se place à droite du titre ; étroit : en haut de l'écran
-  orbite(t, cx, cz, large) {
-    const a = 0.55 + Math.sin(t * 0.09) * 0.4, r = large ? 8.5 : 7;
-    const px = cx + Math.sin(a) * r, pz = cz + Math.cos(a) * r;
-    this.c.position.set(px, large ? 2.6 : 3.4, pz);
-    const dx = (cx - px) / r, dz = (cz - pz) / r;
-    if (large) this.c.lookAt(cx + dz * 2.6, 1.5, cz - dx * 2.6);
-    else this.c.lookAt(cx - dx * 2.5, 0, cz - dz * 2.5); // vise devant le personnage : il monte dans le cadre
+  // Un plan de l'accueil (main.js : PLANS), à la fraction u de sa durée : la caméra glisse de P.de à P.a en regardant de
+  // P.vise à P.viseA. Large : le sujet passe à droite du titre ; étroit : en haut de l'écran, au-dessus des boutons.
+  plan(P, u, large) {
+    const c = this.c, d = P.de, a = P.a, v = P.vise, w = P.viseA || v;
+    c.position.set(d[0] + (a[0] - d[0]) * u, d[1] + (a[1] - d[1]) * u, d[2] + (a[2] - d[2]) * u);
+    const tx = v[0] + (w[0] - v[0]) * u, ty = v[1] + (w[1] - v[1]) * u, tz = v[2] + (w[2] - v[2]) * u;
+    const dx = tx - c.position.x, dz = tz - c.position.z, l = Math.hypot(dx, dz) || 1, k = l * (P.decale ?? 0.3);
+    // vise à gauche du sujet (il passe à droite), ou plus bas (il monte dans le cadre)
+    if (large) this.regard.set(tx + dz / l * k, ty, tz - dx / l * k); else this.regard.set(tx, ty - l * (P.decaleV ?? P.decale * 0.75), tz);
+    c.lookAt(this.regard);
     this.pret = false;
   }
 }

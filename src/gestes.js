@@ -5,7 +5,7 @@
 // Repère d'un véhicule : avant vers +z, +x à gauche, le côté du conducteur.
 import * as THREE from 'three';
 import { son } from './audio.js';
-import { versAngle, angle, lisse, mix } from './outils.js';
+import { versAngle, angle, lisse, mix, borne } from './outils.js';
 import { MAT } from './modeles.js';
 import { geoCarton, geoCheque, geoBouteille, PAS_CARTON } from './engins.js';
 
@@ -19,14 +19,107 @@ const vR = new THREE.Vector3();
 // le point p ramené à portée de bras (même hauteur)
 function aPortee(p, out) { out.copy(p); const l = Math.hypot(p.x, p.z); if (l > BRAS) { out.x *= BRAS / l; out.z *= BRAS / l; } return out; }
 
-// Montée de chaque véhicule, dans le repère de sa caisse : chemin des pieds (x, y, z) depuis le sol jusqu'au poste de
-// conduite, durée, et le moment où l'on commence à s'asseoir (fraction du chemin).
+/* ---------------------------------------------------------------- monter, descendre : temps par temps
+   Une montée (Teddy, 25/11/2026 : « on dirait qu'il fait du toboggan, il faut un truc plus naturel ») : l'état de départ,
+   au sol, puis, temps par temps, où vont le corps (son origine, aux pieds), son cap, chaque pied (la semelle), chaque
+   main (le poignet, ou null : libre), combien il est assis (0 debout, 1 au volant), combien les jambes restent posées
+   (1 : sur leurs appuis ; 0 : la pose au volant), le buste penché. Repère de la caisse (avant vers +z, +x à gauche, le
+   côté du conducteur). Un pied bouge à la fois (un pas : le pied de tête, puis l'autre ; un échelon : une main, puis le
+   pied de l'autre côté) ; les pieds posés ne glissent pas, le bassin ne monte que si les jambes le portent (anim.js :
+   poseAppuis). Descendre, c'est la montée à rebours, un peu plus vite. */
+const PI2 = Math.PI / 2;
+// les deux pieds d'un corps debout en (x, y, z), tourné de cap, écartés de e de part et d'autre : [gauche, droit]
+function pieds(x, y, z, cap, e = 0.095) { const lx = Math.cos(cap) * e, lz = -Math.sin(cap) * e; return [[x + lx, y, z + lz], [x - lx, y, z - lz]]; }
+// Construit une montée : depart = { corps, cap } au sol ; chaque temps { d, t ('pas', 'echelon', 'assis'), corps, cap,
+// pieds: [g, d] (undefined : il reste), mains: [g, d] (undefined : elle reste ; null : lâchée), assis, jambes, penche,
+// premier (le pied de tête : 0 gauche, 1 droit) }. Rend les états (S[0] au départ, S[i] à la fin du temps i) et les temps.
+function construire(depart, temps, opts) {
+  const c = depart.corps, S0 = { corps: c, cap: depart.cap, pieds: pieds(c[0], c[1], c[2], depart.cap), lacets: [depart.cap, depart.cap], mains: [null, null], assis: 0, jambes: 1, penche: 0 };
+  const S = [S0];
+  for (const T of temps) {
+    const P = S[S.length - 1], cap = T.cap ?? P.cap;
+    const E = { corps: T.corps ?? P.corps, cap, pieds: P.pieds.slice(), lacets: P.lacets.slice(), mains: P.mains.slice(), assis: T.assis ?? P.assis, jambes: T.jambes ?? P.jambes, penche: T.penche ?? P.penche };
+    for (let j = 0; j < 2; j++) {
+      if (T.pieds && T.pieds[j]) { E.pieds[j] = T.pieds[j]; E.lacets[j] = cap; }
+      if (T.mains && T.mains[j] !== undefined) E.mains[j] = T.mains[j];
+    }
+    S.push(E);
+  }
+  return { S, temps, depart, ...opts };
+}
+// Les montées, d'après le véhicule (construites une fois, gardées sur son modèle)
 const MONTEES = {
-  // marchepied devant la roue arrière gauche, plancher, siège
-  tracteur: { chemin: [[1.32, 0, 0.2], [0.86, 0.7, 0.14], [0.5, 1.24, 0.02], [0.28, 1.24, -0.34], [0, 1.24, -0.62]], duree: 1.35, assis: 0.55, baisse: 0.15 },
-  // juste derrière la portière (hors de son passage), dans l'ouverture, le seuil, le siège
-  van: { chemin: [[1.25, 0, -0.45], [1.2, 0, 0.05], [0.95, 0.06, 0.12], [0.55, 0.45, 0.0], [0.38, 0.45, -0.05]], duree: 1.25, assis: 0.35, baisse: 0.6 },
+  // le tracteur : deux marchepieds devant la roue arrière gauche (engins.js), le plancher du poste ; la main droite sur la
+  // poignée, la gauche sur le montant des marches, puis sur la planche de bord, puis sur le volant ; face au poste, on se
+  // tourne vers l'avant et l'on s'assoit
+  tracteur: () => {
+    const M1 = 0.44, M2 = 0.84, F = 1.24;
+    return construire({ corps: [1.22, 0, 0.12], cap: -PI2 }, [
+      { d: 0.5, t: 'pas', pieds: [[0.8, M1, 0.21], [0.8, M1, 0.03]], corps: [0.9, M1, 0.12], mains: [[0.9, 1.17, 0.25], [0.77, 1.42, -0.19]], penche: 0.28 },
+      { d: 0.46, t: 'pas', premier: 1, pieds: [[0.79, M2, 0.21], [0.79, M2, 0.03]], corps: [0.88, M2, 0.12], mains: [[0.33, 1.72, 0.13], [0.76, 1.64, -0.31]], penche: 0.22 },
+      { d: 0.44, t: 'pas', pieds: [[0.5, F, 0.2], [0.5, F, 0.02]], corps: [0.57, F, 0.11], mains: [[0.2, 1.86, -0.16], undefined], penche: 0.1 },
+      { d: 0.42, t: 'pas', premier: 1, cap: 0, corps: [0.08, F, -0.34], pieds: [[0.18, F, -0.3], [-0.02, F, -0.32]], mains: [undefined, null], penche: 0.04 },
+      { d: 0.5, t: 'assis', corps: [0, F, -0.62], assis: 1, jambes: 0, mains: [null, null], penche: 0 },
+    ], { son: 'marche', baisse: 0.12 });
+  },
+  // le van : la portière ouverte, on entre dans l'ouverture, le pied gauche sur le plancher de la cabine, la main gauche
+  // au montant, la droite au dossier ; on se hisse et l'on s'assoit en se tournant vers l'avant
+  van: () => {
+    const F = 0.45;
+    return construire({ corps: [1.25, 0, -0.45], cap: -PI2 }, [
+      { d: 0.45, t: 'pas', corps: [1.24, 0, 0.02], cap: -1.35, pieds: pieds(1.24, 0, 0.02, -1.35) },
+      { d: 0.48, t: 'pas', pieds: [[0.76, F, 0.14], undefined], corps: [0.98, 0.2, 0.03], cap: -1.15, mains: [[0.92, 1.42, 0.42], [0.78, 1.02, -0.36]], penche: 0.25 },
+      { d: 0.62, t: 'assis', corps: [0.38, F, -0.05], cap: 0, pieds: [undefined, [0.3, F, 0.25]], assis: 1, jambes: 0, mains: [null, null], penche: 0.05 },
+    ], { baisse: 0.6 });
+  },
+  // une voiture (engins.js : voitureConduite ; montee : W, la demi-largeur, z, l'arrière de la portière) : on longe la
+  // voiture jusqu'à l'ouverture, on se tourne dos au siège, on s'assoit au bord en baissant la tête, les pieds dehors,
+  // puis on pivote en rentrant les jambes
+  voiture: m => {
+    const { W, z } = m.montee, s = m.siege;
+    return construire({ corps: [W + 0.42, 0, z - 0.42], cap: 0 }, [
+      { d: 0.5, t: 'pas', premier: 1, corps: [W + 0.3, 0, s.z], cap: PI2, pieds: pieds(W + 0.3, 0, s.z, PI2, 0.11) },
+      { d: 0.55, t: 'assis', corps: [W - 0.12, 0, s.z], assis: 0.72, penche: 0.18 },
+      { d: 0.6, t: 'assis', corps: [s.x, 0, s.z], cap: 0, pieds: [[s.x + 0.1, 0.36, s.z + 0.45], [s.x - 0.1, 0.36, s.z + 0.45]], assis: 1, jambes: 0, penche: 0 },
+    ], { baisse: 0.75 });
+  },
+  // l'enjambeur (enjambeur.js : montee, son échelle et son palier) : face à l'échelle, les mains sur les montants, on
+  // grimpe une main puis le pied de l'autre côté, barreau par barreau ; on passe sur le palier, on va à la porte, la main
+  // sur la poignée, on entre en se baissant (la tête sous le toit) et l'on s'assoit
+  enjambeur: m => {
+    const E = m.montee, { x, z0, z1, pas, n } = E.echelle, YD = E.palier, zm = (z0 + z1) / 2, xp = x + 0.11, xc = x + 0.3, xm = x + 0.06;
+    const T = [{ d: 0.45, t: 'pas', corps: [xc + 0.04, 0, zm], pieds: pieds(xc + 0.04, 0, zm, -PI2, 0.09), mains: [[xm, 1.25, z1 - 0.02], [xm, 1.25, z0 + 0.02]], penche: 0.12 }];
+    const y = [0, 0];
+    for (let k = 1; k <= n; k++) {
+      const f = k % 2 ? 0 : 1, c = 1 - f; // le pied gauche aux barreaux impairs ; la main de l'autre côté monte d'abord
+      y[f] = pas * k + 0.017;
+      const pp = [undefined, undefined], mm = [undefined, undefined];
+      pp[f] = [xp, y[f], f ? zm - 0.09 : zm + 0.09];
+      mm[c] = [xm, Math.min(YD + 0.88, 1.4 + pas * k), c ? z0 + 0.02 : z1 - 0.02];
+      T.push({ d: 0.34, t: 'echelon', pieds: pp, mains: mm, corps: [xc, (y[0] + y[1]) / 2, zm], penche: 0.08 });
+    }
+    // sur le palier : le pied resté en bas d'abord (la main de l'autre côté en haut du montant), puis l'autre
+    const f = n % 2 ? 1 : 0, mh = [undefined, undefined];
+    mh[1 - f] = [xm, YD + 0.88, 1 - f ? z0 + 0.02 : z1 - 0.02];
+    const pp = [undefined, undefined]; pp[f] = [x - 0.08, YD, f ? zm - 0.09 : zm + 0.09];
+    T.push({ d: 0.48, t: 'echelon', pieds: pp, mains: mh, corps: [x + 0.12, YD - 0.25, zm], penche: 0.15 });
+    T.push({ d: 0.44, t: 'pas', premier: 1 - f, pieds: pieds(x - 0.1, YD, zm, -PI2, 0.09), corps: [x - 0.1, YD, zm], mains: [[x - 0.2, YD + 0.93, z1 - 0.02], [x - 0.2, YD + 0.93, z0 + 0.02]], penche: 0.05 });
+    // à la porte, la main droite sur la poignée ; on entre en se baissant, tourné vers le siège ; on s'assoit
+    const P = E.porte, Y = YD + 0.05;
+    T.push({ d: 0.5, t: 'pas', corps: [P.x + 0.2, Y, P.z + 0.1], cap: -1.25, pieds: pieds(P.x + 0.2, Y, P.z + 0.1, -1.25, 0.09), mains: [null, E.poignee], penche: 0.1 });
+    T.push({ d: 0.6, t: 'assis', corps: [P.x - 0.3, Y, P.z + 0.22], cap: -0.55, pieds: [[P.x - 0.32, Y, P.z + 0.38], [P.x - 0.2, Y, P.z + 0.12]], assis: 0.45, jambes: 0.7, penche: 0.38 });
+    T.push({ d: 0.5, t: 'assis', corps: [m.siege.x, Y, m.siege.z], cap: 0, assis: 1, jambes: 0, mains: [null, null], penche: 0 });
+    return construire({ corps: [xc + 0.42, 0, zm], cap: -PI2 }, T, { son: 'marche', baisse: 0.55 });
+  },
 };
+const montee = v => v.m.appuis || (v.m.appuis = MONTEES[v.m.montee?.genre || v.genre](v.m));
+// Les fenêtres d'un temps (fractions de sa durée) : le corps ; le pied de tête, l'autre (un seul pied : le premier) ; les mains
+const FEN = {
+  pas: { c: [0.14, 0.9], p1: [0, 0.5], p2: [0.4, 0.92], p: [0, 0.62], m: [0, 0.45] },
+  echelon: { c: [0.3, 1], p1: [0.22, 0.75], p2: [0.22, 0.75], p: [0.22, 0.75], m: [0, 0.42] },
+  assis: { c: [0, 1], p1: [0, 0.6], p2: [0.25, 0.85], p: [0, 0.7], m: [0, 0.5] },
+};
+const fen = (f, w) => borne((f - w[0]) / (w[1] - w[0]), 0, 1);
 // ordre de remplissage des colonnes de cartons depuis le côté où l'on se tient : d'abord les plus éloignées
 const ORDRE = { tracteur: { droite: [2, 5, 1, 4, 0, 3], gauche: [0, 3, 1, 4, 2, 5], arriere: [0, 1, 2, 3, 4, 5] }, van: { droite: [0, 3, 1, 4, 2, 5] } };
 
@@ -36,11 +129,6 @@ function versMonde(v, l, out) {
   const h = v.p.h, c = Math.cos(h), s = Math.sin(h);
   out.x = v.p.pos.x + l[0] * c + l[2] * s; out.z = v.p.pos.z - l[0] * s + l[2] * c;
   return out;
-}
-// point du chemin de montée à la fraction u (segments parcourus à vitesse égale)
-function surChemin(ch, u, out) {
-  const n = ch.length - 1, s = Math.min(n - 1e-6, Math.max(0, u) * n), i = Math.floor(s), f = s - i;
-  return out.set(mix(ch[i][0], ch[i + 1][0], f), mix(ch[i][1], ch[i + 1][1], f), mix(ch[i][2], ch[i + 1][2], f));
 }
 // Contourner un véhicule : le segment a-b (repère du véhicule) coupe-t-il le rectangle [x0, x1, z0, z1] ? (découpage de
 // Liang-Barsky)
@@ -267,39 +355,93 @@ export class Gestes {
   }
 
   /* ------------------------------------------------------------ monter, descendre */
-  // (place : on est déjà devant la portière ouverte)
-  etapesMonter(v, fin, place = false) {
-    const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte, sonMontee = M.son || 'marche';
-    const etapes = place ? [] : this.allerVers(v, ch[0], -Math.PI / 2);
-    if (porte && !place) etapes.push(this.portiere(v, 1));
-    let marche = false;
-    etapes.push({
-      duree: M.duree,
-      debut: () => {
-        const j = this.j, g = j.m.groupe;
-        v.m.caisse.add(g);
-        j.assis = true; j.poste = v.poste; j.v = 0;
-        // dans une voiture : à sa place d'abord, le temps de mesurer sa tête sous le toit (pieton.js : caler)
-        g.position.copy(v.m.siege); g.rotation.set(0, 0, 0); j.caler();
-        j.transition = 0; j.baisse = M.baisse;
-        surChemin(ch, 0, g.position); g.rotation.set(0, -Math.PI / 2, 0); j.sync(0);
-      },
-      maj: (dt, t, u) => {
-        const j = this.j, g = j.m.groupe, T0 = M.tourne ? M.tourne[0] : 0.3, T1 = M.tourne ? M.tourne[1] : 1;
-        surChemin(ch, u, g.position);
-        g.rotation.set(0, mix(-Math.PI / 2, 0, lisse((u - T0) / (T1 - T0))), 0);
-        j.transition = lisse((u - M.assis) / (1 - M.assis));
-        if (M.echelle) this.echelle(j, M.echelle, u, g.position.y);
-        else if (!porte && !marche && u > 0.25) { marche = true; son.jouer(sonMontee); }
+  // Aller au pied de la montée du véhicule v (au sol, tourné comme il faut pour monter)
+  versMontee(v) { const D = montee(v).depart; return this.allerVers(v, D.corps, D.cap); }
+  // La montée de v jouée temps par temps (sens 1), ou à rebours (sens -1 : descendre) ; vitesse : facteur des durées.
+  // debut() et fin() : à l'étape de départ et d'arrivée (le personnage passe dans la caisse, en revient)
+  appuis(v, sens, vitesse, debut, fin) {
+    const M = montee(v), S = M.S, T = M.temps, n = T.length, cum = [0], A = new Float64Array(21);
+    for (const t of T) cum.push(cum[cum.length - 1] + t.d / vitesse);
+    const D = cum[n], C = [0, 0, 0], P = [0, 0, 0], pose = [false, false];
+    let kAvant = -1;
+    return {
+      duree: D,
+      debut: () => { kAvant = -1; debut?.(); },
+      maj: (dt, t, u, Tg) => {
+        const j = this.j, g = j.m.groupe, s = j.m.echelle, tt = sens > 0 ? Math.min(Tg, D) : Math.max(0, D - Tg);
+        let k = 0; while (k < n - 1 && tt > cum[k + 1]) k++;
+        const f = (tt - cum[k]) / (cum[k + 1] - cum[k]), B = T[k], W = FEN[B.t], a = S[k], b = S[k + 1];
+        if (k !== kAvant) { kAvant = k; pose[0] = pose[1] = true; }
+        // le corps
+        const uc = lisse(fen(f, W.c));
+        for (let i = 0; i < 3; i++) C[i] = mix(a.corps[i], b.corps[i], uc);
+        const cap = a.cap + angle(b.cap - a.cap) * uc, co = Math.cos(cap), si = Math.sin(cap);
+        g.position.set(C[0], C[1], C[2]); g.rotation.set(0, cap, 0);
+        const assis = mix(a.assis, b.assis, uc);
+        j.transition = assis;
+        A[0] = mix(a.jambes, b.jambes, uc); A[1] = mix(a.penche, b.penche, uc); A[2] = 1 - assis;
+        // repère du personnage : (point de la caisse - corps), tourné de -cap, à son échelle
+        const loc = (q, k0) => {
+          const dx = q[0] - C[0], dz = q[2] - C[2];
+          A[k0] = (dx * co - dz * si) / s; A[k0 + 1] = (q[1] - C[1]) / s; A[k0 + 2] = (dx * si + dz * co) / s;
+        };
+        // les pieds : celui qui bouge se lève, passe au-dessus de la marche et se pose ; l'autre reste où il est
+        const bouge0 = a.pieds[0] !== b.pieds[0], bouge1 = a.pieds[1] !== b.pieds[1], deux = bouge0 && bouge1, prem = B.premier || 0;
+        for (let i = 0; i < 2; i++) {
+          const k0 = 3 + 5 * i, p0 = a.pieds[i], p1 = b.pieds[i], sg = i ? -1 : 1;
+          let lacet = b.lacets[i], tg = 0;
+          if (p0 === p1) loc(p1, k0);
+          else {
+            const uf = fen(f, deux ? (i === prem ? W.p1 : W.p2) : W.p), h = lisse(borne((uf - 0.15) / 0.85, 0, 1));
+            const dy = p1[1] - p0[1], lev = Math.min(0.2, 0.07 + Math.abs(dy) * 0.3);
+            P[0] = mix(p0[0], p1[0], h); P[2] = mix(p0[2], p1[2], h);
+            P[1] = mix(p0[1], p1[1], lisse(borne(uf / 0.75, 0, 1))) + lev * Math.sin(Math.PI * uf);
+            loc(P, k0);
+            tg = 0.35 * Math.sin(Math.PI * uf);
+            lacet = a.lacets[i] + angle(b.lacets[i] - a.lacets[i]) * uf;
+            // un bruit de pied quand il se pose (à la montée sur la marche, à la descente sur celle d'en dessous)
+            const posee = sens > 0 ? uf >= 1 : uf <= 0;
+            if (posee && !pose[i] && M.son) son.jouer(M.son);
+            pose[i] = posee;
+          }
+          A[k0 + 3] = tg; A[k0 + 4] = angle(lacet - cap) + sg * 0.06;
+        }
+        // les mains : vers leur prise (ou lâchées), en passant un peu en arrière d'une prise à l'autre
+        const um = lisse(fen(f, W.m));
+        for (let i = 0; i < 2; i++) {
+          const k0 = 13 + 4 * i, m0 = a.mains[i], m1 = b.mains[i];
+          if (!m0 && !m1) { A[k0 + 3] = 0; continue; }
+          if (m0 && m1 && m0 !== m1) {
+            for (let c = 0; c < 3; c++) P[c] = mix(m0[c], m1[c], um);
+            const r = Math.sin(Math.PI * um) * 0.07; P[0] += si * r; P[2] += co * r; P[1] += r * 0.5;
+            loc(P, k0); A[k0 + 3] = 1;
+          } else { loc(m1 || m0, k0); A[k0 + 3] = m1 ? (m0 ? 1 : um) : 1 - um; }
+        }
+        j.appuis = A;
         j.sync(dt, t);
         g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z; // la caméra suit
+        if (Tg >= D) fin?.();
       },
-    });
+    };
+  }
+  // (place : on est déjà devant la portière ouverte)
+  etapesMonter(v, fin, place = false) {
+    const M = montee(v), porte = !!v.m.porte;
+    const etapes = place ? [] : this.versMontee(v);
+    if (porte && !place) etapes.push(this.portiere(v, 1));
+    etapes.push(this.appuis(v, 1, 1, () => {
+      const j = this.j, g = j.m.groupe;
+      v.m.caisse.add(g);
+      j.assis = true; j.poste = v.poste; j.v = 0;
+      // dans une voiture : à sa place d'abord, le temps de mesurer sa tête sous le toit (pieton.js : caler)
+      g.position.copy(v.m.siege); g.rotation.set(0, 0, 0); j.caler();
+      j.transition = 0; j.baisse = M.baisse;
+    }));
     if (porte) etapes.push(this.portiere(v, -1));
     etapes.push({
       action: () => {
         const j = this.j;
-        j.transition = null; j.baisse = undefined; j.echelle = null;
+        j.transition = null; j.baisse = undefined; j.appuis = null;
         j.m.groupe.position.copy(v.m.siege); j.m.groupe.rotation.set(0, 0, 0);
         fin();
       },
@@ -307,46 +449,22 @@ export class Gestes {
     return etapes;
   }
   etapesDescendre(v, sorti, fermer = true) {
-    const M = v.m.montee || MONTEES[v.genre], ch = M.chemin, porte = !!v.m.porte;
+    const M = montee(v), porte = !!v.m.porte, D = M.depart;
     const etapes = [];
     if (porte) etapes.push(this.portiere(v, 1));
-    let marche = false;
-    etapes.push({
-      duree: M.duree * 0.9,
-      debut: () => { const j = this.j; j.transition = 1; j.baisse = M.baisse; },
-      maj: (dt, t, u) => {
-        const j = this.j, g = j.m.groupe, D = M.descente;
-        surChemin(ch, 1 - u, g.position);
-        // (une échelle se descend face à elle : D.cap, le cap à prendre, et quand)
-        g.rotation.set(0, D ? mix(0, D.cap, lisse((u - D.tourne[0]) / (D.tourne[1] - D.tourne[0]))) : mix(0, Math.PI / 2, lisse((u - 0.15) / 0.6)), 0);
-        j.transition = 1 - lisse((1 - u - M.assis) / (1 - M.assis));
-        if (M.echelle) this.echelle(j, M.echelle, 1 - u, g.position.y);
-        else if (!porte && !marche && u > 0.7) { marche = true; son.jouer(M.son || 'marche'); }
-        j.sync(dt, t);
-        g.getWorldPosition(vT); j.pos.x = vT.x; j.pos.z = vT.z;
-        if (u >= 1) {
-          // pied au sol : le personnage revient dans la scène, à côté du véhicule, tourné vers l'extérieur
-          this.c.scene.add(g);
-          versMonde(v, ch[0], this.cible);
-          j.pos.set(this.cible.x, 0, this.cible.z); this.c.col.resoudre(j.pos, j.r);
-          j.h = j.hv = v.p.h + Math.PI / 2; j.v = 0;
-          j.assis = false; j.transition = null; j.baisse = undefined; j.poste = null; j.echelle = null;
-          j.sync(dt, t);
-          sorti();
-        }
-      },
-    });
+    etapes.push(this.appuis(v, -1, 1.2, () => { const j = this.j; j.transition = 1; j.baisse = M.baisse; }, () => {
+      // pied au sol : le personnage revient dans la scène, au pied de la montée, tourné comme il y est arrivé
+      const j = this.j, g = j.m.groupe;
+      this.c.scene.add(g);
+      versMonde(v, D.corps, this.cible);
+      j.pos.set(this.cible.x, 0, this.cible.z); this.c.col.resoudre(j.pos, j.r);
+      j.h = j.hv = v.p.h + D.cap; j.v = 0;
+      j.assis = false; j.transition = null; j.baisse = undefined; j.poste = null; j.appuis = null;
+      j.sync(0, 0);
+      sorti();
+    }));
     if (porte && fermer) etapes.push(this.portiere(v, -1)); // (fermer faux : on la laisse ouverte à qui monte ensuite)
     return etapes;
-  }
-  // Sur une échelle (l'enjambeur : sa montée a une échelle, de la fraction E.u0 à E.u1 du chemin) : la pose qui grimpe
-  // (anim.js : poseEchelle) tant qu'on y est, la hauteur gravie ; un bruit de pied sur chaque barreau
-  echelle(j, E, u, y) {
-    if (u <= E.u0 || u >= E.u1) { if (j.echelle) j.echelle = null; return; }
-    const e = j.echelle || (j.echelle = { h: 0, pas: E.pas, k: -1 });
-    e.h = y - E.y0;
-    const k = Math.floor(e.h / E.pas);
-    if (k !== e.k) { if (e.k >= 0) son.jouer('marche'); e.k = k; }
   }
   // Monter dans le véhicule v ; fin() quand on est installé (main.js passe en conduite)
   monter(v, fin) { this.lancer(this.etapesMonter(v, fin)); }

@@ -435,7 +435,9 @@ export function tracteur() {
   corps.push(peint(B(1.34, 0.06, 1.3, FONCE, 0, 1.21, -0.6), FONCE));
   for (let z = -1.15; z < 0.0; z += 0.13) corps.push(B(1.2, 0.012, 0.025, '#4a4c54', 0, 1.246, z));
   for (const s of [1, -1]) {
-    corps.push(B(0.3, 0.04, 0.26, GRIS, s * 0.74, 0.66, 0.12), B(0.03, 0.54, 0.03, '#2b2b30', s * 0.87, 0.93, 0.0), B(0.03, 0.54, 0.03, '#2b2b30', s * 0.87, 0.93, 0.24));
+    // deux marches (dessus à 0,44 et 0,84 m : gestes.js, MONTEES.tracteur), leurs deux montants
+    corps.push(B(0.3, 0.04, 0.26, GRIS, s * 0.74, 0.42, 0.12), B(0.3, 0.04, 0.26, GRIS, s * 0.74, 0.82, 0.12));
+    corps.push(B(0.03, 0.84, 0.03, '#2b2b30', s * 0.87, 0.8, 0.0), B(0.03, 0.84, 0.03, '#2b2b30', s * 0.87, 0.8, 0.24));
     barre(at, [s * 0.74, 1.3, -0.13], [s * 0.74, 1.78, -0.4], 0.018, '#2b2b30', 0);
   }
   for (const s of [1, -1]) { const p = B(0.1, 0.02, 0.14, '#4a4c54'); p.rotateX(-0.6); corps.push(deplacer(p, s * 0.17, 1.33, -0.08)); }
@@ -881,9 +883,9 @@ export function voitureConduite(couleur, nom) {
       zAr: M.zAr, zAv: M.zAv, xAr: M.xr, xAv: M.xr, assise: P.assise, plancher: P.plancher, emprise: [[-W, W, -L, L]],
     },
     volantCentre: P.volant, volantRayon: P.rayon, plafond: P.plafond,
-    // la montée : derrière la portière (hors de son passage), on entre par l'ouverture, on s'assoit en se baissant (pieds
-    // au sol), on rentre les jambes
-    montee: { chemin: [[W + 0.4, 0, M.portes[1] - 0.4], [W + 0.35, 0, s.z - 0.1], [W - 0.05, 0, s.z], [0.62, 0, s.z], [s.x, 0, s.z]], duree: 1.1, assis: 0.3, baisse: 0.75 },
+    // la montée (gestes.js : MONTEES.voiture) : sa demi-largeur, l'arrière de la portière (on part de derrière elle, hors
+    // de son passage)
+    montee: { genre: 'voiture', W, z: M.portes[1] },
   };
 }
 const PLAST = '#232428', NOIR = '#141518', CHROME = '#cfd3d8', LAQUE = '#191a1e';

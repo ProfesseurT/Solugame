@@ -228,18 +228,12 @@ export function enjambeur() {
     zAr: ZR, zAv: ZV, xAr: VOIE, xAv: VOIE, assise: 2.97, plancher: YD + 0.05,
     emprise: [[-1.36, 1.46, -2.45, 2.18]],
   };
-  // monter : à côté de l'échelle, face à elle ; on grimpe (gestes.js : echelle), on passe sur le palier, on entre par la
-  // porte en se baissant (on commence à s'asseoir dès le seuil : la tête reste sous le toit), on se tourne vers l'avant et
-  // l'on s'assoit. Le chemin (repère de la caisse) : la montée de
-  // l'échelle découpée en huit segments (chacun prend le même temps).
-  const ch = [[1.82, 0, 0.35], [1.64, 0, 0.35]];
-  for (let k = 1; k <= 8; k++) ch.push([1.64, YD * k / 8, 0.35]);
-  ch.push([1.34, YD, 0.35], [1.0, YD + 0.03, 0.42], [0.55, YD + 0.05, 0.55], [0.12, YD + 0.05, 0.62]);
-  const n = ch.length - 1;
+  // la montée (gestes.js : MONTEES.enjambeur) : l'échelle (ses montants, l'écart de ses barreaux, combien), le palier, la
+  // porte de la cabine et sa poignée
+  let barreaux = 0; for (let y = 0.3; y < YD - 0.1; y += LADDER.pas) barreaux++; // (comme on les a posés)
   const montee = {
-    chemin: ch, duree: 5.4, assis: 10 / n, baisse: 0.55, son: 'marche',
-    echelle: { u0: 1 / n, u1: 9 / n, y0: 0, pas: LADDER.pas }, tourne: [10.2 / n, 12.6 / n],
-    descente: { cap: -Math.PI / 2, tourne: [0.04, 3.2 / n] },
+    genre: 'enjambeur', echelle: { ...LADDER, n: barreaux }, palier: YD,
+    porte: { x: XC, z: ZC0 }, poignee: [XC + 0.06, 3.05, ZC0 + 0.03],
   };
   return {
     groupe, caisse, rouesAr, rouesAv, pivots, essieu, volant, siege: new THREE.Vector3(0, 2.97 - 0.88, 0.62),

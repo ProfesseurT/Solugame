@@ -359,6 +359,7 @@ const jeu = {
     else scene.add(joueur.m.groupe);
     joueur.sync(0, temps);
     for (const b of document.querySelectorAll('.perso')) b.setAttribute('aria-pressed', String(b.dataset.h === h));
+    if (etat === 'accueil') allerPlan(0); // l'accueil montre le personnage choisi
   },
   finVue: false,
   tactile,
@@ -571,9 +572,8 @@ function prendreVoiture(c) {
   const monter = () => auVolant(v);
   if (ia && jeu.wtf) {
     // mode WTF : on va jusqu'à sa portière, on l'ouvre, il en tombe ; on monte une fois qu'il s'est relevé et écarté
-    const ch = v.m.montee.chemin;
     gestes.lancer([
-      ...gestes.allerVers(v, ch[0], -Math.PI / 2), gestes.portiere(v, 1),
+      ...gestes.versMontee(v), gestes.portiere(v, 1),
       { action: () => conducteurDescend(p, v, () => { libre = true; }, () => { debout = true; }) },
       { maj: (dt, t, u, T) => { gestes.immobile(dt, t); if (debout && !tLibre) tLibre = T; return (tLibre && T > tLibre + 0.4) || T > 8; } },
       ...gestes.etapesMonter(v, monter, true),
@@ -1054,15 +1054,12 @@ function boucle(maintenant) {
   const dt = Math.min(voile ? 0.1 : 0.05, ms / 1000);
   dernier = maintenant;
   temps += dt;
-  if (etat === 'accueil') {
-    cam.orbite(temps, joueur.pos.x, joueur.pos.z, largeur > hauteurE * 1.15);
-    joueur.sync(dt, temps);
-    for (const { p } of clients.liste) p.sync(dt, temps);
-  } else { miseAJour(dt); if ((tSauve += dt) > 4) { tSauve = 0; sauver(); } }
+  if (etat === 'accueil') vitrine(dt);
+  else { miseAJour(dt); if ((tSauve += dt) > 4) { tSauve = 0; sauver(); } }
   particules.maj(dt);
   if (monde.nuages) monde.nuages.rotation.y += dt * 0.004; // les nuages dérivent
   monde.moulin.rotation.x -= dt * 0.35; // les ailes du moulin des Grands Champs
-  const ego = etat === 'jeu' && jeu.auVolant ? tr.pos : joueur.pos;
+  const ego = etat === 'accueil' ? VISE : etat === 'jeu' && jeu.auVolant ? tr.pos : joueur.pos;
   avantRendu(ego);
   hud.update(dt, camera, largeur, hauteurE);
   // téléphone, PC ou carte de fin : monde voilé, dessiné à cadence réduite (voir plus haut), sans mesure
@@ -1087,6 +1084,39 @@ paliers.appliquer(paliers.q);
 // toujours compiler au démarrage (appliquer ne le fait que si le type d'ombre change : sinon l'image restait noire)
 if (!paliers.nCompil) paliers.compiler();
 
+/* ------------------------------------------------------------------ l'accueil
+   Derrière le titre, des plans du monde qui glissent lentement, enchaînés par un fondu au noir ; le bourg vit (passants,
+   voitures, parvis du chai). Le premier plan, et chaque fois qu'on change de personnage : le personnage choisi, dans la
+   cour du domaine (posé là pour l'accueil ; lancer le remet au départ). de, a : la caméra ; vise, viseA : ce qu'elle
+   regarde ; decale : de combien le sujet s'écarte du titre (camera.js : plan). */
+const PLANS = [
+  { nom: 'Le domaine', duree: 9, heros: [-92, -56, -0.93], de: [-96.1, 1.65, -53.1], a: [-95.3, 1.5, -53.7], vise: [-92, 1.2, -56], decale: 0.3, decaleV: 0.16 },
+  { nom: 'Les Perrières', duree: 8, de: [-152, 9, -104], a: [-141, 7.5, -93], vise: [-95, 2, -52], viseA: [-92, 2, -54], decale: 0.2 },
+  { nom: 'Le bourg', duree: 8, de: [80.5, 5.4, -30], a: [85, 4.3, -33.8], vise: [95, 1.6, -46], decale: 0.25 },
+  { nom: 'Les Grands Champs', duree: 8, de: [-71, 5.2, 172], a: [-63, 5.8, 165], vise: [-36, 6.5, 147], decale: 0.2 },
+  { nom: 'Le château', duree: 9, de: [-224, 44, -233], a: [-236, 43, -245], vise: [-280, 38, -287], decale: 0.15 },
+];
+const FONDU = 0.55, VISE = new THREE.Vector3(), LOIN = { x: 1e4, y: 0, z: 1e4 }; // (personne ne réagit à la caméra de l'accueil)
+let iPlan = -1, tPlan = 0, noir = false, planFige = null;
+function vitrine(dt) {
+  if (iPlan < 0) allerPlan(0);
+  let P = PLANS[iPlan];
+  if (!planFige && (tPlan += dt) > P.duree) { allerPlan((iPlan + 1) % PLANS.length); P = PLANS[iPlan]; }
+  const fondu = !planFige && tPlan > P.duree - FONDU;
+  if (fondu !== noir) { noir = fondu; $('fondu').classList.toggle('noir', noir); if (noir) $('plan-nom').classList.add('cache'); }
+  cam.plan(P, planFige ? planFige.u : tPlan / P.duree, largeur > hauteurE * 1.15);
+  VISE.set(P.vise[0], P.vise[1] - 1.2, P.vise[2]); // (l'ombre suit ce qu'on regarde)
+  joueur.sync(dt, temps);
+  if (peuple) bourg(dt, LOIN);
+}
+function allerPlan(i) {
+  iPlan = i; tPlan = 0;
+  const h = PLANS[i].heros;
+  if (h) joueur.placer(h[0], h[1], h[2]);
+  joueur.regard = h ? camera.position : null; // le personnage regarde la caméra
+  const n = $('plan-nom'); n.textContent = PLANS[i].nom; n.classList.remove('cache');
+}
+
 /* ------------------------------------------------------------------ écrans */
 for (const b of document.querySelectorAll('.perso')) {
   b.setAttribute('aria-pressed', String(b.dataset.h === choixHeros));
@@ -1099,6 +1129,8 @@ function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la
   son.demarrer();
   if (tactile) { try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (_) { /* refusé */ } }
   $('accueil').hidden = true; $('hud').hidden = false;
+  noir = false; $('fondu').classList.remove('noir', 'lent');
+  joueur.placer(L.depart.x, L.depart.z, L.depart.h); joueur.regard = null; // (l'accueil l'avait posé pour son plan)
   etat = 'jeu';
   cam.yaw = joueur.h; cam.pret = false;
   if (m === 'reprendre') reprendrePartie(SAUVE.partie);
@@ -1159,27 +1191,37 @@ function reprendrePartie(P) {
 }
 // ce qu'on dit de la partie enregistrée (à l'accueil, à la reprise) : la mission, ou rentrer dormir, ou tout est gagné
 const libelle = P => (P.mission === 'traitement' && ['dodo', 'libre'].includes(P.etat.etape) ? 'dodo' : P.mission === 'habillage' && P.etat.etape === 'libre' ? 'libre' : P.mission);
-$('jouer').addEventListener('click', () => lancer('tournee'));
-$('reprendre').addEventListener('click', () => lancer('reprendre'));
-$('jouer2').addEventListener('click', () => lancer('traitement'));
-$('jouer3').addEventListener('click', () => lancer('habillage'));
+// Les missions de l'accueil (Teddy, 25/11/2026 : « les niveaux ne sont pas accessibles dès le début ») : la 1 toujours ;
+// chacune des suivantes quand la précédente est gagnée (ou elle-même déjà gagnée). Le grand bouton : « Continuer » la
+// partie enregistrée, sinon « Jouer » la première mission ouverte et pas encore gagnée.
+const IDS = MISSIONS.liste.map(M => M.id);
+const ouverte = (G, i) => i === 0 || !!G[IDS[i - 1]] || !!G[IDS[i]];
+let aJouer = IDS[0];
+function missionsAccueil() {
+  const G = SAUVE.gagnees, P = SAUVE.partie, reprise = !!(P && P.etat);
+  const k = IDS.findIndex((id, i) => ouverte(G, i) && !G[id]);
+  aJouer = IDS[Math.max(0, k)];
+  for (const b of document.querySelectorAll('.mi')) {
+    const i = IDS.indexOf(b.dataset.m), M = MISSIONS.liste[i], ok = ouverte(G, i), g = !!G[M.id];
+    b.disabled = !ok;
+    b.classList.toggle('verrou', !ok); b.classList.toggle('gagnee', g); b.classList.toggle('suivante', ok && !g && !reprise && M.id === aJouer);
+    b.setAttribute('aria-label', `${M.n}, ${M.titre} : ${g ? 'gagnée, à rejouer' : ok ? 'à jouer' : `fermée, elle s'ouvre quand la ${MISSIONS.liste[i - 1].n.toLowerCase()} est gagnée`}`);
+  }
+  const M = MISSIONS.liste[IDS.indexOf(aJouer)];
+  $('jouer-t').textContent = reprise ? 'Continuer' : 'Jouer';
+  $('jouer-s').textContent = reprise ? MISSIONS.enCours[libelle(P)] : `${M.n} · ${M.titre}`;
+}
+$('jouer').addEventListener('click', () => lancer(SAUVE.partie?.etat ? 'reprendre' : aJouer));
+for (const b of document.querySelectorAll('.mi')) b.addEventListener('click', () => { if (!b.disabled) lancer(b.dataset.m); });
 $('poche').addEventListener('click', () => { if (etat === 'jeu' && $('fin').hidden && !pc.ouvert) { son.jouer('tap'); tel.basculer(); } });
 // (la carte de fin se remplit quand elle s'affiche : montrerFin)
 $('continuer').addEventListener('click', () => { $('fin').hidden = true; jeu.finVue = false; ctrl.actions.length = 0; });
 
 document.addEventListener('gesturestart', e => e.preventDefault());
 requestAnimationFrame(boucle);
-$('jouer').disabled = false; $('jouer2').disabled = false; $('jouer3').disabled = false; $('reprendre').disabled = false;
-{
-  // une partie enregistrée : « Continuer » d'abord, « Nouvelle partie » ensuite ; une mission rejouée : lancée tout de suite
-  const P = SAUVE.partie, aLancer = SAUVE.aLancer();
-  if (P && P.etat && !aLancer) {
-    $('reprendre').hidden = false; $('reprendre-t').hidden = false;
-    $('reprendre-t').textContent = MISSIONS.enCours[libelle(P)];
-    $('jouer').textContent = 'Nouvelle partie'; $('jouer').classList.add('second');
-  }
-  if (aLancer) lancer(aLancer);
-}
+$('jouer').disabled = false;
+missionsAccueil();
+{ const aLancer = SAUVE.aLancer(); if (aLancer) lancer(aLancer); } // une mission rejouée depuis le téléphone : tout de suite
 mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
@@ -1192,6 +1234,8 @@ window.CL = {
   versMission3() { traitement.etape = 'dodo'; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },
   sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
+  // l'accueil : le plan i figé à la fraction u (captures), ou qui reprend son cours (u omis)
+  plan(i, u) { allerPlan(i); planFige = u == null ? null : { u }; }, PLANS,
   get tr() { return tr; },
   vehicule(genre) { return VEHICULES.find(v => v.genre === genre); },
   passants() { return passants.map(p => p.p); },

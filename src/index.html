@@ -434,15 +434,52 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .cta:active{transform:translateY(1px)}
 /* le bouton s'allume quand le jeu est prêt (l'accueil s'affiche avant la construction du monde) */
 .cta:disabled{opacity:.5;box-shadow:none}
-.cta.second{background:transparent;border:2px solid rgba(255,250,242,.75);color:var(--blanc);font-size:20px;padding:12px 34px;box-shadow:none;text-shadow:var(--ombre)}
-.reprise{margin:-8px 0 0;font:600 13px/1.3 var(--ui);text-shadow:var(--ombre)}
 .cta{transition:opacity .3s}
-/* aide de l'accueil : écrite dans la page pour s'afficher sans attendre le script ; doigt ou clavier selon l'appareil */
+/* l'accueil : le titre en haut, ce qu'on choisit en bas ; le monde passe derrière (main.js : vitrine) */
+#accueil{gap:0;justify-content:space-between;
+  background:linear-gradient(180deg,rgba(20,18,30,.5) 0%,rgba(20,18,30,0) 26%,rgba(20,18,30,0) 42%,rgba(20,18,30,.72) 62%,rgba(20,18,30,.95) 100%)}
+.acc-tete,.acc-bas{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%}
+.acc-bas{gap:14px;margin-top:18px}
+#accueil>.acc-tete{margin-top:0}
+#jouer{display:grid;justify-items:center;gap:6px;padding:14px 44px 12px;min-width:min(100%,300px)}
+#jouer small{font:700 12px/1 var(--ui);letter-spacing:.04em;text-transform:none;opacity:.78}
+/* les trois missions, trois jours de la semaine : chacune s'ouvre quand la précédente est gagnée (main.js : missionsAccueil) */
+.missions{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:min(100%,560px)}
+.missions li{display:flex}
+.mi{position:relative;flex:1;display:grid;grid-template-rows:auto 1fr auto;align-content:start;gap:6px;min-height:118px;padding:10px 10px 11px;
+  text-align:left;border:1px solid rgba(255,250,242,.16);border-top:3px solid var(--app);border-radius:14px;background:rgba(20,18,30,.82);
+  transition:transform .15s,border-color .15s,background .15s}
+.mi:not(:disabled):hover{transform:translateY(-2px);border-color:rgba(255,250,242,.4);border-top-color:var(--app);background:rgba(34,29,49,.92)}
+.mi:not(:disabled):active{transform:translateY(1px)}
+.mi:disabled{cursor:default}
+.mi-date{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:6px;font:700 10px/1.05 var(--ui);letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.mi-date b{grid-row:span 2;font:900 34px/.8 var(--titre);letter-spacing:0;color:var(--or)}
+.mi-t{font:700 14px/1.15 var(--ui);text-wrap:balance}
+.mi-app{display:flex;align-items:center;gap:6px;font:700 11px/1.1 var(--ui);color:rgba(255,250,242,.8)}
+.mi-app::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--app)}
+.mi-v{display:none;font:600 11px/1.2 var(--ui);color:rgba(255,250,242,.75)}
+/* coin haut droit : la médaille d'une mission gagnée, le cadenas d'une mission fermée */
+.mi-etat{position:absolute;right:8px;top:8px;width:26px;height:26px;display:none}
+.mi.gagnee .mi-etat{display:block;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe7a8,var(--or) 55%,#b9832b);box-shadow:0 0 0 2px rgba(20,18,30,.9),0 2px 8px rgba(255,195,90,.45)}
+.mi.gagnee .mi-etat::after{content:"";position:absolute;inset:6px;background:#5b3a10;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+.mi.verrou{border-top-color:rgba(255,250,242,.22);background:rgba(20,18,30,.66)}
+.mi.verrou>:not(.mi-etat):not(.mi-v){opacity:.42}
+.mi.verrou .mi-app{display:none}.mi.verrou .mi-v{display:block}
+.mi.verrou .mi-etat{display:block;background:rgba(255,250,242,.8);
+  mask:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Cpath d="M7 10V7a5 5 0 0 1 10 0v3h1.5v11h-13V10zm2.2 0h5.6V7a2.8 2.8 0 0 0-5.6 0z"/%3E%3C/svg%3E') center/18px no-repeat;
+  -webkit-mask:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Cpath d="M7 10V7a5 5 0 0 1 10 0v3h1.5v11h-13V10zm2.2 0h5.6V7a2.8 2.8 0 0 0-5.6 0z"/%3E%3C/svg%3E') center/18px no-repeat}
+.mi.suivante{border-color:rgba(255,195,90,.55);border-top-color:var(--app);animation:suivante 2.4s ease-out .6s 2}
+@keyframes suivante{0%{box-shadow:0 0 0 0 rgba(255,195,90,.55)}60%,100%{box-shadow:0 0 0 12px rgba(255,195,90,0)}}
+/* aide : écrite dans la page pour s'afficher sans attendre le script ; doigt ou clavier selon l'appareil */
 .aide .tactile{display:none}
 @media (pointer:coarse){.aide .tactile{display:inline}.aide .clavier{display:none}}
-.aide{margin:0;max-width:44ch;font:400 13px/1.5 var(--ui);opacity:.92;text-wrap:balance}
+.aide{max-width:46ch;font:400 13px/1.5 var(--ui);opacity:.92;text-wrap:balance}
+.aide summary{cursor:pointer;width:max-content;margin:0 auto;padding:4px 10px;font:700 13px/1.3 var(--ui);text-decoration:underline;text-underline-offset:3px;list-style:none}
+.aide summary::-webkit-details-marker{display:none}
+.aide p{margin:6px 0 0}
 .version{margin:0;font:400 11px/1.3 var(--ui);opacity:.65}
-.lien-m2{border:0;background:none;color:inherit;padding:4px 8px;font:600 13px/1.3 var(--ui);text-decoration:underline;text-underline-offset:3px;opacity:.9} .lien-m2:disabled{opacity:.4}
+/* le nom du plan qu'on voit (grands écrans) */
+.plan-nom{display:none}
 .ecran-plein>:first-child{margin-top:auto}
 #fin>:last-child{margin-bottom:auto}
 #fin{background:rgba(14,12,22,.72)}
@@ -455,15 +492,24 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
 .cta.viticode{background:var(--viticode);color:#fff;font-size:20px;padding:12px 26px;box-shadow:0 8px 24px rgba(232,78,27,.35)}
 #erreur{position:absolute;inset:0;margin:0;display:grid;place-items:center;padding:24px;text-align:center;font:500 16px/1.5 var(--ui);background:var(--nuit)}
 @media (min-width:600px) and (min-aspect-ratio:23/20){
-  #accueil{align-items:flex-start;text-align:left;padding-left:max(7vw,var(--sl));
-    background:linear-gradient(90deg,rgba(20,18,30,.9) 0%,rgba(20,18,30,.62) 34%,rgba(20,18,30,0) 60%)}
-  #accueil .logo{font-size:clamp(96px,11vw,170px)}
-  #accueil>:last-child{margin-bottom:auto}
+  #accueil{align-items:flex-start;justify-content:center;gap:22px;text-align:left;padding-left:max(6vw,var(--sl));
+    background:linear-gradient(90deg,rgba(20,18,30,.92) 0%,rgba(20,18,30,.7) 32%,rgba(20,18,30,0) 58%)}
+  #accueil .logo{font-size:clamp(96px,10.5vw,164px)}
+  .acc-tete,.acc-bas{align-items:flex-start;width:min(560px,46vw)}
+  .acc-bas{margin-top:0}
+  #jouer{justify-items:start;padding-inline:40px}
+  .aide summary{margin:0}
+  .plan-nom{display:block;position:absolute;right:max(28px,var(--sr));bottom:calc(24px + var(--sb));margin:0;padding-top:8px;border-top:2px solid var(--or);
+    font:900 22px/1 var(--titre);letter-spacing:.14em;text-transform:uppercase;text-shadow:var(--ombre);transition:opacity .5s}
+  .plan-nom.cache{opacity:0}
 }
 @media (max-height:520px) and (orientation:landscape){
   .ecran-plein{gap:8px}.logo{font-size:clamp(54px,12vw,96px)}.accroche{display:none}.cta{padding:12px 36px}
+  #accueil{gap:10px}.acc-bas{gap:8px}.mi{min-height:92px}.mi-date b{font-size:26px}
   #tel{height:calc(100% - 20px - var(--st) - var(--sb));width:min(46vw,330px)}
 }
+@media (max-width:480px){.acc-tete .logo{font-size:clamp(70px,21vw,104px)}.accroche{font-size:15px}.mi{padding:9px 8px 10px}.mi-t{font-size:13px}}
+@media (max-width:480px) and (max-height:700px){.accroche{display:none}}
 @media (max-width:480px){#sous-titre{bottom:calc(92px + var(--sb));max-width:calc(100vw - 32px)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
 </style>
@@ -497,20 +543,32 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--or);outline-offset:
   </div>
   <div id="pc" hidden><p id="pc-obj"></p><div class="moniteur"><div id="pc-ecran" class="pc-ecran"></div></div><div class="pied"></div></div>
   <section id="accueil" class="ecran-plein">
-    <p class="sur">Solumatic présente</p>
-    <h1 class="logo"><span>Tournée</span><span>générale</span></h1>
-    <p class="accroche">Un village, des vignes, un tracteur. Et votre téléphone pour vous sortir de la paperasse.</p>
-    <div class="choix" role="group" aria-label="Personnage">
-      <button class="perso" data-h="vigneron" aria-pressed="true">Vigneron</button>
-      <button class="perso" data-h="vigneronne" aria-pressed="false">Vigneronne</button>
+    <div class="acc-tete">
+      <p class="sur">Solumatic présente</p>
+      <h1 class="logo"><span>Tournée</span><span>générale</span></h1>
+      <p class="accroche">Un village, des vignes, un tracteur. Et votre téléphone pour vous sortir de la paperasse.</p>
     </div>
-    <button id="reprendre" class="cta" hidden disabled>Continuer</button>
-    <p id="reprendre-t" class="reprise" hidden></p>
-    <button id="jouer" class="cta" disabled>Jouer</button>
-    <button id="jouer2" class="lien-m2" disabled>Ou directement la mission 2 : la journée de traitement</button>
-    <button id="jouer3" class="lien-m2" disabled>Ou la mission 3 : l'habillage, avec Viticode</button>
-    <p class="aide" id="aide"><span class="tactile">Glissez le doigt n'importe où pour marcher, plus loin pour courir. Près du tracteur ou du van, touchez « Monter ». Près d'un passant, « Servir un verre ». Au volant : gardez le doigt posé pour avancer, le véhicule suit l'itinéraire de la mission ; glissez sur le côté pour tourner, vers le bas pour freiner, en bas et sur le côté pour déraper. Deux doigts : tourner la caméra. Le téléphone est en bas à droite.</span><span class="clavier">Flèches ou ZQSD : marcher, avec Maj : courir. Au volant, espace : frein à main (ça dérape). E : monter, descendre, servir un verre, emprunter une voiture, rentrer dormir, ouvrir le PC. T : téléphone. M : son. R : radio. J et L, ou clic droit glissé : tourner la caméra ; C : la remettre derrière. Manette : stick gauche, gâchettes, A, Y ; RB : frein à main.</span></p>
-    <p class="version">Démo 1.0 · un jeu original de l'équipe Solumatic</p>
+    <div class="acc-bas">
+      <div class="choix" role="group" aria-label="Personnage">
+        <button class="perso" data-h="vigneron" aria-pressed="true">Vigneron</button>
+        <button class="perso" data-h="vigneronne" aria-pressed="false">Vigneronne</button>
+      </div>
+      <button id="jouer" class="cta" disabled><span id="jouer-t">Jouer</span><small id="jouer-s">Mission 1 · La tournée de Noël</small></button>
+      <ol class="missions" aria-label="Les trois missions : chacune s'ouvre quand la précédente est gagnée">
+        <li><button class="mi" data-m="tournee" style="--app:var(--vitisoft)" disabled>
+          <span class="mi-date"><b>8</b>mar.<br>déc.</span><span class="mi-etat"></span>
+          <span class="mi-t">La tournée de Noël</span><span class="mi-app">Vitisoft</span></button></li>
+        <li><button class="mi verrou" data-m="traitement" style="--app:var(--phyto)" disabled>
+          <span class="mi-date"><b>9</b>mer.<br>déc.</span><span class="mi-etat"></span>
+          <span class="mi-t">La journée de traitement</span><span class="mi-app">Registre phyto</span><span class="mi-v">Après la mission&nbsp;1</span></button></li>
+        <li><button class="mi verrou" data-m="habillage" style="--app:var(--viticode)" disabled>
+          <span class="mi-date"><b>10</b>jeu.<br>déc.</span><span class="mi-etat"></span>
+          <span class="mi-t">L'habillage</span><span class="mi-app">Viticode</span><span class="mi-v">Après la mission&nbsp;2</span></button></li>
+      </ol>
+      <details class="aide"><summary>Comment jouer</summary><p id="aide"><span class="tactile">Glissez le doigt n'importe où pour marcher, plus loin pour courir. Près du tracteur ou du van, touchez « Monter ». Près d'un passant, « Servir un verre ». Au volant : gardez le doigt posé pour avancer, le véhicule suit l'itinéraire de la mission ; glissez sur le côté pour tourner, vers le bas pour freiner, en bas et sur le côté pour déraper. Deux doigts : tourner la caméra. Le téléphone est en bas à droite.</span><span class="clavier">Flèches ou ZQSD : marcher, avec Maj : courir. Au volant, espace : frein à main (ça dérape). E : monter, descendre, servir un verre, emprunter une voiture, rentrer dormir, ouvrir le PC. T : téléphone. M : son. R : radio. J et L, ou clic droit glissé : tourner la caméra ; C : la remettre derrière. Manette : stick gauche, gâchettes, A, Y ; RB : frein à main.</span></p></details>
+      <p class="version">Démo 1.0 · un jeu original de l'équipe Solumatic</p>
+    </div>
+    <p class="plan-nom" id="plan-nom" aria-hidden="true"></p>
   </section>
   <section id="fin" class="ecran-plein" hidden>
     <div class="carte-fin">

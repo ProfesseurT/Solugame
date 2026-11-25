@@ -407,7 +407,7 @@ if (scenario === 'voitures') {
       for (let n = 0; n < 900 && J.gestes.actif; n++) {
         CL.step(1); couche = Math.min(couche, d.m.groupe.rotation.x);
         // quand il commence à tomber, où en est le personnage ? (devant la portière, qu'il a ouverte)
-        if (ecart === null && d.m.groupe.rotation.x < -0.2) { const v = J.veh, c = v.m.montee.chemin[0], h = v.p.h, x = v.p.pos.x + c[0] * Math.cos(h) + c[2] * Math.sin(h), z = v.p.pos.z - c[0] * Math.sin(h) + c[2] * Math.cos(h); ecart = Math.hypot(J.joueur.pos.x - x, J.joueur.pos.z - z); }
+        if (ecart === null && d.m.groupe.rotation.x < -0.2) { const v = J.veh, c = v.m.appuis.depart.corps, h = v.p.h, x = v.p.pos.x + c[0] * Math.cos(h) + c[2] * Math.sin(h), z = v.p.pos.z - c[0] * Math.sin(h) + c[2] * Math.cos(h); ecart = Math.hypot(J.joueur.pos.x - x, J.joueur.pos.z - z); }
       }
       CL.step(120);
       log.push(['volée : il ne tombe qu\'une fois le personnage à sa portière (' + (ecart ?? -1).toFixed(2) + ' m)', ecart !== null && ecart < 0.3]);
@@ -531,7 +531,12 @@ if (scenario === 'sauvegarde') {
   // en partie traitée, le registre) se reprend aussi
   const attendre = () => page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 60000 });
   const r1 = await ev(() => {
-    const m = CL.mission, J = CL.jeu, log = [];
+    const m = CL.mission, J = CL.jeu, log = [], mi = id => document.querySelector(`.mi[data-m="${id}"]`);
+    // une première partie : seule la mission 1 est ouverte, les deux autres attendent que la précédente soit gagnée
+    log.push(['accueil, première fois : la mission 1 ouverte, les missions 2 et 3 fermées ; « Jouer » lance la mission 1', !mi('tournee').disabled && mi('traitement').disabled && mi('habillage').disabled
+      && mi('traitement').classList.contains('verrou') && mi('habillage').classList.contains('verrou') && document.querySelector('#jouer-t').textContent === 'Jouer' && document.querySelector('#jouer-s').textContent.includes('Mission 1')]);
+    mi('habillage').click();
+    log.push(['une mission fermée ne se lance pas', !document.querySelector('#accueil').hidden && CL.etat === 'accueil']);
     CL.jouer(); CL.step(260);
     const tr = CL.vehicule('tracteur'), [cave, bar, treille] = m.clients;
     cave.cartons = 6; cave.statut = 'chargee'; cave.veh = tr; m.places.tracteur = [...Array(6).fill('cave'), ...Array(12).fill(null)];
@@ -546,13 +551,13 @@ if (scenario === 'sauvegarde') {
   await page.reload({ waitUntil: 'load' }); await attendre();
   const r2 = await ev(() => {
     const q = s => document.querySelector(s), m = CL.mission, J = CL.jeu, log = [];
-    log.push(['à l\'accueil : « Continuer » la tournée en cours, « Nouvelle partie » ensuite', !q('#reprendre').hidden && q('#reprendre-t').textContent.includes('tournée') && q('#jouer').textContent === 'Nouvelle partie']);
+    log.push(['à l\'accueil : « Continuer » la tournée en cours ; la mission 2 toujours fermée', q('#jouer-t').textContent === 'Continuer' && q('#jouer-s').textContent.includes('tournée') && q('.mi[data-m="traitement"]').disabled]);
     // (la page a pu tourner quelques secondes avant de se recharger : la sauvegarde faite en la quittant a l'heure d'alors)
-    const H = Math.floor(CL.SAUVE.partie.minutes);
-    q('#reprendre').click(); CL.step(30);
+    const H = CL.SAUVE.partie.minutes;
+    q('#jouer').click(); CL.step(30);
     const tr = CL.vehicule('tracteur'), [cave, bar, treille] = m.clients;
     log.push(['reprise : les commandes où elles en étaient, le chèque, le prospect, l\'heure', cave.statut === 'chargee' && cave.veh === tr && bar.statut === 'signee' && treille.statut === 'livree'
-      && m.retardataire.statut === 'recupere' && m.prospect.statut === 'attendu' && Math.floor(J.minutes) === H && H >= 18 * 60 + 12 && m.etape === 'journee']);
+      && m.retardataire.statut === 'recupere' && m.prospect.statut === 'attendu' && Math.abs(J.minutes - H) < 1 && H >= 18 * 60 + 12 && m.etape === 'journee']);
     log.push(['ce qui se voit : 6 cartons dans le tracteur, la commande du bar sur la palette, La Treille rentrée chez elle', tr.m.cartons.filter(c => c.visible).length === 6 && tr.p.charge === 6
       && m.palette.filter(p => p.groupe.visible).every(p => p.client === 'bar') && m.palette.some(p => p.groupe.visible)
       && CL.clients.liste.find(f => f.id === 'treille').etat === 'dedans' && CL.clients.liste.find(f => f.id === 'cave').etat === 'dehors']);
@@ -588,7 +593,7 @@ if (scenario === 'sauvegarde') {
   await page.reload({ waitUntil: 'load' }); await attendre();
   const r4 = await ev(([b, f]) => {
     const q = s => document.querySelector(s), log = [];
-    q('#reprendre').click(); CL.step(60);
+    q('#jouer').click(); CL.step(60);
     const T = CL.traitement, p = T.parcelles[0];
     log.push(['reprise de la mission 2 : la bouillie prête, la parcelle traitée en partie (mêmes travées), le registre', T.etape === 'traiter' && T.prete && p.faites === f
       && p.v.blocs.every((x, j) => Array.from(x.traite).join('') === b[j]) && T.registre[0].par === 'essai' && T.registre[0].statut === 'attente' && CL.jeu.minutes > 1440]);
@@ -615,8 +620,9 @@ if (scenario === 'sauvegarde') {
   await page.reload({ waitUntil: 'load' }); await attendre();
   const r6 = await ev(() => {
     const q = s => document.querySelector(s), H = CL.habillage, J = CL.jeu, L = J.lieux, log = [];
-    log.push(['à l\'accueil : « Continuer » l\'habillage', !q('#reprendre').hidden && q('#reprendre-t').textContent.includes('habillage')]);
-    q('#reprendre').click(); CL.step(60);
+    log.push(['à l\'accueil : « Continuer » l\'habillage ; la tournée gagnée (médaille), la mission 2 ouverte, la 3 fermée (la 2 pas encore gagnée)', q('#jouer-t').textContent === 'Continuer' && q('#jouer-s').textContent.includes('habillage')
+      && q('.mi[data-m="tournee"]').classList.contains('gagnee') && !q('.mi[data-m="traitement"]').disabled && q('.mi[data-m="habillage"]').disabled]);
+    q('#jouer').click(); CL.step(60);
     const D = L.entrepot.depot, p = J.remorque.ici;
     log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, la remorque dételée dans la cour de l\'imprimerie, les palox rentrés, l\'œnologue rentrée ; on attend le SMS',
       H.etape === 'jour' && H.publiee && H.fiche.degre === 12.5 && H.fiche.energie.kj === 299.6 && H.fiche.ingr.has('sulfites') && H.bat === 'ok' && H.livre && H.decharge
