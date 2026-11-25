@@ -450,6 +450,7 @@ void main() {
     plan.push({ t: 'l', pts, c: '#c9b993', w: 4.2 });
   }
   surf.push(B(6, 0.09, 8.5, '#aaa69d', -86, 0, -67)); // l'aire de remplissage : un béton clair (ses détails : plus bas)
+  surf.push(B(22, 0.055, 8, '#cfc1a0', -69, 0, -76)); rect(-80, -80, -58, -72, '#cfc1a0'); // devant le hangar, du gravier
   rect(-89, -71.25, -83, -62.75, '#a9a399');
   // parking de l'église
   surf.push(B(12, 0.055, 9, '#cfc1a0', 121, 0, -59.5));
@@ -1025,10 +1026,11 @@ void main() {
   function chaiEtBureau() {
     const o = { x: -70, z: -52, w: 26, d: 12, h: 6.2, rot: -Math.PI / 2 }, { w, d, h } = o, L = [];
     const H = 2.8, PL = -9.1, PR = -8.1, PH = 2.15; // plafond de la pièce, porte (lx de PL à PR, hauteur PH)
-    // la halle du chai : quatre murs (40 cm), la façade ouverte à la grande porte (lx de -1,8 à 1,8, 4,2 m de haut)
+    // la halle du chai : quatre murs (40 cm), la façade ouverte à la grande porte (lx de -1,8 à 1,8, 5 m de haut : l'enjambeur
+    // y passe, Teddy, 25/11/2026)
     L.push(B(20.6, h, 0.4, TUF, 2.7, h / 2, -5.8), B(0.4, h, 11.2, TUF, 12.8, h / 2, 0), B(0.4, h, 11.2, TUF, -7.4, h / 2, 0));
-    L.push(B(5.8, h, 0.4, TUF, -4.7, h / 2, 5.8), B(11.2, h, 0.4, TUF, 7.4, h / 2, 5.8), B(3.6, h - 4.2, 0.4, TUF, 0, 4.2 + (h - 4.2) / 2, 5.8));
-    L.push(B(0.36, 4.3, 0.16, '#d8cbb0', -1.98, 2.15, 6.06), B(0.36, 4.3, 0.16, '#d8cbb0', 1.98, 2.15, 6.06), B(4.32, 0.36, 0.16, '#d8cbb0', 0, 4.38, 6.06)); // encadrement de pierre
+    L.push(B(5.8, h, 0.4, TUF, -4.7, h / 2, 5.8), B(11.2, h, 0.4, TUF, 7.4, h / 2, 5.8), B(3.6, h - 5.0, 0.4, TUF, 0, 5.0 + (h - 5.0) / 2, 5.8));
+    L.push(B(0.36, 5.1, 0.16, '#d8cbb0', -1.98, 2.55, 6.06), B(0.36, 5.1, 0.16, '#d8cbb0', 1.98, 2.55, 6.06), B(4.32, 0.36, 0.16, '#d8cbb0', 0, 5.18, 6.06)); // encadrement de pierre
     L.push(B(5.4, h, 7.2, TUF, -10.3, h / 2, -2.4));            // derrière la pièce
     L.push(B(5.4, h - H, 4.8, TUF, -10.3, H + (h - H) / 2, 3.6)); // au-dessus d'elle
     L.push(B(0.3, H, 4.8, TUF, -12.85, H / 2, 3.6));            // pignon sud
@@ -1067,7 +1069,7 @@ void main() {
     H2.push(B(11.2, 0.06, 19.8, BETON, -70, 0.03, -49.3), B(0.18, 0.065, 15, '#5f5b55', -66.8, 0.035, -50));
     // murs enduits à la chaux, côté intérieur (l'enduit se salit et tombe en pied de mur : modeles.js)
     for (const [x, z, lx, lz] of [[-75.58, -56.5, 0.02, 5.4], [-75.58, -44.8, 0.02, 10.8], [-64.42, -49.3, 0.02, 19.8], [-70, -59.18, 11.2, 0.02], [-70, -39.42, 11.2, 0.02]]) H2.push(B(lx, 6.15, lz, '#e6d4b0', x, 3.075, z));
-    H2.push(B(0.02, 1.95, 3.6, '#e6d4b0', -75.58, 5.175, -52));
+    H2.push(B(0.02, 1.15, 3.6, '#e6d4b0', -75.58, 5.575, -52));
     for (const z of [-57, -52.5, -48, -43.5]) H2.push(B(11.2, 0.28, 0.24, '#6b4a30', -70, 5.85, z)); // entraits de la charpente
     for (const z of [-56.5, -51.5, -46.5, -41.5]) H2.push(C(0.01, 0.01, 0.8, 4, FER, -70, 5.45, z), C(0.06, 0.32, 0.24, 10, FER, -70, 4.98, z), C(0.14, 0.14, 0.04, 8, '#ffe1a0', -70, 4.86, z));
     // cuves inox : fût, chapeau conique, pieds, porte basse, vanne, échelle sur l'une
@@ -1120,8 +1122,8 @@ void main() {
     // la grande porte : deux vantaux de planches sur leurs gonds, qui s'ouvrent vers la cour (main.js les anime)
     const vantail = s => {
       const g = new THREE.Group(), L2 = [];
-      L2.push(B(0.08, 4.1, 1.8, '#5b3a2a', 0, 2.05, s * 0.9));
-      for (const y of [0.5, 2.05, 3.6]) L2.push(B(0.1, 0.16, 1.7, '#4a3324', -0.02, y, s * 0.9));
+      L2.push(B(0.08, 4.9, 1.8, '#5b3a2a', 0, 2.45, s * 0.9));
+      for (const y of [0.5, 2.45, 4.4]) L2.push(B(0.1, 0.16, 1.7, '#4a3324', -0.02, y, s * 0.9));
       L2.push(B(0.06, 0.06, 0.18, '#2b2b30', -0.06, 2.0, s * 1.6));
       const m = new THREE.Mesh(fusion(L2), MAT); m.castShadow = true; m.receiveShadow = true; g.add(m);
       g.position.set(-76.02, 0, s > 0 ? -53.8 : -50.2); scene.add(g);
@@ -1307,13 +1309,13 @@ void main() {
   maison({ x: -100, z: -64, w: 16, d: 10, h: 7.2, rot: 0, volets: '#6b7f99', porteC: '#3e4f63' });
   const chai = chaiEtBureau();
   {
-    enseigne('CHAI', facade(chai, 0, 0.12), 4.65, 2.2, 0.7, '#5b3a2a', '#f1e2c4');
+    enseigne('CHAI', facade(chai, 0, 0.12), 5.75, 2.2, 0.62, '#5b3a2a', '#f1e2c4');
   }
   /* -- Le parvis du chai (Teddy, 24/11/2026 : « des artefacts viticoles, réalistes, et que ça vive »). Au nord de la grande
      porte, le chantier des barriques, le poste de rinçage (une barrique couchée sur son berceau d'inox, le nettoyeur haute
      pression et son tuyau, une flaque, le caniveau à grille), des barriques rincées debout qui s'égouttent ; dans le coin
      contre le muret, une remorque plateau chargée de caisses de vendange que l'on range sur des palettes, deux palox ;
-     près du bureau, un vieux pressoir à cage et un demi-fût planté. Ceux qui y travaillent, les caisses (en instances), le
+     près du bureau, un demi-fût planté (le vieux pressoir à cage est près de l'arbre de la cour). Ceux qui y travaillent, les caisses (en instances), le
      chien, les moineaux : parvis.js. Rien sur les passages des véhicules (la cour, la porte, le bureau), ni sur la marche
      arrière qui ressort du chai (chai.js, cheminSortie). */
   const FUT = '#7a4a2a', CERCLE = '#3a3a3e', INOX = '#a3aab2';
@@ -1397,18 +1399,7 @@ void main() {
   for (const dx of [-0.45, 0.45]) bati.push(B(0.14, 0.06, 1.0, '#4f5a63', -77.0 + dx, 0.03, -37.6));
   col.boite(-77.6, -38.1, -76.4, -37.1);
   contact.jupe(-77.6, -38.1, -76.4, -37.1, 0.8, 0.35);
-  // le vieux pressoir à cage, près du bureau : la maie de pierre et son bec, la cage de douelles cerclée de fer, le mouton,
-  // la vis et sa barre
-  {
-    const x = -79.4, z = -63.2;
-    bati.push(B(1.7, 0.45, 1.7, '#cfc3a8', x, 0.225, z), B(1.5, 0.04, 1.5, '#a99a82', x, 0.44, z), B(0.3, 0.12, 0.34, '#cfc3a8', x - 0.98, 0.33, z));
-    bati.push(C(0.58, 0.58, 0.85, 16, '#6b4a30', x, 0.88, z));
-    for (const y of [0.6, 0.9, 1.2]) bati.push(C(0.6, 0.6, 0.05, 16, CERCLE, x, y, z));
-    bati.push(B(1.2, 0.18, 0.28, '#5b3a2a', x, 1.42, z), B(0.28, 0.18, 1.2, '#5b3a2a', x, 1.6, z));
-    bati.push(C(0.06, 0.06, 1.3, 8, '#2b2b30', x, 2.2, z), C(0.13, 0.13, 0.2, 8, '#2b2b30', x, 1.85, z), B(1.7, 0.07, 0.07, '#5b3a2a', x, 1.88, z, 0.6));
-    col.boiteC(x, z, 1.7, 1.7);
-    contact.jupe(x - 0.85, z - 0.85, x + 0.85, z + 0.85, 0.5, 0.3);
-  }
+  // (le vieux pressoir à cage, qui était ici, est près de l'arbre de la cour : le chemin du hangar passe là)
   // un demi-fût planté d'un laurier, à côté de la porte du bureau
   bati.push(C(0.4, 0.36, 0.46, 12, FUT, -77.0, 0.23, -58.75), C(0.405, 0.405, 0.04, 12, CERCLE, -77.0, 0.36, -58.75), C(0.37, 0.37, 0.02, 12, '#6f5238', -77.0, 0.45, -58.75));
   bati.push(S(0.42, '#4d6b3c', -77.0, 0.92, -58.75, 1, 1.15, 1, 1), S(0.3, '#557544', -76.9, 1.3, -58.65, 1, 1, 1, 1));
@@ -1454,17 +1445,156 @@ void main() {
   col.boite(-115, -33.75, -93.4, -33.25); col.boite(-86.6, -33.75, -62, -33.25);
   contact.jupe(-115, -33.75, -93.4, -33.25, 0.8, 0.3); contact.jupe(-86.6, -33.75, -62, -33.25, 0.8, 0.3);
   for (const x of [-93, -87]) { bati.push(B(0.8, 2.6, 0.8, TUF, x, 1.3, -33.5), B(1, 0.2, 1, '#cbbf9f', x, 2.7, -33.5)); col.boiteC(x, -33.5, 0.8, 0.8); }
-  // la barre du portail et son enseigne, sur deux montants de fer : assez haut pour l'enjambeur (4,3 m)
-  bati.push(B(6.4, 0.12, 0.12, '#2b2b30', -90, 5.2, -33.5));
-  for (const x of [-93, -87]) bati.push(B(0.09, 2.4, 0.09, '#2b2b30', x, 4.0, -33.5));
-  enseigne('DOMAINE DU CLOS LIBRE', { x: -90, z: -33.42, rot: 0 }, 4.82, 5.6, 0.72, '#2b2b30', '#f0d9a0');
+  // le portail : ses deux piliers de tuffeau, et au-dessus (Teddy, 25/11/2026 : « un truc en fer forgé, plus haut ; quand on
+  // passe dessous ou qu'on le voit de derrière ») une arche de fer forgé : montants doubles et leurs pointes, deux arcs
+  // reliés de barreaux, volutes, une grappe au sommet, le nom du domaine découpé dans le fer (lisible des deux côtés), deux
+  // lanternes sur les piliers. Le plus bas à 5 m : l'enjambeur (4,4 m) passe dessous.
+  {
+    const FER = '#25262a', Z = -33.5;
+    const fer = (x0, y0, x1, y1, e = 0.05) => { const l = Math.hypot(x1 - x0, y1 - y0), g = new THREE.BoxGeometry(l, e, e); g.rotateZ(Math.atan2(y1 - y0, x1 - x0)); g.translate((x0 + x1) / 2, (y0 + y1) / 2, Z); return teinter(g, FER); };
+    const anneau = (x, y, r, arc = Math.PI * 2, rot = 0, e = 0.02) => { const g = new THREE.TorusGeometry(r, e, 4, 14, arc); g.rotateZ(rot); g.translate(x, y, Z); return teinter(g, FER); };
+    const L = [];
+    for (const s of [-1, 1]) {
+      const x = -90 + s * 3.0;
+      for (const dx of [-0.17, 0.17]) { L.push(fer(x + dx, 2.8, x + dx, 5.6, 0.055), teinter(C(0, 0.05, 0.18, 4, FER, x + dx, 5.69, Z), FER)); }
+      for (const y of [3.3, 4.1, 4.85]) L.push(fer(x - 0.17, y, x + 0.17, y, 0.04));
+      L.push(anneau(x, 3.7, 0.13), anneau(x, 4.47, 0.13));
+      // la volute, au pied de l'arche, côté intérieur ; la lanterne sur le pilier
+      L.push(anneau(x - s * 0.55, 5.32, 0.2, Math.PI * 1.5, s > 0 ? Math.PI : -Math.PI / 2), anneau(x - s * 0.55, 5.32, 0.09, Math.PI * 1.5, s > 0 ? Math.PI : -Math.PI / 2));
+      L.push(B(0.26, 0.05, 0.26, FER, x, 2.83, Z), B(0.18, 0.28, 0.18, '#ffe1a0', x, 3.0, Z), C(0, 0.17, 0.14, 4, FER, x, 3.21, Z, 'y', Math.PI / 4));
+    }
+    // deux barres droites, les deux arcs (une demi-ellipse chacun), les barreaux entre eux
+    L.push(fer(-93.2, 5.0, -86.8, 5.0, 0.06), fer(-93.2, 5.14, -86.8, 5.14, 0.04));
+    const arc = (a, b, y0, k) => { const P = []; for (let i = 0; i <= 18; i++) { const t = Math.PI * (1 - i / 18); P.push([-90 + a * Math.cos(t), y0 + b * Math.sin(t)]); } return P; };
+    const ext = arc(3.2, 1.35, 5.45), int = arc(2.95, 0.72, 5.36);
+    for (let i = 1; i < ext.length; i++) { L.push(fer(ext[i - 1][0], ext[i - 1][1], ext[i][0], ext[i][1], 0.06), fer(int[i - 1][0], int[i - 1][1], int[i][0], int[i][1], 0.045)); }
+    for (let i = 2; i < ext.length - 1; i += 2) if (i !== 8 && i !== 10) L.push(fer(int[i][0], int[i][1], ext[i][0], ext[i][1], 0.035));
+    // la grappe au sommet, sa feuille, sa vrille
+    for (const [dx, dy] of [[0, 0], [-0.1, 0.02], [0.1, 0.02], [-0.05, -0.09], [0.05, -0.09], [0, -0.18], [-0.15, 0.1], [0.15, 0.1], [0, 0.11]]) L.push(teinter(S(0.058, FER, -90 + dx, 6.46 + dy, Z), FER));
+    L.push(teinter(S(0.2, FER, -89.78, 6.66, Z, 1.1, 0.7, 0.2), FER), anneau(-90.25, 6.68, 0.1, Math.PI * 1.4, 0.3, 0.012));
+    bati.push(...L);
+    // le nom du domaine, découpé dans le fer : deux plaques de l'atlas, l'une vers la route, l'autre vers la cour
+    const lettres = (c, W, H) => {
+      c.clearRect(0, 0, W, H); c.fillStyle = FER; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `bold ${Math.round(H * 0.8)}px Georgia, 'Times New Roman', serif`; c.fillText('DOMAINE DU CLOS LIBRE', W / 2, H * 0.54);
+    };
+    atlas.poser(768, 70, lettres, 4.6, 0.42, -90, 5.56, Z + 0.02, 0);
+    atlas.poser(768, 70, lettres, 4.6, 0.42, -90, 5.56, Z - 0.02, Math.PI);
+  }
+  /* -- Le hangar ouvert (Teddy, 25/11/2026 : « un gros garage ouvert pour ranger le tracteur, l'enjambeur, un transpalette
+     et d'autres machines, derrière le chai, un peu caché mais accessible ») : au nord-est de la cour, derrière le bout du
+     chai (x de -76,5 à -60, z de -94 à -80), ouvert au sud ; trois travées de 5,5 m (le tracteur, l'enjambeur, le
+     transpalette et l'atelier) sous un toit de bac acier à deux pans (5 m à l'égout : l'enjambeur passe) ; soubassement de
+     parpaings et bardage de planches, poteaux d'acier en façade, dalle de béton, néons ; au fond de la troisième travée,
+     l'établi, le panneau d'outils, les étagères (bidons, huile), des pneus, un broyeur ; dehors, la cuve à gazole et sa
+     pompe. On y va par la cour, entre l'aire de remplissage et le bout du chai (lieux.reseau ; le vieux pressoir, qui était
+     là, est passé près de l'arbre). */
+  {
+    const x0 = -76.5, x1 = -60, z0 = -94, z1 = -80, H = 5.0, BLOC = '#b5b0a6', BARD = '#6e5a44', ACIER = '#5d6b78', xm = (x0 + x1) / 2, zm = (z0 + z1) / 2;
+    const L = [];
+    L.push(B(x1 - x0, 0.1, z1 - z0, '#a3a29c', xm, 0.0, zm));
+    const mur = (w, d, x, z) => L.push(B(w, 1.2, d, BLOC, x, 0.6, z), B(w, H - 1.2, d, BARD, x, 1.2 + (H - 1.2) / 2, z));
+    mur(x1 - x0, 0.25, xm, z0 + 0.125); mur(0.25, z1 - z0, x0 + 0.125, zm); mur(0.25, z1 - z0, x1 - 0.125, zm);
+    // les couvre-joints du bardage, dedans et dehors
+    for (let x = x0 + 0.55; x < x1 - 0.3; x += 0.55) L.push(B(0.06, H - 1.25, 0.03, '#5e4a36', x, 1.2 + (H - 1.2) / 2, z0 - 0.015), B(0.06, H - 1.25, 0.03, '#5e4a36', x, 1.2 + (H - 1.2) / 2, z0 + 0.265));
+    for (let z = z0 + 0.55; z < z1 - 0.3; z += 0.55) for (const x of [x0 - 0.015, x1 + 0.015]) L.push(B(0.03, H - 1.25, 0.06, '#5e4a36', x, 1.2 + (H - 1.2) / 2, z));
+    // les poteaux d'acier, la sablière de façade ; le toit à deux pans (les pignons en bardage) ; trois néons
+    for (const x of [x0 + 0.13, -71, -65.5, x1 - 0.13]) L.push(B(0.22, H, 0.22, ACIER, x, H / 2, z1 - 0.13));
+    for (const x of [-71, -65.5]) L.push(B(0.2, H, 0.2, ACIER, x, H / 2, z0 + 0.35));
+    L.push(B(x1 - x0, 0.32, 0.22, ACIER, xm, H - 0.16, z1 - 0.13), B(x1 - x0, 0.32, 0.2, ACIER, xm, H - 0.16, z0 + 0.35));
+    L.push(...toit(x1 - x0, z1 - z0, 1.4, '#8d9196', xm, H, zm, false, { mur: BARD, dessous: '#9aa0a6', faitiere: '#7d8288', egout: 0.6 }));
+    for (const x of [-73.75, -68.25, -62.75]) L.push(B(0.12, 0.06, 1.5, '#eef0f2', x, H + 0.35, zm), B(0.03, 0.4, 0.03, '#2b2b30', x, H + 0.55, zm));
+    // l'établi au fond de la troisième travée, son étau ; le panneau d'outils ; les étagères de bidons ; des pneus ; le broyeur
+    L.push(B(2.8, 0.08, 0.75, '#9a7b55', -62.6, 0.9, z0 + 0.65), B(2.7, 0.04, 0.6, '#7d6b55', -62.6, 0.3, z0 + 0.65));
+    for (const x of [-63.9, -61.3]) for (const dz of [0.35, 0.95]) L.push(B(0.07, 0.9, 0.07, '#5e4a36', x, 0.45, z0 + dz));
+    L.push(B(0.2, 0.14, 0.16, '#3b5f8e', -61.6, 1.01, z0 + 0.5), B(0.04, 0.04, 0.3, '#9aa0a6', -61.6, 1.02, z0 + 0.62));
+    L.push(B(2.4, 1.1, 0.04, '#c9b48a', -62.6, 1.75, z0 + 0.28));
+    for (const [x, y, w, h, c] of [[-63.5, 1.95, 0.05, 0.42, '#2b2b30'], [-63.2, 1.85, 0.32, 0.05, '#c0392b'], [-62.9, 1.95, 0.04, 0.5, '#2b2b30'], [-62.5, 1.9, 0.08, 0.3, '#e0b12a'], [-62.1, 1.95, 0.05, 0.45, '#2b2b30'], [-61.8, 1.7, 0.3, 0.05, '#2b2b30'], [-61.5, 2.0, 0.06, 0.25, '#c0392b']]) L.push(B(w, h, 0.03, c, x, y, z0 + 0.31));
+    for (let k = 0; k < 4; k++) L.push(B(0.42, 0.03, 2.2, '#8d9196', x1 - 0.48, 0.35 + k * 0.5, -88.0));
+    for (const x of [x1 - 0.68, x1 - 0.28]) for (const z of [-89.05, -86.95]) L.push(B(0.04, 1.85, 0.04, '#8d9196', x, 0.93, z));
+    for (let k = 0; k < 3; k++) for (let i = 0; i < 4; i++) L.push(B(0.3, 0.38, 0.2, ['#c0392b', '#2f6b3a', '#e0b12a', '#2b2b30'][(i + k) % 4], x1 - 0.48, 0.56 + k * 0.5, -88.8 + i * 0.5));
+    for (let k = 0; k < 4; k++) L.push(C(0.42, 0.42, 0.26, 12, '#1e1e22', -61.2, 0.14 + k * 0.27, -91.6), C(0.24, 0.24, 0.27, 10, '#55585e', -61.2, 0.14 + k * 0.27, -91.6));
+    L.push(B(1.9, 0.45, 1.2, '#c0392b', -63.4, 0.5, -89.6), B(1.95, 0.08, 1.25, '#9a2f22', -63.4, 0.76, -89.6), B(0.3, 0.35, 0.3, '#3a3a3e', -63.4, 0.95, -89.6), C(0.2, 0.2, 1.95, 10, '#2b2b30', -63.4, 0.22, -90.15, 'x'));
+    for (const dx of [-0.35, 0.35]) L.push(B(0.06, 0.6, 0.06, '#3a3a3e', -63.4 + dx, 1.1, -89.05));
+    // des taches d'huile sous les deux premières travées, un bidon, un balai
+    for (const [x, z, r] of [[-73.75, -86.9, 0.6], [-74.2, -88.6, 0.35], [-68.25, -86.4, 0.5]]) L.push(C(r, r, 0.004, 12, '#4f4c47', x, 0.052, z));
+    L.push(B(0.2, 0.32, 0.14, '#c0392b', -71.6, 0.21, -93.3), C(0.012, 0.012, 1.3, 4, '#9a7b55', -76.0, 0.75, -92.8, 'y'), B(0.35, 0.08, 0.06, '#5e4a36', -76.0, 0.1, -92.8));
+    // dehors, à l'ouest : la cuve à gazole sur son bac de rétention, sa pompe et son pistolet
+    L.push(B(1.4, 0.3, 2.4, '#8d9196', -78.3, 0.15, -86.5), C(0.62, 0.62, 2.0, 14, '#2f6b3a', -78.3, 0.95, -86.5, 'z'), B(0.25, 0.5, 0.2, '#c0392b', -78.3, 1.75, -85.5), C(0.03, 0.03, 0.9, 5, '#1e1e22', -77.9, 1.1, -85.4));
+    bati.push(...L);
+    contact.jupe(x0 - 0.05, z0 - 0.05, x1 + 0.05, z0 + 0.25, 1.4, 0.4);
+    plan.push({ t: 'b', x0, z0, x1, z1 });
+    plusTard.push(() => {
+      for (const [a, b, c, d] of [[x0, z0, x1, z0 + 0.25], [x0, z0, x0 + 0.25, z1], [x1 - 0.25, z0, x1, z1]]) col.boite(a, b, c, d).haut = true;
+      for (const x of [x0 + 0.13, -71, -65.5, x1 - 0.13]) col.boiteC(x, z1 - 0.13, 0.26, 0.26);
+      for (const [a, b, c, d] of [[-64.0, z0, -61.2, z0 + 1.05], [x1 - 0.72, -89.2, x1, -86.8], [-61.65, -92.05, -60.75, -91.15], [-64.4, -90.4, -62.4, -89.0], [-79.0, -87.7, -77.6, -85.3]]) col.boite(a, b, c, d);
+    });
+  }
+  /* -- L'arbre centenaire, au milieu de la cour (Teddy, 25/11/2026 : « un arbre centenaire au milieu, avec un peu d'herbe
+     autour ») : un vieux chêne, tronc épais, empattement, cinq maîtresses branches et un grand houppier ; un rond d'herbe
+     bordé de tuffeau, un banc circulaire autour du tronc, des feuilles tombées ; le vieux pressoir à cage à côté. */
+  {
+    const X = -99.5, Z = -46.5, ECORCE = '#5a4636';
+    const branche = (a, b, r0, r1) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], l = Math.hypot(dx, dy, dz), g = new THREE.CylinderGeometry(r1, r0, l, 7, 1, false);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / l, dy / l, dz / l)));
+      g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+      return teinter(g, ECORCE, T.bois);
+    };
+    const L = [];
+    L.push(teinter(C(0.62, 0.95, 4.4, 10, ECORCE, X, 2.2, Z), ECORCE, T.bois), teinter(C(0.95, 1.35, 0.55, 10, ECORCE, X, 0.27, Z), ECORCE, T.bois));
+    const tete = [X, 4.2, Z];
+    for (const [dx, dy, dz, r] of [[3.6, 3.3, 0.8, 0.3], [-3.2, 3.6, -1.4, 0.32], [0.9, 4.0, 3.5, 0.28], [-1.1, 3.8, -3.6, 0.3], [0.3, 5.4, 0.2, 0.34]]) L.push(branche(tete, [X + dx, 4.2 + dy, Z + dz], 0.5, r));
+    // le houppier : de grosses touffes (le vent les balance un peu)
+    const FEU = ['#6f8a3a', '#8a8f3a', '#a6823a', '#5d7a36', '#7d8a3c'];
+    [[0, 10.0, 0, 4.3], [3.6, 8.4, 0.9, 3.3], [-3.3, 8.6, -1.4, 3.4], [0.9, 8.2, 3.6, 3.1], [-1.1, 8.5, -3.7, 3.2], [2.6, 10.9, -2.1, 2.7], [-2.4, 10.8, 2.2, 2.6], [-3.8, 7.6, 2.0, 2.2], [3.5, 7.8, -2.6, 2.3]].forEach(([dx, y, dz, r], i) => {
+      const c = FEU[i % FEU.length], g = teinter(S(r, c, X + dx, y, Z + dz, 1, 0.78, 1, 1), c, T.feuillage), p = g.attributes.position, w = new Float32Array(p.count);
+      for (let k = 0; k < p.count; k++) w[k] = 0.2 + 0.5 * Math.max(0, (p.getY(k) - (y - r * 0.78)) / (r * 1.56));
+      g.setAttribute('aVent', new THREE.BufferAttribute(w, 1)); L.push(g);
+    });
+    // le rond d'herbe, sa bordure de tuffeau, le banc circulaire, des feuilles tombées
+    L.push(teinter(C(4.3, 4.3, 0.07, 28, '#8a9a4c', X, 0.035, Z), '#8a9a4c', T.herbe));
+    for (let i = 0; i < 24; i++) { const a = (i + 0.5) / 24 * Math.PI * 2; L.push(B(0.2, 0.22, 1.14, '#ebe0c6', X + Math.cos(a) * 4.42, 0.11, Z + Math.sin(a) * 4.42, -a)); }
+    for (let i = 0; i < 8; i++) {
+      const a = (i + 0.5) / 8 * Math.PI * 2, r = 1.55;
+      L.push(B(0.42, 0.05, 1.2, '#9a7b55', X + Math.cos(a) * r, 0.46, Z + Math.sin(a) * r, -a), B(0.06, 0.44, 0.06, '#5e4a36', X + Math.cos(a) * (r + 0.12), 0.22, Z + Math.sin(a) * (r + 0.12)));
+    }
+    for (let i = 0; i < 40; i++) { const a = i * 2.39996, r = 1.6 + (i * 0.37) % 2.5; L.push(B(0.18, 0.006, 0.12, ['#c9822f', '#a6532a', '#d9a832', '#8a5a2a'][i % 4], X + Math.cos(a) * r, 0.075, Z + Math.sin(a) * r, a)); }
+    bati.push(...L);
+    contact.tache(X, Z, 7, 7, 0.32);
+    plan.push({ t: 'a', x: X, z: Z, r: 6.5 });
+    col.boiteC(X, Z, 6.1, 6.1).haut = false; // le rond (les cailloux de la cour ne s'y sèment pas)
+    // le vieux pressoir à cage (il était près du bureau du chai) : la maie de pierre et son bec, la cage de douelles
+    // cerclée de fer, le mouton, la vis et sa barre
+    {
+      const x = -104.8, z = -53.0, CER = '#3a3a3e';
+      bati.push(B(1.7, 0.45, 1.7, '#cfc3a8', x, 0.225, z), B(1.5, 0.04, 1.5, '#a99a82', x, 0.44, z), B(0.3, 0.12, 0.34, '#cfc3a8', x + 0.98, 0.33, z));
+      bati.push(C(0.58, 0.58, 0.85, 16, '#6b4a30', x, 0.88, z));
+      for (const y of [0.6, 0.9, 1.2]) bati.push(C(0.6, 0.6, 0.05, 16, CER, x, y, z));
+      bati.push(B(1.2, 0.18, 0.28, '#5b3a2a', x, 1.42, z), B(0.28, 0.18, 1.2, '#5b3a2a', x, 1.6, z));
+      bati.push(C(0.06, 0.06, 1.3, 8, '#2b2b30', x, 2.2, z), C(0.13, 0.13, 0.2, 8, '#2b2b30', x, 1.85, z), B(1.7, 0.07, 0.07, '#5b3a2a', x, 1.88, z, 0.6));
+      col.boiteC(x, z, 1.7, 1.7);
+      contact.jupe(x - 0.85, z - 0.85, x + 0.85, z + 0.85, 0.5, 0.3);
+    }
+  }
+  /* -- Le parking des visiteurs, à l'ouest de la cour, sous le vieux cèdre : trois places entre des rondins (on s'y gare le
+     nez vers l'ouest ; hors de la sortie du van et du passage de la maison), le panneau */
+  {
+    for (const z of [-48.1, -50.7, -53.3, -55.9]) bati.push(teinter(C(0.11, 0.11, 4.6, 7, '#6b4a30', -112.5, 0.11, z, 'x'), '#6b4a30', T.bois));
+    panneau((c, W, H) => {
+      c.fillStyle = '#efe4cb'; c.fillRect(0, 0, W, H); c.strokeStyle = '#5a3f2b'; c.lineWidth = 7; c.strokeRect(5, 5, W - 10, H - 10);
+      c.fillStyle = '#2c4f8a'; c.beginPath(); c.roundRect(W * 0.08, H * 0.18, H * 0.64, H * 0.64, 10); c.fill();
+      c.fillStyle = '#ffffff'; c.font = `bold ${Math.round(H * 0.5)}px Arial, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('P', W * 0.08 + H * 0.32, H * 0.52);
+      c.fillStyle = '#5a3f2b'; c.font = `bold ${Math.round(H * 0.28)}px Georgia, serif`; c.textAlign = 'left'; c.fillText('Visiteurs', W * 0.08 + H * 0.78, H * 0.52);
+    }, 1.3, 0.5, -109.7, 1.3, -47.4, Math.PI / 2);
+  }
   /* -- l'aire de remplissage (mission 2 ; Teddy, 24/11/2026 : « une espèce de fosse pour le tracteur, avec des détails ») :
      un bac de béton entre deux murets de rétention, où le tracteur entre par le sud et ressort au nord vers les vignes
      (le muret ouest s'ouvre pour aller à la cuve d'eau) ; joints de dilatation, caniveau central à grille qui mène à la
      fosse de récupération, regard du débourbeur ; la cuve d'eau de 1 000 L dans sa cage, son tuyau jusqu'à la potence,
      le compteur d'eau, la vanne, la potence au-dessus de la cuve du pulvérisateur ; la réserve d'eau claire pour se
      laver les mains ; l'armoire fermée des produits, le bac de rétention et ses bidons, l'extincteur ; des bornes
-     jaunes ; le panneau. Lieux : lieux.aire (le tracteur s'arrête au milieu, tourné vers le nord), aire.cuve. */
+     jaunes. Lieux : lieux.aire (le tracteur s'arrête au milieu, tourné vers le nord), aire.cuve. */
   {
     const BET = '#aaa69d', MUR = '#bab5ab', JAUNE = '#e0b12a', NOIR2 = '#1e1e22', GRIS = '#6a6d74';
     // les murets : à l'est d'un tenant, à l'ouest en deux, ouverts devant la cuve d'eau ; leurs bouts peints en jaune et noir
@@ -1514,10 +1644,7 @@ void main() {
     bati.push(C(0.07, 0.07, 0.42, 8, '#c0392b', -84.25, 1.0, -71.12), B(0.06, 0.04, 0.05, NOIR2, -84.25, 1.24, -71.08));
     col.boiteC(-83.4, -71.4, 1.4, 0.7); col.boiteC(-82.05, -71.35, 1.05, 0.75);
     contact.jupe(-84.05, -71.7, -82.75, -71.1, 0.6, 0.35);
-    // le panneau, à l'entrée
-    for (const dx of [-0.85, 0.85]) bati.push(B(0.07, 1.9, 0.07, '#5d6b78', -82.0 + dx, 0.95, -62.3));
-    col.boiteC(-82.0, -62.3, 1.9, 0.15);
-    enseigne('AIRE DE REMPLISSAGE', { x: -82.0, z: -62.27, rot: 0 }, 1.65, 1.9, 0.42, '#2f6b3a', '#f4efe2');
+    // (plus de panneau à l'entrée : Teddy, 25/11/2026, « c'est moche »)
   }
 
   // Le bourg : maisons le long de la départementale
@@ -2790,7 +2917,7 @@ void main() {
         q.setFromAxisAngle(axe, rnd() * 6.28);
         // dans l'entrepôt de l'imprimeur, sa cour et son accès (mission 3) : tirée au sort comme avant (la suite du tirage
         // ne bouge pas), mais réduite à rien
-        const s = dansEntrepot(x, z, 0.6) ? 0 : 1;
+        const s = dansEntrepot(x, z, 0.6) || (x > -80 && x < -58 && z > -95 && z < -72) ? 0 : 1; // (ni dans le hangar du domaine, ni devant)
         m.compose(pv.set(x, 0, z), q, e.set(k * s, k * (0.8 + rnd() * 0.5) * s, k * s));
         im.setMatrixAt(i, m); im.setColorAt(i, c.copy(pick(TEINTES)));
       }
@@ -2880,9 +3007,9 @@ void main() {
 
   const lieux = {
     depart: { x: -99, z: -55, h: 0 },
-    // tracteur et van garés côte à côte à l'ouest de la cour, hors du passage entre le chai et le portail :
-    // on choisit l'un ou l'autre pour la tournée
-    tracteur: { x: -100, z: -42, h: Math.PI / 2 },
+    // le tracteur rangé dans le hangar, derrière le chai (sa travée, le nez vers la sortie) ; le van dans la cour : on
+    // choisit l'un ou l'autre pour la tournée
+    tracteur: { x: -73.75, z: -87.5, h: 0 },
     van: { x: -108, z: -37.5, h: Math.PI / 2 },
     chai: { x: -82, z: -52 },
     // dans le chai : où le véhicule s'arrête pour charger, la sortie en marche arrière, la caméra de la halle
@@ -2929,6 +3056,10 @@ void main() {
       { sens: true, points: [[95, -30], [86, -40], [78, -46], [81.5, -56], [88, -53.5], [100.5, -53], [101, -40], [96, -27], [95, 8], [95, 10]] },
       [[-55, 10], [-55, 124], [-53.2, 134.5]],                             // le chemin des Grands Champs, jusqu'à l'auberge
       [[-84, -45], [-86.5, -56], [-86, -66]],                              // la cour, jusqu'à l'aire de remplissage
+      [[-86.5, -56], [-86.5, -50.6]],                                      // de l'aire ou du hangar, tout droit vers la porte du chai
+      // le hangar (derrière le bout du chai) : entre l'aire et le bureau du chai, puis la travée du tracteur, celle de l'enjambeur
+      [[-86.5, -56], [-82.0, -60.0], [-80.4, -64.0], [-79.6, -68.5], [-77.0, -72.8], [-74.2, -75.6], [-73.75, -79.0], [-73.75, -84.5]],
+      [[-74.2, -75.6], [-69.4, -76.6], [-68.25, -79.0], [-68.25, -84.5]],
       ...CHEMINS,                                                          // les chemins de vigne, derrière le domaine
     ],
     route0: [-82.8, -58.4], // où l'on part en tournée : la sortie du chai (main.js, cheminSortie)
@@ -2940,12 +3071,14 @@ void main() {
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
-  // l'enjambeur (enjambeur.js), garé dans la cour au sud de l'aire de remplissage, tourné vers elle (vers le nord), son
-  // échelle du côté de la maison ; hors des passages (le chemin de la cour au chai et à l'aire, la porte de la maison)
-  lieux.enjambeur = { x: -95, z: -48, h: Math.PI };
+  // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
+  // gerbeur électrique de Marc : transpalette.js) dans la troisième travée
+  lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
+  lieux.transpalette = { x: -62.75, z: -84.4, h: 0 };
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
-  // la voiture du personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
-  lieux.garees = [[-105, -49, 0.5, '#e9e6de'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b']];
+  // deux voitures de visiteurs sur le parking du domaine ; la voiture du personnel de l'imprimerie, garée dans la cour de
+  // l'entrepôt, entre ses deux lignes blanches
+  lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b']];
   /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,
      à côté de sa porte, tourné vers la route ; le véhicule s'arrête sur la départementale, devant. L'entrepôt de
      l'imprimeur-étiqueteur : arret, la balise et le bout de l'itinéraire, dans la cour, cap au sud ; la conduite assistée

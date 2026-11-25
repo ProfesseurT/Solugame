@@ -23,8 +23,10 @@ export class Clients {
     const m = this.c.mission;
     for (const f of this.liste) {
       const p = f.p;
-      if (f.etat === 'dedans') continue;
+      if (f.etat === 'dedans' || f.etat === 'pilote') continue; // (pilote : mené d'ailleurs, main.js : Marc au transpalette)
       if (f.etat === 'range') { f.gestes.update(dt, t); continue; }
+      // un saut de côté (il évite un véhicule : main.js, esquiver) : joué jusqu'au bout ; il reste où il a atterri
+      if (p.sautT > 0) { p.update(dt, 0, 0, 0, false, this.c.col, t); if (p.sautT <= 0) f.l = { x: p.pos.x, z: p.pos.z, h: f.l.h }; continue; }
       if (f.porte && m.fait(m.arretDe(f.id)) && (f.t += dt) > ATTENTE) { this.ranger(f); continue; }
       // dehors : il se tourne vers vous, vous regarde et fait signe quand vous arrivez ; à plus de LOIN, il n'est dessiné à
       // aucun palier (main.js : ombrePerso), il n'y a rien à animer

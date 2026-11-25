@@ -56,7 +56,8 @@ export class Chai {
   maj(dt, ego, cap, position) {
     const { jeu, monde, cam } = this.c, PC = monde.porteChai;
     const charge = this.c.aCharger(); // on vient charger (la mission en cours : main.js)
-    const ouvrir = this.auChai || this.dansChai || (charge && jeu.distance(jeu.lieux.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7;
+    // (ouverte aussi quand Marc rentre les palox au transpalette, fin de la mission 3 : c.ouverte)
+    const ouvrir = this.auChai || this.dansChai || (charge && jeu.distance(jeu.lieux.chai) < 30) || Math.hypot(ego.x + 76, ego.z + 52) < 7 || !!(this.c.ouverte && this.c.ouverte());
     PC.k += ((ouvrir ? 1 : 0) - PC.k) * Math.min(1, dt * 1.6);
     const a = 1.7 * lisse(PC.k); PC.a.rotation.y = -a; PC.b.rotation.y = a;
     PC.col.fantome = PC.k > 0.5; // ouverte, elle n'arrête personne, mais compte toujours pour la caméra du dehors (le linteau)

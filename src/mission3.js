@@ -51,7 +51,8 @@ export class Habillage {
     this.livre = false;     // dételée dans la cour de l'imprimerie
     this.decharge = false; this.minDecharge = 0; // les six palox sont dans le hangar (et à quelle heure du jeu)
     this.sms = false; this.smsLu = false; this.tSms = 0; // le message de l'imprimerie : c'est habillé
-    this.rentree = false;   // ramenée au chai : c'est fini
+    this.rentree = false;   // ramenée au chai, les palox rentrés : c'est fini
+    this.marc = false;      // posée au chai : Marc rentre les palox au transpalette (main.js : jeu.marc)
     this.occupe = false;
     this.message = HX.messages.imprimerie.apercu; this.fil = 'imprimerie';
     this.objAff = null; this.itin = null; this.tItin = 0; this.tObj = 0;
@@ -75,7 +76,7 @@ export class Habillage {
   // La sauvegarde : où en est la journée, prise hors des gestes ; à la reprise, on est au domaine, à pied, la remorque
   // dételée là où elle doit être (cachée, à sa place au domaine, dans la cour de l'imprimerie, au chai) ; main.js remet
   // ce qui se voit
-  get stable() { return ['debut', 'message', 'jour', 'fin', 'libre'].includes(this.etape) && !this.occupe && !this.j.gestes.actif && (!this.livre || this.decharge); }
+  get stable() { return ['debut', 'message', 'jour', 'fin', 'libre'].includes(this.etape) && !this.occupe && !this.marc && !this.j.gestes.actif && (!this.livre || this.decharge); }
   instantane() {
     const F = this.fiche;
     return {
@@ -117,7 +118,7 @@ export class Habillage {
   // Rien tant qu'il reste à faire sur le téléphone avant de partir.
   get prochain() {
     const L = this.j.lieux, R = this.R;
-    if (this.rentree) return null;
+    if (this.rentree || this.marc) return null;
     if (this.sms) return this.attelee ? { lieu: L.remorque.chai.arret, nom: 'Le chai' } : { lieu: L.entrepot.arrivee, nom: 'Imprimerie Saint-Vincent' };
     if (this.livre) return this.decharge ? { lieu: L.maison, nom: 'Maison' } : null;
     if (this.echantillon === 'aucun') return { lieu: this.j.carton, nom: 'Le chai' };
@@ -149,6 +150,7 @@ export class Habillage {
     if (e === 'avant') return null;
     if (e === 'debut' || e === 'message') return O.message;
     if (e === 'fin' || e === 'libre') return O.fin;
+    if (this.marc) return O.marc;
     if (this.sms) return this.attelee ? O.chai : this.enTracteur ? O.reprendre : O.reprendreTracteur;
     if (this.livre) return this.decharge ? O.attente : O.dechargement;
     if (this.echantillon === 'aucun') return O.echantillon;
@@ -353,14 +355,16 @@ export class Habillage {
       j.hud.banniere(...HX.bannieres.reprise, 3); j.hud.dire(HX.dialogues.versChai);
     }, j.lieux.entrepot.virage);
   }
-  // Au chai : le tracteur avance tout seul jusqu'à poser la remorque à sa place, on la dételle : c'est fini
+  // Au chai : le tracteur avance tout seul jusqu'à poser la remorque à sa place, on la dételle ; Marc rentre les six
+  // palox au chai avec le transpalette (main.js : jeu.marc ; Teddy, 25/11/2026) : c'est fini
   deposer() {
     const j = this.j;
     this.occupe = true;
     j.hud.vider();
     this.R.deteler(j.lieux.remorque.chai, () => {
-      this.occupe = false; this.attelee = false; this.rentree = true; this.itin = null;
-      this.finir();
+      this.occupe = false; this.attelee = false; this.marc = true; this.itin = null;
+      j.hud.dire(HX.dialogues.marcDecharge);
+      j.marc.decharger(() => { this.marc = false; this.rentree = true; j.hud.dire(HX.dialogues.marcFini); this.finir(); });
     });
   }
   finir() {

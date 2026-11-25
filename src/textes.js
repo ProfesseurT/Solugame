@@ -494,6 +494,7 @@ export const HABILLAGE = {
     reprendreTracteur: 'Prenez le tracteur et allez chercher la remorque à l\'imprimerie',
     reprendre: 'Allez chercher la remorque à l\'imprimerie : arrêtez-vous à l\'entrée de la cour',
     chai: 'Ramenez la remorque au chai, et dételez-la dans la cour',
+    marc: 'Marc rentre les palox au chai, avec le transpalette',
     fin: 'Le Clos 2025 est habillé',
   },
   dialogues: {
@@ -533,6 +534,11 @@ export const HABILLAGE = {
     julienAide: [{ qui: 'Julien', txt: 'Bonjour ! Mettez-vous en travers, là, et reculez sur le timon. Je m\'occupe de la goupille.' }],
     versChai: [{ qui: 'Julien', txt: 'C\'est bon ! Bonne route, et bonne vente.' }, { qui: '', txt: 'Je la ramène au chai.' }],
     fin: [{ qui: '', txt: 'Le Clos 2025 est habillé, et chaque bouteille dit ce qu\'elle contient.' }],
+    // Marc, à la fin : il rentre les palox au chai avec le transpalette ; quand on fonce sur lui, il s'écarte en criant
+    // (Teddy, 25/11/2026)
+    marcDecharge: [{ qui: 'Marc', txt: 'Laissez, je m\'en occupe : je rentre les palox au chai avec le transpalette.' }],
+    marcFini: [{ qui: 'Marc', txt: 'C\'est rangé : les six palox sont au chai. Elles sont belles, ces bouteilles !' }],
+    marcCri: 'Attention aux accidents du travail ! Ça va te coûter cher !',
   },
   // l'appli : ce que le jeu rappelle (consignes, pas Viticode) et les refus quand la fiche ne correspond pas au bulletin
   app: {

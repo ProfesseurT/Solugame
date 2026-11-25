@@ -15,7 +15,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { enjambeur, deplierEnjambeur } from './enjambeur.js';
-import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habillerPalox, parPoses, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement } from './remorque.js';
+import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habillerPalox, parPoses, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement, transpalette, TRANSPALETTE } from './remorque.js';
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
@@ -160,6 +160,12 @@ const mChariot = chariot();
 scene.add(mChariot.groupe);
 placerChariot(mChariot, L.entrepot.chariot, col);
 let dech = null;
+// Le transpalette du domaine (un gerbeur électrique : remorque.js), rangé dans le hangar ; à la fin de la mission 3, Marc
+// rentre avec lui les palox au chai (jeu.marc, plus bas)
+const mTP = transpalette();
+scene.add(mTP.groupe);
+placerChariot(mTP, L.transpalette, col);
+let dechChai = null;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
 const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
@@ -416,7 +422,12 @@ jeu.remorque = {
       cadre: (a, b) => gestes.cadrerEntre(a, b, v),
       lancer: (etapes, fait) => {
         f.etat = 'range'; f.gestes.g = null; f.p.salut = false; f.p.regard = null; f.p.m.groupe.visible = true;
-        f.gestes.lancer(etapes, () => { f.etat = 'dehors'; f.l = { x: f.p.pos.x, z: f.p.pos.z, h: f.p.h }; fait(); });
+        f.gestes.lancer(etapes, () => {
+          f.etat = 'dehors'; f.l = { x: f.p.pos.x, z: f.p.pos.z, h: f.p.h }; fait();
+          // Marc, au domaine : il a fini d'aider, il rentre à la maison (Teddy, 25/11/2026)
+          // (par le portail, puis à l'est de l'arbre de la cour)
+          if (f === gens3.liste[2]) { const G = f.gestes; f.etat = 'range'; G.lancer([...G.allerA(() => VERS_MAISON[0], () => Math.PI), ...G.allerA(() => VERS_MAISON[1], () => Math.PI), ...G.allerA(() => VERS_MAISON[2], () => -2.6), ...G.entrer(PORTE_MAISON)], () => { f.etat = 'dedans'; }); }
+        });
       },
     }), fin);
   },
@@ -449,6 +460,54 @@ jeu.remorque = {
     if (f.p.assis) descendreChariot(f.p, mChariot, scene);
     const P = att.versMonde(-2.2, 0, 3.4, { x: 0, y: 0, z: 0 });
     f.gestes.g = null; f.l = { x: P.x, z: P.z, h: att.h - Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true;
+  },
+};
+// Marc et le transpalette (mission 3, Teddy, 25/11/2026 : « à la fin, Marc vient aider à décharger la remorque dans le chai
+// avec le transpalette ») : quand on reprend la remorque à l'imprimerie (on est loin), il sort le transpalette du hangar et
+// attend devant le chai ; la remorque posée, il rentre les six palox au chai (remorque.js : Dechargement, L.chai : on les
+// pose devant les cuves, deux par pile), debout sur la plateforme, les mains au timon ; puis il en descend.
+const PORTE_MAISON = { x: L.maison.x, z: L.maison.z - 0.2, rot: 0 }; // (la porte de la maison du domaine, façade au sud)
+const VERS_MAISON = [{ x: -90.6, z: -30.5 }, { x: -90.6, z: -38.5 }, { x: -94.2, z: -52.5 }]; // de l'allée à la porte : le portail, la cour
+const CHAI3 = {
+  chariot: { x: -84.6, z: -50.6, h: -Math.PI / 2 }, chai: { dehors: { x: -78.6, z: -52.1 }, retour: { x: -73.4, z: -50.2 } },
+  stock: [-56.5, -55.1, -53.7].flatMap(z => [0, 0.78].map(y => ({ x: -68.5, y, z, h: Math.PI / 2 }))),
+};
+jeu.marc = {
+  // il attend devant le chai, sur le transpalette
+  attendre() {
+    const f = gens3.liste[2], P = CHAI3.chariot;
+    placerChariot(mTP, P, col); mTP.groupe.visible = true;
+    f.gestes.g = null; f.etat = 'pilote'; f.p.m.groupe.visible = true; f.p.outil = TRANSPALETTE.mains;
+    this.surPlateforme(0, 0);
+  },
+  // la remorque posée : il rentre les palox ; fin quand le dernier est posé (il descend, à côté de la grande porte)
+  decharger(fin) {
+    if (gens3.liste[2].etat !== 'pilote') this.attendre();
+    dechChai = new Dechargement({ ch: mTP, att, L: CHAI3, conducteur: null, col, scene, vite: 3.4, habille: true });
+    this.fin = fin;
+  },
+  // debout sur la plateforme : le personnage suit le transpalette (pas d'enfant : il marche après), les mains au timon
+  surPlateforme(dt, t) {
+    const f = gens3.liste[2], p = f.p, g = mTP.groupe, h = g.rotation.y, P = TRANSPALETTE.pied;
+    p.pos.set(g.position.x + Math.sin(h) * P.z, 0, g.position.z + Math.cos(h) * P.z); p.h = p.hv = h; p.v = 0; p.maj = true;
+    p.sync(dt, t); p.m.groupe.position.y += 0.15; // (sur la plateforme)
+  },
+  maj(dt, t) {
+    if (!dechChai || dechChai.fini) return;
+    dechChai.maj(dt, t);
+    this.surPlateforme(dt, t);
+    if (dechChai.fini) {
+      // il descend, va devant la grande porte, se tourne vers la cour
+      const f = gens3.liste[2], G = f.gestes, D = { x: -78.4, z: -50.6 };
+      f.p.outil = null; f.etat = 'range';
+      G.lancer([...G.allerA(() => D, () => -Math.PI / 2)], () => { f.etat = 'dehors'; f.l = { x: D.x, z: D.z, h: -Math.PI / 2 }; });
+      const fin = this.fin; this.fin = null; if (fin) fin();
+    }
+  },
+  // une partie reprise, la mission finie : les palox au chai, le transpalette garé dedans
+  ranges() {
+    dechChai = new Dechargement({ ch: mTP, att, L: CHAI3, conducteur: null, col, scene, vite: 3.4, habille: true });
+    dechChai.finir();
   },
 };
 // le carton ouvert du chai, près de la palette (mission 3) : on y prend une bouteille, l'échantillon pour le labo
@@ -557,7 +616,8 @@ function descendre() {
 // ressort), décharger ceux d'un client, puis remonter au volant
 const chai = new Chai({ jeu, monde, mission, gestes, cam, hud, tactile, conduite: { couperMoteur, auVolant, aPied },
   // on vient charger : la grande porte s'ouvre (la tournée : ce qui est signé ; l'habillage : les cartons du Clos)
-  aCharger: () => enCours() === mission && (mission.aCharger.length > 0 || mission.etape === 'chargement') });
+  aCharger: () => enCours() === mission && (mission.aCharger.length > 0 || mission.etape === 'chargement'),
+  ouverte: () => !!dechChai && !dechChai.fini });
 jeu.charger = (piles, place, fin) => chai.charger(piles, place, fin);
 jeu.decharger = (f, cols, ajout, fin) => { couperMoteur(); gestes.decharger(veh, f, cols, { sorti: aPied, ajout, fin }); };
 // À l'épicerie : arrêté devant, on descend, on va au comptoir, l'épicier parle et donne le chèque, on remonte ; à pied, on
@@ -806,6 +866,25 @@ function marcher(dtm) {
 // La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients (ils se tournent vers vous et font
 // signe ; leur affaire faite, ils rangent leurs cartons et rentrent : clients.js), les figurants assis, les verres qu'on
 // boit, les voitures de la départementale
+// Marc s'écarte d'un véhicule du joueur qui fonce sur lui (Teddy, 25/11/2026 : « il s'échappe si on essaie de l'écraser, en
+// criant : attention aux accidents du travail, ça va te coûter cher ») : un saut de côté (clients.js le joue), le cri
+const V_ESQ = new THREE.Vector3();
+function esquiver(f, dt) {
+  const p = f.p;
+  f.tCri = Math.max(0, (f.tCri || 0) - dt);
+  if (p.etq && p.etq.vu) hud.placer(p.etq, p.pos.x, 2.25, p.pos.z, p.m.groupe.visible);
+  if (!jeu.auVolant || !p.m.groupe.visible || f.etat === 'dedans' || f.etat === 'pilote' || p.sautT > 0 || Math.abs(tr.v) < 1.6) return;
+  const sg = Math.sign(tr.v), fx = Math.sin(tr.h) * sg, fz = Math.cos(tr.h) * sg, rx = p.pos.x - tr.pos.x, rz = p.pos.z - tr.pos.z;
+  const devant = rx * fx + rz * fz, cote = rx * fz - rz * fx;
+  if (devant < 0 || devant > 3 + Math.abs(tr.v) * 0.9 || Math.abs(cote) > 2.2) return;
+  // du côté où il est déjà, s'il y a la place d'atterrir (sinon de l'autre : une remorque, un mur)
+  const libre = k => [1.2, 2.4].every(l => !col.resoudre(V_ESQ.set(p.pos.x + fz * k * l, 0, p.pos.z - fx * k * l), 0.34));
+  let s = cote >= 0 ? 1 : -1;
+  if (!libre(s) && libre(-s)) s = -s;
+  p.sauter(fz * s, -fx * s);
+  if (!p.etq) p.etq = hud.etiquette('', 'bulle');
+  if (f.tCri <= 0) { f.tCri = 5; hud.bulle(p.etq, HABILLAGE.dialogues.marcCri, 2.8); son.jouer('erreur'); }
+}
 const PARVIS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
@@ -825,6 +904,11 @@ function bourg(dtm, ego) {
   }
   clients.maj(dtm, temps, ego, jeu.auVolant);
   gens3.maj(dtm, temps, ego, jeu.auVolant);
+  { const marc = gens3.liste[2]; if (marc) {
+    if (habillage.sms && habillage.attelee && !habillage.marc && marc.etat === 'dedans') jeu.marc.attendre();
+    jeu.marc.maj(dtm, temps);
+    esquiver(marc, dtm);
+  } }
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
   tonnellerie.maj(dtm, PARVIS_C);
@@ -1020,6 +1104,7 @@ function miseAJour(dt) {
   // la ligne d'habillage tourne dès que les premiers palox sont rentrés (mission 3) ; le chariot, dessiné de près
   if (monde.ligne) monde.ligne.maj(dtm, habillage.decharge || (!!dech && dech.avancement > 0.15), camera.position.x, camera.position.z);
   voirChariot(mChariot, camera.position.x, camera.position.z);
+  voirChariot(mTP, camera.position.x, camera.position.z);
   // la barre d'état du téléphone : sans réseau en bas des Grands Champs (mission 2)
   { const res = !traitement.actif || traitement.reseau; if (res !== resAff) { resAff = res; $('tel-res').textContent = res ? '4G' : 'Pas de service'; } }
   tel.update(dt);
@@ -1249,7 +1334,7 @@ function reprendrePartie(P) {
     // ou qu'on rentre tout de suite), rechargée des palox habillés, ou posée au chai
     const H = habillage;
     if (H.prete) jeu.remorque.preparer(); // (Marc à sa place au domaine, au bord de l'allée)
-    if (H.rentree) { const C = L.remorque.chai; att.poser(C.x, C.z, C.h); habillerPalox(mRem, true); }
+    if (H.rentree) { const C = L.remorque.chai; att.poser(C.x, C.z, C.h); habillerPalox(mRem, true); jeu.marc.ranges(); } // (les palox rentrés au chai par Marc)
     else if (H.sms) jeu.remorque.habillee();
     else if (H.livre) {
       const D = L.entrepot.depot;
@@ -1259,6 +1344,8 @@ function reprendrePartie(P) {
       const f = gens3.liste[1], S = L.entrepot.stock[0]; f.p.placer(S.x + 1.6, S.z - 1.4, Math.PI / 2);
     }
     if (H.echantillon !== 'aucun') cartonOuvert.visible = true; // (cinq bouteilles sur six : celle du labo est partie)
+    // la remorque attelée au départ, Marc est rentré à la maison (il ressort pour le déchargement au chai : jeu.marc)
+    if (H.livre || H.sms || H.rentree) { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; }
   } else if (P.mission === 'traitement') {
     lendemain(); mission2 = false; horloge(0);
     traitement.reprendre(P.etat);
@@ -1315,7 +1402,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, mTP, get dechChai() { return dechChai; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },

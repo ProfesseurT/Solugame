@@ -381,16 +381,15 @@ if (scenario === 'voitures') {
       CL.agir(); CL.finirGeste(); CL.step(5);
       log.push(['volée : au volant', J.auVolant && J.veh.genre === 'voiture' && CL.GAREES.length === ng - 1]);
       // un passant qui voit venir la voiture saute de côté ; celui qui a le nez dans son téléphone se fait aplatir
-      // (la course traverse la cour vers l'est, là où l'enjambeur est garé : il va à l'aire de remplissage le temps de l'essai)
-      CL.vehicule('enjambeur').p.placer(-86, -66, Math.PI);
+      // (la course traverse la cour vers l'est, entre l'arbre et le muret)
       const E = CL.gens[1];
-      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); E.attente = 99; E.p.placer(-91, -47, 0);
+      CL.teleporter(-104, -40, Math.PI / 2); CL.step(3); E.attente = 99; E.p.placer(-95, -40, 0); // (au sud de l'arbre de la cour)
       // qu'il ne sorte pas son téléphone en attendant (un tirage au hasard) : il doit voir venir la voiture
       { const A = E.p.anim; A.repos = 0; A.envie = 0; A.tEnvie = 99; A.wTel = 0; E.p.telephone = false; }
       let saute = false; CL.ctrl.ky = -1; for (let n = 0; n < 150; n++) { CL.step(1); if (E.p.sautT > 0) saute = true; } CL.ctrl.ky = 0; CL.step(60);
       log.push(['mode WTF : le passant qui la voit venir saute de côté', saute]);
       const G = CL.gens[0];
-      CL.teleporter(-100, -47, Math.PI / 2); CL.step(3); G.attente = 99; G.p.telephone = true; G.p.placer(-91, -47, 0); CL.step(40); // dans la cour : pas de circulation
+      CL.teleporter(-104, -40, Math.PI / 2); CL.step(3); G.attente = 99; G.p.telephone = true; G.p.placer(-95, -40, 0); CL.step(40); // dans la cour : pas de circulation
       CL.ctrl.ky = -1; for (let n = 0; n < 300 && G.ecrase <= 0; n++) CL.step(1); CL.ctrl.ky = 0; CL.step(10);
       log.push(['le nez dans son téléphone, il est aplati comme une crêpe', G.ecrase > 0 && G.p.m.groupe.scale.y < 0.3]);
       CL.step(200);
@@ -624,9 +623,9 @@ if (scenario === 'sauvegarde') {
       && q('.mi[data-m="tournee"]').classList.contains('gagnee') && !q('.mi[data-m="traitement"]').disabled && q('.mi[data-m="habillage"]').disabled]);
     q('#jouer').click(); CL.step(60);
     const D = L.entrepot.depot, p = J.remorque.ici;
-    log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, la remorque dételée dans la cour de l\'imprimerie, les palox rentrés, l\'œnologue rentrée, Marc au domaine ; rentrer dormir',
+    log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, la remorque dételée dans la cour de l\'imprimerie, les palox rentrés, l\'œnologue rentrée, Marc rentré à la maison ; rentrer dormir',
       H.etape === 'jour' && H.publiee && H.fiche.degre === 12.5 && H.fiche.energie.kj === 299.6 && H.fiche.ingr.has('sulfites') && H.bat === 'ok' && H.livre && H.decharge
-      && !J.remorque.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 0.5 && CL.dech && CL.dech.fini && CL.gens3.liste[0].etat === 'dedans' && CL.gens3.liste[2].etat === 'dehors' && H.cible === L.maison && CL.jeu.minutes > 2 * 1440]);
+      && !J.remorque.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 0.5 && CL.dech && CL.dech.fini && CL.gens3.liste[0].etat === 'dedans' && CL.gens3.liste[2].etat === 'dedans' && H.cible === L.maison && CL.jeu.minutes > 2 * 1440]);
     CL.teleporter(L.maison.x, L.maison.z + 1, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(60 * 6);
     const E = L.entrepot.retour;
     log.push(['rentré dormir : au réveil, le message de l\'imprimerie ; la remorque rechargée, tournée vers la sortie', H.sms && Math.hypot(J.remorque.ici.x - E.x, J.remorque.ici.z - E.z) < 0.5 && CL.dech.stock.count === 0]);
@@ -837,9 +836,9 @@ if (scenario === 'habillage') {
       for (let n = 0; n < 4000 && J.gestes.actif; n++) { CL.step(1); if (!J.auVolant) descendu = true; const A = CL.attelage.anneau({ x: 0, z: 0 }); timon = Math.min(timon, Math.hypot(marc.p.pos.x - A.x, marc.p.pos.z - A.z)); }
       CL.step(10);
       log.push([`attelée par Marc (il est allé au timon : à ${timon.toFixed(1)} m de l'anneau), on est resté au volant ; la balise : l'imprimerie`, R.attelee && H.attelee && !descendu && J.auVolant && J.veh.genre === 'tracteur'
-        && timon < 1.2 && marc.etat === 'dehors' && H.cible === L.entrepot.depot]);
+        && timon < 1.2 && ['range', 'dehors'].includes(marc.etat) && H.cible === L.entrepot.depot]);
       const d = rouler(() => J.gestes.actif && H.occupe);
-      log.push([`en conduite assistée jusqu'à l'imprimerie, dans la zone d'activités (${d.t} s) : aucun choc, la remorque ne bute pas (${d.chocs}, ${d.butees}) ; on dételle`, d.ok && d.chocs === 0 && d.butees === 0]);
+      log.push([`en conduite assistée jusqu'à l'imprimerie, dans la zone d'activités (${d.t} s) : aucun choc, la remorque ne bute pas (${d.chocs}, ${d.butees}) ; on dételle ; Marc, lui, est rentré à la maison`, d.ok && d.chocs === 0 && d.butees === 0 && marc.etat === 'dedans' && !marc.p.m.groupe.visible]);
       CL.finirGeste(4000); CL.step(10);
       { const D = L.entrepot.depot, p = R.ici;
         log.push([`dételée dans la cour, à ${Math.hypot(p.x - D.x, p.z - D.z).toFixed(1)} m de sa place ; Julien va à son chariot`, H.livre && !R.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 2.5 && obj().includes('chariot')]); }
@@ -865,12 +864,18 @@ if (scenario === 'habillage') {
       descendu = false;
       for (let k = 0; k < 5000 && J.gestes.actif; k++) { CL.step(1); if (!J.auVolant) descendu = true; }
       CL.step(10);
-      log.push([`attelée par Julien, on est resté au volant, le tracteur tourné vers la sortie (cap ${CL.tr.h.toFixed(2)})`, R.attelee && H.attelee && !descendu && Math.cos(CL.tr.h) < -0.95 && julien.etat === 'dehors' && H.cible === L.remorque.chai.arret]);
+      log.push([`attelée par Julien, on est resté au volant, le tracteur tourné vers la sortie (cap ${CL.tr.h.toFixed(2)}) ; Marc attend devant le chai, sur le transpalette`, R.attelee && H.attelee && !descendu && Math.cos(CL.tr.h) < -0.95 && julien.etat === 'dehors' && H.cible === L.remorque.chai.arret
+        && marc.etat === 'pilote' && Math.hypot(CL.mTP.groupe.position.x + 84.6, CL.mTP.groupe.position.z + 50.6) < 0.5]);
       const g = rouler(() => J.gestes.actif && H.occupe);
       log.push([`jusqu'au chai (${g.t} s) : aucun choc, la remorque ne bute pas (${g.chocs}, ${g.butees}) ; on la pose`, g.ok && g.chocs === 0 && g.butees === 0]);
       CL.finirGeste(5000); CL.step(10);
       { const C = L.remorque.chai, p = R.ici;
-        log.push([`posée au chai, à ${Math.hypot(p.x - C.x, p.z - C.z).toFixed(1)} m de sa place ; la mission 3 est gagnée`, H.rentree && !R.attelee && Math.hypot(p.x - C.x, p.z - C.z) < 2.5 && H.etape === 'fin' && CL.SAUVE.gagnees.habillage === true]); }
+        log.push([`posée au chai, à ${Math.hypot(p.x - C.x, p.z - C.z).toFixed(1)} m de sa place ; Marc rentre les palox au transpalette, la grande porte s'ouvre`, H.marc && !H.rentree && !R.attelee && Math.hypot(p.x - C.x, p.z - C.z) < 2.5 && H.etape === 'jour' && !!CL.dechChai && obj().includes('Marc')]); }
+      // Marc range les six palox au chai : sur le transpalette, les mains au timon ; la mission est gagnée quand c'est fait
+      { let n = 0, haut = 0; const D = () => CL.dechChai;
+        for (; n < 60 * 240 && !D().fini; n++) { CL.step(1); haut = Math.max(haut, CL.mTP.tablier.position.y); }
+        log.push([`Marc a rangé les six palox au chai en ${(n / 60).toFixed(0)} s (fourches montées à ${haut.toFixed(2)} m), deux par pile devant les cuves ; la porte était ouverte ; la mission 3 est gagnée`,
+          D().fini && D().stock.count === 6 && haut > 1.1 && H.rentree && !H.marc && H.etape === 'fin' && CL.SAUVE.gagnees.habillage === true && CL.monde.porteChai.k > 0.5]); }
       CL.step(60 * 7);
       log.push(['la carte de fin, avec viticode.fr', J.finVue && document.querySelector('#fin-titre').textContent.includes('Viticode') && !document.querySelector('#fin-cta').hidden && document.querySelector('#fin-cta').href.startsWith('https://viticode.fr')]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
@@ -888,7 +893,7 @@ if (scenario === 'nuit') {
     const touche = (type, code, key = code) => dispatchEvent(new KeyboardEvent(type, { code, key }));
     try {
       CL.jouer(); CL.step(60);
-      CL.teleporter(-99, -50, 0); CL.step(5);
+      CL.teleporter(-93, -58, 0); CL.step(5); // (dans la cour, à l'est de l'arbre)
       touche('keydown', 'ArrowUp'); CL.step(90);
       const marche = CL.joueur.v;
       touche('keydown', 'ShiftLeft', 'Shift'); CL.step(60);
@@ -914,7 +919,7 @@ if (scenario === 'nuit') {
         const sortir = etq('Sortir');
         CL.agir(); CL.finirGeste(); CL.step(5);
         log.push(['on ressort : dehors, le toit revenu, l\'intérieur plus dessiné', sortir && !J.dedans && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.z > -53.4]);
-        CL.teleporter(-99, -50, 0); CL.step(5);
+        CL.teleporter(-93, -58, 0); CL.step(5);
       }
       J.minutes = 19 * 60 + 15; CL.step(5);
       log.push(['19 h 15 : le soir tombe (' + nuit().toFixed(2) + ')', nuit() > 0.3 && nuit() < 0.9]);
@@ -933,6 +938,19 @@ if (scenario === 'nuit') {
       log.push(['on ressort au matin, 7 h, le lendemain', J.heureTxt === '07:00' && J.minutes >= 1440 + 420 && !J.gestes.actif]);
       J.minutes += 40; CL.step(5);
       log.push(['7 h 40 : le jour est revenu, phares éteints', nuit() === 0 && CL.voitures().every(v => !v.mesh.userData.phares.groupe.visible)]);
+      // le domaine : le tracteur et l'enjambeur rangés dans le hangar, derrière le chai ; le transpalette dans la troisième
+      // travée ; Marc (mission 3) s'écarte en criant quand on fonce sur lui en tracteur
+      {
+        const L = J.lieux, tr = CL.vehicule('tracteur'), en = CL.vehicule('enjambeur'), dans = (v, l) => Math.hypot(v.p.pos.x - l.x, v.p.pos.z - l.z) < 0.5;
+        log.push(['le tracteur, l\'enjambeur et le transpalette rangés dans le hangar', dans(tr, L.tracteur) && dans(en, L.enjambeur) && L.tracteur.z < -80 && Math.hypot(CL.mTP.groupe.position.x - L.transpalette.x, CL.mTP.groupe.position.z - L.transpalette.z) < 0.5]);
+        J.remorque.preparer(); const m = CL.gens3.liste[2];
+        { const p = tr.p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
+        CL.tr.placer(m.p.pos.x + 0.3, m.p.pos.z + 16, Math.PI); CL.step(5);
+        CL.ctrl.ky = -1; let saut = false, dmin = 99;
+        for (let i = 0; i < 240; i++) { CL.step(1); if (m.p.sautT > 0) saut = true; dmin = Math.min(dmin, Math.hypot(CL.tr.pos.x - m.p.pos.x, CL.tr.pos.z - m.p.pos.z)); }
+        CL.ctrl.ky = 0; CL.step(30);
+        log.push([`Marc s'écarte du tracteur qui fonce sur lui (au plus près : ${dmin.toFixed(1)} m), en criant`, saut && dmin > 1.6 && m.p.etq && m.p.etq.el.textContent.startsWith('Attention aux accidents du travail')]);
+      }
     } catch (e) { log.push(['scénario interrompu : ' + e.message, false]); }
     return log;
   });
