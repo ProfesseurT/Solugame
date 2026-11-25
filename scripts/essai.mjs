@@ -44,7 +44,10 @@ const navigateur = await puppeteer.launch({
 const page = await navigateur.newPage();
 const erreurs = [];
 page.on('pageerror', e => erreurs.push('pageerror: ' + e.message));
-page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') erreurs.push(m.type() + ': ' + m.text()); });
+// (l'environnement, pas le jeu : une police de Google Fonts qui ne charge pas faute de réseau, le périphérique audio de la
+// machine qui décroche quand dix navigateurs tournent ensemble ; le jeu marche sans les deux)
+const HORS_JEU = /Failed to load resource: net::ERR_|AudioContext encountered an error from the audio device/;
+page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !HORS_JEU.test(m.text())) erreurs.push(m.type() + ': ' + m.text()); });
 const LENT = Number(process.env.LENT || 1);
 if (LENT > 1) await page.emulateCPUThrottling(LENT);
 await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load' });
