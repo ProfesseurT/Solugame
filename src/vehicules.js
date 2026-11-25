@@ -192,8 +192,10 @@ export class Tracteur {
       if (col.resoudre(c, RC)) { touche = true; nx += col.nx; nz += col.nz; }
       for (let j = 0; j < voitures.length; j++) {
         const vo = voitures[j];
+        // ses deux cercles le long de son axe (sur la départementale : x, dans son sens ; au château : ax, az, village.js)
+        const ax = vo.ax ?? vo.sens, az = vo.az ?? 0;
         for (let k = -1; k <= 1; k += 2) {
-          const vx = vo.x + k * 1.1 * vo.sens, dx = c.x - vx, dz = c.z - vo.z, d2 = dx * dx + dz * dz, R = RC + 1.0;
+          const vx = vo.x + k * 1.1 * ax, vz = vo.z + k * 1.1 * az, dx = c.x - vx, dz = c.z - vz, d2 = dx * dx + dz * dz, R = RC + 1.0;
           if (d2 < R * R && d2 > 1e-6) {
             const d = Math.sqrt(d2), p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d;
             vo.cogner(this, -dx / d, -dz / d); // la voiture encaisse le choc

@@ -614,6 +614,14 @@ export const TONNELLERIE = {
   rouleur: ['Pardon, je passe avec la barrique !', 'Celle-là part demain chez un vigneron du coin.', 'Elle roule toute seule, il suffit de la guider.'],
 };
 
+// Le village du château (village.js) : ceux qui déjeunent en terrasse, le serveur, les touristes, le belvédère
+export const VILLAGE = {
+  attables: ['Bonjour !', 'On est bien, en terrasse, même en décembre.', 'Les rillettes sont excellentes, ici.', 'Vous êtes du coin ? Quel beau village.'],
+  serveur: ['Je vous installe ? Une table au soleil ?', 'Attention, ça passe !', 'Le plat du jour est encore là.'],
+  touristes: ['Quel château !', 'Vous pourriez nous prendre en photo ?', 'C\'est par où, le belvédère ?', 'Les tours sont magnifiques.'],
+  belvedere: ['Quelle vue sur la vallée !', 'On voit les vignes jusqu\'au bourg.', 'Bonjour !'],
+};
+
 export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],
