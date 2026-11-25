@@ -32,6 +32,7 @@ import { Verres } from './verres.js';
 import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
 import { Tonnellerie } from './tonnellerie.js';
+import { Village } from './village.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
@@ -250,11 +251,12 @@ function peupler() {
   habillage.c.oeno = gens3.liste[0]; habillage.c.etiq = gens3.liste[1]; habillage.c.salarie = gens3.liste[2];
   // Marc n'est là que le jour de l'habillage, la remorque préparée (jeu.remorque.preparer)
   { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; }
+  village.creerVoitures(); // les deux voitures qui montent au château, en derniers (rien ne change pour les autres)
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
-function asseoirConducteur(vo) {
-  const p = new Pieton(unPassant({}, rConducteurs)), P = vo.mesh.userData.poste;
+function asseoirConducteur(vo, r = rConducteurs) {
+  const p = new Pieton(unPassant({}, r)), P = vo.mesh.userData.poste;
   vo.mesh.add(p.m.groupe); p.m.groupe.position.copy(P.siege);
   p.assis = true; p.poste = P; p.volant = 0; p.m.maillage.castShadow = false;
   p.caler();
@@ -265,12 +267,12 @@ function asseoirConducteur(vo) {
 // un passant du bas-côté de sa voie : il nous la prête de bon cœur, ou il s'enfuit en criant au voleur. sorti() : il a
 // quitté son siège ; debout() : il est sur ses pieds, à l'écart.
 const GESTES_PNJ = []; // les gestes en cours des autres (main.js les fait avancer : bourg)
-function conducteurDescend(p, v, sorti, debout) {
+function conducteurDescend(p, v, sorti, debout, autour = false) {
   const G = new Gestes({ jeu, scene, col, acteur: p }), vole = jeu.wtf;
   G.lancer(vole ? G.tomber(v, sorti) : G.etapesDescendre(v, sorti, false), () => {
     debout?.();
     const x = p.pos.x, z = p.pos.z;
-    const zone = z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
+    const zone = autour ? { x0: x - 6, z0: z - 6, x1: x + 6, z1: z + 6 } : z > 10 ? { x0: x - 30, z0: 14.4, x1: x + 30, z1: 16.6 } : { x0: x - 30, z0: 3.9, x1: x + 30, z1: 5.9 };
     const pa = new Passant(p.m, zone, rPietons);
     pa.p.placer(x, z, p.h);
     pa.cri = hud.etiquette('', 'bulle'); pa.p.etq = pa.cri; pa.bulle = 4;
@@ -287,8 +289,8 @@ function conducteurDescend(p, v, sorti, debout) {
 const voituresM = [];
 // voitures garées : immobiles, chacune son maillage (en mode WTF, on peut la voler), et sa boîte de collision
 const GAREES = [];
-for (const [x, z, r, c] of L.garees) {
-  const m = voiture(c); m.position.set(x, 0, z); m.rotation.y = r; m.receiveShadow = true; m.name = 'voiture garée';
+for (const [x, z, r, c, y = 0] of [...L.garees, ...L.chateau.garees]) { // (y : le village du château, sur son plateau)
+  const m = voiture(c); m.position.set(x, y, z); m.rotation.y = r; m.receiveShadow = true; m.name = 'voiture garée';
   scene.add(m); voituresM.push(m);
   const tourne = Math.abs(Math.sin(r)) > 0.5;
   const b = col.boiteC(x, z, tourne ? 3.9 : 1.75, tourne ? 1.75 : 3.9); b.haut = false;
@@ -565,6 +567,18 @@ const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, 
 const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, regarder });
 const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
+// le village du château qui vit (village.js) : ses terrasses, ses touristes, ses deux voitures qui montent et
+// redescendent (comme celles de la départementale : un conducteur, des phares, on les emprunte) ; AUTOS : toutes les
+// voitures qui roulent, pour les chocs du véhicule qu'on conduit et la conduite assistée
+const rVillage = hasard(61);
+const village = new Village({
+  scene, camera, hud, lieux: L, unPassant, emettre,
+  voiture: c => { const m = voiture(c, undefined, true); scene.add(m); voituresM.push(m); return m; },
+  conducteur: vo => asseoirConducteur(vo, rVillage),
+  passantVit: (p, dt, danger, ecraseur) => passantVit(p, dt, danger, ecraseur),
+});
+village.garees = GAREES.filter(g => g.m.position.y > 20).map(g => g.m); // (les voitures garées du château : cachées de loin, comme ses gens)
+const AUTOS = [];
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
 $('radio').addEventListener('click', e => { e.stopPropagation(); if (jeu.auVolant) { son.jouer('tap'); jeu.basculerRadio(); } });
@@ -661,12 +675,17 @@ function voitureProche() {
     const d = Math.hypot(joueur.pos.x - v.x, joueur.pos.z - v.z);
     if (d < dmin) { dmin = d; best = v; }
   }
+  for (const v of village.voitures) {
+    if (!v.conducteur || Math.abs(v.v) > 0.6) continue;
+    const d = Math.hypot(joueur.pos.x - v.x, joueur.pos.z - v.z);
+    if (d < dmin) { dmin = d; best = v; }
+  }
   if (jeu.wtf) for (const g of GAREES) { const d = Math.hypot(joueur.pos.x - g.x, joueur.pos.z - g.z) - 0.8; if (d < dmin) { dmin = d; best = g; } }
   return best;
 }
 function prendreVoiture(c) {
   if (gestes.actif) return;
-  const ia = voitures.includes(c), mesh = ia ? c.mesh : c.m, h = ia ? c.mesh.rotation.y : c.h, { nom, couleur } = mesh.userData;
+  const iv = village.voitures.includes(c), ia = iv || voitures.includes(c), mesh = ia ? c.mesh : c.m, h = ia ? c.mesh.rotation.y : c.h, { nom, couleur } = mesh.userData;
   const m = voitureConduite(couleur, nom);
   finir(m.groupe);
   const v = creerVehicule('voiture', m, { x: c.x, z: c.z, h }, posteDe(m));
@@ -677,9 +696,9 @@ function prendreVoiture(c) {
     c.conducteur = null; libre = false; debout = false;
     m.caisse.add(p.m.groupe); p.m.groupe.position.copy(m.siege); p.m.groupe.rotation.set(0, 0, 0);
     p.poste = v.poste; p.pos.set(c.x, 0, c.z); p.sync(0, temps);
-    voitures.splice(voitures.indexOf(c), 1);
+    if (iv) village.retirer(c); else voitures.splice(voitures.indexOf(c), 1);
     c.cri.vu = false;
-    REMPLACER.push({ t: temps + 20, sens: c.sens, vmax: c.vmax, couleur, cri: c.cri });
+    REMPLACER.push({ t: temps + 20, sens: c.sens, vmax: c.vmax, couleur, cri: c.cri, village: iv });
   } else { GAREES.splice(GAREES.indexOf(c), 1); col.retirer(c.boite); }
   scene.remove(mesh); voituresM.splice(voituresM.indexOf(mesh), 1);
   veh = v; tr = v.p; tm = v.m;
@@ -689,14 +708,14 @@ function prendreVoiture(c) {
     // mode WTF : on va jusqu'à sa portière, on l'ouvre, il en tombe ; on monte une fois qu'il s'est relevé et écarté
     gestes.lancer([
       ...gestes.versMontee(v), gestes.portiere(v, 1),
-      { action: () => conducteurDescend(p, v, () => { libre = true; }, () => { debout = true; }) },
+      { action: () => conducteurDescend(p, v, () => { libre = true; }, () => { debout = true; }, iv) },
       { maj: (dt, t, u, T) => { gestes.immobile(dt, t); if (debout && !tLibre) tLibre = T; return (tLibre && T > tLibre + 0.4) || T > 8; } },
       ...gestes.etapesMonter(v, monter, true),
     ]);
     return;
   }
   // sinon il descend, nous laisse la portière ouverte et s'écarte ; puis on monte
-  if (ia) conducteurDescend(p, v, () => { libre = true; });
+  if (ia) conducteurDescend(p, v, () => { libre = true; }, undefined, iv);
   gestes.lancer([
     { maj: (dt, t, u, T) => { gestes.immobile(dt, t); return (libre && T > 0.6) || T > 8; } },
     ...gestes.etapesMonter(v, monter),
@@ -806,7 +825,7 @@ function conduire(dt, dtm, dernier = true) {
   // mission 2 : l'enjambeur engagé dans un rang fait toute la parcelle tout seul (passages, demi-tours) ; on ne gère que
   // l'avance (Teddy, 24/11/2026) : doigt posé ou flèche du haut, il avance ; glissé vers le bas ou flèche du bas, il
   // freine ; rien, il s'arrête. Le volant (doigt de côté, flèches de côté) ne fait rien.
-  const engage = M === traitement && traitement.engage && libre ? pilote.commande(tr, veh.genre, M.cible, voitures, col, true) : null;
+  const engage = M === traitement && traitement.engage && libre ? pilote.commande(tr, veh.genre, M.cible, AUTOS, col, true) : null;
   if (engage) {
     const avance = ctrl.clavier ? (ctrl.ky < 0 ? 1 : ctrl.ky > 0 ? -1 : 0) : ctrl.id !== null ? (ctrl.jy > 0.45 ? -1 : 1) : 0;
     braq = engage.braq; jeu.pilote = true;
@@ -815,14 +834,14 @@ function conduire(dt, dtm, dernier = true) {
   else if (ctrl.clavier && libre) {
     gaz = -ctrl.ky; braq = -ctrl.kx;
     // dans une parcelle du jour, la bouillie prête (mission2.js) : flèche du haut seule, le guidage suit les passages
-    if (M === traitement && traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, voitures, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
+    if (M === traitement && traitement.guidage && ctrl.ky < 0 && !ctrl.kx) { const auto = pilote.commande(tr, veh.genre, M.cible, AUTOS, col); if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; } }
   }
   else if (ctrl.id !== null && libre) {
     const sx = ctrl.jx, sy = ctrl.jy, ax = Math.abs(sx), tourne = ax > 0.2;
     const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
     if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.5 && sy > 0.55 && tr.v > 6) { fm = true; gaz *= 0.3; } } // frein à main : un geste franc, lancé
     else {
-      const auto = tourne ? null : pilote.commande(tr, veh.genre, M.cible, voitures, col);
+      const auto = tourne ? null : pilote.commande(tr, veh.genre, M.cible, AUTOS, col);
       if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
       else {
         braq = volant;
@@ -832,7 +851,7 @@ function conduire(dt, dtm, dernier = true) {
     }
   } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0;
   if (ctrl.fm && libre) fm = true;
-  tr.update(dtm, gaz, braq, col, voitures, temps, fm);
+  tr.update(dtm, gaz, braq, col, AUTOS, temps, fm);
   if (M === traitement) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
   if (!dernier) return;
   joueur.volant = tr.braq; // les mains suivent la direction
@@ -886,22 +905,26 @@ function esquiver(f, dt) {
   if (f.tCri <= 0) { f.tCri = 5; hud.bulle(p.etq, HABILLAGE.dialogues.marcCri, 2.8); son.jouer('erreur'); }
 }
 const PARVIS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
+const VILLAGE_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, ecraseur: false, obstacles: OBSTACLES };
+// un passant (du bourg, ou un touriste du château) : il s'écarte du véhicule qui arrive (il crie) ; en mode WTF, le
+// véhicule lancé lui passe dessus, il s'aplatit (il se relève quelques secondes plus tard)
+function passantVit(p, dtm, danger, ecraseur) {
+  const r = p.update(dtm, danger, col, temps);
+  if (r === 'releve') hud.bulle(p.cri, pick(REPLIQUES.releve), 2.2);
+  else if (r) hud.bulle(p.cri, 'Hé !', 1.6);
+  if (ecraseur && p.ecrase <= 0 && sousVehicule(tr, p.p.pos) && p.ecraser()) {
+    son.jouer('pouet'); son.jouer('choc'); cam.secousse = Math.max(cam.secousse, 0.3);
+    hud.bulle(p.cri, pick(REPLIQUES.ecrase), 1.4);
+  }
+  if (p.ecrase <= 0) { horsDesVehicules(p.p.pos, 0.34); if (att.attelee) att.pousser(p.p.pos, 0.34); }
+  if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, p.p.pos.y + 2.3, p.p.pos.z, true);
+}
+const klaxonVillage = v => { son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !', 1.6); };
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
   DANGER.wtf = jeu.wtf;
   const danger = jeu.auVolant ? DANGER : null, ecraseur = jeu.wtf && jeu.auVolant && Math.abs(tr.v) > 2.5;
-  for (const p of passants) {
-    const r = p.update(dtm, danger, col, temps);
-    if (r === 'releve') hud.bulle(p.cri, pick(REPLIQUES.releve), 2.2);
-    else if (r) hud.bulle(p.cri, 'Hé !', 1.6);
-    // mode WTF : le véhicule lancé lui passe dessus, il s'aplatit (il se relève quelques secondes plus tard)
-    if (ecraseur && p.ecrase <= 0 && sousVehicule(tr, p.p.pos) && p.ecraser()) {
-      son.jouer('pouet'); son.jouer('choc'); cam.secousse = Math.max(cam.secousse, 0.3);
-      hud.bulle(p.cri, pick(REPLIQUES.ecrase), 1.4);
-    }
-    if (p.ecrase <= 0) { horsDesVehicules(p.p.pos, 0.34); if (att.attelee) att.pousser(p.p.pos, 0.34); }
-    if (p.cri.vu) hud.placer(p.cri, p.p.pos.x, 2.3, p.p.pos.z, true);
-  }
+  for (const p of passants) passantVit(p, dtm, danger, ecraseur);
   clients.maj(dtm, temps, ego, jeu.auVolant);
   gens3.maj(dtm, temps, ego, jeu.auVolant);
   { const marc = gens3.liste[2]; if (marc) {
@@ -912,6 +935,9 @@ function bourg(dtm, ego) {
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
   tonnellerie.maj(dtm, PARVIS_C);
+  VILLAGE_C.t = temps; VILLAGE_C.minutes = jeu.minutes; VILLAGE_C.ego = ego; VILLAGE_C.aPied = !jeu.auVolant; VILLAGE_C.danger = danger; VILLAGE_C.ecraseur = ecraseur;
+  village.maj(dtm, VILLAGE_C, klaxonVillage);
+  AUTOS.length = 0; for (const v of voitures) AUTOS.push(v); for (const v of village.voitures) AUTOS.push(v);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
@@ -922,6 +948,7 @@ function bourg(dtm, ego) {
     const r = REMPLACER[i];
     if (temps < r.t) continue;
     REMPLACER.splice(i, 1);
+    if (r.village) { village.nouvelleVoiture(r.couleur, 0, r.cri); continue; }
     const vo = creerVoiture(-340 * r.sens, r.sens, r.vmax, r.couleur); vo.cri = r.cri;
     asseoirConducteur(vo);
   }
@@ -973,6 +1000,7 @@ function phares() {
   const on = UNI.uNuit.value > 0.15;
   const allumer = (ph, a) => { if (ph.groupe.visible !== a) { ph.groupe.visible = a; ph.flaque.visible = a; } };
   for (const v of voitures) allumer(v.mesh.userData.phares, on);
+  for (const v of village.voitures) allumer(v.mesh.userData.phares, on);
   for (const v of VEHICULES) allumer(v.m.phares, on && v === veh && (jeu.auVolant || gestes.roule));
 }
 
@@ -1068,7 +1096,7 @@ function reperes(dt, ego, cible) {
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
   const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
-  hud.placer(etqPrendre, vc ? vc.x : 0, 2.3, vc ? vc.z : 0, !!vc);
+  hud.placer(etqPrendre, vc ? vc.x : 0, 2.3 + (vc ? vc.y ?? (vc.m ? vc.m.position.y : 0) : 0), vc ? vc.z : 0, !!vc); // (au château : sur son plateau)
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
   hud.placer(etqDescendre, tr.pos.x, tr.pos.y + (veh.genre === 'enjambeur' ? 5.0 : 3.8), tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 }
@@ -1083,7 +1111,7 @@ function miseAJour(dt) {
     // Doigt posé ou touche de direction enfoncée : une scène de cartons se joue trois fois plus vite.
     const vite = gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1;
     gestes.update(dtm * vite, temps);
-    if (jeu.auVolant && !gestes.roule) tr.update(dtm, 0, 0, col, voitures, temps); // (le véhicule qui roule tout seul : gestes.js)
+    if (jeu.auVolant && !gestes.roule) tr.update(dtm, 0, 0, col, AUTOS, temps); // (le véhicule qui roule tout seul : gestes.js)
   } else if (jeu.auVolant) {
     // en traitant les rangs (mission2.js), doigt posé ou touche enfoncée : la scène va trois fois plus vite (trois pas de
     // conduite par image)
@@ -1170,9 +1198,10 @@ function majTaches() {
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const f of gens3.liste) if (gens3.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
-  for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
+  for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y, m.position.y);
   parvis.taches(t, ombrePerso);
   tonnellerie.taches(t, ombrePerso);
+  village.taches(t, ombrePerso);
   t.fin();
 }
 // Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
@@ -1402,7 +1431,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, mTP, get dechChai() { return dechChai; },
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },

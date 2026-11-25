@@ -724,7 +724,7 @@ void main() {
     // lanternes de part et d'autre du bandeau
     for (const x of [X0, X1]) L.push(B(0.05, 0.05, 0.28, '#2b2b30', x, 3.72, z0 + 0.3), B(0.18, 0.26, 0.18, '#2b2b30', x, 3.6, z0 + 0.46), B(0.13, 0.18, 0.13, LUEUR, x, 3.58, z0 + 0.46));
     // l'intérieur peint, éclairé : derrière la vitrine et derrière la porte
-    const fond = (lx, l3, h3, y, porte) => { const p = facade(o, lx, 0.012), W = porte ? 80 : 320; atlas.poser(W, Math.round(W * h3 / l3), (c, w2, h2) => peindreInterieur(c, w2, h2, o.boutique, porte), l3, h3, p.x, y, p.z, p.rot, true); };
+    const fond = (lx, l3, h3, y, porte) => { const p = facade(o, lx, 0.012), W = porte ? 80 : 320; atlas.poser(W, Math.round(W * h3 / l3), (c, w2, h2) => peindreInterieur(c, w2, h2, o.boutique, porte), l3, h3, p.x, y + (o.y || 0), p.z, p.rot, true); };
     fond(gx, gw, 2.06, 1.67, false);
     fond(px, pw, 2.3, 1.15, true);
   }
@@ -1810,7 +1810,106 @@ void main() {
      de logis en tuffeau, grandes croisées, lucarnes à fronton, hautes cheminées, deux grosses tours rondes au sud
      (mâchicoulis, toits en poivrière), deux ailes et leur cour d'honneur au nord, fermée par un châtelet d'entrée ;
      jardins à la française, mur de clôture. Son propre tirage au sort (le reste du monde ne bouge pas). */
+  /* Le village du château qui vit (Teddy, 25/11/2026 : « de l'activité au château : des gens, des voitures, des
+     restaurants, des terrasses ») : le trottoir pavé tout autour de la route du tour (ouvert devant la route), l'enseigne
+     et la terrasse des deux restaurants et du café (un platelage de bois, des jardinières aux deux bouts, des tables
+     rondes et leurs chaises, l'assiette et le verre de chaque place, une carafe ou une bouteille, des parasols au bord de
+     la rue, l'ardoise du menu près de la porte ; le passage devant la porte reste libre), des places de stationnement
+     sur le trottoir (les voitures : main.js, GAREES). Appelé par chateau() une fois ses maisons posées ; son propre
+     tirage au sort (le reste du monde ne bouge pas). Ce qui vit (les gens, les voitures qui roulent) : village.js. */
+  function villageTerrasses(RESTOS, RF, jA, rBord, surf) {
+    const CH = CHATEAU, Y = CH.y, rv = hasard(9157), V = villageChateau;
+    // le trottoir pavé, du bord du tour aux façades
+    {
+      const p = [], n = 192, r0 = CH.tour + DEMI + 0.22, r1 = RF - 0.05, sauf = (DEMI + 0.7) / rBord;
+      for (let k = 0; k < n; k++) {
+        const a0 = k / n * Math.PI * 2, a1 = (k + 1) / n * Math.PI * 2;
+        if (Math.abs(angle((a0 + a1) / 2 - jA)) < sauf) continue;
+        const P = (r, a) => [CH.x + Math.cos(a) * r, Y + 0.035, CH.z + Math.sin(a) * r];
+        p.push(...P(r0, a0), ...P(r1, a1), ...P(r1, a0), ...P(r0, a0), ...P(r0, a1), ...P(r1, a1));
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.computeVertexNormals();
+      surf.push(teinter(g, '#bdb19b'));
+    }
+    // les réverbères (mêmes places que dans chateau()) : ni table ni voiture dessous
+    const lampes = [];
+    for (let k = 0; k < 12; k++) {
+      const b = k / 12 * Math.PI * 2 + 0.2, x = CH.x + Math.cos(b) * (CH.tour + 4.6), z = CH.z + Math.sin(b) * (CH.tour + 4.6);
+      if (procheRoute(x, z, 8).d >= 6.5) lampes.push([x, z]);
+    }
+    const presLampe = (x, z, d) => lampes.some(([lx, lz]) => Math.hypot(lx - x, lz - z) < d);
+    const tourne = (h, lx, lz) => [lx * Math.cos(h) + lz * Math.sin(h), -lx * Math.sin(h) + lz * Math.cos(h)];
+    for (const R of RESTOS) {
+      const o = R.o;
+      if (!o) continue;
+      const w = o.w, xp = w * 0.33, P = (lx, av) => facade(o, lx, av), places = [], tables = [];
+      enseigne(R.nom, P(-w * 0.14, 0.37), Y + 3.05, Math.min(5.8, w * 0.58), 0.54, R.c, '#f3e7c9');
+      // le platelage et ses lames
+      { const q = P(0, 1.55); bati.push(B(w - 0.5, 0.06, 2.9, '#8d7c66', q.x, Y + 0.03, q.z, o.rot)); }
+      for (let k = 0; k < 9; k++) { const q = P(0, 0.25 + k * 0.32); bati.push(B(w - 0.5, 0.004, 0.025, '#6e5a44', q.x, Y + 0.062, q.z, o.rot)); }
+      // les jardinières aux deux bouts, fleuries
+      for (const sg of [-1, 1]) {
+        const q = P(sg * (w / 2 - 0.3), 1.6);
+        bati.push(B(0.42, 0.45, 2.5, '#6b4a30', q.x, Y + 0.25, q.z, o.rot), teinter(B(0.36, 0.3, 2.4, '#4f7a3a', q.x, Y + 0.6, q.z, o.rot), '#4f7a3a', T.feuillage));
+        for (let k = 0; k < 6; k++) { const f = P(sg * (w / 2 - 0.3), 0.6 + k * 0.4); bati.push(S(0.08, ['#d23a4a', '#f4f1ea', '#e0457a'][Math.floor(rv() * 3)], f.x, Y + 0.78, f.z)); }
+        col.boiteO(q.x, q.z, 0.42, 2.5, o.rot);
+      }
+      // les tables, deux rangs (sous le store, puis au bord de la rue sous les parasols), sauf devant la porte
+      for (const av of [1.25, 2.55]) for (let lx = -w / 2 + 1.25; lx <= w / 2 - 1.2; lx += 2.05) {
+        if (Math.abs(lx - xp) < 1.25) continue;
+        const t = P(lx, av);
+        if (presLampe(t.x, t.z, 1.4)) continue;
+        bati.push(C(0.36, 0.36, 0.035, 12, '#ece5d8', t.x, Y + 0.74, t.z), C(0.03, 0.03, 0.72, 6, '#2d2d33', t.x, Y + 0.37, t.z), C(0.2, 0.22, 0.03, 8, '#2d2d33', t.x, Y + 0.015, t.z));
+        tables.push({ x: t.x, z: t.z, y: Y, lx, av });
+        for (const sg of [-1, 1]) {
+          const c = P(lx + sg * 0.62, av), h = Math.atan2(t.x - c.x, t.z - c.z), fx = Math.sin(h), fz = Math.cos(h);
+          bati.push(B(0.42, 0.05, 0.4, R.chaise, c.x, Y + 0.45, c.z, h), B(0.42, 0.42, 0.04, R.chaise, c.x - fx * 0.19, Y + 0.7, c.z - fz * 0.19, h));
+          for (const [ax, az] of [[-0.17, -0.16], [0.17, -0.16], [-0.17, 0.16], [0.17, 0.16]]) { const [ox, oz] = tourne(h, ax, az); bati.push(B(0.03, 0.44, 0.03, '#2d2d33', c.x + ox, Y + 0.22, c.z + oz)); }
+          // son couvert : l'assiette, le verre à sa droite
+          const px = t.x + (c.x - t.x) * 0.36, pz = t.z + (c.z - t.z) * 0.36, [gx, gz] = tourne(h, -0.16, 0.06);
+          bati.push(C(0.12, 0.12, 0.012, 10, '#fbfbfa', px, Y + 0.764, pz), C(0.028, 0.022, 0.1, 6, '#d6e6ea', px + gx, Y + 0.81, pz + gz));
+          places.push({ x: c.x, z: c.z, h, y: Y });
+        }
+        if (rv() < 0.6) bati.push(C(0.045, 0.05, 0.24, 8, rv() < 0.5 ? '#3a1820' : '#cfe6f2', t.x, Y + 0.88, t.z));
+        if (av > 2) bati.push(C(0.025, 0.025, 1.75, 5, '#e8e4dc', t.x, Y + 1.63, t.z), C(0, 1.25, 0.42, 8, R.c, t.x, Y + 2.68, t.z), C(1.25, 1.25, 0.06, 8, '#f3e7c9', t.x, Y + 2.46, t.z, 'y', 0, 0));
+        col.boiteO(t.x, t.z, 1.9, 0.9, o.rot);
+        contact.tache(t.x, t.z, 0.95, 0.95, 0.25, Y + 0.07);
+      }
+      // l'ardoise du menu, près de la porte
+      {
+        const q = P(xp + 1.05, 0.7), nx = Math.sin(o.rot), nz = Math.cos(o.rot);
+        bati.push(B(0.62, 0.86, 0.05, '#6b4a30', q.x, Y + 0.55, q.z, o.rot));
+        for (const sg of [-1, 1]) { const l = P(xp + 1.05 + sg * 0.26, 0.6); bati.push(B(0.04, 0.95, 0.04, '#6b4a30', l.x, Y + 0.47, l.z, o.rot)); }
+        const titre = R.genre === 'bar' ? 'Le café' : 'Menu du jour', lignes = R.genre === 'bar' ? ['Café, thé, chocolat', 'Jus de pommes', 'Glaces', 'Gâteau maison'] : R.nom.startsWith('CRÊPERIE') ? ['Galettes', 'Crêpes', 'Cidre', 'Formule midi'] : ['Rillettes', 'Fouées', 'Tarte Tatin', 'Plat du jour'];
+        atlas.poser(128, 176, (c, W, H) => {
+          c.fillStyle = '#23272a'; c.fillRect(0, 0, W, H); c.strokeStyle = '#8a6a48'; c.lineWidth = 8; c.strokeRect(4, 4, W - 8, H - 8);
+          c.fillStyle = '#f2efe6'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.font = 'italic bold 19px Georgia, serif'; c.fillText(titre, W / 2, 26);
+          c.font = '14px Georgia, serif'; lignes.forEach((l, i) => c.fillText(l, W / 2, 58 + i * 26));
+        }, 0.54, 0.74, q.x + nx * 0.03, Y + 0.56, q.z + nz * 0.03, o.rot);
+        col.boiteC(q.x, q.z, 0.6, 0.6);
+      }
+      // (axes : la maison, pour passer de la façade, lx le long et av devant, au monde : village.js)
+      V.restos.push({ nom: R.nom, genre: R.genre, places, tables, ac: R.ac, c: R.c, porte: { x: o.entree.x, z: o.entree.z, rot: o.entree.rot, y: Y }, axes: { x: o.x, z: o.z, d: o.d, rot: o.rot } });
+    }
+    // des places de stationnement sur le trottoir (un pavage plus sombre) : loin des terrasses, du belvédère, de la route,
+    // des réverbères ; une voiture sur chacune, garée dans un sens ou dans l'autre
+    const prises = RESTOS.filter(R => R.o).map(R => [R.ac, (R.o.w / 2 + 1.8) / RF]), choisis = [];
+    const COUL = ['#8a3a32', '#2f4a6b', '#d8cfa6', '#5c6f8a', '#e9e6de', '#3b3f46', '#6c8f4e'];
+    for (let a = -Math.PI; a < Math.PI && choisis.length < 6; a += 0.13) {
+      const x = CH.x + Math.cos(a) * 36.4, z = CH.z + Math.sin(a) * 36.4;
+      if (procheRoute(x, z, 12).d < 10 || Math.abs(angle(a - Math.PI / 4)) < 0.5 || presLampe(x, z, 3.6)) continue;
+      if (prises.some(([b, l]) => Math.abs(angle(a - b)) < l) || choisis.some(b => Math.abs(angle(a - b)) < 0.62)) continue;
+      choisis.push(a);
+      const h = Math.atan2(-Math.sin(a), Math.cos(a)) + (rv() < 0.5 ? Math.PI : 0);
+      surf.push(B(2.3, 0.05, 5.4, '#a89c88', x, Y + 0.03, z, h));
+      V.garees.push([x, z, h, COUL[Math.floor(rv() * COUL.length)], sol(x, z)]);
+    }
+  }
   const arbresChateau = []; // [x, z, type, y] : versés avec les autres arbres
+  // le village du château qui vit (village.js) : ses restaurants et leurs terrasses (places assises, tables, porte), les
+  // bancs du belvédère, les voitures garées sur les trottoirs (main.js : GAREES), les maisons
+  const villageChateau = { restos: [], bancs: [], garees: [], maisons: [] };
   function chateau() {
     const rndMonde = rnd;
     rnd = hasard(7341);
@@ -2070,6 +2169,15 @@ void main() {
       }
       return Math.abs(angle(a - Math.PI / 4)) > 0.34; // le belvédère, au sud-est
     };
+    // Trois maisons reçoivent une devanture (Teddy, 25/11/2026 : « de l'activité au château, des restaurants, des
+    // terrasses ») : deux restaurants et un café, la première maison de genre 2 près de chaque angle visé (à côté de
+    // l'arrivée de la route, à côté du belvédère, face aux jardins) ; elle tire quand même au sort les fenêtres que sa
+    // devanture remplace (tirage : le village ne bouge pas)
+    const RESTOS = [
+      { a: -1.86, nom: 'LE RELAIS DES TOURELLES', c: '#7a2233', genre: 'resto', chaise: '#2d2d33' },
+      { a: 1.14, nom: 'CAFÉ DE LA POIVRIÈRE', c: '#2f4a6b', genre: 'bar', chaise: '#b08a5a' },
+      { a: 2.27, nom: 'CRÊPERIE DU CHÂTELET', c: '#2f5d50', genre: 'resto', chaise: '#2d2d33' },
+    ];
     let a = -Math.PI / 2 + 0.05, n = 0;
     while (a < Math.PI * 1.5 - 0.05) {
       const w = 8 + Math.floor(rnd() * 5), d = 7.5 + rnd() * 1.5, h = 5.8 + rnd() * 1.8, dem = w / 2 + 0.4;
@@ -2077,11 +2185,15 @@ void main() {
       if (!libre(ac, dem)) { a += 0.06; continue; }
       const r = RF + d / 2, x = CH.x + Math.cos(ac) * r, z = CH.z + Math.sin(ac) * r;
       const genre = n % 3, rot = Math.atan2(-Math.cos(ac), -Math.sin(ac));
-      maison({
+      const R0 = genre === 2 ? RESTOS.find(q => !q.o && Math.abs(angle(ac - q.a)) < 0.45) : null;
+      const om = maison({
         x, z, y: Y, w, d, h, rot, volets: genre === 1 ? null : pick(VOLETS),
         mur: genre === 1 ? pick(['#e6d4b0', '#ead9bb', '#e9d2a8']) : genre === 0 ? TUF : undefined,
         tourelle: genre === 0 && w >= 9, colombages: genre === 1, lucarnes: true,
+        ...(R0 ? { vitrine: R0.c, boutique: R0.genre, banne: R0.c, porteC: R0.c, tirage: true } : {}),
       });
+      if (R0) { R0.o = om; R0.ac = ac; }
+      villageChateau.maisons.push({ ac, x, z, w, d, rot });
       // mur de jardin jusqu'à la maison suivante
       const ecart = 1.6 + rnd() * 2.2, a1 = ac + dem / RF, a2 = a1 + ecart / RF;
       const am = (a1 + a2) / 2, xm = CH.x + Math.cos(am) * (RF + 0.6), zm = CH.z + Math.sin(am) * (RF + 0.6);
@@ -2089,6 +2201,7 @@ void main() {
       col.boiteO(xm, zm, ecart + 0.3, 0.5, Math.PI / 2 - am);
       a = a2; n++;
     }
+    villageTerrasses(RESTOS, RF, jA, rBord, surf);
     // réverbères sur le bas-côté, du côté des maisons
     for (let k = 0; k < 12; k++) {
       const b = k / 12 * Math.PI * 2 + 0.2, x = CH.x + Math.cos(b) * (CH.tour + 4.6), z = CH.z + Math.sin(b) * (CH.tour + 4.6);
@@ -2104,6 +2217,7 @@ void main() {
         const xb = CH.x + Math.cos(b) * (CH.tour + 5.1), zb = CH.z + Math.sin(b) * (CH.tour + 5.1), rb = Math.PI / 2 - b;
         bati.push(B(1.9, 0.1, 0.5, '#6b4a30', xb, Y + 0.48, zb, rb), B(0.1, 0.45, 0.5, '#2d2d33', xb + Math.cos(b + Math.PI / 2) * 0.8, Y + 0.22, zb + Math.sin(b + Math.PI / 2) * 0.8, rb), B(0.1, 0.45, 0.5, '#2d2d33', xb - Math.cos(b + Math.PI / 2) * 0.8, Y + 0.22, zb - Math.sin(b + Math.PI / 2) * 0.8, rb));
         col.boiteC(xb, zb, 1.2, 1.2);
+        villageChateau.bancs.push({ x: xb, z: zb, h: rb, y: Y });
       }
     }
     // quelques arbres dans les jardins, derrière les maisons
@@ -3071,6 +3185,7 @@ void main() {
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
+  lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
   // gerbeur électrique de Marc : transpalette.js) dans la troisième travée
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };

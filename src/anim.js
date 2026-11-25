@@ -352,8 +352,9 @@ export class Anim {
 
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */
   poseAssise(br, p) {
-    const o = this.o, g = this.m.groupe, s = this.m.echelle, dm = this.m.dim;
-    const yB = (0.56 - g.position.y) / s + 0.1, yP = (0 - g.position.y) / s + DIM.cheville;
+    // (p.y0 : la hauteur du sol sous la chaise ; les terrasses et les bancs du village du château sont sur son plateau)
+    const o = this.o, g = this.m.groupe, s = this.m.echelle, dm = this.m.dim, y0 = (p && p.y0) || 0;
+    const yB = (y0 + 0.56 - g.position.y) / s + 0.1, yP = (y0 - g.position.y) / s + DIM.cheville;
     o[OS.bassin].position.set(0, yB, -0.02);
     o[OS.bassin].rotation.set(-0.14, 0, 0.02 * this.poids);
     o[OS.ventre].rotation.set(0.1 + br * 0.3, this.ry * 0.12, 0);
@@ -364,7 +365,7 @@ export class Anim {
     // mains posées sur les cuisses ; au portable (p.clavier), un peu penché, les mains sur le clavier
     if (p && p.clavier) {
       o[OS.ventre].rotation.x += 0.12; o[OS.poitrine].rotation.x += 0.1; this.reperes();
-      const yC = (0.82 - g.position.y) / s;
+      const yC = (y0 + 0.82 - g.position.y) / s;
       this.brasIK(0, 0.15, yC, 0.62, 0.7, -0.5, -0.6, 1);
       this.brasIK(3, -0.15, yC, 0.62, -0.7, -0.5, -0.6, 1);
       o[OS.mainG].rotation.set(0.25, 0, 0.2); o[OS.mainD].rotation.set(0.25, 0, -0.2);

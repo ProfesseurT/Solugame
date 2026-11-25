@@ -423,7 +423,7 @@ if (scenario === 'voitures') {
 }
 
 if (scenario === 'chateau') {
-  // la route du château (relief.js) : en tracteur puis en van, on monte jusqu'au tour sans quitter la chaussée, le
+  // le village du château qui vit ; la route du château (relief.js) : en tracteur puis en van, on monte jusqu'au tour sans quitter la chaussée, le
   // véhicule posé sur le sol, la caméra jamais sous le relief ; on fait le tour du château ; hors de la route, on est
   // retenu ; à pied, les pieds sur la pente ; en voiture, une glisse se tient à l'accélérateur et au volant
   const r = await ev(async () => {
@@ -461,6 +461,34 @@ if (scenario === 'chateau') {
     const route = Array.from({ length: R.n }, (_, k) => [R.x[k], R.z[k]]);
     try {
       CL.jouer(); CL.step(30);
+      // le village du château vit (village.js) : trois terrasses, des voitures garées sur le trottoir, à la hauteur du
+      // plateau ; de près, ceux qui y déjeunent, les serveurs, les touristes (ils bougent, prennent des photos), le
+      // belvédère ; deux voitures qui montent, s'arrêtent devant le joueur (on peut l'emprunter), repartent, s'allument
+      // la nuit
+      {
+        const V = CL.village, LC = J.lieux.chateau, G = () => V.gens, n = k => G().filter(g => g.genre === k).length;
+        log.push(['le village : trois terrasses (' + LC.restos.map(q => q.places.length).join(', ') + ' places), ' + LC.garees.length + ' voitures garées sur le trottoir, sur le plateau',
+          LC.restos.length === 3 && LC.restos.every(q => q.places.length >= 8 && q.tables.length >= 4) && LC.garees.length >= 4 && LC.garees.every(g => Math.abs(g[4] - C.y) < 0.2) && CL.GAREES.filter(g => g.m.position.y > C.y - 0.5).length === LC.garees.length]);
+        J.minutes = 13 * 60; J.joueur.placer(C.x, C.z - 24, 0); CL.step(60 * 2);
+        const avant = G().filter(g => g.genre === 'touriste').map(g => [g.p.pos.x, g.p.pos.z]);
+        let servi = 0, photo = 0;
+        for (let k = 0; k < 100; k++) { CL.step(15); if (G().some(g => g.genre === 'serveur' && g.etat === 'sert')) servi++; if (G().some(g => g.genre === 'touriste' && g.p.telephone)) photo++; }
+        const bouge = G().filter(g => g.genre === 'touriste').filter((g, i) => Math.hypot(g.p.pos.x - avant[i][0], g.p.pos.z - avant[i][1]) > 1).length;
+        log.push(['de près, le village vit : ' + n('table') + ' attablés, ' + n('serveur') + ' serveurs (à une table ' + servi + ' fois sur 100), ' + n('touriste') + ' touristes (' + bouge + ' ont bougé ; une photo ' + photo + ' fois sur 100), ' + (n('banc') + n('balustrade')) + ' au belvédère',
+          n('table') >= 12 && n('serveur') === 3 && n('touriste') >= 12 && bouge >= 8 && servi > 5 && photo > 5 && n('banc') + n('balustrade') === 4]);
+        const v = V.voitures[0], s0 = v.s;
+        CL.step(60 * 10);
+        const roule = v.s - s0, i = Math.min(v.C.n - 1, Math.floor(v.s) + 14);
+        J.joueur.placer(v.C.X[i], v.C.Z[i], 0); CL.step(60 * 5);
+        const d = Math.hypot(J.joueur.pos.x - v.x, J.joueur.pos.z - v.z), arret = v.v < 0.3, klaxon = v.klaxon;
+        const emprunte = [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Emprunter la voiture'));
+        J.joueur.placer(C.x, C.z - 24, 0); CL.step(60 * 4);
+        log.push(['une voiture monte au château (' + roule.toFixed(0) + ' m en 10 s) ; devant le joueur, elle s\'arrête (à ' + d.toFixed(1) + ' m) et klaxonne, on peut l\'emprunter (' + [arret, klaxon, emprunte].join(' ') + ') ; elle repart (' + v.v.toFixed(1) + ' m/s)', roule > 40 && arret && d > 2.5 && klaxon && emprunte && v.v > 1.5]);
+        J.minutes = 21 * 60; CL.step(10);
+        log.push(['la nuit, les voitures du château roulent phares allumés', V.voitures.length === 2 && V.voitures.every(w => w.mesh.userData.phares.groupe.visible)]);
+        J.minutes = 13 * 60; CL.step(5);
+        for (const w of [...V.voitures]) { w.mesh.visible = false; V.retirer(w); } // (les essais de la route qui suivent : la route libre)
+      }
       for (const genre of ['tracteur', 'van']) {
         if (!monter(genre)) { log.push([genre + ' : monté', false]); continue; }
         CL.teleporter(-176, 2, Math.PI); CL.step(20);
