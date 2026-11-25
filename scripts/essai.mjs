@@ -896,6 +896,26 @@ if (scenario === 'nuit') {
       touche('keyup', 'ShiftLeft', 'Shift'); touche('keyup', 'ArrowUp'); CL.step(30);
       log.push(['au clavier : la flèche fait marcher (' + marche.toFixed(1) + ' m/s), Maj courir (' + course.toFixed(1) + ' m/s)', Math.abs(marche - 1.6) < 0.15 && course > 5]);
       log.push(['17 h 40 : la lumière dorée', nuit() === 0]);
+      // la zone d'activités : la tonnellerie vit (le feu, le cercleur, la rouleuse) ; on entre chez Solumatic (vue d'en haut,
+      // sans le toit, ceux qui y travaillent), les cloisons arrêtent, on ressort
+      {
+        const T = CL.tonnellerie, S = CL.solu, M = CL.monde, etq = t => [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith(t));
+        CL.teleporter(222.5, -30.5, 0.9); CL.step(60 * 20);
+        log.push(['la tonnellerie vit : le cercleur frappe (' + T.ce.coups + ' coups en 20 s), le feu brûle, la rouleuse roule sa barrique (' + T.ro.etat + ')', T.ce.coups >= 18 && T.flammes.visible && T.ro.etat === 'roule' && T.futs.some(f => f.visible)]);
+        CL.teleporter(204.65, -51.8, Math.PI); CL.step(20);
+        const propose = etq('Entrer chez Solumatic');
+        CL.agir(); CL.finirGeste(); CL.step(10);
+        log.push(['chez Solumatic : « Entrer », dedans (vue d\'en haut, sans le toit), cinq personnes à leur poste', propose && J.dedans === 'solumatic' && !M.toitSolu.visible && M.interieurSolu.visible && S.employes.length === 5 && S.employes.every(p => p.m.groupe.visible)]);
+        CL.teleporter(204.6, -60, Math.PI); CL.step(3);
+        touche('keydown', 'ArrowUp'); CL.step(60 * 8); touche('keyup', 'ArrowUp'); CL.step(10);
+        const zN = CL.joueur.pos.z;
+        log.push(['dedans, on marche le long du hall jusqu\'à la cloison du bout (z = ' + zN.toFixed(2) + ')', zN > -67.7 && zN < -66.4]);
+        CL.teleporter(204.65, -55.6, 0); CL.step(10);
+        const sortir = etq('Sortir');
+        CL.agir(); CL.finirGeste(); CL.step(5);
+        log.push(['on ressort : dehors, le toit revenu, l\'intérieur plus dessiné', sortir && !J.dedans && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.z > -53.4]);
+        CL.teleporter(-99, -50, 0); CL.step(5);
+      }
       J.minutes = 19 * 60 + 15; CL.step(5);
       log.push(['19 h 15 : le soir tombe (' + nuit().toFixed(2) + ')', nuit() > 0.3 && nuit() < 0.9]);
       J.minutes = 21 * 60; CL.step(5);

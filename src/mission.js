@@ -170,7 +170,7 @@ export class Mission {
     if (e === 'avant' || e === 'debut') return null;
     if (e === 'dodo') return OBJECTIFS.dodo;
     if (e === 'fin' || e === 'libre') return OBJECTIFS.libre;
-    if (e === 'retour') return r.statut === 'recupere' ? OBJECTIFS.retour : j.dedans ? OBJECTIFS.pcOuvrir : OBJECTIFS.retourPC;
+    if (e === 'retour') return r.statut === 'recupere' ? OBJECTIFS.retour : j.dedans === 'bureau' ? OBJECTIFS.pcOuvrir : OBJECTIFS.retourPC;
     if (e === 'pc') return this.toutFait ? OBJECTIFS.pcFini : OBJECTIFS.pc(this.tachesFaites);
     if (e === 'chargement') return OBJECTIFS.chai;
     if (this.attenteBL) { const c = this.client(this.attenteBL); return this.blPret ? OBJECTIFS.bl(c.du) : OBJECTIFS.livrer(c.du); }

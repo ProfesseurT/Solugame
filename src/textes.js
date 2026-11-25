@@ -601,6 +601,19 @@ export const energie = (degre, glucides) => {
 
 // Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la
 // tournée ; le lendemain matin, jour du traitement.
+// Les bureaux de Solumatic (solumatic.js) : ce que disent ceux qui y travaillent quand on passe près de leur poste (rien
+// sur les produits : un bonjour)
+export const SOLUMATIC = {
+  bonjour: ['Bonjour ! Bienvenue chez Solumatic.', 'Salut ! Le café est dans la salle à manger.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !', 'Ah, bonjour ! Je termine un appel et je suis à vous.'],
+};
+
+// Le parvis de la tonnellerie (tonnellerie.js) : le tonnelier qui cercle, le chauffeur, le rouleur
+export const TONNELLERIE = {
+  cercleur: ['Attention les oreilles, je cercle !', 'Les cercles, un par un, à la chasse.', 'Du chêne fendu, séché deux ou trois ans dehors.'],
+  chauffeur: ['Ne vous approchez pas trop du feu.', 'On chauffe pour cintrer les douelles, puis pour la chauffe.', 'Un peu d\'eau sur le bois, sinon il casse.'],
+  rouleur: ['Pardon, je passe avec la barrique !', 'Celle-là part demain chez un vigneron du coin.', 'Elle roule toute seule, il suffit de la guider.'],
+};
+
 export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],

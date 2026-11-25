@@ -26,10 +26,12 @@ import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABIL
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
+import { Solumatic } from './solumatic.js';
 import { Chai } from './chai.js';
 import { Verres } from './verres.js';
 import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
+import { Tonnellerie } from './tonnellerie.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
@@ -76,11 +78,11 @@ const paliers = new Paliers({
   regler(q) { monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800); regarder(); taches.mat.opacity = q.tache; },
 });
 // Jusqu'où la caméra dessine : loin dehors (la brume du palier) ; dans le bureau du chai, la pièce seulement (le monde
-// extérieur, derrière les murs, n'est pas dessiné, ni le ciel)
-let vueDedans = false;
-function regarder(dedans = vueDedans) {
-  vueDedans = dedans;
-  camera.far = dedans ? 16 : paliers.q.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
+// extérieur, derrière les murs, n'est pas dessiné, ni le ciel) ; chez Solumatic, vu d'en haut, un peu plus (loin)
+let vueDedans = false, vueLoin = 16;
+function regarder(dedans = vueDedans, loin = 16) {
+  vueDedans = dedans; if (dedans) vueLoin = loin;
+  camera.far = dedans ? vueLoin : paliers.q.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
   monde.ciel.visible = !dedans;
 }
 // Repère de la lumière (le même que celui de la caméra d'ombre) : on cale son centre sur la grille de texels
@@ -110,6 +112,7 @@ const marque = new THREE.Group();
 const particules = new Particules(scene, camera, rnd), emettre = particules.emettre;
 const taches = new Taches(scene);
 const parvis = new Parvis({ scene, camera, emettre }); // le parvis du chai : ceux qui y travaillent, le chien, les moineaux
+const tonnellerie = new Tonnellerie({ scene, camera, emettre }); // la tonnellerie de la zone d'activités : le feu, ceux qui y travaillent
 const traces = new Traces(scene);
 const effets = new EffetsVehicule(particules, traces, col, rnd); // fumée, traces, feuilles, gravillons du véhicule conduit
 
@@ -231,6 +234,7 @@ function peupler() {
   // les conducteurs des voitures de la départementale
   for (const vo of voitures) asseoirConducteur(vo);
   parvis.peupler(hud); // le rinceur et la porteuse du parvis du chai (tenues fixées : rien ne change pour les autres)
+  tonnellerie.peupler(hud); // le cercleur, le chauffeur, la rouleuse de la tonnellerie (tenues fixées)
   // l'œnologue devant son labo, l'étiqueteur devant l'entrepôt de l'imprimerie (mission 3), créés en derniers
   for (const [id, l] of [['labo', L.figurants.labo], ['entrepot', L.entrepot.figurant], ['salarie', L.remorque]]) {
     const p = new Pieton(perso(CLIENTS_3D[id]));
@@ -498,7 +502,9 @@ const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le 
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
-const ETQ_ACTION = [...bureau.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
+// les bureaux de Solumatic, dans la zone d'activités (solumatic.js) : la porte d'entrée, ceux qui y travaillent
+const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, regarder });
+const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -639,6 +645,7 @@ function prendreVoiture(c) {
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
+  if (solu.agir()) return; // la porte d'entrée de Solumatic (solumatic.js)
   if (habillage.echantillonProche) { habillage.prendreEchantillon(); return; } // mission 3 : le carton ouvert du chai
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (verres.servable) { verres.servir(verres.servable); return; }
@@ -820,6 +827,7 @@ function bourg(dtm, ego) {
   gens3.maj(dtm, temps, ego, jeu.auVolant);
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
+  tonnellerie.maj(dtm, PARVIS_C);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
@@ -963,7 +971,7 @@ function reperes(dt, ego, cible) {
     }
   }
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
-  const pcPres = bureau.maj();
+  const pcPres = bureau.maj() || solu.maj(dt, temps);
   verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
   const servable = verres.servable;
   // devant la porte de la maison du domaine : rentrer dormir
@@ -1024,6 +1032,7 @@ function miseAJour(dt) {
   // la caméra : dans le bureau du chai, celle de la pièce ; dans la halle du chai, celle de la halle ; un geste qui se
   // regarde (charger, décharger, le chèque) a son cadre ; sinon, elle suit
   if (camLibre) { /* posée à la main (captures) */ }
+  else if (jeu.dedans === 'solumatic') solu.camera(dt);
   else if (jeu.dedans) bureau.camera(dt);
   else if (chai.camera(dt, ego)) { /* posée au fond de la halle */ }
   else if (gestes.cadre) cam.cadrer(dt, gestes.cadre, col);
@@ -1078,6 +1087,7 @@ function majTaches() {
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y);
   parvis.taches(t, ombrePerso);
+  tonnellerie.taches(t, ombrePerso);
   t.fin();
 }
 // Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
@@ -1305,7 +1315,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis,
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie,
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },

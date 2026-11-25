@@ -394,6 +394,19 @@ export const son = {
     const t = ctx.currentTime;
     bruit(t, 0.6, 3600, 0.05 * k, 'highpass'); note(96, t, 0.6, 'sawtooth', 0.012 * k, sfx, 300);
   },
+  // la tonnellerie (tonnellerie.js) : un coup de masse sur la chasse, sec et métallique ; le feu de copeaux qui crépite
+  // (k de 0 à 1 selon la distance ; le feu, rejoué tous les tiers de seconde)
+  marteau(k) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime;
+    bruit(t, 0.05, 2600, 0.22 * k, 'bandpass'); note(1180, t, 0.18, 'triangle', 0.05 * k, sfx, 0, true); note(310, t, 0.12, 'sine', 0.09 * k, sfx, 0, true);
+  },
+  feu(k) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 3; i++) if (Math.random() < 0.6) bruit(t + Math.random() * 0.28, 0.012 + Math.random() * 0.02, 1800 + Math.random() * 2500, 0.06 * k, 'highpass');
+    bruit(t, 0.32, 420, 0.02 * k);
+  },
   jouer(nom) {
     if (!ctx || !actif) return;
     const t = ctx.currentTime;

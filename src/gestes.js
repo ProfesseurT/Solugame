@@ -747,21 +747,22 @@ export class Gestes {
   }
 
   /* ------------------------------------------------------------ le bureau du chai (monde.js : la pièce, sa porte) */
-  // la porte du bureau, qui s'ouvre vers l'intérieur
-  porteBureau(sens) { return this.battant(this.c.porte, -1.45, sens, sens > 0 ? 0.5 : 0.45); }
+  // la porte du bureau, qui s'ouvre vers l'intérieur (ou celle de B.battant : { obj, a }, l'angle ouvert)
+  porteBureau(sens, B) { const P = B && B.battant; return this.battant(P ? P.obj : this.c.porte, P ? P.a : -1.45, sens, sens > 0 ? 0.5 : 0.45); }
   // Passer la porte : on y va, elle s'ouvre, on passe le seuil ; au seuil, fondu au noir et la caméra change de côté
-  // (passe), puis on avance et elle se referme. B : lieux.bureau ; entrer : vers l'intérieur, sinon vers la cour.
+  // (passe), puis on avance et elle se referme. B : lieux.bureau (ou lieux.solumatic : B.cap, le cap pour entrer, et
+  // B.battant, sa porte) ; entrer : vers l'intérieur, sinon vers dehors.
   passer(B, entrer, { fondu, passe, fin }) {
-    const cap = entrer ? Math.PI / 2 : -Math.PI / 2, a = entrer ? B.dehors : B.dedans, b = entrer ? B.dedans : B.dehors;
+    const c0 = B.cap ?? Math.PI / 2, cap = entrer ? c0 : c0 + Math.PI, a = entrer ? B.dehors : B.dedans, b = entrer ? B.dedans : B.dehors;
     this.lancer([
       ...this.allerA(() => a, () => cap),
-      this.porteBureau(1),
+      this.porteBureau(1, B),
       ...this.allerA(() => B.seuil, () => cap),
       { action: () => fondu(true) },
       { duree: 0.25, maj: (dt, t) => this.immobile(dt, t) }, // le temps du fondu au noir (index.html, #fondu)
       { action: () => { passe(); fondu(false); } },
       ...this.allerA(() => b, () => cap + (entrer ? 0.4 : 0)),
-      this.porteBureau(-1),
+      this.porteBureau(-1, B),
     ], fin);
   }
   // S'asseoir au portable : devant la chaise, on s'y assoit en se tournant vers le bureau ; assis() quand c'est fait

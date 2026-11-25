@@ -138,6 +138,26 @@ export class Camera {
     this.fovPose = this.c.fov; this.fovPlus = 0;
     this.pret = true;
   }
+  // Dans les bureaux de Solumatic (solumatic.js) : une vue plongeante (le toit n'est pas dessiné, les cloisons s'arrêtent
+  // à 2,75 m) qui suit le personnage (x, z) ; tournée à la main, elle garde son cap (les commandes suivent son axe) ;
+  // pincer ou la molette : plus près, plus loin
+  plongee(dt, x, z) {
+    const ct = this.ctrl;
+    if (ct) {
+      const r = ct.cam;
+      if (r.x || r.y) { this.yaw = angle(this.yaw - r.x); r.x = r.y = 0; }
+      if (ct.kcam) this.yaw = angle(this.yaw - ct.kcam * 2.1 * dt);
+      if (r.zoom !== 1) { this.zoom = borne(this.zoom * r.zoom, 0.6, 1.6); r.zoom = 1; }
+      r.recentrer = false;
+    }
+    const k = this.pret ? lisser(dt, 3.5) : 1, d = 3.8 * this.zoom, h = 10.5 * this.zoom;
+    this.pos.x += (x - Math.sin(this.yaw) * d - this.pos.x) * k; this.pos.y += (h - this.pos.y) * k; this.pos.z += (z - Math.cos(this.yaw) * d - this.pos.z) * k;
+    this.regard.x += (x - this.regard.x) * k; this.regard.y += (0.6 - this.regard.y) * k; this.regard.z += (z - this.regard.z) * k;
+    this.c.position.copy(this.pos); this.c.lookAt(this.regard);
+    if (Math.abs(this.c.fov - this.fovBase) > 0.02) { this.c.fov = this.fovBase; this.c.updateProjectionMatrix(); }
+    this.fovPose = this.c.fov; this.fovPlus = 0;
+    this.pret = true;
+  }
   // Un plan de l'accueil (main.js : PLANS), à la fraction u de sa durée : la caméra glisse de P.de à P.a en regardant de
   // P.vise à P.viseA. Large : le sujet passe à droite du titre ; étroit : en haut de l'écran, au-dessus des boutons.
   plan(P, u, large) {

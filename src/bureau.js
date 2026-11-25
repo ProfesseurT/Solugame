@@ -24,15 +24,17 @@ export class Bureau {
   }
   // le personnage est-il à moins de d du point p ?
   pres(p, d) { const j = this.c.jeu.joueur.pos; return Math.hypot(j.x - p.x, j.z - p.z) < d; }
+  // jeu.dedans : 'bureau' dans le bureau du chai ('solumatic' dans les bureaux de Solumatic : solumatic.js)
+  get ici() { return this.c.jeu.dedans === 'bureau'; }
   get porteDehors() { const j = this.c.jeu; return !j.dedans && !j.auVolant && this.pres(this.B.dehors, 2.6); }
-  get porteDedans() { return this.c.jeu.dedans && this.pres(this.B.dedans, 1.5); }
-  get depot() { return this.c.jeu.dedans && this.c.mission.chequeADeposer && this.pres(this.B.depot, 2.0); }
-  get chaise() { return this.c.jeu.dedans && !this.c.mission.chequeADeposer && !this.auPortable && this.pres(this.B.chaise, 1.8); }
+  get porteDedans() { return this.ici && this.pres(this.B.dedans, 1.5); }
+  get depot() { return this.ici && this.c.mission.chequeADeposer && this.pres(this.B.depot, 2.0); }
+  get chaise() { return this.ici && !this.c.mission.chequeADeposer && !this.auPortable && this.pres(this.B.chaise, 1.8); }
 
   // l'action (E, ou une étiquette touchée) : rend vrai si elle concernait le bureau. Dedans : sortir ; d'abord poser le
   // chèque de l'épicerie, ensuite s'asseoir au portable.
   agir() {
-    if (this.c.jeu.dedans) {
+    if (this.ici) {
       if (this.porteDedans) this.passer(false);
       else if (this.depot) { this.c.mission.deposerCheque(); this.cheque.visible = true; }
       else if (this.chaise) this.asseoir();
@@ -46,7 +48,7 @@ export class Bureau {
     c.ctrl.relacher();
     c.gestes.passer(this.B, entrer, {
       fondu: noir => $('fondu').classList.toggle('noir', noir),
-      passe: () => { c.jeu.dedans = entrer; c.regarder(entrer); c.cam.pret = false; if (!entrer) c.cam.yaw = -Math.PI / 2; },
+      passe: () => { c.jeu.dedans = entrer ? 'bureau' : false; c.regarder(entrer); c.cam.pret = false; if (!entrer) c.cam.yaw = -Math.PI / 2; },
       fin: () => {},
     });
   }
@@ -73,7 +75,7 @@ export class Bureau {
     h.placer(this.etq.sortir, B0.seuil.x + 0.3, 2.3, B0.seuil.z, dedans);
     h.placer(this.etq.depot, B0.depot.x, 1.25, B0.depot.z, depot);
     h.placer(this.etq.portable, B0.chaise.x, 1.45, B0.chaise.z, chaise);
-    c.monde.interieurBureau.visible = c.jeu.dedans || c.monde.porteBureau.rotation.y < -0.01;
+    c.monde.interieurBureau.visible = this.ici || c.monde.porteBureau.rotation.y < -0.01;
     return dehors || dedans || depot || chaise;
   }
   // la caméra dans la pièce : posée dans un coin ; au portable, derrière l'épaule
