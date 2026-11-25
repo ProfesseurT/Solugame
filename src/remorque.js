@@ -37,9 +37,11 @@ const bois = (g, c) => teinter(g, c, T.bois);
    palox ; origine au sol sous le milieu. Les bouteilles sont rangées en dernier : la passe d'ombre s'arrête avant elles
    (ombrePalox), la caisse et la masse de verre font déjà toute l'ombre ; leurs bouts cachés (contre l'épaule, le col, le
    bouchon) n'ont pas de couvercle. */
-let geoPaloxP = null, nOmbrePalox = 0;
-function geoPalox() {
-  if (geoPaloxP) return geoPaloxP;
+// habille : les bouteilles habillées (le lendemain, mission 3) : la capsule bordeaux sur le col, l'étiquette crème
+const geoPaloxP = {};
+let nOmbrePalox = 0;
+function geoPalox(habille = false) {
+  if (geoPaloxP[habille]) return geoPaloxP[habille];
   const { w: W, l: D, h: H } = PALOX, L = [], B1 = '#c9a46a', B2 = '#b48c56', B3 = '#9c7646', V = '#1f3b2a', BOUCHON = '#c9a46a';
   for (const z of [-0.42, 0, 0.42]) L.push(bois(B(W, 0.1, 0.1, B3, 0, 0.05, z), B3));
   L.push(bois(B(W, 0.025, D, B2, 0, 0.1125, 0), B2));
@@ -51,7 +53,7 @@ function geoPalox() {
   }
   // la masse des bouteilles, et la couche du dessus : couchées le long de z, tête-bêche d'une rangée à l'autre
   L.push(B(W - 0.07, 0.5, D - 0.07, '#152a1d', 0, 0.125 + 0.25, 0));
-  for (const g of L) nOmbrePalox += g.attributes.position.count;
+  if (!nOmbrePalox) for (const g of L) nOmbrePalox += g.attributes.position.count; // (la même caisse pour les deux)
   const y = 0.625 + 0.036;
   for (let r = 0; r < 14; r++) {
     const x = -W / 2 + 0.075 + r * 0.0808;
@@ -62,12 +64,19 @@ function geoPalox() {
       const versCol = s > 0 ? 1 : 2, versFond = s > 0 ? 2 : 1;
       L.push(C(0.036, 0.036, 0.2, 5, V, x, y, zc - s * 0.05, 'z', 0, versFond));
       L.push(C(s > 0 ? 0.015 : 0.036, s > 0 ? 0.036 : 0.015, 0.045, 5, V, x, y, zc + s * 0.0725, 'z', 0, 0));
-      L.push(C(0.0145, 0.0145, 0.06, 5, V, x, y, zc + s * 0.125, 'z', 0, versCol));
-      L.push(C(0.012, 0.012, 0.012, 5, BOUCHON, x, y, zc + s * 0.159, 'z', 0, versCol));
+      if (habille) {
+        L.push(C(0.0175, 0.0175, 0.075, 5, '#7d2333', x, y, zc + s * 0.13, 'z', 0, versCol));
+        L.push(C(0.037, 0.037, 0.08, 5, '#efe4c8', x, y, zc - s * 0.05, 'z', 0, 0));
+      } else {
+        L.push(C(0.0145, 0.0145, 0.06, 5, V, x, y, zc + s * 0.125, 'z', 0, versCol));
+        L.push(C(0.012, 0.012, 0.012, 5, BOUCHON, x, y, zc + s * 0.159, 'z', 0, versCol));
+      }
     }
   }
-  return (geoPaloxP = compacter(fusion(L)));
+  return (geoPaloxP[habille] = compacter(fusion(L)));
 }
+// les palox de la remorque : les bouteilles nues (tirées-bouchées) ou habillées
+export function habillerPalox(R, habille) { R.palox.geometry = geoPalox(habille); ombrePalox(R.palox); }
 // la passe d'ombre d'un palox (ou de plusieurs, en instances) : la caisse seule (les bouteilles sont dedans)
 function ombrePalox(m) {
   const g = m.geometry;
@@ -226,6 +235,8 @@ export class Attelage {
     this.pos.set(x, 0, z); this.h = h; this.v = 0; this.bequilleK = 1; this.goupilleK = 0;
     this.poserBoite(); this.sync(0); this.vu[0] = NaN;
   }
+  // plus là du tout (main.js : la remorque pas encore préparée) : plus de boîte
+  retirer() { if (this.boite) { this.col.retirer(this.boite); this.boite = null; } }
   poserBoite() {
     if (this.boite) this.col.retirer(this.boite);
     const { Z0, Z1, W } = REMORQUE, zc = (Z0 + Z1) / 2, fx = Math.sin(this.h), fz = Math.cos(this.h);
@@ -372,7 +383,7 @@ export class Attelage {
     // feux stop : ceux du tracteur
     if (R.feux.stop) { const on = !!(this.tr && this.tr.m.feux && this.tr.m.feux.stop && this.tr.m.feux.stop.visible); if (R.feux.stop.visible !== on) R.feux.stop.visible = on; }
   }
-  // les palox remis sur la remorque (une partie qui repart de zéro)
+  // les palox remis sur la remorque (une partie qui repart de zéro ; ou, la nuit, rechargés à l'imprimerie)
   recharger() {
     for (let k = 0; k < 6; k++) montrerPalox(this.r, k, true);
     this.ridelleK[0] = this.ridelleK[1] = 0;
@@ -397,7 +408,7 @@ export function peutAtteler(tr, att) {
 }
 // Un chemin [x, z] lissé (Bézier) d'une pose (x0, z0, cap h0) à une autre (x3, z3, h3), parcouru en marche avant, ou en
 // marche arrière (recul : le véhicule regarde à l'opposé du sens de la marche) ; n points
-function chemin(x0, z0, h0, x3, z3, h3, recul, n = 28) {
+export function chemin(x0, z0, h0, x3, z3, h3, recul, n = 28) {
   const s = recul ? -1 : 1, d = Math.hypot(x3 - x0, z3 - z0), c = Math.max(0.5, d * 0.42);
   const x1 = x0 + s * Math.sin(h0) * c, z1 = z0 + s * Math.cos(h0) * c, x2 = x3 - s * Math.sin(h3) * c, z2 = z3 - s * Math.cos(h3) * c, pts = [];
   for (let i = 0; i <= n; i++) {
@@ -406,6 +417,8 @@ function chemin(x0, z0, h0, x3, z3, h3, recul, n = 28) {
   }
   return pts;
 }
+// un chemin en marche avant par une suite de poses [x, z, cap] (une courbe de l'une à l'autre)
+export function parPoses(P) { const pts = [[P[0][0], P[0][1]]]; for (let i = 1; i < P.length; i++) pts.push(...chemin(...P[i - 1], ...P[i], false, 18).slice(1)); return pts; }
 const longueur = pts => { let l = 0; for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return l; };
 // une poignée invisible que les mains vont prendre (anim.js : porte), une par personnage
 function poignee(G) {
@@ -448,6 +461,39 @@ export function etapesAtteler(G, v, att, o) {
     mains(G, att, 0, REMORQUE.RY + 0.2, REMORQUE.RZ, 0.9, u => { att.goupilleK = lisse((u - 0.3) / 0.5); }, () => att.atteler(tr)),
     ...G.etapesMonter(v, o.installe),
   ];
+}
+// Atteler avec de l'aide (mission 3 : le salarié au domaine, Julien à l'imprimerie ; Teddy, 25/11/2026 : « l'employé
+// m'aide à attacher la remorque ») : on reste au volant ; le tracteur fait d'abord, s'il le faut, sa manœuvre
+// (o.manoeuvre : un chemin [x, z] en marche avant), puis recule tout seul jusqu'à l'anneau ; celui qui aide (GA : ses
+// gestes ; o.lancer(etapes) : les lui fait jouer, et dit quand c'est fini) va au timon, lève la béquille, met la goupille,
+// et s'écarte. o.couper : le moteur coupé ; o.cadre(a, b) : la caméra cadre l'attelage, du côté de celui qui aide.
+export function etapesAttelerAide(G, v, att, GA, o) {
+  const tr = v.p, h = att.h, A = { x: 0, z: 0 }, P = { x: 0, y: 0, z: 0 };
+  att.anneau(A);
+  const x3 = A.x - Math.sin(h) * ATT_Z, z3 = A.z - Math.cos(h) * ATT_Z; // le tracteur, son attelage sur l'anneau
+  const e = [];
+  if (o.manoeuvre) e.push(G.rouler(v, o.manoeuvre, 1.4 + longueur(o.manoeuvre) / 2.0, false));
+  // le recul, calculé une fois la manœuvre faite (le tracteur est là où elle l'a mené)
+  const recul = { duree: 1, r: null, debut: () => {
+    const pts = chemin(tr.pos.x, tr.pos.z, tr.h, x3, z3, h, true);
+    recul.r = G.rouler(v, pts, 1.3 + longueur(pts) / 1.2, true); recul.duree = recul.r.duree; recul.r.debut();
+  }, maj: (...a) => recul.r.maj(...a) };
+  let fait = false;
+  e.push(recul, { action: () => {
+    o.couper();
+    o.cadre?.(att.versMonde(0.58, 0, 4.4, P), A);
+    o.lancer([
+      ...aCoteDuTimon(GA, att, 4.05),
+      mains(GA, att, 0.17, 0.68, 4.32, 1.3, u => { att.bequilleK = 1 - lisse((u - 0.15) / 0.75); }),
+      ...aCoteDuTimon(GA, att, 4.85),
+      mains(GA, att, 0, REMORQUE.RY + 0.2, REMORQUE.RZ, 0.9, u => { att.goupilleK = lisse((u - 0.3) / 0.5); }, () => att.atteler(tr)),
+      // il s'écarte, sur le côté de la remorque, et fait signe que c'est bon
+      ...GA.allerA(() => att.versMonde(2.1, 0, 2.6, P), () => att.h + Math.PI / 2 + 0.6),
+      { action: () => { GA.j.saluer(); } },
+      { duree: 0.9, maj: (dt, t) => GA.immobile(dt, t) },
+    ], () => { fait = true; });
+  } }, { maj: (dt, t) => { G.immobile(dt, t); return fait; } });
+  return e;
 }
 // Dételer : (si depot { x, z, h } : le tracteur avance d'abord tout seul pour poser la remorque à cette place) ; on
 // descend, on baisse la béquille, on ôte la goupille ; la remorque est dételée ; on remonte, le tracteur avance de
@@ -612,7 +658,8 @@ export class Dechargement {
     // le demi-tour en deux temps, juste derrière la grande porte : on y entre en marche arrière, palox devant, cap à l'est
     // (k0) ; on recule en braquant jusqu'à regarder le nord ou le sud (k1) ; on repart en avant, en tournant vers l'ouest,
     // jusqu'à la pile. Vers le sud pour les rangs du nord de la porte, vers le nord pour celui du sud.
-    const tour = zj => (zj <= 27.7 ? { k0: pose(172.6, 27.5, Math.PI / 2), k1: pose(170.6, 29.5, Math.PI) } : { k0: pose(172.6, 27.8, Math.PI / 2), k1: pose(170.6, 25.8, 0) });
+    const PX = L.porte.x;
+    const tour = zj => (zj <= 27.7 ? { k0: pose(PX + 0.5, 27.5, Math.PI / 2), k1: pose(PX - 1.5, 29.5, Math.PI) } : { k0: pose(PX + 0.5, 27.8, Math.PI / 2), k1: pose(PX - 1.5, 25.8, 0) });
     E.push({ t: 'ridelle', cote, duree: 0.9 }, { t: 'gyro', on: true });
     palox.forEach((P, n) => {
       const S = places[n], hs = S.h, sxs = Math.sin(hs), szs = Math.cos(hs), D = tour(S.z), dernier = n === palox.length - 1;
@@ -711,6 +758,12 @@ export class Dechargement {
   // tout de suite à la fin : les palox à leurs places, le chariot à sa dernière pose, fourches basses
   finir() {
     while (!this.fini) { const e = this.etapes[this.i]; if (!e) { this.fin(); break; } this.T = e.duree || 0; this.maj(e.duree ? e.duree / this.vite : 0, 0); }
+  }
+  // la nuit (mission 3) : les palox habillés sont repartis sur la remorque ; le hangar est vide
+  vider() {
+    this.stock.count = 0;
+    for (const b of this.boites) this.col.retirer(b);
+    this.boites.length = 0;
   }
   fin() {
     this.fini = true; this.ch.gyro.visible = false;

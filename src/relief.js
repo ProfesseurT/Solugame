@@ -52,9 +52,22 @@ function echantillonner(P) {
   return out;
 }
 
-// Le relief avant la route : collines adoucies, plateau du château aplani (talus d'autant plus large que l'écart est grand)
+/* ---------------------------------------------------------------- la zone d'activités
+   À l'est du bourg, de part et d'autre de la départementale (Teddy, 25/11/2026 : « plutôt dans une zone industrielle, une
+   petite avec 2 ou 3 boîtes, à l'extérieur du village ») : l'imprimerie Saint-Vincent, le bureau de Solumatic, une
+   tonnellerie (monde.js : zoneActivites). Ses bâtiments sont posés à y = 0 : le terrain y est à plat, raccordé aux
+   collines sur 30 m. Le rectangle à plat déborde d'une maille du grand terrain (15,5 m) autour de ce qui est bâti : les
+   mailles qui le touchent ont leurs quatre sommets à zéro. */
+export const ZA = { x0: 186, x1: 248, z0: -47, z1: 62, bati: { x0: 186, x1: 241, z0: -36, z1: 49 } };
+const plat = (x, z) => { const dx = Math.max(ZA.x0 - x, 0, x - ZA.x1), dz = Math.max(ZA.z0 - z, 0, z - ZA.z1); return 1 - lisse(Math.hypot(dx, dz) / 30); };
+// un point (à m mètres près) de ce qui est bâti dans la zone : ni arbre des collines, ni balle de foin, ni herbe haute
+export const dansZA = (x, z, m = 0) => x > ZA.bati.x0 - m && x < ZA.bati.x1 + m && z > ZA.bati.z0 - m && z < ZA.bati.z1 + m;
+
+// Le relief avant la route : collines adoucies, plateau du château aplani (talus d'autant plus large que l'écart est grand),
+// la zone d'activités à plat
 export function avantRoute(x, z) {
   let h = naturelle(x, z) * adoucir(x, z);
+  if (x > ZA.x0 - 40) h *= 1 - plat(x, z);
   const C = CHATEAU, d = Math.hypot(x - C.x, z - C.z);
   if (d < C.plateau + 40) { const W = Math.min(30, 10 + 1.2 * Math.abs(h - C.y)); h = mix(C.y, h, lisse((d - C.plateau) / W)); }
   return h;

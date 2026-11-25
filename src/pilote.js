@@ -81,7 +81,8 @@ export class Pilote {
     const T = tr.T, emp = tr.d.emp, ecartAngle = Math.atan2(lat, lon);
     // le point visé est derrière : demi-tour en trois temps (en avant braqué à gauche, en arrière braqué à droite,
     // puis on repart), comme dans une rue étroite ; on change de temps au bout de l'angle voulu ou contre un obstacle
-    if (!serre && !this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
+    // (jamais avec une remorque attelée : en reculant, elle se mettrait en portefeuille ; on tourne en avant, braqué)
+    if (!serre && !tr.remorque && !this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
     if (this.demi) {
       const D = this.demi, tourne = Math.abs(((h - D.h0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
       D.t += 1 / 60; D.tp += 1 / 60;
@@ -110,9 +111,11 @@ export class Pilote {
         return true;
       };
       // fini quand le point visé est devant ; si l'on recule encore, on freine d'abord (pas d'élan vers un obstacle)
-      if (Math.abs(ecartAngle) < 0.9) { this.demi = null; if (tr.v < -0.2) { this.actif = true; return cmd(1, 0); } }
+      // (en avant, on ne braque que de 60° à la fois : le nez ne monte pas sur le trottoir d'en face ; on finit le point
+      // visé bien devant, pas de travers : dans une rue étroite, ce qui reste de virage pousserait sur le trottoir)
+      if (Math.abs(ecartAngle) < 0.6) { this.demi = null; if (tr.v < -0.2) { this.actif = true; return cmd(1, 0); } }
       else if (D.phase === 0) {
-        if (D.t > 0.25 && (tourne > 1.5 || !libre(1) || coince || D.t > 7)) { D.phase = 1; D.t = 0; D.tp = 0; D.h0 = h; }
+        if (D.t > 0.25 && (tourne > 1.05 || !libre(1) || coince || D.t > 7)) { D.phase = 1; D.t = 0; D.tp = 0; D.h0 = h; }
         else { this.actif = true; return cmd(borne((2.2 - tr.v) * 0.9, -1, 1), 1); }
       }
       if (this.demi && D.phase === 1) {

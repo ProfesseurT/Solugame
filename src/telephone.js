@@ -609,7 +609,8 @@ export class Telephone {
     // mission 3 : l'imprimerie (son message du matin, puis l'envoi du QR code et le BAT), le labo (le bulletin)
     if (H && H.actif) {
       if (H.bulletin) fils.unshift({ id: 'labo', ...HX.messages.labo });
-      fils.unshift({ id: 'imprimerie', ...HX.messages.imprimerie, apercu: H.bat === 'ok' ? HX.messages.imprimerie.imprime : H.bat === 'recu' ? HX.messages.imprimerie.recu : HX.messages.imprimerie.apercu });
+      const I = HX.messages.imprimerie;
+      fils.unshift({ id: 'imprimerie', ...I, apercu: H.sms ? I.termine : H.bat === 'ok' ? I.imprime : H.bat === 'recu' ? I.recu : I.apercu });
     }
     if (this.fil) {
       const t = fils.find(x => x.id === this.fil);
@@ -632,7 +633,7 @@ export class Telephone {
     if (H.bat !== 'aucun') b += `<p class="bulle">${esc(I.recu)}</p><div class="bat">${this.contreEtiquette()}</div>`;
     if (H.bat === 'recu') b += `<button class="ap-bt plein large" data-a="vc-accord">${esc(I.accord)}</button>`;
     if (H.bat === 'ok') { b += `<p class="bulle moi">${esc(I.accord)}</p>`; if (H.tImprime <= 0) b += `<p class="bulle">${esc(I.imprime)}</p>`; }
-    // le SMS de la fin : la photo d'une bouteille habillée, le lien de sa fiche (comme le client la verra)
+    // le message d'après l'habillage : la photo d'une bouteille habillée, le lien de sa fiche (comme le client la verra)
     if (H.sms) {
       const [a, b2, c] = I.termineFil;
       b += `<p class="bulle">${esc(a)}</p><div class="bat photo">${this.contreEtiquette()}</div><p class="bulle">${esc(b2)}</p>

@@ -610,10 +610,10 @@ if (scenario === 'sauvegarde') {
     H.couleur('Rouge'); for (let i = 0; i < 4; i++) H.degre(1); H.ingredient('raisins'); H.bio(); H.ingredient('sulfites');
     for (let i = 0; i < 8; i++) H.valeur('glucides', 1); for (let i = 0; i < 2; i++) H.valeur('sucres', 1);
     H.calculer(); H.publier(); H.telecharger(); H.envoyer(); H.bat = 'recu'; H.accord();
-    H.livre = true; H.decharge = true; H.tSms = 30;
+    H.annonce = true; H.livre = true; H.decharge = true; H.minDecharge = CL.jeu.minutes;
     CL.step(60 * 4);
     const P = CL.sauver();
-    log.push(['l\'habillage s\'enregistre (fiche publiée, BAT validé, remorque livrée, palox rentrés)', !!P && P.mission === 'habillage' && P.etat.publiee && P.etat.bat === 'ok' && P.etat.livre && P.etat.decharge && !P.etat.sms]);
+    log.push(['l\'habillage s\'enregistre (fiche publiée, BAT validé, remorque livrée, palox rentrés)', !!P && P.mission === 'habillage' && P.etat.publiee && P.etat.bat === 'ok' && P.etat.livre && P.etat.decharge && P.etat.annonce && !P.etat.sms]);
     return log;
   });
   for (const [msg, c] of r5) ok(c, msg);
@@ -624,11 +624,14 @@ if (scenario === 'sauvegarde') {
       && q('.mi[data-m="tournee"]').classList.contains('gagnee') && !q('.mi[data-m="traitement"]').disabled && q('.mi[data-m="habillage"]').disabled]);
     q('#jouer').click(); CL.step(60);
     const D = L.entrepot.depot, p = J.remorque.ici;
-    log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, la remorque dételée dans la cour de l\'imprimerie, les palox rentrés, l\'œnologue rentrée ; on attend le SMS',
+    log.push(['reprise de la mission 3 : la fiche publiée (12,5 % vol, 299,6 kJ), le BAT validé, la remorque dételée dans la cour de l\'imprimerie, les palox rentrés, l\'œnologue rentrée, Marc au domaine ; rentrer dormir',
       H.etape === 'jour' && H.publiee && H.fiche.degre === 12.5 && H.fiche.energie.kj === 299.6 && H.fiche.ingr.has('sulfites') && H.bat === 'ok' && H.livre && H.decharge
-      && !J.remorque.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 0.5 && CL.dech && CL.dech.fini && CL.gens3.liste[0].etat === 'dedans' && H.cible === null && CL.jeu.minutes > 2 * 1440]);
-    CL.step(60 * 22);
-    log.push(['le SMS arrive', H.sms && H.etape === 'sms']);
+      && !J.remorque.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 0.5 && CL.dech && CL.dech.fini && CL.gens3.liste[0].etat === 'dedans' && CL.gens3.liste[2].etat === 'dehors' && H.cible === L.maison && CL.jeu.minutes > 2 * 1440]);
+    CL.teleporter(L.maison.x, L.maison.z + 1, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(60 * 6);
+    const E = L.entrepot.retour;
+    log.push(['rentré dormir : au réveil, le message de l\'imprimerie ; la remorque rechargée, tournée vers la sortie', H.sms && Math.hypot(J.remorque.ici.x - E.x, J.remorque.ici.z - E.z) < 0.5 && CL.dech.stock.count === 0]);
+    const P2 = CL.sauver();
+    log.push(['et cela s\'enregistre', !!P2 && P2.etat.sms]);
     return log;
   });
   for (const [msg, c] of r6) ok(c, msg);
@@ -723,18 +726,22 @@ if (scenario === 'traitement') {
 }
 
 if (scenario === 'habillage') {
-  // la mission 3 : après la journée de traitement, on rentre dormir ; au réveil, le message de l'imprimerie ; l'échantillon
-  // à pied dans un palox de la remorque ; le van ne l'attelle pas, le tracteur si (il recule tout seul, on met la
-  // goupille) ; en conduite assistée jusqu'au labo, remorque derrière ; l'œnologue ; le bulletin ; la fiche Viticode,
-  // refusée tant qu'elle ne correspond pas au bulletin, publiée, testée (l'âge, la langue) ; le QR code personnalisé (le
-  // titre et la valeur énergétique gardés), téléchargé, envoyé ; le BAT validé ; jusqu'à l'imprimerie ; on dételle ;
-  // Julien rentre les six palox au chariot élévateur ; le SMS ; la carte de fin
+  // la mission 3 (Teddy, 25/11/2026) : après la journée de traitement, on rentre dormir ; au réveil, le message de
+  // l'imprimerie ; la remorque pas encore là ; l'échantillon à pied, au carton ouvert du chai ; en van, en conduite
+  // assistée, jusqu'au labo ; l'œnologue ; Marc prépare la remorque ; le bulletin ; la fiche Viticode, refusée tant
+  // qu'elle ne correspond pas au bulletin, publiée, testée (l'âge, la langue) ; le QR code personnalisé (le titre et la
+  // valeur énergétique gardés), téléchargé, envoyé ; le BAT validé ; de retour au domaine, Marc dit que la remorque est
+  // prête ; le van ne l'attelle pas ; le tracteur recule, Marc attelle (on reste au volant) ; jusqu'à l'imprimerie, dans
+  // la zone d'activités ; on dételle ; Julien rentre les six palox au chariot élévateur ; on rentre dormir ; le message
+  // de l'imprimerie (photo, lien de la fiche) ; on va reprendre la remorque, Julien attelle ; on la ramène au chai, on la
+  // dételle ; la carte de fin
   const r = await ev(async () => {
     const J = CL.jeu, H = CL.habillage, R = J.remorque, tel = J.tel, L = J.lieux, log = [];
     const obj = () => document.querySelector('#objectif')?.textContent || '', toast = () => document.querySelector('#app .ph-toast')?.textContent || '', app = () => document.querySelector('#app').textContent;
+    const dit = () => document.querySelector('#sous-titre').textContent;
     const essai = (a, attendu) => { tel.action(a); return toast().includes(attendu); };
     // conduite assistée au doigt jusqu'à ce que but() soit vrai : durée, chocs, butées de la remorque
-    const rouler = (but, max = 60 * 120) => {
+    const rouler = (but, max = 60 * 150) => {
       const C = CL.ctrl; let t = 0, chocs = 0, butees = 0, arret = 0;
       C.id = 1; C.jx = 0; C.jy = 0;
       for (let k = 0; k < max && !but(); k++) {
@@ -747,37 +754,31 @@ if (scenario === 'habillage') {
       C.id = null;
       return { t: Math.round(t), chocs, butees, ok: but() };
     };
+    const monterDans = genre => { const v = CL.vehicule(genre), p = v.p.pos; CL.teleporter(p.x + Math.cos(v.p.h) * 2.4, p.z - Math.sin(v.p.h) * 2.4, 0); CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3); return J.auVolant && J.veh.genre === genre; };
+    let marc, julien;
     try {
       CL.jouer(); CL.step(30);
+      marc = CL.gens3.liste[2]; julien = CL.gens3.liste[1];
       tel.ouvrir('viticode');
       log.push(['avant la mission 3, Viticode l\'annonce', app().includes('mission 3') && !H.actif]);
       tel.fermer();
       CL.versMission2(); CL.step(60); CL.versMission3(); CL.step(300);
-      log.push(['au réveil, le jeudi : la mission 3, la remorque de palox chargée au domaine, dételée, le message de l\'imprimerie',
-        H.actif && J.minutes >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 480 && !R.attelee && Math.hypot(R.ici.x - L.remorque.x, R.ici.z - L.remorque.z) < 0.5 && tel.notif === 'messages' && obj().includes('imprimerie')]);
+      log.push(['au réveil, le jeudi : la mission 3, le message de l\'imprimerie ; la remorque n\'est pas encore là, Marc non plus',
+        H.actif && J.minutes >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 480 && !R.attelee && CL.mRem.groupe.userData.cache && marc.etat === 'dedans' && tel.notif === 'messages' && obj().includes('imprimerie')]);
       tel.ouvrir('messages'); tel.action('fil:imprimerie'); tel.fermer(); CL.step(60);
-      log.push(['message lu : l\'échantillon, à la remorque', H.etape === 'jour' && obj().includes('échantillon') && H.cible === R.ici]);
-      // l'échantillon, à pied, dans un palox
-      { const D = R.debout(); CL.teleporter(D.x, D.z, D.h || 0); } CL.step(10);
-      log.push(['à côté de la remorque : « Prendre un échantillon »', H.echantillonProche]);
+      log.push(['message lu : l\'échantillon, au chai', H.etape === 'jour' && obj().includes('chai') && H.cible === J.carton]);
+      // l'échantillon, à pied, au carton ouvert du chai
+      CL.teleporter(J.carton.x - 1.0, J.carton.z, Math.PI / 2); CL.step(10);
+      log.push(['au carton ouvert du chai : « Prendre un échantillon »', H.echantillonProche]);
       CL.agir(); CL.finirGeste(); CL.step(5);
-      log.push(['échantillon pris ; ensuite atteler la remorque : il faut le tracteur', H.echantillon === 'pris' && H.cible === R.approche && obj().includes('tracteur')]);
-      // le van n'attelle pas
-      { const p = CL.vehicule('van').p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
-      CL.teleporter(-90, -9, 0); CL.step(40);
-      log.push(['en van devant le timon : pas d\'attelage, il faut le tracteur', J.auVolant && J.veh.genre === 'van' && !J.gestes.actif && !R.attelee && document.querySelector('#sous-titre').textContent.includes('tracteur')]);
-      CL.agir(); CL.finirGeste(); CL.step(3);
-      CL.vehicule('van').p.placer(L.van.x, L.van.z, L.van.h); CL.step(3);
-      // le tracteur : arrêté devant le timon, il recule tout seul, on met la goupille
-      { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
-      CL.teleporter(-90, -9, 0); CL.step(30);
-      log.push(['en tracteur devant le timon, l\'attelage commence', J.gestes.actif && H.occupe]);
-      CL.finirGeste(4000); CL.step(10);
-      log.push(['attelée, de nouveau au volant ; la balise : le labo', R.attelee && H.attelee && J.auVolant && J.veh.genre === 'tracteur' && H.cible === L.arrets.labo]);
+      log.push(['échantillon pris ; la balise : le labo', H.echantillon === 'pris' && H.cible === L.arrets.labo && obj().includes('labo')]);
+      // en van, en conduite assistée, jusqu'au labo
+      log.push(['au volant du van', monterDans('van')]);
       const a = rouler(() => J.gestes.actif && H.occupe);
-      log.push([`en conduite assistée jusqu'au labo, remorque derrière (${a.t} s) : aucun choc, la remorque ne bute pas (${a.chocs}, ${a.butees})`, a.ok && a.chocs === 0 && a.butees === 0]);
+      log.push([`en van, en conduite assistée jusqu'au labo (${a.t} s) : aucun choc (${a.chocs})`, a.ok && a.chocs === 0]);
       CL.finirGeste(3000); CL.step(60 * 4);
-      log.push(['échantillon donné, l\'œnologue le rentre au labo, remonté au volant ; le labo analyse', H.echantillon === 'depose' && CL.gens3.liste[0].etat !== 'dehors' && J.auVolant && obj().includes('bulletin')]);
+      log.push(['échantillon donné, l\'œnologue le rentre au labo ; pendant ce temps, Marc a préparé la remorque, à sa place', H.echantillon === 'depose' && CL.gens3.liste[0].etat !== 'dehors' && J.auVolant
+        && !CL.mRem.groupe.userData.cache && Math.hypot(R.ici.x - L.remorque.x, R.ici.z - L.remorque.z) < 0.5 && marc.etat === 'dehors' && obj().includes('Marc')]);
       CL.step(60 * 26);
       log.push(['le bulletin arrive (Messages)', H.bulletin && tel.notif === 'messages' && H.fil === 'labo']);
       tel.ouvrir('messages'); tel.action('fil:labo');
@@ -819,26 +820,57 @@ if (scenario === 'habillage') {
       tel.action('vc-envoyer'); CL.step(60 * 6);
       log.push(['envoyé ; le BAT de l\'imprimerie arrive', H.envoye && H.bat === 'recu' && tel.app === 'messages']);
       tel.action('vc-accord'); CL.step(120);
-      log.push(['BAT validé : la remorque, à l\'imprimerie', H.bat === 'ok' && H.cible === L.entrepot.depot && app().includes('j\'imprime')]);
+      log.push(['BAT validé ; la balise : la remorque, au domaine', H.bat === 'ok' && H.cible === R.approche && app().includes('j\'imprime')]);
       tel.fermer(); CL.step(5);
-      const b = rouler(() => J.gestes.actif && H.occupe);
-      log.push([`en conduite assistée jusqu'à l'imprimerie (${b.t} s) : aucun choc, la remorque ne bute pas (${b.chocs}, ${b.butees}) ; on dételle`, b.ok && b.chocs === 0 && b.butees === 0]);
+      // de retour au domaine, en van : Marc dit que la remorque est prête ; le van ne l'attelle pas
+      const c = rouler(() => H.annonce || J.gestes.actif);
+      log.push([`de retour au domaine en van (${c.t} s, en ${CL.tr.pos.x.toFixed(0)}, ${CL.tr.pos.z.toFixed(0)}) : Marc dit que la remorque est prête`, H.annonce && dit().includes('prête')]);
+      CL.teleporter(-90, -9, 0); CL.step(60 * 9);
+      log.push(['en van devant le timon : pas d\'attelage, il faut le tracteur', J.auVolant && J.veh.genre === 'van' && !J.gestes.actif && !R.attelee && H.aideCle === 'remorque']);
+      CL.agir(); CL.finirGeste(); CL.step(3);
+      CL.vehicule('van').p.placer(L.van.x, L.van.z, L.van.h); CL.step(3);
+      // le tracteur : arrêté devant le timon, il recule tout seul ; Marc attelle ; on reste au volant
+      monterDans('tracteur');
+      CL.teleporter(-90, -9, 0); CL.step(30);
+      log.push(['en tracteur devant le timon, l\'attelage commence', J.gestes.actif && H.occupe]);
+      let descendu = false, timon = 9;
+      for (let n = 0; n < 4000 && J.gestes.actif; n++) { CL.step(1); if (!J.auVolant) descendu = true; const A = CL.attelage.anneau({ x: 0, z: 0 }); timon = Math.min(timon, Math.hypot(marc.p.pos.x - A.x, marc.p.pos.z - A.z)); }
+      CL.step(10);
+      log.push([`attelée par Marc (il est allé au timon : à ${timon.toFixed(1)} m de l'anneau), on est resté au volant ; la balise : l'imprimerie`, R.attelee && H.attelee && !descendu && J.auVolant && J.veh.genre === 'tracteur'
+        && timon < 1.2 && marc.etat === 'dehors' && H.cible === L.entrepot.depot]);
+      const d = rouler(() => J.gestes.actif && H.occupe);
+      log.push([`en conduite assistée jusqu'à l'imprimerie, dans la zone d'activités (${d.t} s) : aucun choc, la remorque ne bute pas (${d.chocs}, ${d.butees}) ; on dételle`, d.ok && d.chocs === 0 && d.butees === 0]);
       CL.finirGeste(4000); CL.step(10);
       { const D = L.entrepot.depot, p = R.ici;
         log.push([`dételée dans la cour, à ${Math.hypot(p.x - D.x, p.z - D.z).toFixed(1)} m de sa place ; Julien va à son chariot`, H.livre && !R.attelee && Math.hypot(p.x - D.x, p.z - D.z) < 2.5 && obj().includes('chariot')]); }
       let n = 0; for (; n < 60 * 150 && !H.decharge; n++) CL.step(1);
       CL.step(10);
-      log.push([`les six palox rentrés au chariot (${Math.round(n / 60)} s) ; la ligne tourne ; un SMS viendra (objectif : ${obj()})`, H.decharge && J.chariot.fini && obj().includes('SMS')]);
-      CL.step(60 * 46);
-      log.push(['le SMS de l\'imprimerie : c\'est terminé', H.sms && H.etape === 'sms' && tel.notif === 'messages']);
+      log.push([`les six palox rentrés au chariot (${Math.round(n / 60)} s) ; la ligne tourne ; l'habillage prend l'après-midi : rentrer dormir (objectif : ${obj()})`, H.decharge && J.chariot.fini && obj().includes('dormir') && H.cible === L.maison]);
+      // rentrer dormir : au réveil, le message de l'imprimerie ; la remorque rechargée, tournée vers la sortie
+      CL.agir(); CL.finirGeste(); CL.step(3);
+      CL.teleporter(L.maison.x, L.maison.z + 1, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(60 * 6);
+      const E = L.entrepot.retour;
+      log.push(['au réveil, le vendredi : le message de l\'imprimerie ; la remorque rechargée de palox habillés, tournée vers la sortie ; le tracteur rentré au domaine',
+        H.sms && tel.notif === 'messages' && J.minutes >= 3 * 1440 + 420 && Math.hypot(R.ici.x - E.x, R.ici.z - E.z) < 0.5 && Math.abs(CL.attelage.h - E.h) < 0.01
+        && Math.hypot(CL.vehicule('tracteur').p.pos.x - L.tracteur.x, CL.vehicule('tracteur').p.pos.z - L.tracteur.z) < 1 && obj().includes('imprimerie')]);
       tel.ouvrir('messages'); tel.action('fil:imprimerie');
-      log.push(['le SMS : la photo de la bouteille habillée, le lien de sa fiche', app().includes('C\'est terminé') && !!document.querySelector('#app [data-a="vc-tester:sms"]') && !!document.querySelector('#app .bat.photo')]);
+      log.push(['le message : la photo de la bouteille habillée, le lien de sa fiche', app().includes('sont habillés') && !!document.querySelector('#app [data-a="vc-tester:sms"]') && !!document.querySelector('#app .bat.photo')]);
       tel.action('vc-tester:sms'); tel.action('vc-age:oui');
-      log.push(['le lien du SMS : la fiche du Clos', app().includes('Ingrédients')]);
-      tel.action('vc-fermer-test');
-      log.push(['retour au SMS', tel.app === 'messages']);
-      tel.fermer(); CL.step(60);
-      log.push(['l\'habillage est fini ; la mission 3 est gagnée', H.etape === 'fin' && CL.SAUVE.gagnees.habillage === true]);
+      log.push(['le lien du message : la fiche du Clos', app().includes('Ingrédients')]);
+      tel.action('vc-fermer-test'); tel.fermer(); CL.step(10);
+      // la reprendre : en tracteur, arrêté à l'entrée de la cour ; il se met en travers, recule ; Julien attelle
+      monterDans('tracteur');
+      const f = rouler(() => J.gestes.actif && H.occupe);
+      log.push([`en tracteur jusqu'à l'imprimerie (${f.t} s) : aucun choc (${f.chocs}) ; Julien vient atteler`, f.ok && f.chocs === 0]);
+      descendu = false;
+      for (let k = 0; k < 5000 && J.gestes.actif; k++) { CL.step(1); if (!J.auVolant) descendu = true; }
+      CL.step(10);
+      log.push([`attelée par Julien, on est resté au volant, le tracteur tourné vers la sortie (cap ${CL.tr.h.toFixed(2)})`, R.attelee && H.attelee && !descendu && Math.cos(CL.tr.h) < -0.95 && julien.etat === 'dehors' && H.cible === L.remorque.chai.arret]);
+      const g = rouler(() => J.gestes.actif && H.occupe);
+      log.push([`jusqu'au chai (${g.t} s) : aucun choc, la remorque ne bute pas (${g.chocs}, ${g.butees}) ; on la pose`, g.ok && g.chocs === 0 && g.butees === 0]);
+      CL.finirGeste(5000); CL.step(10);
+      { const C = L.remorque.chai, p = R.ici;
+        log.push([`posée au chai, à ${Math.hypot(p.x - C.x, p.z - C.z).toFixed(1)} m de sa place ; la mission 3 est gagnée`, H.rentree && !R.attelee && Math.hypot(p.x - C.x, p.z - C.z) < 2.5 && H.etape === 'fin' && CL.SAUVE.gagnees.habillage === true]); }
       CL.step(60 * 7);
       log.push(['la carte de fin, avec viticode.fr', J.finVue && document.querySelector('#fin-titre').textContent.includes('Viticode') && !document.querySelector('#fin-cta').hidden && document.querySelector('#fin-cta').href.startsWith('https://viticode.fr')]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }

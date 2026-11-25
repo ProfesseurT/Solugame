@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer, MAT } from './modeles.js';
 import { Collisions } from './collisions.js';
-import { tracteur, van, voiture, voitureConduite, allumerPhares } from './engins.js';
+import { tracteur, van, voiture, voitureConduite, allumerPhares, geoCartonOuvert } from './engins.js';
 import { perso, HEROS } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
@@ -15,7 +15,7 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { enjambeur, deplierEnjambeur } from './enjambeur.js';
-import { remorque, Attelage, peutAtteler, etapesAtteler, etapesDeteler, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement } from './remorque.js';
+import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habillerPalox, parPoses, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement } from './remorque.js';
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
@@ -190,9 +190,11 @@ const CLIENTS_3D = {
   epicerie: { peau: '#d9a27e', cheveux: '#5a4a3a', coiffure: 'court', barbe: true, haut: '#7a5c3f', col: '#e9e1cf', bas: '#2f3440', tablier: '#2f4a6b' },
   // le patron de l'Auberge du Moulin, le prospect, en veste de cuisine
   auberge: { peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
-  // mission 3 : Hélène, l'œnologue, en blouse blanche ; Julien, l'étiqueteur de l'imprimerie, en bleu de travail
+  // mission 3 : Hélène, l'œnologue, en blouse blanche ; Julien, l'étiqueteur de l'imprimerie, en bleu de travail ; Marc,
+  // le salarié du domaine, en salopette verte
   labo: { femme: true, peau: '#f0c8a0', cheveux: '#3b2a1a', coiffure: 'chignon', haut: '#f4f6f8', col: '#f4f6f8', bas: '#3a3f4a', tablier: '#f4f6f8', lunettes: true },
   entrepot: { peau: '#d9a27e', cheveux: '#2b1d0e', coiffure: 'court', barbe: true, tenue: 'salopette', haut: '#3c5a8a', col: '#e9e1cf', bas: '#3c5a8a', chapeau: 'casquette', chapeauC: '#e84e1b' },
+  salarie: { peau: '#e0ac69', cheveux: '#7a5230', coiffure: 'court', tenue: 'salopette', haut: '#5a6b2f', col: '#e9e1cf', bas: '#5a6b2f', chapeau: 'casquette', chapeauC: '#2f4a6b' },
 };
 function peupler() {
   if (peuple) return;
@@ -230,12 +232,14 @@ function peupler() {
   for (const vo of voitures) asseoirConducteur(vo);
   parvis.peupler(hud); // le rinceur et la porteuse du parvis du chai (tenues fixées : rien ne change pour les autres)
   // l'œnologue devant son labo, l'étiqueteur devant l'entrepôt de l'imprimerie (mission 3), créés en derniers
-  for (const [id, l] of [['labo', L.figurants.labo], ['entrepot', L.entrepot.figurant]]) {
+  for (const [id, l] of [['labo', L.figurants.labo], ['entrepot', L.entrepot.figurant], ['salarie', L.remorque]]) {
     const p = new Pieton(perso(CLIENTS_3D[id]));
     scene.add(p.m.groupe); p.placer(l.x, l.z, l.h);
     gens3.ajouter(p, l, id);
   }
-  habillage.c.oeno = gens3.liste[0]; habillage.c.etiq = gens3.liste[1];
+  habillage.c.oeno = gens3.liste[0]; habillage.c.etiq = gens3.liste[1]; habillage.c.salarie = gens3.liste[2];
+  // Marc n'est là que le jour de l'habillage, la remorque préparée (jeu.remorque.preparer)
+  { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; }
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
@@ -395,15 +399,60 @@ const habillage = new Habillage(jeu, {});
 jeu.habillage = habillage;
 // La remorque et le chariot, pour la mission 3 (mission3.js)
 jeu.remorque = {
-  get ici() { return att.pos; },          // la remorque (la balise de l'échantillon, à pied)
+  get ici() { return att.pos; },          // la remorque (au domaine : où Marc attend)
   approche: L.remorque.approche,         // où le tracteur vient se mettre devant le timon (la balise pour atteler)
   get attelee() { return att.attelee; },
   peutAtteler: () => jeu.auVolant && veh.genre === 'tracteur' && peutAtteler(tr, att),
-  atteler(fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesAtteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v) }), fin); },
-  deteler(fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesDeteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v), depot: L.entrepot.depot }), fin); },
-  debout: () => att.pointEchantillon(joueur.pos.x, joueur.pos.z).debout,
-  pointEchantillon: () => att.pointEchantillon(joueur.pos.x, joueur.pos.z),
+  // atteler avec l'aide de f (Marc au domaine, Julien à l'imprimerie : une entrée de gens3) ; virage : une manœuvre avant
+  // de reculer sur l'anneau (à l'imprimerie, le lendemain)
+  atteler(f, fin, virage = null) {
+    const v = veh; couperMoteur(); ctrl.relacher();
+    gestes.lancer(etapesAttelerAide(gestes, v, att, f.gestes, {
+      manoeuvre: virage ? parPoses([[tr.pos.x, tr.pos.z, tr.h], virage]) : null, couper: couperMoteur,
+      cadre: (a, b) => gestes.cadrerEntre(a, b, v),
+      lancer: (etapes, fait) => {
+        f.etat = 'range'; f.gestes.g = null; f.p.salut = false; f.p.regard = null; f.p.m.groupe.visible = true;
+        f.gestes.lancer(etapes, () => { f.etat = 'dehors'; f.l = { x: f.p.pos.x, z: f.p.pos.z, h: f.p.h }; fait(); });
+      },
+    }), fin);
+  },
+  // dételer, la remorque posée à la place depot (le tracteur avance tout seul pour l'y mettre)
+  deteler(depot, fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesDeteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v), depot }), fin); },
+  // pas encore préparée (le matin de l'habillage) : pas là du tout ; Marc non plus
+  cacher() {
+    att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.retirer();
+    mRem.groupe.userData.cache = true; mRem.groupe.visible = false;
+    const f = gens3.liste[2]; if (f) { f.etat = 'dedans'; f.p.m.groupe.visible = false; }
+  },
+  // préparée par Marc : chargée, à sa place au bord de l'allée ; il attend à côté, côté allée, près du timon
+  preparer() {
+    att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.recharger(); habillerPalox(mRem, false);
+    mRem.groupe.userData.cache = false;
+    const f = gens3.liste[2], P = att.versMonde(2.0, 0, 2.2, { x: 0, y: 0, z: 0 });
+    if (f) { f.l = { x: P.x, z: P.z, h: att.h + Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true; }
+  },
+  // l'habillage fini : les palox habillés rechargés à l'imprimerie, la remorque tournée vers la sortie ; Julien à côté ;
+  // le hangar vide
+  habillee() {
+    const R = L.entrepot.retour;
+    att.poser(R.x, R.z, R.h);
+    // (une partie reprise : le déchargement d'abord refait d'un coup, puis les palox remis sur la remorque)
+    if (!dech) { dech = new Dechargement({ ch: mChariot, att, L: L.entrepot, conducteur: null, col, scene, vite: VITE_CHARIOT }); dech.finir(); }
+    dech.vider(); placerChariot(mChariot, L.entrepot.chariot, col);
+    att.recharger(); habillerPalox(mRem, true);
+    mRem.groupe.userData.cache = false;
+    const f = gens3.liste[1];
+    if (f.p.assis) descendreChariot(f.p, mChariot, scene);
+    const P = att.versMonde(-2.2, 0, 3.4, { x: 0, y: 0, z: 0 });
+    f.gestes.g = null; f.l = { x: P.x, z: P.z, h: att.h - Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true;
+  },
 };
+// le carton ouvert du chai, près de la palette (mission 3) : on y prend une bouteille, l'échantillon pour le labo
+const CARTON3 = { x: L.palette.x, y: 0.36, z: L.palette.z + 1.05 }; // (le haut des bouteilles)
+jeu.carton = CARTON3;
+const cartonOuvert = new THREE.Mesh(geoCartonOuvert(), MAT);
+cartonOuvert.position.set(CARTON3.x, 0, CARTON3.z); cartonOuvert.castShadow = true; cartonOuvert.receiveShadow = true; cartonOuvert.visible = false;
+scene.add(cartonOuvert);
 // Julien (l'étiqueteur) va à son chariot, s'assoit, rentre les six palox près de la ligne, en descend (remorque.js)
 const VITE_CHARIOT = 2.5;
 jeu.chariot = {
@@ -445,7 +494,7 @@ jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
 const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
-const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : un palox de la remorque
+const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le carton ouvert du chai
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
@@ -862,8 +911,8 @@ function surlendemain() {
     v.p.charge = 0;
   }
   for (const p of mission.palette) p.groupe.visible = false;
-  // la remorque de palox au domaine, chargée, dételée ; le chariot à sa place dans la cour de l'imprimerie
-  att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.recharger();
+  // la remorque de palox pas encore préparée (Marc la sortira pendant qu'on est au labo) ; le carton ouvert du chai
+  jeu.remorque.cacher(); cartonOuvert.visible = true;
   mission3 = true;
 }
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
@@ -882,13 +931,18 @@ function dormir() {
         joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
         if (mission.etape === 'dodo') lendemain();
         else if (traitement.etape === 'dodo') surlendemain();
+        // la nuit de l'habillage : le tracteur, le van et l'enjambeur rangés dans la cour au réveil (le tracteur est peut-être
+        // resté à l'imprimerie)
+        else if (habillage.attendNuit) for (const v of VEHICULES) { const l = L[v.genre]; if (l) v.p.placer(l.x, l.z, l.h); }
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
     {
       action: () => {
         $('fondu').classList.remove('noir'); son.jouer('claque');
-        if (mission2) { mission2 = false; traitement.demarrer(); } else if (mission3) { mission3 = false; habillage.demarrer(); } else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
+        if (mission2) { mission2 = false; traitement.demarrer(); } else if (mission3) { mission3 = false; habillage.demarrer(); }
+        else if (habillage.attendNuit) habillage.reveil(); // l'habillage fini pendant la nuit : le message de l'imprimerie
+        else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
       },
     },
   ]);
@@ -915,7 +969,7 @@ function reperes(dt, ego, cible) {
   // devant la porte de la maison du domaine : rentrer dormir
   const dodo = !pcPres && !servable && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
-  { const ok = habillage.echantillonProche && !tel.ouvert && !pcPres, P = ok ? jeu.remorque.pointEchantillon() : null; hud.placer(etqEchantillon, P ? P.x : 0, P ? P.y + 0.6 : 0, P ? P.z : 0, ok); }
+  hud.placer(etqEchantillon, CARTON3.x, CARTON3.y + 0.8, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
   const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
@@ -1036,7 +1090,7 @@ function voirLoin() {
   const c = camera.position, fin = scene.fog.far, R = 6;
   for (let i = 0; i < LOINS.length; i++) {
     const g = LOINS[i], p = g.position, prof = (p.x - c.x) * AXE.x + (p.y - c.y) * AXE.y + (p.z - c.z) * AXE.z - R;
-    const vu = prof < (p.y + 4.6 < 5 ? fin - 6 : fin * 1.6);
+    const vu = !g.userData.cache && prof < (p.y + 4.6 < 5 ? fin - 6 : fin * 1.6); // (cache : pas là du tout)
     if (g.visible !== vu) g.visible = vu;
   }
 }
@@ -1181,14 +1235,20 @@ function reprendrePartie(P) {
     surlendemain(); mission3 = false; horloge(0);
     habillage.reprendre(P.etat);
     gens3.reprendre();
-    // la remorque déjà livrée : dételée dans la cour de l'imprimerie, les palox rentrés (ou qu'on rentre tout de suite)
-    if (habillage.livre) {
+    // la remorque : cachée (pas encore préparée), à sa place au domaine, dans la cour de l'imprimerie (les palox rentrés,
+    // ou qu'on rentre tout de suite), rechargée des palox habillés, ou posée au chai
+    const H = habillage;
+    if (H.prete) jeu.remorque.preparer(); // (Marc à sa place au domaine, au bord de l'allée)
+    if (H.rentree) { const C = L.remorque.chai; att.poser(C.x, C.z, C.h); habillerPalox(mRem, true); }
+    else if (H.sms) jeu.remorque.habillee();
+    else if (H.livre) {
       const D = L.entrepot.depot;
       att.poser(D.x, D.z, D.h);
       dech = new Dechargement({ ch: mChariot, att, L: L.entrepot, conducteur: null, col, scene, vite: VITE_CHARIOT });
       dech.finir(); finDechargement();
       const f = gens3.liste[1], S = L.entrepot.stock[0]; f.p.placer(S.x + 1.6, S.z - 1.4, Math.PI / 2);
     }
+    if (H.echantillon !== 'aucun') cartonOuvert.visible = true; // (cinq bouteilles sur six : celle du labo est partie)
   } else if (P.mission === 'traitement') {
     lendemain(); mission2 = false; horloge(0);
     traitement.reprendre(P.etat);
