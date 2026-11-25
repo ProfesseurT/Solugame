@@ -678,8 +678,8 @@ export class Gestes {
     }
     return m[k];
   }
-  // L'échantillon : on va au carton ouvert (src : { x, y, z } dans le monde, le haut des bouteilles), on en sort une
-  // bouteille, on la regarde, on la range ; fin() quand c'est fait
+  // L'échantillon : on va au palox (src : { x, y, z } dans le monde, le haut des bouteilles), on en sort une bouteille,
+  // on la regarde, on la range ; fin() quand c'est fait
   echantillon(src, fin) {
     const devant = { x: 0, z: 0 }, w = new THREE.Vector3();
     this.lancer([
@@ -692,7 +692,7 @@ export class Gestes {
         debut: () => { const b = this.bouteille(false); b.visible = true; this.j.porte = b; son.jouer('tap'); },
         maj: (dt, t, u, T) => {
           const b = this.bouteille(false), s = this.local(w.set(src.x, src.y, src.z), vT);
-          // sortie du carton, montée jusqu'aux yeux, regardée, puis rangée (dans la poche de la veste)
+          // sortie du palox, montée jusqu'aux yeux, regardée, puis rangée (dans la poche de la veste)
           b.position.copy(s).lerp(vB.set(0, 1.1, 0.3), lisse(T / 0.7));
           b.position.y -= lisse((T - 1.6) / 0.4) * 0.3;
           if (T > 1.7) this.j.porte = null;

@@ -7,6 +7,7 @@ import { Gestes } from './gestes.js';
 
 const ATTENTE = 2.5;  // secondes entre l'affaire faite et le rangement (on a le temps de les voir faire)
 const DEDANS = 1.6;   // secondes passées dans la boutique entre deux piles
+const LOIN = 220;     // m : au-delà (plus loin que les personnages dessinés au palier haut, 200 m, et la caméra), immobile
 const VISAGE = new THREE.Vector3(), V = new THREE.Vector3();
 
 export class Clients {
@@ -25,8 +26,10 @@ export class Clients {
       if (f.etat === 'dedans') continue;
       if (f.etat === 'range') { f.gestes.update(dt, t); continue; }
       if (f.porte && m.fait(m.arretDe(f.id)) && (f.t += dt) > ATTENTE) { this.ranger(f); continue; }
-      // dehors : il se tourne vers vous, vous regarde et fait signe quand vous arrivez
-      const pres = Math.hypot(p.pos.x - ego.x, p.pos.z - ego.z) < 12;
+      // dehors : il se tourne vers vous, vous regarde et fait signe quand vous arrivez ; à plus de LOIN, il n'est dessiné à
+      // aucun palier (main.js : ombrePerso), il n'y a rien à animer
+      const d = Math.hypot(p.pos.x - ego.x, p.pos.z - ego.z), pres = d < 12;
+      if (d > LOIN) continue;
       p.h = pres ? Math.atan2(ego.x - p.pos.x, ego.z - p.pos.z) : f.l.h;
       p.salut = pres; p.regard = pres ? VISAGE.set(ego.x, auVolant ? 2.4 : 1.6, ego.z) : null;
       p.sync(dt, t);

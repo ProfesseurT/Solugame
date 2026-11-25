@@ -254,7 +254,8 @@ export class Habillage {
     const j = this.j;
     if (this.etape === 'debut' || this.etape === 'message') { this.lu = true; this.aller('jour'); }
     this.occupe = true;
-    j.gestes.echantillon(this.R.pointEchantillon(), () => {
+    const P = this.R.pointEchantillon(); // (une copie : le point est refait à chaque image)
+    j.gestes.echantillon({ x: P.x, y: P.y, z: P.z }, () => {
       this.occupe = false; this.echantillon = 'pris'; this.itin = null;
       son.jouer('succes');
       j.hud.dire(this.attelee ? HX.dialogues.echantillonAttelee : HX.dialogues.echantillon);

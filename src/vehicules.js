@@ -320,6 +320,9 @@ const LONG = 4.2; // longueur d'une voiture (m)
 // Au-delà, on se croise sans se toucher : un véhicule arrêté entre deux voies, pour livrer côté nord, ne bloque plus les
 // deux sens à la fois (chacun attendait l'autre). cercles(o) remplit CER ([x, z, rayon, demi-longueur]) et rend leur nombre.
 const CER = [[0, 0, 0, 0], [0, 0, 0, 0]];
+// plus loin que ça de l'axe d'une voie, un obstacle n'y touche pas : son cercle le plus écarté (la remorque : 2,2 m devant
+// son milieu, 1,35 m de rayon) reste hors de la voie (1,11 m plus son rayon)
+const LOIN_VOIE = 5.5;
 function cercles(o) {
   const p = o.veh;
   if (!p) { const c = CER[0]; c[0] = o.x; c[1] = o.z; c[2] = 0.9; c[3] = 2.4; return 1; }
@@ -345,7 +348,9 @@ export class Voiture {
   ecart(obstacles, voitures, z) {
     let libre = 1e9, obst = null;
     for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i], n = cercles(o);
+      const o = obstacles[i];
+      if (Math.abs(o.z - z) > LOIN_VOIE) continue; // (garé loin de la route : aucun de ses cercles n'y touche)
+      const n = cercles(o);
       for (let k = 0; k < n; k++) {
         const c = CER[k], dx = (c[0] - this.x) * this.sens - LONG / 2 - c[3];
         if (dx > -5 && dx < libre && Math.abs(c[1] - z) < 1.11 + c[2]) { libre = dx; obst = o; }
@@ -363,7 +368,9 @@ export class Voiture {
   // la voie d'en face est-elle libre pour doubler ?
   voieLibre(obstacles, voitures) {
     for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i], n = cercles(o);
+      const o = obstacles[i];
+      if (Math.abs(o.z - this.zAutre) > LOIN_VOIE) continue;
+      const n = cercles(o);
       for (let k = 0; k < n; k++) {
         const c = CER[k], dx = (c[0] - this.x) * this.sens;
         if (dx > -6 && dx < 40 && Math.abs(c[1] - this.zAutre) < 1.11 + c[2]) return false;

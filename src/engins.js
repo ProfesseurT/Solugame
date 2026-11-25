@@ -5,6 +5,8 @@ import { assombrir } from './outils.js';
 
 const TAU = Math.PI * 2;
 export const VITRE = '#2d3846'; // reconnue comme vitre (table TYPES de modeles.js) : reflète le ciel
+// une pièce qui ne bouge jamais par rapport à son parent (elle suit le véhicule) : sa matrice est calculée une fois
+export const fixe = o => { o.updateMatrix(); o.matrixAutoUpdate = false; return o; };
 
 /* ---------------------------------------------------------------- outils de carrosserie
    Les carrosseries sont faites de facettes posées une à une (coques en sections, dalles percées de fenêtres,
@@ -196,17 +198,32 @@ export function roue(r, l, n, cote, dedans, jante = '#c4c8cd') {
   return g;
 }
 
-// Les quatre roues d'un véhicule du domaine : à l'arrière sur le châssis (groupe), à l'avant sur deux pivots de direction
-// portés par un essieu oscillant (il penche sur les bosses). g : géométries [arrière gauche, arrière droite, avant
-// gauche, avant droite] ; demi-voie, hauteur et position le long du véhicule de l'arrière, puis de l'avant.
-export function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv) {
+// Les quatre roues d'un véhicule du domaine (et de l'enjambeur, et des voitures qu'on conduit) : à l'arrière sur le
+// châssis (groupe), à l'avant sur deux pivots de direction portés par un essieu oscillant (il penche sur les bosses).
+// g : géométries [arrière gauche, arrière droite, avant gauche, avant droite] ; demi-voie, hauteur et position le long
+// du véhicule de l'arrière, puis de l'avant ; xPivot : le pivot de direction, quand il n'est pas dans la roue (la jambe
+// de l'enjambeur : la roue déportée vers l'extérieur). Les deux roues arrière, qui tournent ensemble, ne font qu'un
+// maillage (un appel de dessin et une ombre de moins) : rouesAr le donne deux fois (vehicules.js les règle pareil).
+const PAIRES = new Map();
+function paireRoues(gG, gD, x) {
+  const cle = gG.uuid + gD.uuid + x;
+  let p = PAIRES.get(cle);
+  if (!p) {
+    const a = gG.clone(), b = gD.clone();
+    for (const [g, dx] of [[a, x], [b, -x]]) { const P = g.attributes.position.array; for (let i = 0; i < P.length; i += 3) P[i] += dx; }
+    PAIRES.set(cle, p = fusion([a, b]));
+  }
+  return p;
+}
+export function roues(groupe, g, xAr, yAr, zAr, xAv, yAv, zAv, xPivot = xAv) {
   const mk = (geo, parent, x, y, z) => { const m = new THREE.Mesh(geo, MAT); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-  const rouesAr = [mk(g[0], groupe, xAr, yAr, zAr), mk(g[1], groupe, -xAr, yAr, zAr)];
+  const ar = mk(paireRoues(g[0], g[1], xAr), groupe, 0, yAr, zAr);
   const essieu = new THREE.Group(); essieu.position.set(0, yAv, zAv); groupe.add(essieu);
   const pivots = [new THREE.Group(), new THREE.Group()];
-  pivots[0].position.set(xAv, 0, 0); pivots[1].position.set(-xAv, 0, 0);
+  pivots[0].position.set(xPivot, 0, 0); pivots[1].position.set(-xPivot, 0, 0);
   essieu.add(pivots[0], pivots[1]);
-  return { rouesAr, rouesAv: [mk(g[2], pivots[0], 0, 0, 0), mk(g[3], pivots[1], 0, 0, 0)], pivots, essieu };
+  const d = xAv - xPivot;
+  return { rouesAr: [ar, ar], rouesAv: [mk(g[2], pivots[0], d, 0, 0), mk(g[3], pivots[1], -d, 0, 0)], pivots, essieu };
 }
 
 /* ---------------------------------------------------------------- phares, la nuit
@@ -266,13 +283,13 @@ export function feuxDomaine(caisse, stop, recul) {
     if (!l) continue;
     const g = [];
     for (const [lx, ly, lz, x, y, z] of l) for (const s of [1, -1]) g.push(B(lx, ly, lz, '#fff', s * x, y, z));
-    f[k] = new THREE.Mesh(fusion(g), mat()); f[k].visible = false; caisse.add(f[k]);
+    f[k] = fixe(new THREE.Mesh(fusion(g), mat())); f[k].visible = false; caisse.add(f[k]);
   }
   return f;
 }
 export function gyrophare(caisse, x, y, z) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.visible = false; caisse.add(g);
-  g.add(new THREE.Mesh(fusion([B(0.05, 0.085, 0.13, '#fff', 0.035, 0, 0), B(0.05, 0.085, 0.13, '#fff', -0.035, 0, 0)]), MAT_CLIGNO));
+  g.add(fixe(new THREE.Mesh(fusion([B(0.05, 0.085, 0.13, '#fff', 0.035, 0, 0), B(0.05, 0.085, 0.13, '#fff', -0.035, 0, 0)]), MAT_CLIGNO)));
   return g;
 }
 
@@ -289,14 +306,15 @@ export function geoCarton() {
 let geoChequeP = null;
 export function geoCheque() { return geoChequeP || (geoChequeP = compacter(B(0.17, 0.004, 0.08, '#f4efe2'))); }
 // Une bouteille de 75 cl (mission 3 : l'habillage), debout, le fond à l'origine : tirée-bouchée (nue : le verre et le
-// bouchon), ou habillée (capsule bordeaux, étiquette crème devant, contre-étiquette blanche et son QR code derrière)
+// bouchon), ou habillée (capsule bordeaux, étiquette crème devant, contre-étiquette blanche et son QR code derrière).
+// Pas de couvercle aux bouts cachés (contre l'épaule, le col, sous le bouchon ou la capsule).
 const geoBouteilleP = {};
 export function geoBouteille(habillee) {
   const k = habillee ? 'h' : 'n';
   if (geoBouteilleP[k]) return geoBouteilleP[k];
-  const V = '#1f3b2a', L = [C(0.037, 0.037, 0.2, 8, V, 0, 0.1, 0), C(0.014, 0.037, 0.05, 8, V, 0, 0.225, 0), C(0.0135, 0.0145, 0.07, 6, V, 0, 0.285, 0)];
+  const V = '#1f3b2a', L = [C(0.037, 0.037, 0.2, 8, V, 0, 0.1, 0, 'y', 0, 2), C(0.014, 0.037, 0.05, 8, V, 0, 0.225, 0, 'y', 0, 0), C(0.0135, 0.0145, 0.07, 6, V, 0, 0.285, 0, 'y', 0, habillee ? 0 : 1)];
   if (habillee) L.push(C(0.016, 0.016, 0.05, 6, '#8e2a3b', 0, 0.3, 0), B(0.05, 0.075, 0.012, '#f1e8d2', 0, 0.1, 0.034), B(0.044, 0.06, 0.012, '#fbfaf6', 0, 0.1, -0.034), B(0.02, 0.02, 0.004, '#1d1a26', 0, 0.105, -0.0415));
-  else L.push(C(0.012, 0.012, 0.012, 6, '#c9a46a', 0, 0.322, 0));
+  else L.push(C(0.012, 0.012, 0.012, 6, '#c9a46a', 0, 0.322, 0, 'y', 0, 1));
   return (geoBouteilleP[k] = compacter(fusion(L)));
 }
 // Le carton ouvert du chai (mission 3) : celui où l'on prend l'échantillon ; rabats ouverts, les cols et les bouchons
@@ -306,9 +324,9 @@ export function geoCartonOuvert() {
   // les quatre rabats, ouverts vers l'extérieur
   L.push(B(0.36, 0.01, 0.14, '#a97c4b', 0, 0.3, 0.22, 0), B(0.36, 0.01, 0.14, '#a97c4b', 0, 0.3, -0.22, 0));
   L.push(B(0.14, 0.01, 0.32, '#a97c4b', 0.24, 0.3, 0, 0), B(0.14, 0.01, 0.32, '#a97c4b', -0.24, 0.3, 0, 0));
-  // cinq bouteilles sur six (une est partie au labo, ou le sera) : le col et le bouchon
+  // cinq bouteilles sur six (une est partie au labo, ou le sera) : le col et le bouchon (sans couvercle aux bouts cachés)
   for (const [x, z] of [[-0.11, -0.08], [0, -0.08], [0.11, -0.08], [-0.11, 0.08], [0.11, 0.08]]) {
-    L.push(C(0.014, 0.03, 0.06, 6, '#1f3b2a', x, 0.27, z), C(0.0135, 0.0145, 0.07, 6, '#1f3b2a', x, 0.33, z), C(0.012, 0.012, 0.012, 6, '#c9a46a', x, 0.37, z));
+    L.push(C(0.014, 0.03, 0.06, 6, '#1f3b2a', x, 0.27, z, 'y', 0, 0), C(0.0135, 0.0145, 0.07, 6, '#1f3b2a', x, 0.33, z, 'y', 0, 1), C(0.012, 0.012, 0.012, 6, '#c9a46a', x, 0.37, z, 'y', 0, 1));
   }
   return compacter(fusion(L));
 }

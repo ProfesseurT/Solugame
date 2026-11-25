@@ -8,6 +8,9 @@ const surRoute = (a, b) => Math.abs(a[1] - 10) < 2.5 && Math.abs(b[1] - 10) < 2.
 const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14, enjambeur: 6.8 }; // vitesse de croisière (m/s)
 const SONDE = { x: 0, z: 0 }; // point d'essai devant ou derrière le véhicule (demi-tour)
 const COINS = [0, 0.8, -0.8]; // milieu et coins du pare-chocs, sondés pendant un demi-tour
+// la commande rendue (la même à chaque appel : main.js la lit aussitôt ; jusqu'à trois appels par image pour l'enjambeur)
+const CMD = { gaz: 0, braq: 0 };
+const cmd = (gaz, braq) => { CMD.gaz = gaz; CMD.braq = braq; return CMD; };
 
 // l'itinéraire décalé sur la file de droite de la départementale (ailleurs, chemins et rues étroites : au milieu)
 function decaler(route) {
@@ -107,14 +110,14 @@ export class Pilote {
         return true;
       };
       // fini quand le point visé est devant ; si l'on recule encore, on freine d'abord (pas d'élan vers un obstacle)
-      if (Math.abs(ecartAngle) < 0.9) { this.demi = null; if (tr.v < -0.2) { this.actif = true; return { gaz: 1, braq: 0 }; } }
+      if (Math.abs(ecartAngle) < 0.9) { this.demi = null; if (tr.v < -0.2) { this.actif = true; return cmd(1, 0); } }
       else if (D.phase === 0) {
         if (D.t > 0.25 && (tourne > 1.5 || !libre(1) || coince || D.t > 7)) { D.phase = 1; D.t = 0; D.tp = 0; D.h0 = h; }
-        else { this.actif = true; return { gaz: borne((2.2 - tr.v) * 0.9, -1, 1), braq: 1 }; }
+        else { this.actif = true; return cmd(borne((2.2 - tr.v) * 0.9, -1, 1), 1); }
       }
       if (this.demi && D.phase === 1) {
         if (D.t > 0.25 && (!libre(-1) || (D.t > 1 && (tourne > 1.4 || coince)) || D.t > 6)) { D.phase = 0; D.t = 0; D.tp = 0; D.h0 = h; }
-        else { this.actif = true; return { gaz: tr.v > 0.2 ? -1 : -0.8, braq: -1 }; }
+        else { this.actif = true; return cmd(tr.v > 0.2 ? -1 : -0.8, -1); }
       }
     }
     let delta = lon > 0.5 ? Math.atan(2 * emp * (lat / Ld) / Ld) : (lat >= 0 ? 1 : -1) * T.braqMax;
@@ -173,7 +176,7 @@ export class Pilote {
     }
     const gaz = vc < 0.05 && tr.v < 0.3 ? 0 : borne((vc - tr.v) * 0.9, -1, 1);
     this.actif = true;
-    return { gaz, braq };
+    return cmd(gaz, braq);
   }
 }
 
