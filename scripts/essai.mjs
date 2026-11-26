@@ -19,6 +19,10 @@
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
+//   chien     le chien du domaine : il se balade dans la cour ; un véhicule lancé sur lui (couché, debout, assis ; tracteur,
+//             van, marche arrière, mené par un geste ; mode WTF aussi) : il fuit, jamais dans l'emprise ; on le caresse ; le
+//             soir il rentre, la nuit il est dedans, le matin il ressort ; il ne gêne pas le tracteur sur le chemin du hangar
+
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
@@ -1195,10 +1199,12 @@ if (scenario === 'chien') {
       // garde-fou : posé dans l'emprise d'un véhicule (arrêté), il en est sorti aussitôt
       { const v = CL.vehicule('van'); poser(v.p.pos.x, v.p.pos.z, 0, 0); CL.step(2); log.push([`posé sous le van, il en est sorti (écart ${ecart(v).toFixed(2)} m)`, ecart(v) > 0]); }
       // le caresser : debout ou assis, il s'assoit devant nous ; couché, il se met sur le dos
-      for (const p of [0, 2]) {
+      // (couché, il se met sur le dos sept fois sur dix : son tirage au sort, imposé ici pour essayer les deux)
+      for (const [p, sorte] of [[0, 0.5], [2, 0.1], [2, 0.9]]) {
         poser(-95, -40, 0, p); CL.teleporter(C.x + 0.9, C.z + 0.9, -2.4); CL.step(20);
-        const propose = etq('Caresser le chien');
-        CL.agir(); CL.step(2);
+        const propose = etq('Caresser le chien'), rnd = C.rnd;
+        C.rnd = () => sorte; CL.agir(); C.rnd = rnd; CL.step(2);
+        const surLeDos = C.caresse.dos;
         let genou = 0, main = 9, dos = 0, leche = 0;
         for (let i = 0; i < 600 && J.gestes.actif; i++) {
           CL.step(1);
@@ -1207,7 +1213,8 @@ if (scenario === 'chien') {
           dos = Math.max(dos, C.W[4]); leche = Math.max(leche, C.leche);
         }
         CL.step(10);
-        log.push([`le caresser (${p ? 'couché : sur le dos' : 'debout : il s\'assoit'}) : « Caresser le chien », à genoux (${genou.toFixed(2)}), la main sur lui (${main.toFixed(2)} m), le geste fini`, propose && genou > 0.95 && main < 0.4 && !J.gestes.actif && !CL.joueur.caresse && (p ? dos > 0.8 : leche > 0.5) && C.etat !== 'caresse']);
+        log.push([`le caresser (${!p ? 'debout : il s\'assoit, lèche la main' : surLeDos ? 'couché : il se met sur le dos' : 'couché : il reste couché, lèche la main'}) : « Caresser le chien », à genoux (${genou.toFixed(2)}), la main sur lui (${main.toFixed(2)} m), le geste fini`, propose && genou > 0.95 && main < 0.4 && !J.gestes.actif && !CL.joueur.caresse && (surLeDos ? dos > 0.8 : leche > 0.5) && surLeDos === (p === 2 && sorte < 0.5) && C.etat !== 'caresse']);
+
       }
       // la nuit : le soir, il rentre à la maison par la porte (invisible) ; le matin, il ressort
       {
