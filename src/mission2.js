@@ -209,6 +209,12 @@ export class Traitement {
     return pts;
   }
 
+  // Le véhicule qu'il faut (main.js : vehiculeGuide) : l'enjambeur, pour l'aire de remplissage et les parcelles
+  get vehiculeVoulu() {
+    const e = this.etape;
+    if (e === 'preparer' || (e === 'traiter' && this.prochaine && !this.attendNote)) return { v: 'enjambeur', raison: 'pulve' };
+    return null;
+  }
   // L'objectif affiché, d'après où en est la journée (recalculé à chaque image)
   get objectif() {
     const e = this.etape, O = TX.objectifs, j = this.j;

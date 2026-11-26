@@ -68,7 +68,7 @@ page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') &
 const LENT = Number(process.env.LENT || 1);
 if (LENT > 1) await page.emulateCPUThrottling(LENT);
 await page.goto('file://' + join(root, 'index.html') + (process.env.QUALITE ? '?qualite=' + process.env.QUALITE : ''), { waitUntil: 'load', timeout: 120000 });
-await page.waitForFunction(() => window.CL, { timeout: 60000 }); // (sous la charge des bancs en parallèle, le démarrage peut dépasser 20 s)
+await page.waitForFunction(() => window.CL, { timeout: 180000 }); // (sous la charge des bancs en parallèle, le démarrage peut dépasser une minute)
 const ev = (f, ...a) => page.evaluate(f, ...a);
 const capture = async nom => { await new Promise(r => setTimeout(r, 250)); await page.screenshot({ path: join(sortie, nom + '.jpg'), type: 'jpeg', quality: 85 }); console.log('capture', join('essais', dossier, nom + '.jpg')); };
 const ok = (cond, msg) => { console.log((cond ? 'OK   ' : 'ÉCHEC ') + msg); if (!cond) erreurs.push('échec : ' + msg); };

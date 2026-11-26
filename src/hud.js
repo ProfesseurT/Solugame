@@ -99,6 +99,12 @@ export class Hud {
   // oublie les répliques en attente (sauf celles qui déclenchent une suite)
   vider() { for (let i = this.file.length - 1; i >= 0; i--) if (!this.file[i].fin) this.file.splice(i, 1); if (this.ligne && !this.ligne.fin) this.tLigne = Math.min(this.tLigne, 0.2); }
 
+  // sous l'objectif, le véhicule qu'il faut et où il est (main.js : guider) ; écrit seulement quand il change
+  guide(txt) {
+    if (txt === this.gTxt) return;
+    this.gTxt = txt; const el = $('guide-veh');
+    el.textContent = txt || ''; el.hidden = !txt;
+  }
   objectif(txt) {
     const el = $('objectif');
     el.textContent = txt; el.classList.remove('neuf'); void el.offsetWidth; el.classList.add('neuf');

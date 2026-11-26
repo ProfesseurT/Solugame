@@ -175,6 +175,14 @@ export class Habillage {
     return this.itin.pts;
   }
   get enTracteur() { return this.j.auVolant && this.j.veh.genre === 'tracteur'; }
+  // Le véhicule qu'il faut (main.js : vehiculeGuide) : le tracteur, pour aller atteler la remorque (au domaine, ou la
+  // reprendre à l'imprimerie) ; le labo, à pied ou en n'importe lequel
+  get vehiculeVoulu() {
+    if (this.etape !== 'jour' || this.occupe || this.nuit || this.rentree || this.marc || this.attelee) return null;
+    if (this.bulletin && this.bat !== 'ok' && !this.sms) return null; // (Viticode d'abord, sur le téléphone)
+    const p = this.prochain;
+    return p && ((p.lieu === this.R.approche && this.annonce) || this.sms) ? { v: 'tracteur', raison: 'remorque' } : null;
+  }
 
   // L'objectif affiché, d'après où en est la journée
   get objectif() {

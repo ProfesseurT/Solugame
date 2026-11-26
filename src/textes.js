@@ -969,3 +969,24 @@ export const RESTAURATEURS = {
 export const CHIEN = {
   caresse: ['Brave chien !', 'Qui c\'est le bon chien ?', 'Allez, une caresse.', 'T\'es un bon gardien, toi.', 'Doucement, doucement...', 'Tu veux des grattouilles ?', 'Tu as bien gardé la cour ?'],
 };
+
+// Le bon véhicule (main.js : vehiculeGuide ; Teddy, 26/11/2026 : « guider sur les véhicules à prendre pour faire certaines
+// missions, sinon ça peut devenir complexe ») : quand l'étape en demande un (la mission le dit : vehiculeVoulu) et qu'on est
+// à pied ou dans un autre, la balise va sur lui, l'objectif dit lequel, où il est et pourquoi, une phrase le rappelle.
+export const GUIDE_VEHICULE = {
+  noms: { tracteur: 'le tracteur', van: 'le van', enjambeur: 'l\'enjambeur', voiture: 'la voiture' },
+  balise: { tracteur: 'Tracteur', van: 'Van', enjambeur: 'Enjambeur', voiture: 'Voiture' },
+  ou: { hangar: 'sous le hangar, derrière le chai', cour: 'dans la cour du domaine', loin: 'là où vous l\'avez laissé, suivez la balise' },
+  // pourquoi ce véhicule-là
+  raisons: {
+    charger: 'les commandes signées se chargent au chai',
+    cartons: 'les cartons sont dedans',
+    pulve: 'c\'est lui qui porte le pulvérisateur',
+    remorque: 'lui seul tire la remorque de palox',
+  },
+  // la ligne sous l'objectif : « L'enjambeur : sous le hangar, derrière le chai » (plusieurs : séparés d'un point)
+  ligne: (nom, ou) => `${nom[0].toUpperCase() + nom.slice(1)} : ${ou}`,
+  // dit une fois par étape : à pied, loin de lui ; ou en montant dans un autre
+  pied: (quoi, raison) => [{ qui: '', txt: `Il me faut ${quoi} : ${raison}.` }],
+  mauvais: (quoi, raison) => [{ qui: '', txt: `Pas celui-là : il me faut ${quoi}. ${raison[0].toUpperCase() + raison.slice(1)}.` }],
+};

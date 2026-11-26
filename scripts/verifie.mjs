@@ -12,13 +12,21 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Lance un script node du dossier scripts/ et garde sa sortie (affichée seulement en cas d'échec).
+// Lance un script node du dossier scripts/ et garde sa sortie (affichée seulement en cas d'échec). Huit à la fois au plus
+// (PARALLELE) : dix-sept Chrome ensemble, le jeu mettait plus d'une minute à démarrer et un banc échouait sans raison.
+const PARALLELE = Number(process.env.PARALLELE || 8);
+let enCours = 0;
+const attente = [];
 const lancer = (args, env = {}) => new Promise(ok => {
-  const p = spawn(process.execPath, args, { cwd: root, env: { ...process.env, ...env } });
-  let sortie = '';
-  p.stdout.on('data', d => { sortie += d; });
-  p.stderr.on('data', d => { sortie += d; });
-  p.on('close', code => ok({ code, sortie }));
+  const go = () => {
+    enCours++;
+    const p = spawn(process.execPath, args, { cwd: root, env: { ...process.env, ...env } });
+    let sortie = '';
+    p.stdout.on('data', d => { sortie += d; });
+    p.stderr.on('data', d => { sortie += d; });
+    p.on('close', code => { enCours--; if (attente.length) attente.shift()(); ok({ code, sortie }); });
+  };
+  if (enCours < PARALLELE) go(); else attente.push(go);
 });
 const echec = (titre, sortie) => { console.log(`ÉCHEC ${titre}\n\n${sortie.trim()}\n`); process.exit(1); };
 

@@ -22,7 +22,7 @@ import { son } from './audio.js';
 import { hasard, lisse, $, ouvert, dateJeu, jourDe, heureDe, majuscule } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS, CHIEN } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS, CHIEN, GUIDE_VEHICULE as GV } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -38,7 +38,7 @@ import { Restaurateurs } from './restaurateurs.js';
 import { Velos } from './velos.js';
 import { Ecole } from './ecole.js';
 import { SAUVE } from './sauvegarde.js';
-import { Reseau, longueur } from './reseau.js';
+import { Reseau, longueur, ecart } from './reseau.js';
 
 const T0 = performance.now(); // mesures du démarrage (banc d'essai)
 // Polices : la feuille de Google Fonts est préchargée sans bloquer la page (une feuille de style bloquante retenait tout le
@@ -886,11 +886,51 @@ function lireEntrees() {
 // on s'arrête en douceur. Au clavier et à la manette : à la main.
 // (dernier : faux pour les pas de conduite en plus d'une image accélérée : le personnage, les effets et le son ne se
 // calculent qu'une fois par image)
+// Le bon véhicule (Teddy, 26/11/2026 : « guider sur les véhicules à prendre pour faire certaines missions, sinon ça peut
+// devenir complexe, l'enjambeur tout ça ») : la mission en cours dit celui que demande l'étape (vehiculeVoulu : un genre,
+// une liste, ou le véhicule où sont les cartons, et pourquoi) ; à pied ou dans un autre, jeu.guide : la balise va sur le
+// plus proche de ceux qui conviennent (son nom, l'itinéraire jusqu'à lui), l'objectif dit lequel, où et pourquoi, une
+// phrase le rappelle une fois par étape (loin de lui à pied, ou en montant dans un autre)
+let guideIt = null, guideDit = '', tGuide = 0;
+function ouEst(v) {
+  const p = v.p.pos, H = L.toits[0];
+  if (p.x > H.x0 && p.x < H.x1 && p.z > H.z0 && p.z < H.z1) return GV.ou.hangar;
+  if (p.x > -116 && p.x < -78 && p.z > -66 && p.z < -28) return GV.ou.cour;
+  return GV.ou.loin;
+}
+function guider(dt) {
+  const M = enCours(), w = M && M.vehiculeVoulu;
+  jeu.guide = null;
+  if (!w || jeu.dedans || gestes.actif || etat !== 'jeu') { guideIt = null; hud.guide(null); return; }
+  const ok = v => Array.isArray(w.v) ? w.v.includes(v.genre) : typeof w.v === 'string' ? v.genre === w.v : v === w.v;
+  if (jeu.auVolant && ok(veh)) { guideIt = null; hud.guide(null); return; }
+  const o = jeu.auVolant ? tr.pos : joueur.pos;
+  let best = null, dmin = 1e9;
+  for (const v of VEHICULES) if (ok(v)) { const d = Math.hypot(v.p.pos.x - o.x, v.p.pos.z - o.z); if (d < dmin) { dmin = d; best = v; } }
+  if (!best) { guideIt = null; hud.guide(null); return; }
+  // l'itinéraire jusqu'à lui : refait s'il a bougé ou si l'on s'en écarte
+  const P = best.p.pos;
+  if ((tGuide -= dt) <= 0 || !guideIt || guideIt.v !== best) {
+    tGuide = 0.5;
+    if (!guideIt || guideIt.v !== best || Math.hypot(guideIt.x - P.x, guideIt.z - P.z) > 3 || ecart(guideIt.pts, o) > 25) guideIt = { v: best, x: P.x, z: P.z, pts: reseau.itineraire(o, P) };
+  }
+  // la ligne sous l'objectif : où il est (« L'enjambeur : sous le hangar, derrière le chai ») ; une liste : chacun et où
+  const raison = GV.raisons[w.raison] || '', liste = Array.isArray(w.v) ? w.v : [best.genre];
+  const ligne = liste.map(g => { const v = g === best.genre ? best : VEHICULES.find(x => x.genre === g); return v ? GV.ligne(GV.noms[g], ouEst(v)) : ''; }).filter(Boolean).join(' · ');
+  jeu.guide = { v: best, lieu: P, nom: GV.balise[best.genre] || 'Véhicule', route: guideIt.pts, ligne };
+  hud.guide(ligne);
+  // une phrase, une fois par étape et par véhicule voulu : dans un autre véhicule, ou à pied loin de lui
+  const cle = (M === mission ? 'm1' : M === traitement ? 'm2' : 'm3') + ':' + M.etape + ':' + liste.join('+');
+  if (cle !== guideDit && !hud.parle && !tel.ouvert && (jeu.auVolant || dmin > 15)) {
+    guideDit = cle;
+    hud.dire((jeu.auVolant ? GV.mauvais : GV.pied)(liste.map(g => GV.noms[g]).join(' ou '), raison));
+  }
+}
 function conduire(dt, dtm, dernier = true) {
   let gaz = 0, braq = 0, fm = false;
   const libre = !tel.ouvert && !pc.ouvert && !jeu.finVue;
-  const M = enCours();
-  pilote.prendre(M.route);
+  const M = enCours(), G = jeu.guide;
+  pilote.prendre(G ? G.route : M.route); // (dans le mauvais véhicule : vers le bon)
   jeu.pilote = false;
   // mission 2 : l'enjambeur engagé dans un rang fait toute la parcelle tout seul (passages, demi-tours) ; on ne gère que
   // l'avance (Teddy, 24/11/2026) : doigt posé ou flèche du haut, il avance ; glissé vers le bas ou flèche du bas, il
@@ -911,7 +951,7 @@ function conduire(dt, dtm, dernier = true) {
     const volant = tourne ? -Math.sign(sx) * Math.pow((ax - 0.2) / 0.8, 1.2) : 0;
     if (sy > 0.45) { gaz = -Math.min(1, (sy - 0.45) / 0.4); braq = volant; if (ax > 0.5 && sy > 0.55 && tr.v > 6) { fm = true; gaz *= 0.3; } } // frein à main : un geste franc, lancé
     else {
-      const auto = tourne ? null : pilote.commande(tr, veh.genre, M.cible, AUTOS, col);
+      const auto = tourne ? null : pilote.commande(tr, veh.genre, G ? G.lieu : M.cible, AUTOS, col);
       if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
       else {
         braq = volant;
@@ -1178,7 +1218,7 @@ function reperes(dt, ego, cible) {
     u.anneau.scale.set(k, 1, k); u.fleche.position.y = 3.2 + Math.sin(temps * 3) * 0.35; u.fleche.rotation.y = temps * 1.6;
     if ((tEtq -= dt) <= 0) {
       tEtq = 0.25;
-      etqCible.el.textContent = enCours().nomCible + ' · ' + Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z)) + ' m';
+      etqCible.el.textContent = (jeu.guide ? jeu.guide.nom : enCours().nomCible) + ' · ' + Math.round(Math.hypot(cible.x - ego.x, cible.z - ego.z)) + ' m';
     }
   }
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
@@ -1235,6 +1275,7 @@ function miseAJour(dt) {
   bourg(dtm, ego);
   phares();
   if (!isoles) particules.fontaine(dtm, L.fontaine);
+  guider(dt); // le bon véhicule pour l'étape en cours (avant la mission : son objectif le reprend)
   enCours().update(dt);
   restos.update(dt); // les restaurateurs du coin : relances, signatures, notifications (jamais par-dessus une mission)
   // la ligne d'habillage tourne dès que les premiers palox sont rentrés (mission 3) ; le chariot, dessiné de près
@@ -1246,7 +1287,7 @@ function miseAJour(dt) {
   tel.update(dt);
   pc.update(dt);
   horloge(dtm);
-  const cible = enCours().cible;
+  const cible = jeu.guide ? jeu.guide.lieu : enCours().cible;
   reperes(dt, ego, cible);
   chai.maj(dt, ego, cap, camera.position); // la grande porte, la halle dessinée de près, dedans ou dehors (chai.js)
 
@@ -1263,7 +1304,7 @@ function miseAJour(dt) {
     if (jeu.auVolant && tr.v > 3 && Math.abs(tr.vT) > 0.8) capCam = cap + Math.atan2(tr.vT, tr.v) * 0.55 * Math.min(1, (Math.abs(tr.vT) - 0.8) / 2.5);
     cam.suivre(dt, ego.x, ego.z, capCam, jeu.auVolant ? tr.v : joueur.v, jeu.auVolant, col, jeu.auVolant ? tr : null, ego.y);
   }
-  hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, enCours().route, jeu.auVolant ? null : VEH_CARTE);
+  hud.carte(ego.x, ego.z, cam.yaw, cap, cible, jeu.auVolant ? 1.45 : 2.2, COULEUR, jeu.guide ? jeu.guide.route : enCours().route, jeu.auVolant ? null : VEH_CARTE);
 }
 
 // Le cadre d'ombre suit le joueur, décalé vers l'avant de la caméra (rien de perdu derrière elle),

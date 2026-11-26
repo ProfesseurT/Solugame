@@ -241,6 +241,20 @@ export class Mission {
     return this.itin.pts;
   }
   get pcDispo() { return this.etape === 'retour' || this.etape === 'pc'; }
+  // Le véhicule qu'il faut pour aller à la balise (main.js : vehiculeGuide) : charger au chai, le van ou le tracteur (une
+  // voiture ni l'enjambeur ne portent de cartons) ; livrer, celui où sont les cartons de ce client ; ailleurs (le chèque, la
+  // dégustation, le bureau du chai), à pied ou en n'importe lequel : rien
+  get vehiculeVoulu() {
+    const e = this.etape;
+    if ((e !== 'journee' && e !== 'livraisons') || this.attenteBL || this.attenteCheque) return null;
+    const n = this.nuit, tour = e === 'livraisons' && this.tour.length && !n;
+    if (tour) {
+      const id = this.tour[0], g = this.genre(this.arretDe(id)), c = g !== 'cheque' && g !== 'prospect' ? this.client(id) : null;
+      return c && c.veh ? { v: c.veh, raison: 'cartons' } : null;
+    }
+    if (n === 'chai' || (!n && this.aCharger.length)) return { v: ['van', 'tracteur'], raison: 'charger' };
+    return null;
+  }
 
   // L'objectif affiché, d'après où en est la journée : recalculé à chaque image, écrit seulement quand il change (il ne
   // peut pas rester en retard sur ce qui s'est passé)
