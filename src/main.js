@@ -19,7 +19,7 @@ import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habi
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
-import { hasard, lisse, $ } from './outils.js';
+import { hasard, lisse, $, ouvert, dateJeu, jourDe, heureDe, majuscule } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
 import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS } from './textes.js';
@@ -264,8 +264,9 @@ function peupler() {
     gens3.ajouter(p, l, id);
   }
   habillage.c.oeno = gens3.liste[0]; habillage.c.etiq = gens3.liste[1]; habillage.c.salarie = gens3.liste[2];
-  // Marc n'est là que le jour de l'habillage, la remorque préparée (jeu.remorque.preparer)
-  { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; }
+  // Marc n'est là que le jour de l'habillage, la remorque préparée (jeu.remorque.preparer) ; le soir, il rentre à la maison
+  // du domaine, par la cour (clients.js : horaires ; son chemin dépend d'où il attend)
+  { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; f.porte = PORTE_MAISON; f.chemin = DU_CHAI; }
   village.creerVoitures(); // les deux voitures qui montent au château, en derniers (rien ne change pour les autres)
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
@@ -395,7 +396,7 @@ const jeu = {
   finVue: false,
   tactile,
   // la carte de fin d'une mission (F : textes.js, FIN ou TRAITEMENT.finCarte), avec la prévente du registre après la 2
-  finDemo() { montrerFin(FIN, false); },
+  finDemo() { const h = heureDe(this.minutes); montrerFin(h >= 18 * 60 || h < 5 * 60 ? FIN : { ...FIN, texte: FIN.texteJour }, false); },
   // une mission gagnée (sauvegarde.js : on pourra la rejouer depuis le téléphone) ; la mission du moment
   gagner(id) { SAUVE.gagner(id); sauver(); },
   get enCoursId() { return habillage.actif ? 'habillage' : traitement.actif ? 'traitement' : 'tournee'; },
@@ -462,7 +463,7 @@ jeu.remorque = {
   preparer() {
     att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.recharger(); habillerPalox(mRem, false);
     const f = gens3.liste[2], P = att.versMonde(2.0, 0, 2.2, { x: 0, y: 0, z: 0 });
-    if (f) { f.l = { x: P.x, z: P.z, h: att.h + Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true; }
+    if (f) { f.l = { x: P.x, z: P.z, h: att.h + Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true; f.ferme = false; f.chemin = VERS_MAISON; }
   },
   // l'habillage fini : les palox habillés rechargés à l'imprimerie, la remorque tournée vers la sortie ; Julien à côté ;
   // le hangar vide
@@ -485,6 +486,7 @@ jeu.remorque = {
 // pose devant les cuves, deux par pile), debout sur la plateforme, les mains au timon ; puis il en descend.
 const PORTE_MAISON = { x: L.maison.x, z: L.maison.z - 0.2, rot: 0 }; // (la porte de la maison du domaine, façade au sud)
 const VERS_MAISON = [{ x: -90.6, z: -30.5 }, { x: -90.6, z: -38.5 }, { x: -94.2, z: -52.5 }]; // de l'allée à la porte : le portail, la cour
+const DU_CHAI = [{ x: -94.2, z: -52.5 }]; // de devant le chai à la porte : la cour, au sud de l'arbre
 const CHAI3 = {
   chariot: { x: -84.6, z: -50.6, h: -Math.PI / 2 }, chai: { dehors: { x: -78.6, z: -52.1 }, retour: { x: -73.4, z: -50.2 } },
   stock: [-56.5, -55.1, -53.7].flatMap(z => [0, 0.78].map(y => ({ x: -68.5, y, z, h: Math.PI / 2 }))),
@@ -517,7 +519,7 @@ jeu.marc = {
       // il descend, va devant la grande porte, se tourne vers la cour
       const f = gens3.liste[2], G = f.gestes, D = { x: -78.4, z: -50.6 };
       f.p.outil = null; f.etat = 'range';
-      G.lancer([...G.allerA(() => D, () => -Math.PI / 2)], () => { f.etat = 'dehors'; f.l = { x: D.x, z: D.z, h: -Math.PI / 2 }; });
+      G.lancer([...G.allerA(() => D, () => -Math.PI / 2)], () => { f.etat = 'dehors'; f.l = { x: D.x, z: D.z, h: -Math.PI / 2 }; f.chemin = DU_CHAI; });
       const fin = this.fin; this.fin = null; if (fin) fin();
     }
   },
@@ -555,7 +557,9 @@ function finDechargement() {
 // l'œnologue et l'étiqueteur (créés dans peupler) : comme les clients, ils se tournent vers vous et font signe ; leur
 // affaire faite (l'échantillon donné, les cartons livrés), ils rentrent au labo ou à l'entrepôt (clients.js)
 L.portes.entrepot = L.entrepot.porte;
-const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: [] } });
+// (leurs heures d'ouverture : le labo, l'imprimerie, le domaine ; outils.js, HORAIRES ; mission3.js)
+const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: [],
+  horaire: id => habillage.horaire(id), occupe: id => habillage.occupeAvec(id), veut: id => habillage.veut(id) } });
 // la mission qui mène la balise, l'itinéraire et l'objectif
 const enCours = () => (habillage.actif ? habillage : traitement.actif ? traitement : mission);
 const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
@@ -948,7 +952,11 @@ function bourg(dtm, ego) {
   }
   gens3.maj(dtm, temps, ego, jeu.auVolant);
   { const marc = gens3.liste[2]; if (marc) {
-    if (habillage.sms && habillage.attelee && !habillage.marc && marc.etat === 'dedans') jeu.marc.attendre();
+    // (la remorque reprise à l'imprimerie, il attend devant le chai, sur le transpalette ; le soir, il en descend et rentre
+    // chez lui ; le matin, il revient, pas sous nos yeux : on est loin, ou c'est le réveil)
+    const dom = ouvert(jeu.minutes, 'domaine');
+    if (habillage.sms && habillage.attelee && !habillage.marc && marc.etat === 'dedans' && dom && (Math.hypot(ego.x - CHAI3.chariot.x, ego.z - CHAI3.chariot.z) > 40 || $('fondu').classList.contains('noir'))) jeu.marc.attendre();
+    if (marc.etat === 'pilote' && !habillage.marc && !dom) { marc.p.outil = null; marc.etat = 'dehors'; marc.l = { x: marc.p.pos.x, z: marc.p.pos.z, h: marc.p.h }; marc.chemin = DU_CHAI; }
     jeu.marc.maj(dtm, temps);
     esquiver(marc, dtm);
   } }
@@ -1078,6 +1086,8 @@ function dormir() {
         else if (habillage.attendNuit) for (const v of VEHICULES) { const l = L[v.genre]; if (l) v.p.placer(l.x, l.z, l.h); }
         // la mission 3 finie : la remorque, vide, et le transpalette rangés sous le hangar pendant la nuit
         else if (habillage.etape === 'libre' && !att.attelee) jeu.remorque.ranger();
+        // les professionnels, à 7 h : ceux qui étaient rentrés pour la nuit ressortent (clients.js : reveil)
+        clients.reveil(); gens3.reveil();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
@@ -1086,7 +1096,10 @@ function dormir() {
         $('fondu').classList.remove('noir'); son.jouer('claque');
         if (mission2) { mission2 = false; traitement.demarrer(); } else if (mission3) { mission3 = false; habillage.demarrer(); }
         else if (habillage.attendNuit) habillage.reveil(); // l'habillage fini pendant la nuit : le message de l'imprimerie
-        else hud.banniere('Bonjour !', 'Le lendemain matin, 7 h', 3);
+        else {
+          hud.banniere('Bonjour !', `${majuscule(dateJeu(jourDe(jeu.minutes)))}, 7 h`, 3);
+          if (enCours() === mission) mission.reveil(); // la tournée pas finie : le bureau dit ce qui reste
+        }
       },
     },
   ]);
@@ -1460,6 +1473,20 @@ window.CL = {
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
+  // rentrer dormir d'un coup (essais) : devant la porte de la maison, le geste joué jusqu'au bout ; 7 h, le lendemain
+  dormir() { if (jeu.auVolant) return; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); this.step(2); },
+  // remonter dans un véhicule laissé ailleurs (essais) : à côté, d'un côté puis de l'autre, jusqu'à être au volant (dans le
+  // bourg, un passant tout près fait passer « Servir un verre » devant « Monter »)
+  remonter(genre) {
+    const v = genre ? VEHICULES.find(x => x.genre === genre) : veh;
+    this.finirGeste();
+    for (let k = 0; k < 40 && !(jeu.auVolant && veh === v); k++) {
+      const a = k * 0.5; joueur.placer(v.p.pos.x + Math.cos(a) * 2.6, v.p.pos.z + Math.sin(a) * 2.6, 0); this.step(2);
+      if (bureau.porteDehors || presMaison()) continue; // (devant la porte du bureau du chai ou de la maison, agir y entrerait)
+      agir(); this.finirGeste(); for (let n = 0; n < 600 && joueur.service; n++) this.step(1); this.step(2);
+    }
+    return jeu.auVolant && veh === v;
+  },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil
   versMission3() { traitement.etape = 'dodo'; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },

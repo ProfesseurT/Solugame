@@ -16,6 +16,9 @@
 //   habillage la mission 3 : rentrer dormir après le traitement, l'échantillon dans un palox, atteler la remorque (pas en
 //             van), le labo en conduite assistée, la fiche Viticode (refus, énergie, test, langue), le QR code
 //             personnalisé et envoyé, le BAT, l'imprimerie, dételer, les palox au chariot, le SMS, la carte de fin
+//   fermeture la nuit, les professionnels fermés : les clients rentrent à 19 h 30, ce qui se fait seul se fait encore,
+//             rentrer dormir, la tournée reprend le matin et se finit, les dates suivent (missions 2 et 3), pas d'appel
+//             la nuit, le labo, Marc et l'imprimerie fermés (mission 3), la partie reprise le lendemain
 //   aides     les cas limites qui doivent toujours finir : objectif juste, relance du bureau, aides devant un client pas
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
@@ -125,6 +128,13 @@ if (scenario === 'parcours') {
       log.push(['de nouveau au volant après ' + id, CL.jeu.auVolant]);
     }
     log.push(['véhicule vide, 11 cartons posés devant les clients', CL.jeu.tm.cartons.every(c => !c.visible) && m.deposes.reduce((s, p) => s + p.userData.n, 0) === 11]);
+    // si la tournée a débordé sur la nuit (19 h 30 : l'Auberge du Moulin ferme ; outils.js, HORAIRES), l'objectif propose
+    // ce qui se fait seul ou de rentrer dormir : on dort, la tournée reprend le lendemain matin
+    if (m.fermes) {
+      log.push([`${CL.jeu.heureTxt} : l'Auberge du Moulin est fermée, l'objectif le dit`, q('#objectif').textContent.startsWith('Il fait nuit')]);
+      CL.agir(); CL.finirGeste(); CL.dormir(); CL.remonter(genre);
+      log.push(['le lendemain matin, de nouveau au volant, la tournée reprend : l\'Auberge du Moulin', CL.jeu.heureTxt.startsWith('07') && CL.jeu.auVolant && m.arretCourant === 'auberge']);
+    }
     // le prospect, aux Grands Champs : on descend, on lui sert un verre, il goûte, la visite est notée dans le bureau
     { const a = CL.jeu.lieux.arrets.auberge; CL.teleporter(a.x, a.z - 4, 0); CL.step(30); }
     log.push(['chez le prospect, Auberge du Moulin', m.prospect.statut === 'visite' && m.cible === null]);
@@ -180,6 +190,15 @@ if (scenario === 'souple') {
     const geste = () => { for (let n = 0; n < 4000 && J.gestes.actif; n++) CL.step(1); CL.step(5); };
     const livrer = id => { const a = L.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); CL.finirGeste(4000); CL.step(10); T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10); CL.finirGeste(2000); CL.step(5); };
     const auChai = () => { CL.teleporter(-83.4, -47.4, 2.83); CL.step(30); geste(); };
+    // si la journée a débordé sur la nuit (19 h 30 : les clients ferment ; outils.js, HORAIRES) avant un arrêt qu'on va
+    // faire seul : l'écran Tournée le dit (pas de « Y aller »), on rentre dormir, et l'arrêt se fait le lendemain matin
+    const nuitTombee = (id, ferme) => {
+      if (!m.fermes) return;
+      T.ouvrir('tournee');
+      log.push([`${J.heureTxt} : ${ferme}, l'écran Tournée le dit (pas de « Y aller ») ; on rentre dormir`, !q(`[data-a="aller:${id}"]`) && q('#app').textContent.includes('Fermé') && q('#app .consigne').textContent.includes('demain matin')]);
+      T.fermer(); CL.agir(); CL.finirGeste(); CL.dormir(); CL.remonter(VEH);
+      log.push(['le lendemain, 7 h : de nouveau au volant, l\'arrêt à faire', J.heureTxt.startsWith('07') && J.minutes > 1440 && J.auVolant && m.arretsPrets.includes(id)]);
+    };
     CL.jouer(); CL.step(260);
     q('#poche').click(); clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]');
     clic('[data-a="ouvrir:tournee"]');
@@ -208,10 +227,13 @@ if (scenario === 'souple') {
     CL.step(1500);
     auChai();
     log.push(['deuxième chargement : le bar (2 cartons)', m.client('bar').statut === 'chargee' && CL.tr.charge === 2]);
+    nuitTombee('bar', 'le Bar Le Cep est fermé');
     T.ouvrir('tournee'); clic('[data-a="aller:bar"]');
     log.push(['un seul arrêt : le bar', m.tour.join() === 'bar']);
     livrer('bar');
     log.push(['livré chez le bar', m.client('bar').statut === 'livree' && m.etape === 'journee']);
+    // le prospect, seul (la nuit tombée : on dort d'abord)
+    nuitTombee('auberge', 'l\'Auberge du Moulin est fermée');
     T.ouvrir('tournee'); clic('[data-a="aller:auberge"]');
     { const a = L.arrets.auberge; CL.teleporter(a.x, a.z - 4, 0); CL.step(30); }
     CL.agir(); CL.finirGeste(); CL.step(5);
@@ -308,6 +330,17 @@ if (scenario === 'aides') {
     T.ouvrir('bureau'); clic('[data-a="rappel:bar"]'); clic('[data-a="msg"]'); T.fermer(); CL.step(400); T.ouvrir('bureau'); T.action('cmd:bar'); saisir(2); T.fermer();
     CL.step(15 * 60); auChai();
     log.push(['La Treille et le bar chargés', m.client('treille').statut === 'chargee' && m.client('bar').statut === 'chargee']);
+    // la journée a débordé sur la nuit (19 h 30 : les clients ferment ; outils.js, HORAIRES) : arrêté devant le bar, on dit
+    // qu'il est fermé et rien ne se livre ; l'objectif propose d'abord ce qui se fait seul (Vitisoft) ; on rentre dormir ; le
+    // lendemain, le bureau dit ce qui reste, et l'on livre
+    if (m.fermes) {
+      silence(); arret('bar'); CL.step(30);
+      log.push([`${J.heureTxt}, le bar est fermé : on le dit, rien ne se livre ; l'objectif propose Vitisoft, au bureau du chai`, dit().includes('Le Bar Le Cep est fermé à cette heure-ci') && !J.gestes.actif && m.client('bar').statut === 'chargee'
+        && objectif().startsWith('Il fait nuit, les clients sont fermés : au bureau du chai, Vitisoft') && m.cible === L.pc]);
+      CL.agir(); CL.finirGeste(); CL.dormir();
+      log.push(['rentré dormir : 7 h, le bureau dit ce qui reste (' + m.resume + ')', J.heureTxt === '07:00' && m.resume === 'Ce matin : 2 livraisons.' && T.notif === 'bureau']);
+      CL.remonter('tracteur');
+    }
     for (const id of ['bar', 'treille']) { arret(id); CL.finirGeste(4000); CL.step(10); T.encre = 200; q('#bt-livrer').disabled = false; clic('#bt-livrer'); CL.step(10); CL.finirGeste(2000); CL.step(5); }
     log.push(['tout est fait dehors, le chèque déjà déposé : « Vitisoft, sur le portable »', m.etape === 'retour' && objectif() === 'Rentrez au bureau du chai : Vitisoft, sur le portable' && m.cible === L.pc]);
     CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
@@ -1044,9 +1077,17 @@ if (scenario === 'conduite') {
     q('[data-a="ouvrir:bureau"]').click(); q('[data-a="cheque"]').click(); q('[data-a="prospect"]').click(); T.fermer(); CL.step(1500);
     { const p = CL.vehicule(VEH).p.pos; CL.teleporter(p.x + 2.4, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3);
     const C = CL.ctrl; C.id = 1; C.jx = 0; C.jy = 0;
-    let t = 0, chocs = 0, arret = 0, bloque = false;
+    let t = 0, chocs = 0, arret = 0, bloque = false, nuits = 0;
     for (let k = 0; k < 60 * 400 && m.etape !== 'pc'; k++) {
       if (T.ouvert && T.app === 'bl') { T.encre = 200; q('#bt-livrer').disabled = false; q('#bt-livrer').click(); }
+      // 19 h 30 : les clients ferment (outils.js, HORAIRES) ; on lève le doigt, on descend, on rentre dormir ; le matin, on
+      // remonte et la tournée reprend où elle en était (l'itinéraire refait depuis là où le véhicule est resté)
+      if (m.fermes && !J.gestes.actif && !T.ouvert) {
+        C.id = null; for (let n = 0; n < 600 && Math.abs(CL.tr.v) > 0.3; n++) CL.step(1);
+        CL.agir(); CL.finirGeste(); CL.dormir(); nuits++;
+        CL.remonter(); C.id = 1; arret = 0;
+        continue;
+      }
       // chez le prospect : descendre, lui servir un verre, attendre qu'il ait goûté, remonter et reposer le doigt
       if (m.prospect.statut === 'visite' && !J.gestes.actif && !T.ouvert) {
         if (J.auVolant) { CL.agir(); CL.finirGeste(); }
@@ -1063,7 +1104,7 @@ if (scenario === 'conduite') {
       if (arret > 15) { bloque = true; break; }
     }
     C.id = null;
-    log.push(['tournée complète en conduite assistée (' + VEH + ', ' + Math.round(t) + ' s de jeu)', !bloque && m.clients.every(c => c.statut === 'livree') && m.retardataire.statut === 'recupere' && J.distance(J.lieux.pc) < 6.5]);
+    log.push(['tournée complète en conduite assistée (' + VEH + ', ' + Math.round(t) + ' s de jeu' + (nuits ? ', reprise au matin après ' + nuits + ' nuit' : '') + ')', !bloque && m.clients.every(c => c.statut === 'livree') && m.retardataire.statut === 'recupere' && J.distance(J.lieux.pc) < 6.5]);
     log.push(['aucun choc en route (' + chocs + ')', chocs === 0]);
     log.push(['le personnage ne traverse jamais un véhicule (' + CL.traversees + ' images)', CL.traversees === 0]);
     return log;
@@ -1101,6 +1142,223 @@ if (scenario === 'poids') {
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
 }
 
+if (scenario === 'fermeture') {
+  // Les professionnels ne travaillent pas la nuit (Teddy, 26/11/2026 ; outils.js, HORAIRES) : à 19 h 35, les clients sont
+  // rentrés (la cave sous nos yeux, par sa porte) ; l'objectif propose d'abord ce qui se fait seul (charger au chai,
+  // Vitisoft), sinon de rentrer dormir, la balise sur la maison ; chez un client fermé, on dit pourquoi et rien ne se
+  // livre ; la tournée ne se lance pas ; le bureau n'appelle pas et ne relance pas après 20 h ; les étoiles ne montent pas.
+  // On dort : 7 h le lendemain, les clients ressortis, le bureau dit ce qui reste ; pas d'appel avant 8 h ; la tournée
+  // reprend. La partie s'enregistre et se reprend (« Continuer ») le lendemain ; la tournée se finit (la carte de fin du
+  // jour) ; Vitisoft, le téléphone, la mission 2 et la mission 3 prennent la date du jour. Mission 3 : le labo fermé à
+  // 18 h 40, l'échantillon le lendemain ; le BAT n'arrive pas la nuit ; Marc rentré, on n'attelle pas ; l'imprimerie
+  // fermée ; le matin, le BAT arrive et Marc attelle.
+  const attendre = () => page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 60000 });
+  // les petites briques des scénarios (dans la page) : définies une fois, sur window
+  const briques = () => {
+    const q = s => document.querySelector(s), J = CL.jeu, L = J.lieux, T = J.tel;
+    window.B = {
+      q, obj: () => q('#objectif').textContent, dit: () => [J.hud.ligne, ...J.hud.file].filter(Boolean).map(l => l.txt).join(' '),
+      clic: s => { const e = q(s); if (!e) throw new Error('absent : ' + s + ' (appli ' + T.app + ', étape ' + CL.mission.etape + ')'); if (e.disabled) throw new Error('désactivé : ' + s); e.click(); },
+      saisir: n => { for (let i = 0; i < n; i++) B.clic('[data-a="qte:1"]'); B.clic('[data-a="signer"]'); },
+      geste: () => { for (let n = 0; n < 4000 && J.gestes.actif; n++) CL.step(1); CL.step(5); },
+      silence: () => { J.hud.vider(); CL.step(9 * 60); },
+      arret: id => { const a = L.arrets[id]; CL.teleporter(a.x + 3, a.z, -Math.PI / 2); CL.step(30); },
+      livrer: id => { B.arret(id); CL.finirGeste(4000); CL.step(10); T.encre = 200; if (!q('#bt-livrer')) throw new Error('pas de bon de livraison chez ' + id + ' : ' + JSON.stringify({ app: T.app, ouvert: T.ouvert, bl: CL.mission.blPret, att: CL.mission.attenteBL, st: CL.mission.client(id).statut, vol: J.auVolant, veh: J.veh.genre, h: J.heureTxt, dit: B.dit(), pos: [CL.tr.pos.x, CL.tr.pos.z], tour: CL.mission.tour })); q('#bt-livrer').disabled = false; B.clic('#bt-livrer'); CL.step(10); CL.finirGeste(2000); CL.step(5); },
+      auChai: () => { CL.teleporter(-83.4, -47.4, 2.83); CL.step(30); B.geste(); },
+      heure: (j, h, m = 0) => { J.minutes = j * 1440 + h * 60 + m; CL.step(2); },
+      // au bureau du chai, assis au portable (le chèque déposé en entrant, s'il y en a un)
+      portable: () => {
+        const BU = L.bureau;
+        if (J.auVolant) { CL.teleporter(-81.4, -59.4, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); }
+        J.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+        J.joueur.placer(-72.6, -63.4, Math.PI / 2); CL.step(5);
+        if (CL.mission.chequeADeposer) { CL.agir(); CL.step(5); }
+        CL.agir(); CL.finirGeste(); CL.step(5);
+      },
+      tuile: () => [...q('#pc .vs-tu.date').children].map(e => e.textContent).join(' '),
+      sortirBureau: () => { const BU = L.bureau; J.joueur.placer(BU.dedans.x + 0.3, BU.dedans.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); },
+    };
+  };
+  const r1 = await ev(briques).then(() => ev(() => {
+    const { q, obj, dit, clic, saisir, silence, arret, auChai, heure, portable, sortirBureau } = B, m = CL.mission, J = CL.jeu, T = J.tel, L = J.lieux, log = [];
+    try {
+      CL.jouer(); CL.step(260);
+      // la cave et La Treille commandent et signent ; le bar attend son appel ; le chèque et le prospect dans la tournée
+      q('#poche').click(); clic('[data-a="rappel:cave"]'); CL.step(900); saisir(6);
+      clic('[data-a="ouvrir:bureau"]'); clic('[data-a="rappel:treille"]'); CL.step(700); saisir(3);
+      clic('[data-a="ouvrir:bureau"]'); clic('[data-a="cheque"]'); clic('[data-a="prospect"]'); T.fermer(); CL.step(1500);
+      log.push(['18 h : deux commandes signées, le bar pas encore appelé', m.client('cave').statut === 'signee' && m.client('treille').statut === 'signee' && m.client('bar').statut === 'a_traiter']);
+      // 19 h 25, à pied devant la Cave du Pressoir : tout le monde attend dehors ; 19 h 30, ils rentrent
+      heure(0, 19, 25);
+      { const f = L.figurants.cave; J.joueur.placer(f.x + 5, f.z + 1, -Math.PI / 2); } CL.step(10);
+      const cave = CL.clients.liste.find(f => f.id === 'cave'), [oeno, julien] = CL.gens3.liste;
+      log.push(['19 h 25 : les cinq clients attendent devant leur boutique, Julien devant l\'imprimerie ; le labo a fermé à 18 h 30', CL.clients.liste.every(f => f.etat === 'dehors' && f.p.m.groupe.visible) && julien.etat === 'dehors' && oeno.etat === 'dedans' && !oeno.p.m.groupe.visible]);
+      let vu = false; for (let n = 0; n < 1500 && J.minutes < 19 * 60 + 35; n++) { CL.step(1); if (cave.etat === 'range' && cave.p.m.groupe.visible) vu = true; }
+      log.push([`19 h 35 : ils sont rentrés (la cave sous nos yeux, par sa porte ; les autres, loin, d'un coup), Julien aussi`, vu && CL.clients.liste.every(f => f.etat === 'dedans' && !f.p.m.groupe.visible && f.ferme) && julien.etat === 'dedans' && !julien.p.m.groupe.visible]);
+      log.push([`la nuit, d'abord ce qui se fait seul : « ${obj()} », la balise au chai`, obj() === 'Il fait nuit : chargez au chai les commandes signées, pour la tournée de demain' && m.cible === L.chai && m.fermes]);
+      // la nuit, les étoiles de retard ne montent pas (personne n'attend devant sa boutique fermée)
+      { const e0 = m.etoiles; CL.step(60 * 45); log.push([`la nuit, les étoiles de retard ne montent pas (${e0} en 45 s)`, m.etoiles === e0]); }
+      // 20 h 05 : le bureau n'appelle plus ; le bouton dit pourquoi et quand ; il ne relance pas
+      heure(0, 20, 5);
+      T.ouvrir('bureau');
+      const ligneBar = [...document.querySelectorAll('#app .rappel')].find(e => e.textContent.includes('Bar Le Cep'));
+      log.push(['20 h 05, Ma journée : l\'appel du bar refusé, le bouton dit pourquoi (trop tard) et quand (demain, 8 h)', !q('[data-a="rappel:bar"]') && ligneBar.textContent.includes('Trop tard pour appeler') && ligneBar.querySelector('button[disabled]').textContent === 'Demain, 8 h']);
+      m.rappel('bar');
+      log.push(['et l\'appel ne part pas (le téléphone le dit)', m.client('bar').statut === 'a_traiter' && !m.appelEnCours && T.app === 'bureau' && q('#app .ph-toast').textContent.includes('Trop tard pour appeler')]);
+      T.fermer(); T.notifier(null); CL.step(60 * 12);
+      log.push(['la nuit, le bureau ne relance pas (une tâche du jour reste : l\'appel du bar)', !T.notif]);
+      // ce qui se fait seul se fait encore : le chargement au chai, en tracteur
+      CL.remonter('tracteur'); auChai();
+      log.push(['la nuit, au chai : les deux commandes se chargent', m.client('cave').statut === 'chargee' && m.client('treille').statut === 'chargee' && J.auVolant]);
+      log.push([`puis Vitisoft : « ${obj()} », la balise au bureau du chai`, obj() === 'Il fait nuit, les clients sont fermés : au bureau du chai, Vitisoft (la DRM)' && m.cible === L.pc && m.nomCible === 'Bureau du chai']);
+      // chez un client fermé : on dit pourquoi, rien ne se livre ; la tournée ne se lance pas
+      silence(); arret('cave'); CL.step(30);
+      log.push([`chez la Cave du Pressoir fermée : « ${dit()} », rien ne se livre`, dit().includes('La Cave du Pressoir est fermée à cette heure-ci. Je repasserai demain matin.') && !J.gestes.actif && !m.attenteBL && m.client('cave').statut === 'chargee']);
+      T.ouvrir('tournee');
+      log.push(['l\'écran Tournée : les arrêts « Fermé », pas de « Démarrer la tournée », la consigne de la nuit', !q('[data-a="tournee"]') && !q('[data-a^="aller:"]') && document.querySelectorAll('#app .arret .tag').length >= 4 && q('#app').textContent.includes('Fermé') && q('#app .consigne').textContent.startsWith('Il fait nuit')]);
+      m.demarrerTournee(); CL.step(5);
+      log.push(['la tournée ne se lance pas la nuit (on dit pourquoi)', m.etape === 'journee' && !m.tour.length && dit().includes('la tournée reprend demain matin')]);
+      T.fermer();
+      // Vitisoft au bureau du chai, la nuit : la DRM du mois dernier
+      portable();
+      log.push(['au portable, la nuit : l\'icône Vitisoft à ouvrir (la DRM)', J.pc.ouvert && !!q('.pc-ico.conseil[data-a="lancer:vitisoft"]')]);
+      clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:drm"]'); clic('[data-a="drm"]'); CL.step(100);
+      clic('[data-a="vue:accueil"]');
+      log.push(['la DRM calculée ; la tuile de la date : mardi 08 décembre', m.drm === 'faite' && B.tuile() === 'mardi 08 décembre']);
+      clic('[data-a="quitter"]'); CL.finirGeste(); CL.step(5); sortirBureau();
+      log.push([`plus rien à faire seul : « ${obj()} », la balise sur la maison`, obj() === 'Il fait nuit : les clients sont fermés. Rentrez dormir, la tournée reprend demain matin' && m.cible === L.maison && m.nomCible === 'Maison']);
+      // on dort : 7 h, le lendemain
+      CL.dormir();
+      log.push([`7 h, le lendemain : « ${q('#ban-t').textContent} · ${q('#ban-s').textContent} » ; le bureau : « ${m.resume} »`, J.heureTxt === '07:00' && Math.floor(J.minutes) === 1440 + 420 && q('#ban-s').textContent === 'Mercredi 9 décembre, 7 h'
+        && m.resume === 'Ce matin : 1 rappel, 2 livraisons, le chèque de l\'Épicerie du Bourg et la visite de l\'Auberge du Moulin.' && T.notif === 'bureau']);
+      log.push(['les clients ressortis, à leur place ; Hélène et Julien aussi', CL.clients.liste.every(f => f.etat === 'dehors' && f.p.m.groupe.visible && !f.ferme && Math.hypot(f.p.pos.x - f.l.x, f.p.pos.z - f.l.z) < 0.1) && oeno.etat === 'dehors' && oeno.p.m.groupe.visible && julien.etat === 'dehors']);
+      T.ouvrir('accueil');
+      log.push([`le téléphone : « ${q('.ph-lieu').textContent} »`, q('.ph-lieu').textContent.startsWith('mercredi 9 décembre')]);
+      T.ouvrir('bureau');
+      const t = q('#app').textContent;
+      log.push(['Ma journée : ce que dit le bureau ce matin ; La Treille silencieuse un jour de plus ; avant 8 h, le bar pas encore (« Dès 8 h »)', t.includes('Ce matin : 1 rappel') && t.includes('rien depuis 39 jours') && t.includes('Trop tôt pour appeler') && !q('[data-a="rappel:bar"]') && [...document.querySelectorAll('#app button[disabled]')].some(b => b.textContent === 'Dès 8 h')]);
+      T.fermer();
+      log.push([`l'objectif : « ${obj()} »`, obj() === 'Le bureau, écran Tournée : lancez la tournée, ou allez à un arrêt']);
+      // la tournée reprend : le chèque, la cave, La Treille, le prospect
+      CL.remonter('tracteur');
+      T.ouvrir('tournee'); clic('[data-a="tournee"]');
+      log.push(['la tournée se lance, le matin : 4 arrêts', m.etape === 'livraisons' && m.tour.length === 4]);
+      { const a = L.arrets.epicerie; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30); B.geste(); }
+      log.push(['le chèque de l\'épicerie', m.retardataire.statut === 'recupere']);
+      B.livrer('cave'); B.livrer('treille');
+      log.push(['la cave et La Treille livrées', m.client('cave').statut === 'livree' && m.client('treille').statut === 'livree']);
+      { const a = L.arrets.auberge; CL.teleporter(a.x, a.z - 4, 0); CL.step(30); }
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      { const f = L.figurants.auberge; J.joueur.placer(f.x - 1.6, f.z, Math.PI / 2); } CL.step(5); CL.agir();
+      for (let n = 0; n < 2400 && m.prospect.statut !== 'a_rappeler'; n++) CL.step(1);
+      log.push(['le prospect a goûté, le matin', m.prospect.statut === 'a_rappeler']);
+      CL.finirGeste(); CL.step(5);
+      const P = CL.sauver();
+      log.push([`la partie s'enregistre le lendemain (jour ${Math.floor(P.minutes / 1440)}, ${J.heureTxt})`, !!P && P.minutes > 1440 && P.etat.clients[2].s === 'livree' && P.etat.drm === 'faite']);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  }));
+  for (const [msg, c] of r1) ok(c, msg);
+  // la partie reprise le lendemain : « Continuer »
+  await page.reload({ waitUntil: 'load', timeout: 120000 }); await attendre();
+  const r2 = await ev(briques).then(() => ev(() => {
+    const { q, obj, dit, clic, saisir, auChai, portable } = B, m = CL.mission, J = CL.jeu, T = J.tel, L = J.lieux, log = [];
+    try {
+      const H0 = CL.SAUVE.partie.minutes;
+      q('#jouer').click(); CL.step(30);
+      log.push(['« Continuer » le lendemain : le jour, l\'heure, la tournée où elle en était, le bureau dit ce qui reste ce matin', Math.abs(J.minutes - H0) < 1 && J.minutes > 1440 && m.client('cave').statut === 'livree' && m.client('bar').statut === 'a_traiter'
+        && m.drm === 'faite' && m.resume.startsWith('Ce matin : 1 rappel') && CL.clients.liste.find(f => f.id === 'cave').etat === 'dedans' && CL.clients.liste.find(f => f.id === 'bar').etat === 'dehors']);
+      // 8 h : le bar s'appelle (un message), répond, commande, signe ; on charge, on livre
+      for (let n = 0; n < 60 * 130 && J.minutes < 1440 + 8 * 60; n++) CL.step(1);
+      T.ouvrir('bureau'); clic('[data-a="rappel:bar"]'); clic('[data-a="msg"]'); T.fermer(); CL.step(400);
+      T.ouvrir('bureau'); T.action('cmd:bar'); saisir(2); T.fermer(); CL.step(1500);
+      log.push(['8 h : le bar s\'appelle, commande, signe', m.client('bar').statut === 'signee']);
+      CL.remonter('tracteur'); auChai(); B.livrer('bar');
+      log.push(['le bar livré : tout est fait dehors, retour au bureau du chai', m.client('bar').statut === 'livree' && m.etape === 'retour']);
+      portable();
+      clic('[data-a="lancer:vitisoft"]'); clic('[data-a="vue:factures"]'); clic('[data-a="ouvrirReg"]'); clic('[data-a="regler"]');
+      clic('[data-a="vue:commandes"]');
+      for (const id of ['cave', 'bar', 'treille']) { clic(`[data-a="fac:${id}"]`); clic(`[data-a="env:${id}"]`); CL.step(80); }
+      clic('[data-a="vue:factures"]');
+      const fac = [...document.querySelectorAll('#pc tr')].find(tr => tr.textContent.includes('F-2026-0127'));
+      log.push(['Vitisoft : les factures du jour, le 09/12/2026, échéance le 08/01/2027', !!fac && fac.textContent.includes('09/12/2026') && fac.textContent.includes('08/01/2027') && q('#pc .pc-h').textContent.includes('09/12/2026')]);
+      clic('[data-a="vue:accueil"]');
+      log.push(['la tuile de la date : mercredi 09 décembre', B.tuile() === 'mercredi 09 décembre']);
+      clic('[data-a="fermerF:vitisoft"]'); CL.step(560);
+      log.push([`la tournée finie le lendemain matin : la carte de fin du jour (« ${q('#fin-texte').textContent.split('DRM. ')[1]} »), la mission 1 gagnée`, !q('#fin').hidden && q('#fin-texte').textContent.includes('c\'est demain') && CL.SAUVE.gagnees.tournee === true]);
+      q('#continuer').click(); CL.step(60);
+      log.push([`en journée, l'objectif : « ${obj()} »`, obj().startsWith('La journée de traitement, c\'est demain : rentrez dormir')]);
+      // la mission 2, le lendemain de la tournée : le jeudi 10 décembre
+      if (J.dedans) { const BU = L.bureau; J.joueur.placer(BU.dedans.x + 0.3, BU.dedans.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); }
+      CL.dormir(); CL.step(100);
+      const R = CL.traitement;
+      log.push([`la mission 2 au réveil, le lendemain de la tournée : « ${q('#ban-t').textContent} », « ${dit()} »`, R.actif && Math.floor(J.minutes) >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 430 && q('#ban-t').textContent === 'Jeudi 10 décembre' && dit().includes('Jeudi 10 décembre, le lendemain de la tournée.')]);
+      T.ouvrir('accueil');
+      log.push([`le téléphone : « ${q('.ph-lieu').textContent} »`, q('.ph-lieu').textContent.startsWith('jeudi 10 décembre')]);
+      T.action('fil:claire');
+      log.push(['Claire : il fait sec jusqu\'à samedi', q('#app').textContent.includes('il fait sec jusqu\'à samedi')]);
+      T.fermer(); CL.step(30);
+      // le Registre phyto : une saisie datée du jour, sans l'année
+      R.parcelles.find(p => p.id === 'perrieres').traitee = true; R.aller('traiter'); R.prete = true;
+      T.ouvrir('phyto'); T.action('rp-nouveau'); T.action('rp-cocher:perrieres'); T.action('rp-suite');
+      for (let i = 0; i < 3; i++) T.action('rp-dose:cuivre:1');
+      T.action('rp-suite'); T.action('rp-suite'); T.action('rp-cible:Mildiou'); T.action('rp-suite');
+      const recap = q('#app').textContent;
+      T.action('rp-enregistrer');
+      log.push([`le registre : « ${R.registre[0].quand} », « ${R.registre[0].par} », sans l'année`, R.registre[0].quand.startsWith('10 décembre · ') && R.registre[0].par.startsWith('vous, le 10 décembre à') && recap.includes('10 décembre') && !recap.includes('2026') && !q('#app').textContent.includes('2026')]);
+      T.fermer();
+      // la mission 3, le jour d'après : le vendredi 11 décembre
+      CL.versMission3(); CL.step(100);
+      log.push([`la mission 3 au réveil : « ${q('#ban-t').textContent} », « ${dit()} »`, CL.habillage.actif && q('#ban-t').textContent === 'Vendredi 11 décembre' && dit().includes('Vendredi 11 décembre. Aujourd\'hui, on habille le Clos 2025')]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  }));
+  for (const [msg, c] of r2) ok(c, msg);
+  // mission 3 : le labo, Marc et l'imprimerie fermés la nuit ; le matin, tout reprend
+  const r3 = await ev(() => {
+    const { q, obj, dit } = B, H = CL.habillage, J = CL.jeu, T = J.tel, L = J.lieux, R = J.remorque, log = [];
+    const [oeno, julien, marc] = CL.gens3.liste;
+    try {
+      T.ouvrir('messages'); T.action('fil:imprimerie'); T.fermer(); CL.step(30);
+      CL.teleporter(J.carton.x - 1.0, J.carton.z, Math.PI / 2); CL.step(10); CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['l\'échantillon pris au chai', H.echantillon === 'pris']);
+      // 18 h 40 : le labo est fermé
+      B.heure(3, 18, 40); CL.step(5);
+      CL.remonter('van'); { const a = L.arrets.labo; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(40); }
+      log.push([`18 h 40, au labo : « ${dit()} » ; Hélène est rentrée, l'échantillon reste dans la poche`, dit().includes('Le labo d\'œnologie est fermé à cette heure-ci. J\'y retourne demain matin.') && oeno.etat === 'dedans' && H.echantillon === 'pris' && !J.gestes.actif]);
+      log.push([`l'objectif : « ${obj()} », la balise sur la maison`, obj().startsWith('Il fait nuit : le labo d\'œnologie est fermé. Rentrez dormir') && H.cible === L.maison]);
+      CL.agir(); CL.finirGeste(); CL.dormir();
+      log.push(['7 h, le samedi 12 : Hélène devant son labo', Math.floor(J.minutes) === 4 * 1440 + 420 && oeno.etat === 'dehors' && oeno.p.m.groupe.visible && q('#ban-s').textContent === 'Samedi 12 décembre, 7 h']);
+      CL.remonter('van'); { const a = L.arrets.labo; CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30); } CL.finirGeste(3000); CL.step(60);
+      log.push(['le matin, l\'échantillon donné ; Marc prépare la remorque', H.echantillon === 'depose' && marc.etat === 'dehors']);
+      CL.step(60 * 26);
+      // la fiche Viticode, publiée, le QR code téléchargé ; envoyé à 19 h 40 : l'imprimerie est fermée
+      for (const k of ['nom', 'millesime', 'appellation', 'lot']) H.remplir(k);
+      H.couleur('Rouge'); for (let i = 0; i < 4; i++) H.degre(1); H.ingredient('raisins'); H.bio(); H.ingredient('sulfites');
+      for (let i = 0; i < 8; i++) H.valeur('glucides', 1); for (let i = 0; i < 2; i++) H.valeur('sucres', 1);
+      H.calculer(); H.publier(); H.telecharger();
+      log.push(['le bulletin arrivé, la fiche publiée', H.bulletin && H.publiee && H.telecharge]);
+      B.heure(4, 19, 40); CL.step(10);
+      H.envoyer(); CL.step(60 * 8);
+      log.push(['19 h 40 : le QR code envoyé, le BAT n\'arrive pas la nuit ; Marc et Julien rentrés', H.envoye && H.bat === 'aucun' && marc.etat === 'dedans' && !marc.p.m.groupe.visible && julien.etat === 'dedans']);
+      log.push([`l'objectif : « ${obj()} »`, obj().startsWith('Il fait nuit : Marc est rentré chez lui. Rentrez dormir, il vous aidera à atteler') && H.cible === L.maison]);
+      CL.agir(); CL.finirGeste(); CL.remonter('tracteur'); CL.teleporter(-90, -9, 0); CL.step(40);
+      log.push([`en tracteur devant le timon : « ${dit()} », pas d'attelage`, dit().includes('Marc est rentré chez lui : on attellera demain matin.') && !J.gestes.actif && !R.attelee]);
+      B.silence(); { const D = L.entrepot.depot; CL.teleporter(D.x, D.z + 7, Math.PI); CL.step(40); }
+      log.push([`à l'imprimerie : « ${dit()} »`, dit().includes('L\'imprimerie est fermée à cette heure-ci. Je reviendrai demain matin.') && !J.gestes.actif]);
+      CL.agir(); CL.finirGeste(); CL.dormir(); CL.step(30);
+      log.push(['7 h, le lendemain : le BAT arrive, Marc attend à la remorque, Julien devant l\'imprimerie', H.bat === 'recu' && marc.etat === 'dehors' && marc.p.m.groupe.visible && julien.etat === 'dehors' && julien.p.m.groupe.visible]);
+      H.accord(); CL.step(10);
+      CL.remonter('tracteur'); CL.teleporter(-90, -9, 0); CL.step(40);
+      log.push(['le matin, en tracteur devant le timon : Marc attelle', J.gestes.actif && H.occupe]);
+      CL.finirGeste(4000); CL.step(10);
+      log.push(['attelée', R.attelee && H.attelee]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r3) ok(c, msg);
+}
+
 if (scenario === 'photo') {
   await ev(() => { CL.jouer(); CL.step(30); });
   const vues = {
@@ -1114,6 +1372,8 @@ if (scenario === 'photo') {
   await capture('conduite');
 }
 
+// l'heure du jeu à la fin du banc (les professionnels ferment le soir : un banc qui déborde sur la nuit doit le prévoir)
+try { console.log('heure du jeu à la fin : ' + await ev(() => (CL.jeu ? `jour ${Math.floor(CL.jeu.minutes / 1440)}, ${CL.jeu.heureTxt}` : '?'))); } catch (_) { /* page fermée */ }
 await navigateur.close();
 if (erreurs.length) { console.log('\nERREURS :\n' + [...new Set(erreurs)].join('\n')); process.exit(1); }
 console.log('\nAucune erreur.');

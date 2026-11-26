@@ -1,7 +1,8 @@
 // Vérification avant chaque push (npm run verifie) : chaque push sur main met le jeu en ligne.
 //  1. construit le jeu (refuse tout tiret cadratin ou demi-cadratin) ;
 //  2. joue la mission entière en tracteur et en van, la journée à la carte, les cas limites, les voitures et le mode WTF
-//     (390 x 844), le clavier, la nuit et le matin (1280 x 800), la route du château et la glisse (900 x 600), la mission 2, la mission 3, la sauvegarde (390 x 844), en même temps ;
+//     (390 x 844), le clavier, la nuit et le matin (1280 x 800), la route du château et la glisse (900 x 600), la mission 2, la mission 3, la sauvegarde, la nuit
+//     et les professionnels fermés (390 x 844), en même temps ;
 //  3. regarde git : index.html doit aller avec src/ dans le même commit.
 // Code 1 si le build ou un parcours échoue, ou si le dernier commit a un index.html en retard sur src/.
 import { spawn, execFileSync } from 'node:child_process';
@@ -36,6 +37,7 @@ const parcours = await Promise.all([
   lancer(['scripts/essai.mjs', 'traitement', '390x844', 'traitement']).then(r => ({ ...r, nom: 'mission 2, journée de traitement' })),
   lancer(['scripts/essai.mjs', 'habillage', '390x844', 'habillage']).then(r => ({ ...r, nom: 'mission 3, l\'habillage' })),
   lancer(['scripts/essai.mjs', 'sauvegarde', '390x844', 'sauvegarde']).then(r => ({ ...r, nom: 'sauvegarde, reprise et missions rejouées' })),
+  lancer(['scripts/essai.mjs', 'fermeture', '390x844', 'fermeture']).then(r => ({ ...r, nom: 'la nuit, les professionnels fermés' })),
 ]);
 for (const r of parcours) {
   if (r.code !== 0 || !r.sortie.includes('Aucune erreur.')) echec(r.nom, r.sortie);

@@ -17,7 +17,9 @@ export const SAUVE = {
   // missions gagnées : { tournee: true, traitement: true }
   get gagnees() { return lire().gagnees; },
   gagner(id) { const o = lire(); if (!o.gagnees[id]) { o.gagnees[id] = true; ecrire(o); } },
-  // la partie en cours : { mission: 'tournee' | 'traitement', minutes, ventes, heros, etat, quand } ou null
+  // la partie en cours : { mission: 'tournee' | 'traitement' | 'habillage', minutes, ventes, heros, etat, quand } ou null ;
+  // minutes : l'heure et le jour du jeu (depuis le jour 0 à minuit : outils.js, dateJeu), une tournée reprise le lendemain
+  // matin garde son jour (les dates, les heures d'ouverture suivent)
   get partie() { return lire().partie; },
   enregistrer(p) { if (this.fige) return; const o = lire(); o.partie = p; ecrire(o); },
   effacerPartie() { const o = lire(); o.partie = null; ecrire(o); },

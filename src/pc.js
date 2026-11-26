@@ -11,7 +11,7 @@
 import { VITISOFT as V } from './textes.js';
 import { ICONES as IC } from './telephone.js';
 import { son } from './audio.js';
-import { $, esc, eur } from './outils.js';
+import { $, esc, eur, dateJeu, jourDe } from './outils.js';
 
 const hl = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' hl';
 const VUES = ['accueil', 'factures', 'commandes', 'drm']; // les écrans où l'on agit ; les autres disent ce qu'ils font
@@ -114,9 +114,12 @@ export class PC {
     return `<aside class="pc-note"><b>Dans Vitisoft</b>${t.map(([x, ok]) => `<span${ok ? ' class="ok"' : ''}>${esc(x)}</span>`).join('')}</aside>`;
   }
 
+  // la date du jour du jeu (outils.js : dateJeu ; la tournée peut finir le lendemain) : la tuile, la barre des tâches, les
+  // factures du jour et leur échéance à 30 jours
+  get jour() { return jourDe(this.jeu.minutes); }
   // le tableau de bord : les tuiles des captures (date, heure, compteurs), des raccourcis, le chiffre d'affaires
   accueil(m) {
-    const d = V.date, retard = m.retardataire.statut === 'saisi' ? 0 : 1;
+    const d = dateJeu(this.jour, 'tuile'), retard = m.retardataire.statut === 'saisi' ? 0 : 1;
     const faites = m.clients.filter(c => ['facturee', 'transmise'].includes(c.statut)).length;
     return `<div class="vs-tuiles">
       <div class="vs-tu orange date"><span>${d.jour}</span><b>${d.n}</b><span>${d.mois}</span></div>
@@ -147,7 +150,7 @@ export class PC {
     const ligne = (n, d, nom, ttc, ech, du, etat, cl = '') => `<tr${cl}><td data-l="Facture"><b>${n}</b></td><td data-l="Date">${d}</td><td data-l="Client">${esc(nom)}</td>
       <td data-l="Montant TTC" class="n">${eur(ttc)}</td><td data-l="Échéance">${ech}</td><td data-l="Reste dû" class="n">${eur(du)}</td><td data-l="État" class="a">${etat}</td></tr>`;
     const neuves = m.clients.filter(c => ['facturee', 'transmise'].includes(c.statut)).reverse()
-      .map(c => ligne(c.facture, V.date.courte, c.nom, m.htClient(c) * 1.2, V.echeance, m.htClient(c) * 1.2, c.statut === 'transmise' ? 'Factur-X, transmise' : 'Factur-X'));
+      .map(c => ligne(c.facture, dateJeu(this.jour, 'chiffres'), c.nom, m.htClient(c) * 1.2, dateJeu(this.jour + V.echeanceJ, 'chiffres'), m.htClient(c) * 1.2, c.statut === 'transmise' ? 'Factur-X, transmise' : 'Factur-X'));
     const retard = ligne(r.facture, V.retardDate, r.nom, r.ttc, V.retardEcheance, saisi ? 0 : r.ttc, act, saisi ? '' : ' class="retard"');
     const anciennes = V.anciennes.map(([n, d, nom, ttc]) => ligne(n, d, nom, ttc, d, 0, 'Réglée'));
     return `<table class="vs-grille"><caption>Liste des factures / Règlements</caption>
@@ -224,7 +227,7 @@ export class PC {
       <div class="pt-bureau">${this.jeu.tel.vuePortable()}</div></section>`;
     $('pc-ecran').innerHTML = `<div class="pc-bureau"><div class="pc-icones">${icone('vitisoft')}${icone('bureau')}</div>${this.penseBete(m)}${fen}
       <footer class="pc-barre"><button class="pc-lever" data-a="quitter">Se lever</button><div class="pc-taches">${taches}</div>
-      <p class="pc-h"><b class="pc-heure">${this.jeu.heureTxt}</b>${V.date.courte}</p></footer></div>`;
+      <p class="pc-h"><b class="pc-heure">${this.jeu.heureTxt}</b>${dateJeu(this.jour, 'chiffres')}</p></footer></div>`;
     const garder = (s, v) => { const e = this.el.querySelector(s); if (e) e.scrollTop = v; };
     garder('.vs-menu', menu);
     if (this.derniereVue === this.vue) garder('.vs-main', main);
