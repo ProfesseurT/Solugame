@@ -346,7 +346,7 @@ export class Voiture {
     this.passe = null; this.zPasse = this.zAutre; this.suivi = 0; this.immobile = 0;
     this.base = sens > 0 ? Math.PI / 2 : -Math.PI / 2;
     mesh.rotation.y = this.base;
-    mesh.position.set(x, 0, this.z);
+    mesh.position.set(x, solEn(x, this.z), this.z); // (les roues sur la chaussée, pas dans sa dalle : relief.js)
     this.feux = mesh.userData.feux || null;
   }
   // devant moi, dans la voie z : écart libre (m) jusqu'au plus proche obstacle ou voiture
@@ -461,7 +461,7 @@ export class Voiture {
     const ess = this.mesh.userData.essieux;
     if (ess) { const a = this.v * dt / this.mesh.userData.rayon; for (const e of ess) e.rotation.x += a; }
     if (this.x * this.sens > 340) { this.x = -340 * this.sens; this.dep = 0; this.z = this.zVoie; this.passe = null; }
-    this.mesh.position.set(this.x, 0, this.z);
+    this.mesh.position.set(this.x, solEn(this.x, this.z), this.z);
     // la voiture s'oriente un peu quand elle change de voie ; la caisse se secoue après un choc
     this.mesh.rotation.set(this.secX, this.base - Math.atan2(dz / dt, Math.max(2, this.v)) * this.sens, this.secZ, 'YXZ');
 

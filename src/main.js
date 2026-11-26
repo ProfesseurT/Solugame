@@ -348,6 +348,7 @@ mesures.persos = Math.round(performance.now() - T0);
 
 /* ------------------------------------------------------------------ jeu */
 const cam = new Camera(camera);
+cam.toits = L.toits; // (sous le toit du hangar, la caméra reste sous la charpente)
 const hud = new Hud(monde.carte, tactile);
 const ctrl = new Controles(canvas, $('stick'));
 cam.lier(ctrl);
@@ -541,7 +542,7 @@ jeu.marc = {
 const CARTON3 = { x: L.palette.x, y: 0.36, z: L.palette.z + 1.05 }; // (le haut des bouteilles)
 jeu.carton = CARTON3;
 const cartonOuvert = new THREE.Mesh(geoCartonOuvert(), MAT);
-cartonOuvert.position.set(CARTON3.x, 0, CARTON3.z); cartonOuvert.castShadow = true; cartonOuvert.receiveShadow = true; cartonOuvert.visible = false;
+cartonOuvert.position.set(CARTON3.x, relief.sol(CARTON3.x, CARTON3.z), CARTON3.z); cartonOuvert.castShadow = true; cartonOuvert.receiveShadow = true; cartonOuvert.visible = false;
 scene.add(cartonOuvert);
 // Julien (l'étiqueteur) va à son chariot, s'assoit, rentre les six palox près de la ligne, en descend (remorque.js)
 const VITE_CHARIOT = 2.5;

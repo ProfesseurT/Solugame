@@ -773,7 +773,7 @@ export class Dechargement {
   // le chariot à sa pose (x, z, h), ses roues, son volant, ses fourches ; le conducteur avec lui
   placer(dt = 0, t = 0) {
     const ch = this.ch;
-    ch.groupe.position.set(this.x, 0, this.z); ch.groupe.rotation.y = this.h;
+    ch.groupe.position.set(this.x, sol(this.x, this.z), this.z); ch.groupe.rotation.y = this.h; // (sur la dalle : relief.js)
     lever(ch, this.y);
     for (const m of ch.rouesAv) m.rotation.x = this.rotAv;
     for (const m of ch.rouesAr) m.rotation.x = this.rotAr;
@@ -854,7 +854,7 @@ export class Dechargement {
 }
 // Le chariot à sa place (au début du jeu), une boîte du décor ; voir : dessiné de près seulement
 export function placerChariot(ch, P, col) {
-  ch.groupe.position.set(P.x, 0, P.z); ch.groupe.rotation.y = P.h; lever(ch, 0.08);
+  ch.groupe.position.set(P.x, sol(P.x, P.z), P.z); ch.groupe.rotation.y = P.h; lever(ch, 0.08);
   if (ch.boite) col.retirer(ch.boite);
   ch.boite = col.boiteO(P.x + Math.sin(P.h) * 0.25, P.z + Math.cos(P.h) * 0.25, 1.2, 3.1, P.h);
 }

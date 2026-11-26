@@ -175,8 +175,56 @@ export const GRILLE = new Float32Array((ZONE.nx + 1) * (ZONE.nz + 1));
 // hauteur dans une maille (fx, fz entre 0 et 1), sommets ha (0,0), hd (1,0), hb (0,1), hc (1,1)
 const maille = (ha, hd, hb, hc, fx, fz) => fx + fz <= 1 ? ha + (hd - ha) * fx + (hb - ha) * fz : hc + (hb - hc) * (1 - fx) + (hd - hc) * (1 - fz);
 
-// Le sol où l'on marche et roule (et où l'on pose les arbres) : les triangles mêmes du terrain dessiné
+/* ---------------------------------------------------------------- les dalles
+   Chaussées, cours, trottoirs, sols du chai, du bureau, du hangar... sont des dalles posées un peu au-dessus du terrain
+   (de 2 à 6 cm : elles ne se mêlent pas à lui). Les pieds, les roues, les ombres de contact se posaient sur le terrain : on
+   s'y enfonçait (Teddy, 26/11/2026 : « on a l'impression qu'on est enfoncé »). monde.js enregistre le dessus de chaque
+   dalle pendant la construction (dalle : un quadrilatère, ses quatre coins, sa hauteur) ; une fois le monde construit
+   (activerDalles), sol rend le plus haut des deux, le terrain ou la dalle. Le décor posé avec sol pendant la construction
+   reste donc où il était. Rangées dans une grille de 8 m. */
+const CASE_D = 8, DALLES = new Map();
+let dallesActives = false;
+export function dalle(P, y) {
+  // P : quatre coins [x, z] dans l'ordre du tour (sens quelconque) ; boîte englobante pour la grille
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const [x, z] of P) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  const d = { P: P.flat(), y, x0, z0, x1, z1 };
+  for (let i = Math.floor(x0 / CASE_D); i <= Math.floor(x1 / CASE_D); i++) for (let j = Math.floor(z0 / CASE_D); j <= Math.floor(z1 / CASE_D); j++) {
+    const k = (i + 512) * 1024 + (j + 512);
+    let l = DALLES.get(k); if (!l) DALLES.set(k, l = []);
+    l.push(d);
+  }
+}
+export function activerDalles() { dallesActives = true; }
+// le dessus de la plus haute dalle sous (x, z), ou -Infinity
+function dessus(x, z) {
+  const l = DALLES.get((Math.floor(x / CASE_D) + 512) * 1024 + (Math.floor(z / CASE_D) + 512));
+  let y = -Infinity;
+  if (!l) return y;
+  for (let n = 0; n < l.length; n++) {
+    const d = l[n];
+    if (d.y <= y || x < d.x0 || x > d.x1 || z < d.z0 || z > d.z1) continue;
+    // dans le quadrilatère : du même côté des quatre bords
+    const P = d.P;
+    let pos = 0, neg = 0;
+    for (let i = 0; i < 8; i += 2) {
+      const ax = P[i], az = P[i + 1], bx = P[(i + 2) % 8], bz = P[(i + 3) % 8], c = (bx - ax) * (z - az) - (bz - az) * (x - ax);
+      if (c > 1e-9) pos++; else if (c < -1e-9) neg++;
+    }
+    if (!pos || !neg) y = d.y;
+  }
+  return y;
+}
+
+// Le sol où l'on marche et roule : le terrain, ou le dessus d'une dalle (une fois le monde construit)
 export function sol(x, z) {
+  const t = terrain(x, z);
+  if (!dallesActives) return t;
+  const d = dessus(x, z);
+  return d > t ? d : t;
+}
+// Le terrain lui-même (et où l'on pose les arbres) : les triangles mêmes du terrain dessiné
+export function terrain(x, z) {
   const Z = ZONE;
   if (x > Z.x0 && x < Z.x1 && z > Z.z0 && z < Z.z1) {
     const u = (x - Z.x0) / Z.pas, v = (z - Z.z0) / Z.pas, a = Math.min(Z.nx - 1, Math.floor(u)), b = Math.min(Z.nz - 1, Math.floor(v)), L = Z.nx + 1, k = b * L + a;

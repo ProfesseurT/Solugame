@@ -585,7 +585,8 @@ if (scenario === 'chateau') {
         log.push(['à pied dans la montée, les pieds sur le sol (' + (e * 100).toFixed(0) + ' cm), y compris en montant (' + J.joueur.pos.y.toFixed(1) + ' m)', e < 0.02 && J.joueur.pos.y > 5]); }
       // une voiture (mode WTF : celle d'en face) : frein à main dans un virage, puis on tient la glisse au volant
       { J.basculerWtf(); const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-        CL.teleporter(-160, 11.7, Math.PI / 2); CL.step(5);
+        // (départ assez à l'ouest : la glisse finit dans l'herbe, avant les rangs du Clos qui la freineraient)
+        CL.teleporter(-185, 11.7, Math.PI / 2); CL.step(5);
         CL.ctrl.ky = -1; for (let k = 0; k < 400 && CL.tr.v < 17; k++) CL.step(1);
         let tenue = 0, bmax = 0, vmin = 99;
         for (let k = 0; k < 300; k++) {

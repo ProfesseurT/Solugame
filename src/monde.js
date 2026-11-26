@@ -10,7 +10,7 @@ import { chariot } from './remorque.js';
 import { SOLU, ENTREE, FENETRES, VITRINES, VITRINE, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
 import { logoSolumatic } from './logo.js';
 import { rangeVelos, veloSeul } from './velos.js';
-import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
+import { naturelle, forme, sol, terrain, dalle, activerDalles, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
 
 export { SOLEIL };
 export const BRUME = '#efb68a';
@@ -525,6 +525,28 @@ void main() {
     plan.push({ t: 'rangs', q, c: cep === 'chenin' ? '#d8ad3c' : '#bf5a30' });
     return q;
   });
+  // Les dalles du sol (relief.js : dalle) : chaque pavé plat et mince d'une liste (moins de 16 cm d'épaisseur, son dessus à
+  // moins de 30 cm du terrain, au moins 1,2 m²), son dessus et ses quatre coins ; les pieds et les roues s'y poseront
+  // une fois le monde construit (activerDalles, à la fin)
+  function dallesDe(liste) {
+    for (const g of liste) {
+      const p = g.attributes.position.array;
+      let y0 = Infinity, y1 = -Infinity;
+      for (let i = 1; i < p.length; i += 3) { if (p[i] < y0) y0 = p[i]; if (p[i] > y1) y1 = p[i]; }
+      if (y1 - y0 > 0.16) continue;
+      const coins = new Map();
+      for (let i = 0; i < p.length; i += 3) if (p[i + 1] > y1 - 1e-4) coins.set(Math.round(p[i] * 1e4) + ',' + Math.round(p[i + 2] * 1e4), [p[i], p[i + 2]]);
+      if (coins.size !== 4) continue;
+      const P = [...coins.values()], cx = (P[0][0] + P[1][0] + P[2][0] + P[3][0]) / 4, cz = (P[0][1] + P[1][1] + P[2][1] + P[3][1]) / 4;
+      const h = y1 - terrain(cx, cz);
+      if (h < -0.01 || h > 0.3) continue;
+      P.sort((a, b) => Math.atan2(a[1] - cz, a[0] - cx) - Math.atan2(b[1] - cz, b[0] - cx));
+      let aire = 0;
+      for (let i = 0; i < 4; i++) { const a = P[i], b = P[(i + 1) % 4]; aire += a[0] * b[1] - b[0] * a[1]; }
+      if (Math.abs(aire) / 2 >= 1.2) dalle(P, y1);
+    }
+  }
+  dallesDe(surf);
   const surfaces = new THREE.Mesh(fusion(surf), MAT);
   surfaces.receiveShadow = true; surfaces.renderOrder = ORDRE.sol; surfaces.name = 'surfaces';
   scene.add(surfaces);
@@ -1310,6 +1332,7 @@ void main() {
       for (const y of [1.17, 2.33]) H2.push(B(0.05, 0.06, 0.86, '#8d7c66', x + s * 0.02, y, z));
       H2.push(B(0.02, 1.1, 0.03, '#8d7c66', x + s * 0.025, 1.75, z), B(0.16, 0.04, 0.9, '#d8cbb0', x + s * 0.08, 1.14, z));
     }
+    dallesDe(H2); // (le sol de béton de la halle, la rigole)
     const halle = new THREE.Mesh(fusion(H2), MAT);
     halle.receiveShadow = true; halle.castShadow = false; halle.name = 'chai'; // dedans, le soleil est coupé (definirInterieur) : l'ombre du toit ne compte qu'au-dessus des murs
     scene.add(halle);
@@ -1413,6 +1436,7 @@ void main() {
     I.push(C(0.008, 0.008, 0.3, 4, '#2b2b30', cx, H - 0.15, cz), C(0.12, 0.24, 0.16, 10, '#2b2b30', cx, H - 0.38, cz), C(0.1, 0.1, 0.02, 8, '#ffe1a0', cx, H - 0.46, cz));
     // meubles : on ne les traverse pas
     for (const [x0, z0, x1, z1] of [[-72.0, -63.42, -71.2, -61.78], [EX0 - 0.03, zS, EX1 + 0.03, zS + 0.38], [-75.7, -64.2, -75.12, -63.64], [-71.82, -60.25, -71.4, -59.6], [-72.75, -60.15, -72.35, -59.6], [-74.25, zS, -73.65, zS + 0.9]]) col.boite(x0, z0, x1, z1);
+    dallesDe(I); // (le parquet du bureau)
     const dedans = new THREE.Mesh(fusion(I), MAT);
     dedans.receiveShadow = false; dedans.castShadow = false; dedans.name = 'bureau du chai';
     scene.add(dedans);
@@ -1784,6 +1808,7 @@ void main() {
     L.push(B(0.2, 0.32, 0.14, '#c0392b', -71.6, 0.21, -93.3), C(0.012, 0.012, 1.3, 4, '#9a7b55', -76.0, 0.75, -92.8, 'y'), B(0.35, 0.08, 0.06, '#5e4a36', -76.0, 0.1, -92.8));
     // dehors, à l'ouest : la cuve à gazole sur son bac de rétention, sa pompe et son pistolet
     L.push(B(1.4, 0.3, 2.4, '#8d9196', -78.3, 0.15, -86.5), C(0.62, 0.62, 2.0, 14, '#2f6b3a', -78.3, 0.95, -86.5, 'z'), B(0.25, 0.5, 0.2, '#c0392b', -78.3, 1.75, -85.5), C(0.03, 0.03, 0.9, 5, '#1e1e22', -77.9, 1.1, -85.4));
+    dallesDe(L); // (la dalle de béton du hangar)
     bati.push(...L);
     contact.jupe(x0 - 0.05, z0 - 0.05, x1 + 0.05, z0 + 0.25, 1.4, 0.4);
     plan.push({ t: 'b', x0, z0, x1, z1 });
@@ -2608,6 +2633,7 @@ void main() {
       const b = rnd() * Math.PI * 2, r = CH.plateau + 2 + rnd() * 6, x = CH.x + Math.cos(b) * r, z = CH.z + Math.sin(b) * r;
       if (procheRoute(x, z, 10).d > 8) arbresChateau.push([x, z, rnd() < 0.5 ? 'chene' : 'cedre', sol(x, z)]);
     }
+    dallesDe(surf);
     const ms = new THREE.Mesh(fusion(surf), MAT);
     ms.receiveShadow = true; ms.renderOrder = ORDRE.sol; ms.name = 'surfaces';
     scene.add(ms);
@@ -2926,6 +2952,7 @@ void main() {
       palette(159.8, 31.5, 4, 2, false);
     }
     for (const g of I) deplacer(g, DX_EN, 0, 0);
+    dallesDe(I); // (la dalle de l'entrepôt)
     const inte = new THREE.Mesh(fusion(I), MAT);
     inte.receiveShadow = true; inte.castShadow = false; inte.name = 'entrepôt'; inte.visible = false;
     scene.add(inte);
@@ -3188,6 +3215,7 @@ void main() {
     toitSolu.matrixAutoUpdate = false; toitSolu.add(bache); scene.add(toitSolu);
     // l'intérieur, ses affiches et ses écrans (dessinés seulement dedans ou porte ouverte) ; dedans, le soleil coupé, des
     // lampes pièce par pièce (definirInterieur : une pièce n'est éclairée que par les siennes, les couloirs par les leurs)
+    dallesDe(I.geos); // (les sols de chaque pièce)
     const interieurSolu = new THREE.Mesh(indexer(fusion(I.geos), true), MAT);
     interieurSolu.castShadow = false; interieurSolu.receiveShadow = true; interieurSolu.name = 'intérieur Solumatic'; interieurSolu.visible = false;
     const vitresSolu = new THREE.Mesh(indexer(fusion(I.vitres), true), new THREE.MeshBasicMaterial({ color: '#d9e6ef' }));
@@ -3625,6 +3653,9 @@ void main() {
   // gerbeur électrique de Marc : transpalette.js) dans la troisième travée, contre le poteau, à côté de la remorque rangée
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
   lieux.transpalette = { x: -64.45, z: -84.4, h: 0 };
+  // les zones couvertes où l'on entre en véhicule : la caméra y reste sous la charpente (camera.js : toits ; le hangar,
+  // sablière à 4,84 m)
+  lieux.toits = [{ x0: -76.5, z0: -94, x1: -60, z1: -80, y: 4.45 }];
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   // les restaurateurs à découvrir (restaurateurs.js) : la place de chacun devant son restaurant, tourné vers la rue (ceux du
   // château : d'après lieux.chateau.restos)
@@ -3732,5 +3763,6 @@ void main() {
     }
   }
 
+  activerDalles(); // le monde est construit : les pieds et les roues se posent désormais sur les dalles (relief.js)
   return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter, ligne, porteSolu: za.porteSolu, toitSolu: za.toitSolu, interieurSolu: za.interieurSolu, vitresSolu: za.vitresSolu };
 }

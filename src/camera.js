@@ -1,7 +1,7 @@
 // La caméra : elle suit le personnage ou le véhicule, cadre une scène (gestes.js), se pose dans une pièce (le bureau et
 // la halle du chai), suit à hauteur d'homme dans les bureaux de Solumatic, enchaîne les plans de l'accueil.
 import * as THREE from 'three';
-import { angle, borne, amortir as lisser } from './outils.js';
+import { angle, borne, amortir as lisser, lisse } from './outils.js';
 import { sol } from './relief.js';
 
 /* ---------------------------------------------------------------- caméra qui suit
@@ -23,6 +23,7 @@ export class Camera {
     this.zoom = 1;                  // distance choisie à la main (pincer, molette)
     this.fovBase = cam.fov; this.fovPose = cam.fov; this.fovPlus = 0;
     this.ctrl = null; this.tb = 0; this.recentre = false;
+    this.toits = [];                // les zones couvertes où l'on entre en véhicule (main.js : le hangar du domaine)
   }
   // relie la caméra aux commandes (deux doigts, souris, touches J L I K, stick droit de la manette)
   lier(ctrl) { this.ctrl = ctrl; }
@@ -99,7 +100,17 @@ export class Camera {
     // en descente, le relief derrière soi monte : la caméra reste au-dessus (en douceur)
     const camX = px - yx * d, camZ = pz - yz * d, sous = sol(camX, camZ) + 1.3 - this.cy;
     this.plancher += (sous - this.plancher) * (pret ? lisser(dt, sous > this.plancher ? 9 : 3) : 1);
-    this.pos.set(camX, this.cy + Math.max(hh, this.plancher), camZ);
+    // sous un toit (le hangar, Teddy, 26/11/2026 : « ça nous coince sous le toit ») : la caméra reste sous la charpente quand
+    // elle y est, ou quand le véhicule y est (vue de dehors, sous l'avant-toit) ; elle y descend et en remonte en douceur, à
+    // mesure qu'on y entre ou qu'on en sort (k : de 2,5 m dehors à 1 m dedans)
+    let yc = this.cy + Math.max(hh, this.plancher);
+    for (let i = 0; i < this.toits.length; i++) {
+      const T = this.toits[i];
+      const dC = Math.min(camX - T.x0, T.x1 - camX, camZ - T.z0, T.z1 - camZ), dV = Math.min(x - T.x0, T.x1 - x, z - T.z0, T.z1 - z);
+      const k = lisse(borne((Math.max(dC, dV) + 2.5) / 3.5, 0, 1));
+      if (k > 0) yc = Math.min(yc, T.y + (1 - k) * 8);
+    }
+    this.pos.set(camX, yc, camZ);
     this.regard.set(px + yx * 3.2, this.cy + (vehicule ? 1.8 + 1.2 * grand : 1.6) + Math.max(0, -this.tangage) * 4, pz + yz * 3.2);
     this.pret = true;
 
