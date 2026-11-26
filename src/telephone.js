@@ -268,11 +268,15 @@ export class Telephone {
     const n = this.notif === 'bureau'
       ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>`
       : this.notif === 'messages' && m3 ? `<button class="ph-notif" data-a="fil:${H.fil}"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(HX.messages[H.fil].de)}</b><br>${esc(H.message)}</span></button>`
-        : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>` : '';
+        : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>`
+          : this.notif === 'phyto' && m2 && R.aNoter.length ? `<button class="ph-notif" data-a="ouvrir:phyto"><span class="ic phyto">${ICONES.phyto}</span><span><b>Registre phyto</b><br>${esc(TX.app.notif(R.noms(R.aNoter)))}</span></button>` : '';
+    // l'appli que la mission 2 veut qu'on ouvre (le message de Claire, puis chaque parcelle traitée à noter) : son icône
+    // mise en évidence
+    const voulue = m2 ? (R.aNoter.length ? 'phyto' : !R.lu ? 'messages' : null) : null;
     const lieu = m3 ? `${esc(HX.date)} · ciel dégagé` : m2 ? `${esc(TX.date)} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé';
     return `<div class="ph-accueil">
       <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${lieu}</p>${n}
-      <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
+      <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico${id === voulue ? ' conseil' : ''}" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
     </div>`;
   }
   // Ma journée : les 3 rappels, avec l'action du moment pour chacun
@@ -549,12 +553,17 @@ export class Telephone {
       <p class="ap-sur">Registre phyto</p><h3>${esc(PHYTO.titre)}</h3><p class="ap-txt">${esc(PHYTO.texte)}</p>
       <a class="ap-bt plein cyan large" href="${esc(LP_URL)}" target="_blank" rel="noopener">${esc(PHYTO.cta)}</a>
       <p class="ap-note">Mission 2, après la tournée et une nuit de sommeil : un traitement à noter, au fond des vignes, sans réseau.</p></div>`;
-    const A = TX.app, aN = R.aNoter;
+    const A = TX.app, G = A.guide, aN = R.aNoter, n = R.enAttente.length, suite = R.premiereATraiter;
+    // la consigne du jeu : quoi faire ici (une parcelle à noter), ou la suite (la parcelle suivante, remonter là où ça
+    // capte), ou rien encore à noter
+    const consigne = aN.length ? G.accueil(R.noms(aN)) : R.etape !== 'traiter' && R.etape !== 'remplir' && R.etape !== 'preparer' ? ''
+      : n && !R.reseau ? G.attente : R.jour.some(p => p.notee) && suite ? G.suite(suite.nom) : !R.jour.some(p => p.traitee) ? G.avant : '';
     const lignes = R.registre.map(l => `<div class="rp-ligne"><p class="rp-quand"><b>${esc(l.quand)}</b>${l.statut === 'attente' ? `<span class="tag decroche">${esc(A.attente)}</span>` : `<span class="tag ok">${esc(A.envoye)}</span>`}</p>
       <p>${esc(l.parcelles.join(', '))}</p><p class="rp-p">${esc(l.produits.join(' ; '))} · ${esc(l.cibles.join(', '))} · ${esc(l.stade)}</p><p class="ap-note">Saisi par ${esc(l.par)}</p></div>`).join('');
-    const a = aN.length ? `<div class="carte-a-faire rp"><p class="ap-sur">Traité aujourd'hui</p><b>${esc(R.noms(aN))}</b></div>` : '';
+    const a = (consigne ? `<p class="consigne rp">${esc(consigne)}</p>` : '') + (aN.length ? `<div class="carte-a-faire rp"><p class="ap-sur">Traité aujourd'hui, à noter</p><b>${esc(R.noms(aN))}</b></div>` : '');
+    const sync = n ? `<p class="rp-sync${R.reseau ? '' : ' non'}">${esc(A.attenteNote(n))}</p>` : '';
     return this.entete('Registre phyto', 'phyto') + `<div class="ap-corps">${a}
-      <button class="ap-bt plein cyan large" data-a="rp-nouveau"${R.prete ? '' : ' disabled'}>${esc(A.nouveau)}</button>
+      <button class="ap-bt plein cyan large${aN.length ? ' guide' : ''}" data-a="rp-nouveau"${aN.length ? '' : ' disabled'}>${esc(A.nouveau)}</button>${sync}
       <p class="ap-h">${esc(A.registre)}</p><p class="ap-note">${esc(A.registreNote)}</p>${lignes}
       <button class="ap-bt large" data-a="rp-export">${esc(A.exporter)}</button>${this.apercuPhyto()}</div>`;
   }
@@ -564,30 +573,35 @@ export class Telephone {
       : `<p class="ap-note rp-apercu">${esc(TX.app.apercuApres)}</p>`;
   }
   // les écrans de la saisie : en-tête (retour : l'étape d'avant), titre de l'étape, son contenu, le bouton de suite
-  etapePhyto(n, titre, corps, suite = 'Suivant') {
-    return this.entete('Registre phyto', 'phyto', 'rp-retour') + `<div class="ap-corps"><p class="ap-sur">Noter un traitement · ${n} sur 5</p><h3>${esc(titre)}</h3>
-      ${corps}<button class="ap-bt plein cyan large" data-a="${suite === 'Suivant' ? 'rp-suite' : 'rp-enregistrer'}">${esc(suite)}</button>${this.apercuPhyto()}</div>`;
+  // (consigne : ce que le jeu dit de faire ici ; le bouton de suite est mis en évidence quand l'étape est juste)
+  etapePhyto(n, titre, corps, suite = 'Suivant', consigne = '') {
+    const R = this.jeu.traitement, juste = R.saisie && !(suite === 'Suivant' ? R.verifier() : R.toutVerifier());
+    return this.entete('Registre phyto', 'phyto', 'rp-retour') + `<div class="ap-corps">${consigne ? `<p class="consigne rp">${esc(consigne)}</p>` : ''}<p class="ap-sur">Noter un traitement · ${n} sur 5</p><h3>${esc(titre)}</h3>
+      ${corps}<button class="ap-bt plein cyan large${juste ? ' guide' : ''}" data-a="${suite === 'Suivant' ? 'rp-suite' : 'rp-enregistrer'}">${esc(suite)}</button>${this.apercuPhyto()}</div>`;
   }
   phytoP() {
     const R = this.jeu.traitement, S = R.saisie;
     if (!S) return this.phyto();
-    const l = R.parcelles.map(p => `<button class="rp-case${S.parcelles.has(p.id) ? ' on' : ''}" data-a="rp-cocher:${p.id}"><i></i><span><b>${esc(p.nom)}</b><small>${esc(p.cep)} · ${String(p.ha.toFixed(2)).replace('.', ',')} ha</small></span></button>`).join('');
-    return this.etapePhyto(1, TX.app.parcelles, `<p class="ap-note">${esc(TX.app.parcellesNote)}</p>${l}`);
+    const aN = R.aNoter;
+    const l = R.parcelles.map(p => `<button class="rp-case${S.parcelles.has(p.id) ? ' on' : aN.includes(p) ? ' guide' : ''}" data-a="rp-cocher:${p.id}"><i></i><span><b>${esc(p.nom)}</b><small>${esc(p.cep)} · ${String(p.ha.toFixed(2)).replace('.', ',')} ha</small></span></button>`).join('');
+    return this.etapePhyto(1, TX.app.parcelles, `<p class="ap-note">${esc(TX.app.parcellesNote)}</p>${l}`, 'Suivant', aN.length ? TX.app.guide.parcelles(R.noms(aN), aN.length) : '');
   }
   phytoD() {
     const R = this.jeu.traitement, S = R.saisie;
     if (!S) return this.phyto();
     const l = TX.produits.map(P => `<div class="cd-ligne"><span><b>${esc(P.nom)}</b><br><small>${esc(P.sous)}</small></span>
-      <div class="pas"><button data-a="rp-dose:${P.id}:-1" aria-label="Moins"${S.doses[P.id] <= 0 ? ' disabled' : ''}>−</button><b class="rp-dose">${String(S.doses[P.id]).replace('.', ',')}<small>${esc(P.unite)}</small></b><button data-a="rp-dose:${P.id}:1" aria-label="Plus">+</button></div></div>`).join('');
-    return this.etapePhyto(2, TX.app.produits, l);
+      <div class="pas"><button data-a="rp-dose:${P.id}:-1" aria-label="Moins"${S.doses[P.id] <= 0 ? ' disabled' : ''}${!P.cuve && S.doses[P.id] > 0 || P.cuve && S.doses[P.id] > P.dose ? ' class="guide"' : ''}>−</button><b class="rp-dose">${String(S.doses[P.id]).replace('.', ',')}<small>${esc(P.unite)}</small></b><button data-a="rp-dose:${P.id}:1" aria-label="Plus"${P.cuve && S.doses[P.id] < P.dose ? ' class="guide"' : ''}>+</button></div></div>`).join('');
+    const C = TX.produits.find(P => P.cuve);
+    return this.etapePhyto(2, TX.app.produits, l, 'Suivant', TX.app.guide.produits(C.nom.toLowerCase(), `${String(C.dose).replace('.', ',')} ${C.unite}`));
   }
   phytoS() {
-    return this.etapePhyto(3, TX.app.stade, `<div class="cd-ligne"><span><b>${esc(TX.stade)}</b><br><small>${esc(TX.stadeDe)}</small></span><span class="tag ok">Repris</span></div>`);
+    return this.etapePhyto(3, TX.app.stade, `<div class="cd-ligne"><span><b>${esc(TX.stade)}</b><br><small>${esc(TX.stadeDe)}</small></span><span class="tag ok">Repris</span></div>`, 'Suivant', TX.app.guide.stade);
   }
   phytoC() {
     const S = this.jeu.traitement.saisie;
     if (!S) return this.phyto();
-    return this.etapePhyto(4, TX.app.cible, `<div class="rp-puces">${TX.cibles.map(c => `<button class="rp-puce${S.cibles.has(c) ? ' on' : ''}" data-a="rp-cible:${c}">${esc(c)}</button>`).join('')}</div>`);
+    const J = TX.ciblesDuJour, g = c => (J.includes(c) ? !S.cibles.has(c) : S.cibles.has(c)) ? ' guide' : '';
+    return this.etapePhyto(4, TX.app.cible, `<div class="rp-puces">${TX.cibles.map(c => `<button class="rp-puce${S.cibles.has(c) ? ' on' : ''}${g(c)}" data-a="rp-cible:${c}">${esc(c)}</button>`).join('')}</div>`, 'Suivant', TX.app.guide.cible);
   }
   phytoR() {
     const R = this.jeu.traitement, S = R.saisie;
@@ -596,7 +610,7 @@ export class Telephone {
     return this.etapePhyto(5, TX.app.recap, `<div class="rp-ligne"><p class="rp-quand"><b>${esc(TX.dateCourte)} · ${esc(this.jeu.heureTxt.replace(/^0/, '').replace(':', ' h '))}</b></p>
       <p>${esc(parcs.map(p => p.nom).join(', '))} · ${String(ha.toFixed(2)).replace('.', ',')} ha</p>
       <p class="rp-p">${esc(TX.produits.filter(P => P.cuve).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`).join(' ; '))}</p>
-      <p class="rp-p">${esc([...S.cibles].join(', '))} · ${esc(TX.stade)}</p></div>${R.reseau ? '' : `<p class="consigne rp">${esc(TX.app.horsReseau)}</p>`}`, TX.app.enregistrer);
+      <p class="rp-p">${esc([...S.cibles].join(', '))} · ${esc(TX.stade)}</p></div>${R.reseau ? '' : `<p class="ap-note rp-hors">${esc(TX.app.horsReseau)}</p>`}`, TX.app.enregistrer, R.reseau ? TX.app.guide.recap : TX.app.guide.recapSans);
   }
   phytoX() {
     return this.entete('Registre phyto', 'phyto', 'ouvrir:phyto') + `<div class="ap-corps"><p class="ap-sur">${esc(TX.app.exporter)}</p><h3>${esc(TX.app.registre)}</h3>

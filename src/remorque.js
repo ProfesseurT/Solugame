@@ -389,6 +389,11 @@ export class Attelage {
     for (let k = 0; k < 6; k++) montrerPalox(this.r, k, true);
     this.ridelleK[0] = this.ridelleK[1] = 0;
   }
+  // vide (rangée sous le hangar, hors de la mission 3)
+  vider() {
+    for (let k = 0; k < 6; k++) montrerPalox(this.r, k, false);
+    this.ridelleK[0] = this.ridelleK[1] = 0;
+  }
 }
 
 /* ---------------------------------------------------------------- atteler, dételer (gestes.js)

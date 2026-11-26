@@ -161,12 +161,13 @@ creerVehicule('van', mVan, L.van, posteDe(mVan));
 const mEnj = enjambeur(); deplierEnjambeur(mEnj, 0);
 const vEnjambeur = creerVehicule('enjambeur', mEnj, L.enjambeur, posteDe(mEnj));
 let veh = vTracteur, tr = veh.p, tm = veh.m;
-// La remorque de palox du Clos 2025 (mission 3 ; remorque.js), garée au domaine, chargée ; seul le tracteur la tire.
+// La remorque de palox du Clos 2025 (mission 3 ; remorque.js) ; seul le tracteur la tire. Rangée vide sous le hangar
+// (L.remorque.range) ; Marc la sort, chargée, devant le domaine pour la mission 3 (jeu.remorque.preparer).
 // Posée, c'est une boîte du décor ; attelée, elle suit le tracteur (Attelage.maj, à chaque image) et repousse les piétons.
 const mRem = remorque();
 scene.add(mRem.groupe); LOINS.push(mRem.groupe);
 const att = new Attelage(mRem, col);
-att.poser(L.remorque.x, L.remorque.z, L.remorque.h);
+att.poser(L.remorque.range.x, L.remorque.range.z, L.remorque.range.h); att.vider();
 OBSTACLES.push(att.pos); // les voitures de la départementale la voient
 // (pour contourner à pied, gestes.js : la remorque attelée comme un véhicule de plus)
 const remorqueContour = { p: att, m: mRem, genre: 'remorque' };
@@ -449,16 +450,17 @@ jeu.remorque = {
   },
   // dételer, la remorque posée à la place depot (le tracteur avance tout seul pour l'y mettre)
   deteler(depot, fin) { const v = veh; couperMoteur(); ctrl.relacher(); gestes.lancer(etapesDeteler(gestes, v, att, { couper: couperMoteur, sorti: aPied, installe: () => auVolant(v), depot }), fin); },
-  // pas encore préparée (le matin de l'habillage) : pas là du tout ; Marc non plus
-  cacher() {
-    att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.retirer();
-    mRem.groupe.userData.cache = true; mRem.groupe.visible = false;
+  // rangée vide sous le hangar (le matin de l'habillage, avant que Marc la prépare ; le lendemain de la mission 3) ; le
+  // transpalette à côté ; Marc pas là
+  ranger() {
+    const R = L.remorque.range;
+    att.poser(R.x, R.z, R.h); att.vider();
+    placerChariot(mTP, L.transpalette, col);
     const f = gens3.liste[2]; if (f) { f.etat = 'dedans'; f.p.m.groupe.visible = false; }
   },
   // préparée par Marc : chargée, à sa place au bord de l'allée ; il attend à côté, côté allée, près du timon
   preparer() {
     att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.recharger(); habillerPalox(mRem, false);
-    mRem.groupe.userData.cache = false;
     const f = gens3.liste[2], P = att.versMonde(2.0, 0, 2.2, { x: 0, y: 0, z: 0 });
     if (f) { f.l = { x: P.x, z: P.z, h: att.h + Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h); f.etat = 'dehors'; f.p.m.groupe.visible = true; }
   },
@@ -471,7 +473,6 @@ jeu.remorque = {
     if (!dech) { dech = new Dechargement({ ch: mChariot, att, L: L.entrepot, conducteur: null, col, scene, vite: VITE_CHARIOT }); dech.finir(); }
     dech.vider(); placerChariot(mChariot, L.entrepot.chariot, col);
     att.recharger(); habillerPalox(mRem, true);
-    mRem.groupe.userData.cache = false;
     const f = gens3.liste[1];
     if (f.p.assis) descendreChariot(f.p, mChariot, scene);
     const P = att.versMonde(-2.2, 0, 3.4, { x: 0, y: 0, z: 0 });
@@ -866,6 +867,8 @@ function conduire(dt, dtm, dernier = true) {
     }
   } else if (tactile && libre) gaz = tr.v > 0.3 ? -0.5 : 0;
   if (ctrl.fm && libre) fm = true;
+  // mission 2 : une parcelle finie, l'enjambeur s'arrête tout seul au bout (on la note avant la suivante : mission2.js)
+  if (M === traitement && traitement.tArret > 0) { gaz = tr.v > 0.3 ? -1 : tr.v < -0.3 ? 1 : 0; braq = 0; fm = false; }
   tr.update(dtm, gaz, braq, col, AUTOS, temps, fm);
   if (M === traitement) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
   if (!dernier) return;
@@ -1049,8 +1052,9 @@ function surlendemain() {
     v.p.charge = 0;
   }
   for (const p of mission.palette) p.groupe.visible = false;
-  // la remorque de palox pas encore préparée (Marc la sortira pendant qu'on est au labo) ; le carton ouvert du chai
-  jeu.remorque.cacher(); cartonOuvert.visible = true;
+  // la remorque de palox rangée vide sous le hangar (Marc la sortira, chargée, pendant qu'on est au labo) ; le carton
+  // ouvert du chai
+  jeu.remorque.ranger(); cartonOuvert.visible = true;
   mission3 = true;
 }
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
@@ -1072,6 +1076,8 @@ function dormir() {
         // la nuit de l'habillage : le tracteur, le van et l'enjambeur rangés dans la cour au réveil (le tracteur est peut-être
         // resté à l'imprimerie)
         else if (habillage.attendNuit) for (const v of VEHICULES) { const l = L[v.genre]; if (l) v.p.placer(l.x, l.z, l.h); }
+        // la mission 3 finie : la remorque, vide, et le transpalette rangés sous le hangar pendant la nuit
+        else if (habillage.etape === 'libre' && !att.attelee) jeu.remorque.ranger();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
@@ -1233,7 +1239,7 @@ function voirLoin() {
   const c = camera.position, fin = scene.fog.far, R = 6;
   for (let i = 0; i < LOINS.length; i++) {
     const g = LOINS[i], p = g.position, prof = (p.x - c.x) * AXE.x + (p.y - c.y) * AXE.y + (p.z - c.z) * AXE.z - R;
-    const vu = !g.userData.cache && prof < (p.y + 4.6 < 5 ? fin - 6 : fin * 1.6); // (cache : pas là du tout)
+    const vu = prof < (p.y + 4.6 < 5 ? fin - 6 : fin * 1.6);
     if (g.visible !== vu) g.visible = vu;
   }
 }

@@ -530,9 +530,10 @@ export function C(rh, rb, h, seg, c, x = 0, y = 0, z = 0, axe = 'y', ry = 0, bou
       const i = k * 3, r = G.p[i + 1] > 0 ? rh : rb;
       let px = G.p[i] * r, py = G.p[i + 1] * h, pz = G.p[i + 2] * r, nx = G.n[i], ny = G.n[i + 1], nz = G.n[i + 2];
       if (flanc) { const l = Math.hypot(nx, pente, nz); nx /= l; ny = pente / l; nz /= l; }
-      if (ry) { const a = px * co + pz * si, b = nx * co + nz * si; pz = pz * co - px * si; px = a; nz = nz * co - nx * si; nx = b; }
       if (axe === 'x') { const a = -py, b = -ny; py = px; px = a; ny = nx; nx = b; }
       else if (axe === 'z') { const a = -pz, b = -nz; pz = py; py = a; nz = ny; ny = b; }
+      // (tourné autour de la verticale une fois couché : un tuyau, une balle de foin, un cercle dans leur direction)
+      if (ry) { const a = px * co + pz * si, b = nx * co + nz * si; pz = pz * co - px * si; px = a; nz = nz * co - nx * si; nx = b; }
       p[o] = px + x; p[o + 1] = py + y; p[o + 2] = pz + z;
       n[o] = nx; n[o + 1] = ny; n[o + 2] = nz;
     }

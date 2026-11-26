@@ -1110,20 +1110,44 @@ void main() {
     H2.push(B(0.02, 1.15, 3.6, '#e6d4b0', -75.58, 5.575, -52));
     for (const z of [-57, -52.5, -48, -43.5]) H2.push(B(11.2, 0.28, 0.24, '#6b4a30', -70, 5.85, z)); // entraits de la charpente
     for (const z of [-56.5, -51.5, -46.5, -41.5]) H2.push(C(0.01, 0.01, 0.8, 4, FER, -70, 5.45, z), C(0.06, 0.32, 0.24, 10, FER, -70, 4.98, z), C(0.14, 0.14, 0.04, 8, '#ffe1a0', -70, 4.86, z));
-    // cuves inox : fût, chapeau conique, pieds, porte basse, vanne, échelle sur l'une
-    const cuves = [-57.6, -54.3, -51, -47.7, -44.4];
+    // cuves inox : fût, chapeau conique et son trou d'homme, pieds, porte basse, vanne ; le tube de niveau (le vin à sa
+    // hauteur), l'ardoise de la cuvée à la craie, la plaque du numéro ; une flaque sous la vanne ; l'échelle sur l'une
+    const cuves = [-57.6, -54.3, -51, -47.7, -44.4], NIVEAU = [2.75, 1.9, 3.05, 1.25, 2.4];
     cuves.forEach((z, i) => {
       H2.push(C(0.9, 0.9, 3.0, 14, INOX, -65.6, 2.0, z), C(0.12, 0.9, 0.45, 14, INOX, -65.6, 3.72, z), C(0.9, 0.55, 0.3, 14, INOX, -65.6, 0.35, z));
       for (const y of [1.15, 2.55, 3.48]) H2.push(C(0.915, 0.915, 0.04, 14, JOINT, -65.6, y, z)); // cordons de soudure
       for (const [dx, dz] of [[0.55, 0.55], [-0.55, 0.55], [0.55, -0.55], [-0.55, -0.55]]) H2.push(B(0.07, 0.5, 0.07, INOX, -65.6 + dx, 0.25, z + dz));
       H2.push(B(0.06, 0.5, 0.42, '#8e959c', -66.48, 1.0, z), C(0.05, 0.05, 0.22, 6, '#8e959c', -66.6, 0.62, z, 'x'), C(0.07, 0.07, 0.03, 8, '#c0392b', -66.72, 0.62, z, 'x'));
       H2.push(B(0.32, 0.16, 0.012, '#f1e8d2', -66.5, 2.4, z, Math.PI / 2)); // plaque : numéro de la cuve
-      if (i === 2) for (let y = 0.4; y < 3.6; y += 0.35) H2.push(B(0.04, 0.04, 0.45, FER, -66.62, y, z + 0.95));
+      H2.push(C(0.2, 0.22, 0.1, 12, INOX, -65.6, 3.99, z), B(0.2, 0.03, 0.03, FER, -65.6, 4.06, z)); // trou d'homme du haut, sa poignée
+      // le tube de niveau, transparent, et le vin dedans ; ses deux raccords
+      const xt = -66.47, zt = z + 0.42, n = NIVEAU[i];
+      H2.push(B(0.028, 2.6, 0.028, '#d4dade', xt, 1.95, zt), B(0.034, n - 0.66, 0.034, '#5a1a24', xt, 0.66 + (n - 0.66) / 2, zt));
+      for (const y of [0.66, 3.25]) H2.push(B(0.12, 0.05, 0.05, INOX, xt + 0.06, y, zt));
+      // l'ardoise : la cuvée à la craie (trois traits)
+      H2.push(B(0.014, 0.3, 0.42, '#2b2f2c', -66.52, 1.72, z - 0.04));
+      for (const [y, l] of [[1.8, 0.3], [1.72, 0.22], [1.64, 0.26]]) H2.push(B(0.006, 0.022, l, '#e8e4d8', -66.53, y, z - 0.04 - (0.3 - l) / 2));
+      H2.push(C(0.34, 0.34, 0.004, 12, '#77726a', -66.85, 0.064, z));
+      if (i === 2) { // l'échelle : deux montants, des barreaux, deux crochets sur le bord du chapeau
+        const ex = -66.7, ez = z - 0.45;
+        for (const dz of [-0.21, 0.21]) H2.push(B(0.045, 3.72, 0.05, FER, ex, 1.86, ez + dz), B(0.36, 0.045, 0.05, FER, ex + 0.16, 3.68, ez + dz));
+        for (let y = 0.28; y < 3.6; y += 0.3) H2.push(B(0.035, 0.035, 0.42, FER, ex, y, ez));
+      }
     });
-    // barriques sur leurs chantiers, deux rangs le long du pignon
-    for (let k = 0; k < 2; k++) {
-      H2.push(B(8.4, 0.12, 0.9, '#5a3f2b', -70.6, 0.06 + k * 0.72, -40.3));
-      for (let i = 0; i < 9; i++) { const x = -74.4 + i * 0.95; H2.push(C(0.34, 0.34, 0.88, 10, k ? '#7a5230' : CHENE, x, 0.48 + k * 0.72, -40.3, 'z'), C(0.08, 0.08, 0.02, 6, '#3a2a1e', x, 0.48 + k * 0.72, -40.75, 'z')); }
+    // la thermorégulation : deux conduites le long du mur, derrière les cuves (l'eau froide, l'eau chaude), un départ vers
+    // le chapeau de chaque cuve
+    for (const [y, c, dz] of [[4.42, '#3b6ea5', -0.09], [4.58, '#a5392d', 0.09]]) {
+      H2.push(C(0.04, 0.04, 15.6, 6, c, -64.56, y, -51.0, 'z'));
+      for (const z of cuves) H2.push(C(0.028, 0.028, 0.64, 6, c, -64.88, y, z + dz, 'x', 0, 0), C(0.028, 0.028, y - 3.78, 6, c, -65.2, (y + 3.78) / 2, z + dz, 'y', 0, 1), C(0.045, 0.045, 0.06, 8, '#c9a55a', -65.2, y - 0.25, z + dz), S(0.03, c, -65.2, y, z + dz));
+    }
+    // les barriques sur leur chantier, contre le pignon : deux madriers, onze couchées, dix par-dessus, dans les creux ; la
+    // bonde et la cuvée à la craie sur le fond de celles du dessus
+    H2.push(B(8.4, 0.12, 0.12, '#5a3f2b', -70.65, 0.06, -40.55), B(8.4, 0.12, 0.12, '#5a3f2b', -70.65, 0.06, -40.05));
+    for (let i = 0; i < 11; i++) H2.push(deplacer(geoBarrique('z'), -74.4 + i * 0.74, 0.47, -40.3));
+    for (let i = 0; i < 10; i++) {
+      const x = -74.03 + i * 0.74;
+      H2.push(deplacer(geoBarrique('z'), x, 1.064, -40.3), C(0.035, 0.035, 0.06, 6, i % 3 ? '#5a3f2b' : '#e8e4d8', x, 1.41, -40.3));
+      H2.push(B(0.16 + (i % 3) * 0.03, 0.022, 0.006, '#e8e4d8', x, 1.1, -40.78), B(0.1, 0.022, 0.006, '#e8e4d8', x - 0.02, 1.04, -40.78));
     }
     // pressoir pneumatique : la cuve couchée sur son bâti, sa porte, la trémie, le tableau de commande
     const PX = -68.6, PZ = -42.7;
@@ -1131,32 +1155,104 @@ void main() {
     for (const x of [PX - 1.1, PX + 1.1]) H2.push(C(0.835, 0.835, 0.05, 14, JOINT, x, 1.55, PZ, 'x'));
     for (const dx of [-1.3, 1.3]) for (const dz of [-0.5, 0.5]) H2.push(B(0.1, 0.55, 0.1, FER, PX + dx, 0.27, PZ + dz));
     H2.push(B(0.7, 0.5, 0.05, '#8e959c', PX, 2.1, PZ + 0.8), B(1.0, 0.5, 0.9, INOX, PX, 2.6, PZ), B(0.4, 0.6, 0.25, '#e8e4d8', PX + 1.9, 1.0, PZ + 1.0), B(0.3, 0.2, 0.02, '#2b2b30', PX + 1.9, 1.1, PZ + 1.13));
-    // égrappoir-fouloir sur roues, pompe, tuyaux couchés
+    for (const [dx, c] of [[-0.08, '#2f9e63'], [0.08, '#c0392b']]) H2.push(C(0.025, 0.025, 0.02, 8, c, PX + 1.9 + dx, 0.85, PZ + 1.13, 'z'));
+    // égrappoir-fouloir sur roues
     H2.push(B(1.4, 0.6, 0.7, INOX, -73.6, 0.75, -41.9), B(1.5, 0.35, 0.9, INOX, -73.6, 1.2, -41.9));
     for (const dx of [-0.55, 0.55]) H2.push(C(0.16, 0.16, 0.08, 8, FER, -73.6 + dx, 0.16, -41.45, 'z'));
-    H2.push(B(0.7, 0.45, 0.45, '#c0392b', -67.6, 0.4, -46.1), C(0.12, 0.12, 0.1, 8, FER, -67.6, 0.12, -45.85, 'z'));
-    for (const [x0, z0, x1, z1] of [[-67.6, -46.4, -66.5, -47.6], [-67.9, -45.8, -68.8, -44.1], [-68.8, -44.1, -71.4, -43.9]]) {
-      const l = Math.hypot(x1 - x0, z1 - z0); H2.push(C(0.06, 0.06, l, 6, '#2a2a2e', (x0 + x1) / 2, 0.07, (z0 + z1) / 2, 'z', Math.atan2(x1 - x0, z1 - z0)));
+    // la pompe à vin sur son chariot : moteur rouge, corps inox, deux roues, la poignée, le coffret ; un tuyau jusqu'à la
+    // vanne de la quatrième cuve, l'autre enroulé par terre
+    {
+      const X = -67.6, Z = -46.1, TV = '#b8543a';
+      H2.push(B(0.9, 0.05, 0.5, FER, X, 0.3, Z));
+      for (const dz of [-0.28, 0.28]) H2.push(C(0.15, 0.15, 0.06, 10, '#1e1e22', X - 0.28, 0.15, Z + dz, 'z'), C(0.06, 0.06, 0.07, 8, '#9aa1a8', X - 0.28, 0.15, Z + dz, 'z'));
+      H2.push(B(0.05, 0.25, 0.05, FER, X + 0.38, 0.17, Z));
+      H2.push(C(0.17, 0.17, 0.44, 12, '#c0392b', X + 0.1, 0.52, Z, 'x'), C(0.18, 0.18, 0.04, 12, '#8e2a22', X + 0.33, 0.52, Z, 'x'));
+      H2.push(C(0.14, 0.14, 0.22, 12, INOX, X - 0.24, 0.5, Z, 'x'), C(0.05, 0.05, 0.16, 8, INOX, X - 0.3, 0.68, Z), C(0.05, 0.05, 0.16, 8, INOX, X - 0.18, 0.68, Z - 0.12, 'z'));
+      for (const dz of [-0.2, 0.2]) H2.push(B(0.03, 0.55, 0.03, FER, X + 0.44, 0.58, Z + dz));
+      H2.push(B(0.03, 0.03, 0.43, FER, X + 0.44, 0.86, Z), B(0.16, 0.2, 0.12, '#e8e4d8', X + 0.12, 0.8, Z), C(0.02, 0.02, 0.02, 8, '#2f9e63', X + 0.12, 0.84, Z + 0.065, 'z'));
+      tuyau(H2, [[X - 0.3, 0.76, Z], [X - 0.34, 0.6, Z + 0.22], [X - 0.38, 0.1, Z + 0.45], [X - 0.75, 0.1, Z + 0.75], [X - 1.35, 0.1, Z + 0.9], [-69.6 + 0.6, 0.1, -45.1]], 0.045, TV);
+      rouleau(H2, -69.6, 0.1, -45.1, 0.6, 0.045, TV, 'y', 2);
+      tuyau(H2, [[X - 0.18, 0.76, Z - 0.2], [X - 0.2, 0.5, Z - 0.45], [X - 0.15, 0.1, Z - 0.75], [X + 0.25, 0.1, Z - 1.1], [X + 0.6, 0.1, Z - 1.45], [-66.88, 0.3, -47.66], [-66.76, 0.62, -47.7]], 0.045, TV);
     }
-    // établi et outils, seaux ; palettes de bouteilles vides filmées ; la palette des commandes du jour
+    // un tuyau enroulé, accroché au pignon au-dessus des barriques ; un autre au mur, près de la porte
+    H2.push(B(0.08, 0.08, 0.3, FER, -72.2, 2.98, -39.57), B(0.08, 0.08, 0.3, FER, -74.9, 2.6, -39.57));
+    rouleau(H2, -72.2, 2.52, -39.5, 0.45, 0.045, '#b8543a', 'z', 2, -1);
+    rouleau(H2, -74.9, 2.15, -39.5, 0.4, 0.04, '#d9dcd2', 'z', 2, -1);
+    // l'établi et ses outils, les seaux ; les palettes de cartons vides pliés ; la palette des commandes du jour
     H2.push(B(0.7, 0.06, 2.2, '#9a7b55', -75.15, 0.9, -57.2), B(0.06, 0.9, 0.06, '#6b4a30', -74.9, 0.45, -58.2), B(0.06, 0.9, 0.06, '#6b4a30', -74.9, 0.45, -56.2), B(0.04, 1.0, 2.2, '#8d7c66', -75.5, 1.55, -57.2));
     for (let i = 0; i < 5; i++) H2.push(B(0.05, 0.25 + (i % 2) * 0.1, 0.05, ['#c0392b', '#2b2b30', '#c9a55a'][i % 3], -75.45, 1.6, -58 + i * 0.35));
+    H2.push(B(0.3, 0.16, 0.5, '#c0392b', -75.15, 1.01, -57.75), B(0.06, 0.18, 0.1, '#2b2b30', -75.15, 1.02, -56.7), C(0.05, 0.05, 0.12, 8, '#c9a55a', -75.0, 0.99, -56.95)); // la caisse à outils, le bec verseur, l'entonnoir
     for (const z of [-56.4, -57.6]) H2.push(C(0.15, 0.13, 0.3, 8, ['#2e86de', '#e0b13a'][z < -57 ? 1 : 0], -73.9, 0.15, z));
     for (const [x, z] of [[-73.2, -58.2], [-71.8, -58.2]]) {
       H2.push(B(1.2, 0.14, 1.0, '#9a7b55', x, 0.07, z)); // palette de cartons vides, pliés en piles
       for (let k = 0; k < 3; k++) for (const dx of [-0.29, 0.29]) for (const dz of [-0.24, 0.24]) H2.push(B(0.56, 0.32, 0.46, (k + (dx > 0) + (dz > 0)) % 2 ? '#b98a55' : '#ad7f4c', x + dx, 0.31 + k * 0.33, z + dz));
     }
     H2.push(B(1.2, 0.14, 1.0, '#9a7b55', -71.4, 0.07, -48.1)); // la palette du jour (lieux.palette)
-    // les fenêtres, vues de dedans (le jour derrière)
-    for (const z of [-56.5, -45.5, -41.2]) H2.push(B(0.03, 1.1, 0.74, '#3d5f8e', -75.59, 1.75, z));
-    for (const z of [-58.3, -54, -49.7, -45.3, -41]) H2.push(B(0.03, 1.1, 0.74, '#3d5f8e', -64.41, 1.75, z));
+    // au mur du bureau : le tableau des cuves à la craie ; le lave-mains inox, son robinet, l'essuie-mains ; l'enrouleur
+    // d'eau ; la raclette et le balai appuyés au mur ; une grille d'évacuation au sol
+    H2.push(B(1.7, 1.05, 0.03, '#6b4a30', -71.5, 1.95, -59.15), B(1.6, 0.95, 0.03, '#2b2f2c', -71.5, 1.95, -59.13));
+    for (let k = 0; k < 5; k++) { const y = 2.3 - k * 0.17; H2.push(B(0.22, 0.03, 0.006, '#e8e4d8', -72.12, y, -59.11), B(0.5 + ((k * 37) % 5) * 0.08, 0.025, 0.006, '#e8e4d8', -71.55, y, -59.11), B(0.18, 0.025, 0.006, k === 1 ? '#e0b12a' : '#e8e4d8', -70.95, y, -59.11)); }
+    H2.push(B(0.9, 0.24, 0.5, INOX, -69.4, 0.86, -58.9), B(0.76, 0.01, 0.36, '#6f767d', -69.4, 0.985, -58.88), B(0.9, 0.32, 0.02, INOX, -69.4, 1.14, -59.15));
+    for (const dx of [-0.4, 0.4]) for (const dz of [-0.2, 0.2]) H2.push(B(0.04, 0.74, 0.04, INOX, -69.4 + dx, 0.37, -58.9 + dz));
+    H2.push(C(0.015, 0.015, 0.3, 6, INOX, -69.4, 1.15, -59.1), B(0.03, 0.03, 0.2, INOX, -69.4, 1.29, -59.0), B(0.08, 0.04, 0.03, '#c0392b', -69.4, 1.12, -59.1));
+    H2.push(B(0.28, 0.32, 0.12, '#e8e4d8', -68.7, 1.55, -59.11), B(0.2, 0.02, 0.02, '#9aa0a6', -68.7, 1.38, -59.05), B(0.08, 0.16, 0.08, '#4a9a5a', -69.75, 1.06, -59.05));
+    // (l'enrouleur : son tambour couché le long du mur, le tuyau vert enroulé, deux joues, la platine, la manivelle)
+    H2.push(B(0.36, 0.12, 0.04, '#5d6b78', -67.75, 1.2, -59.16), C(0.2, 0.2, 0.18, 14, '#2f6b3a', -67.75, 1.2, -58.97, 'x', 0, 0));
+    for (const dx of [-0.1, 0.1]) H2.push(C(0.25, 0.25, 0.02, 14, '#8d9196', -67.75 + dx, 1.2, -58.97, 'x'), B(0.02, 0.06, 0.2, '#5d6b78', -67.75 + dx, 1.2, -59.06));
+    H2.push(C(0.02, 0.02, 0.32, 6, '#e0b12a', -67.75, 1.2, -58.97, 'x'), B(0.02, 0.14, 0.02, '#e0b12a', -67.58, 1.14, -58.97));
+    tuyau(H2, [[-67.75, 1.0, -58.95], [-67.72, 0.55, -58.85], [-67.65, 0.1, -58.7], [-67.9, 0.1, -58.3], [-68.2, 0.1, -58.4]], 0.022, '#2f6b3a');
+    tuyau(H2, [[-70.62, 0.09, -58.72], [-70.62, 1.45, -59.12]], 0.013, '#9a7b55'); H2.push(B(0.45, 0.07, 0.05, '#2b2b30', -70.62, 0.07, -58.7));
+    tuyau(H2, [[-70.25, 0.2, -58.8], [-70.25, 1.5, -59.12]], 0.013, '#9a7b55'); H2.push(B(0.3, 0.18, 0.08, '#c9a55a', -70.25, 0.13, -58.75));
+    H2.push(B(0.3, 0.008, 0.3, '#3a3a3e', -69.4, 0.064, -58.2));
+    for (let k = -2; k <= 2; k++) H2.push(B(0.26, 0.01, 0.025, '#8e959c', -69.4, 0.07, -58.2 + k * 0.055));
+    // la rigole le long des cuves : sa grille
+    for (let z = -57.4; z < -42.5; z += 0.25) H2.push(B(0.17, 0.012, 0.03, '#78736b', -66.8, 0.07, z));
+    // au mur de la porte : l'armoire électrique et ses gaines, le détecteur de gaz carbonique (au ras du sol : le gaz est
+    // lourd), l'extincteur et son panneau ; les étagères des produits du chai ; le ventilateur d'extraction en haut
+    H2.push(B(0.16, 0.85, 0.6, '#d9dcdf', -75.5, 1.6, -54.7), B(0.012, 0.8, 0.008, '#9aa0a6', -75.415, 1.6, -54.7), B(0.012, 0.12, 0.12, '#e0b12a', -75.415, 1.85, -54.55), B(0.02, 0.06, 0.03, '#2b2b30', -75.41, 1.6, -54.47));
+    for (const dz of [-0.18, 0, 0.18]) H2.push(B(0.05, 3.75, 0.05, '#9aa0a6', -75.52, 3.9, -54.7 + dz));
+    H2.push(B(0.05, 0.05, 10.0, '#9aa0a6', -75.52, 5.6, -50.3));
+    H2.push(B(0.06, 0.16, 0.11, '#e8e4d8', -75.53, 0.45, -54.0), B(0.065, 0.03, 0.03, '#c0392b', -75.5, 0.5, -54.0));
+    H2.push(C(0.085, 0.085, 0.5, 10, '#c0392b', -75.45, 0.95, -49.55), B(0.06, 0.1, 0.06, '#2b2b30', -75.45, 1.25, -49.55), B(0.04, 0.3, 0.04, '#2b2b30', -75.38, 1.0, -49.45), B(0.03, 0.06, 0.14, '#5d6b78', -75.55, 1.15, -49.55));
+    H2.push(B(0.012, 0.26, 0.2, '#c0392b', -75.56, 1.65, -49.55), B(0.014, 0.12, 0.07, '#f1e8d2', -75.555, 1.65, -49.55));
+    {
+      const X = -75.3, Z = -47.9, h = 1.9;
+      for (const dx of [-0.22, 0.22]) for (const dz of [-0.95, 0.95]) H2.push(B(0.035, h, 0.035, '#5d6b78', X + dx, h / 2, Z + dz));
+      for (const y of [0.12, 0.62, 1.12, 1.62]) H2.push(B(0.5, 0.025, 1.94, '#8d9196', X, y, Z));
+      // dessus : bidons, sacs, cartons des produits du chai (levures, tanins, bentonite, sulfites), pots
+      for (const [y, items] of [[0.14, [[-0.6, 0.36, 0.34, '#f1e8d2'], [-0.15, 0.36, 0.34, '#f1e8d2'], [0.45, 0.3, 0.5, '#e8e4d8']]], [0.64, [[-0.65, 0.3, 0.3, '#2e86de'], [-0.25, 0.3, 0.3, '#2e86de'], [0.2, 0.22, 0.25, '#c9a55a'], [0.6, 0.22, 0.25, '#c9a55a']]], [1.14, [[-0.6, 0.2, 0.2, '#e0b13a'], [-0.3, 0.2, 0.2, '#e0b13a'], [0.1, 0.26, 0.3, '#ad7f4c'], [0.55, 0.26, 0.3, '#b98a55']]], [1.64, [[-0.55, 0.18, 0.22, '#f1e8d2'], [-0.2, 0.18, 0.22, '#d9dcdf'], [0.35, 0.22, 0.36, '#ad7f4c']]]])
+        for (const [dz, hh, w, c] of items) H2.push(B(0.36, hh, w, c, X + 0.02, y + 0.015 + hh / 2, Z + dz));
+    }
+    H2.push(B(0.6, 0.6, 0.06, '#9aa0a6', -67.6, 5.1, -39.46), C(0.24, 0.24, 0.05, 12, '#2b2b30', -67.6, 5.1, -39.5, 'z'));
+    H2.push(B(0.42, 0.05, 0.012, '#5d6b78', -67.6, 5.1, -39.53), B(0.05, 0.42, 0.012, '#5d6b78', -67.6, 5.1, -39.53));
+    // une palette de bouteilles vides, filmée (couches de verre et intercalaires) ; un fût debout pour goûter : deux
+    // bouteilles, trois verres, le crachoir
+    {
+      const X = -74.75, Z = -44.0;
+      H2.push(B(1.2, 0.14, 1.0, '#9a7b55', X, 0.07, Z));
+      for (let k = 0; k < 4; k++) H2.push(B(1.14, 0.3, 0.96, '#2c4a36', X, 0.31 + k * 0.32, Z), B(1.17, 0.02, 0.99, '#c9a46a', X, 0.47 + k * 0.32, Z));
+      H2.push(B(1.18, 0.04, 1.0, '#d8e2dc', X, 1.42, Z));
+      H2.push(deplacer(geoBarrique('y'), -73.1, 0.475, -45.7));
+      for (const [dx, dz] of [[-0.08, 0.05], [0.06, -0.08]]) H2.push(C(0.037, 0.037, 0.2, 8, '#1f3b2a', -73.1 + dx, 1.05, -45.7 + dz), C(0.014, 0.022, 0.08, 6, '#1f3b2a', -73.1 + dx, 1.19, -45.7 + dz), C(0.016, 0.016, 0.03, 6, '#5b1424', -73.1 + dx, 1.245, -45.7 + dz));
+      for (const [dx, dz] of [[0.14, 0.12], [-0.16, -0.12], [0.18, -0.1]]) H2.push(C(0.03, 0.022, 0.07, 8, '#cfdde3', -73.1 + dx, 1.07, -45.7 + dz), C(0.004, 0.004, 0.06, 4, '#cfdde3', -73.1 + dx, 1.0, -45.7 + dz), C(0.025, 0.025, 0.005, 8, '#cfdde3', -73.1 + dx, 0.955, -45.7 + dz));
+      H2.push(C(0.13, 0.1, 0.22, 10, INOX, -72.55, 0.11, -45.55));
+    }
+    // les fenêtres, vues de dedans (le jour derrière) : leur cadre de bois, l'appui
+    for (const [x, z, s] of [...[-56.5, -45.5, -41.2].map(z => [-75.59, z, 1]), ...[-58.3, -54, -49.7, -45.3, -41].map(z => [-64.41, z, -1])]) {
+      H2.push(B(0.03, 1.1, 0.74, '#3d5f8e', x, 1.75, z));
+      for (const dz of [-0.4, 0.4]) H2.push(B(0.05, 1.2, 0.06, '#8d7c66', x + s * 0.02, 1.75, z + dz));
+      for (const y of [1.17, 2.33]) H2.push(B(0.05, 0.06, 0.86, '#8d7c66', x + s * 0.02, y, z));
+      H2.push(B(0.02, 1.1, 0.03, '#8d7c66', x + s * 0.025, 1.75, z), B(0.16, 0.04, 0.9, '#d8cbb0', x + s * 0.08, 1.14, z));
+    }
     const halle = new THREE.Mesh(fusion(H2), MAT);
     halle.receiveShadow = true; halle.castShadow = false; halle.name = 'chai'; // dedans, le soleil est coupé (definirInterieur) : l'ombre du toit ne compte qu'au-dessus des murs
     scene.add(halle);
     o.halle = halle; // dessiné seulement de près, porte ouverte, ou quand on est dedans (main.js)
     // ce qui arrête : cuves, chantiers, pressoir, égrappoir, pompe, établi, palettes
     for (const z of cuves) col.boiteC(-65.6, z, 1.9, 1.9).haut = true;
-    for (const [x0, z0, x1, z1] of [[-75, -40.8, -66.1, -39.4], [-70.2, -43.4, -67.0, -42.0], [-74.4, -42.4, -72.8, -41.4], [-68, -46.4, -67.2, -45.8], [-75.6, -58.3, -74.8, -56.1], [-73.8, -58.7, -71.2, -57.7]]) col.boite(x0, z0, x1, z1);
+    for (const [x0, z0, x1, z1] of [[-75, -40.8, -66.1, -39.4], [-70.2, -43.4, -67.0, -42.0], [-74.4, -42.4, -72.8, -41.4], [-68.1, -46.45, -67.1, -45.75], [-75.6, -58.3, -74.8, -56.1], [-73.8, -58.7, -71.2, -57.7],
+      [-69.9, -59.2, -68.9, -58.6], [-75.6, -48.9, -75.05, -46.9], [-75.4, -44.55, -74.1, -43.45], [-75.6, -55.05, -75.35, -54.35]]) col.boite(x0, z0, x1, z1);
+    col.boiteC(-73.1, -45.7, 0.72, 0.72);
     // la grande porte : deux vantaux de planches sur leurs gonds, qui s'ouvrent vers la cour (main.js les anime)
     const vantail = s => {
       const g = new THREE.Group(), L2 = [];
@@ -1345,17 +1441,6 @@ void main() {
   // Domaine du Clos Libre
   const VOLETS = ['#5d7d8f', '#7a8f6a', '#9aa3ad', '#6b7f99', '#8e6f5a', '#5f8a87'];
   maison({ x: -100, z: -64, w: 16, d: 10, h: 7.2, rot: 0, volets: '#6b7f99', porteC: '#3e4f63' });
-  const chai = chaiEtBureau();
-  {
-    enseigne('CHAI', facade(chai, 0, 0.12), 5.75, 2.2, 0.62, '#5b3a2a', '#f1e2c4');
-  }
-  /* -- Le parvis du chai (Teddy, 24/11/2026 : « des artefacts viticoles, réalistes, et que ça vive »). Au nord de la grande
-     porte, le chantier des barriques, le poste de rinçage (une barrique couchée sur son berceau d'inox, le nettoyeur haute
-     pression et son tuyau, une flaque, le caniveau à grille), des barriques rincées debout qui s'égouttent ; dans le coin
-     contre le muret, une remorque plateau chargée de caisses de vendange que l'on range sur des palettes, deux palox ;
-     près du bureau, un demi-fût planté (le vieux pressoir à cage est près de l'arbre de la cour). Ceux qui y travaillent, les caisses (en instances), le
-     chien, les moineaux : parvis.js. Rien sur les passages des véhicules (la cour, la porte, le bureau), ni sur la marche
-     arrière qui ressort du chai (chai.js, cheminSortie). */
   const FUT = '#7a4a2a', CERCLE = '#3a3a3e', INOX = '#a3aab2';
   // une barrique de 225 L, tournée (axe y, centre à l'origine) : les douelles (une sur deux un peu plus sombre), le bouge
   // au milieu (70 cm), les fonds (58 cm) et leur jable, quatre cercles de fer peints à même le bois (sans facette de plus) ;
@@ -1385,6 +1470,37 @@ void main() {
     bati.push(deplacer(geoBarrique(axe), x, y, z));
     if (bonde && axe !== 'y') bati.push(C(0.035, 0.035, 0.06, 6, '#5a3f2b', x, y + 0.35, z));
   };
+  // un tuyau souple, de point en point ([x, y, z]) : des tronçons de cylindre sans couvercle, un nœud à chaque coude
+  const tuyau = (L, pts, r, c, seg = 6) => {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const g = C(r, r, l, seg, c, 0, 0, 0, 'y', 0, 0);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3((b[0] - a[0]) / l, (b[1] - a[1]) / l, (b[2] - a[2]) / l)));
+      L.push(deplacer(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2));
+      if (i < pts.length - 1) L.push(S(r, c, b[0], b[1], b[2]));
+    }
+  };
+  // un tuyau enroulé : n spires de rayon R autour de (x, y, z), à plat (axe 'y') ou accroché à un mur perpendiculaire à
+  // l'axe 'x' ou 'z' ; les spires se décalent de s * 2r le long de l'axe (s : vers l'intérieur de la pièce)
+  const rouleau = (L, x, y, z, R, r, c, axe = 'y', n = 2, s = 1) => {
+    const pts = [];
+    for (let k = 0; k <= n * 14; k++) {
+      const a = k / 14 * Math.PI * 2, rr = R * (1 - 0.04 * k / 14), u = Math.cos(a) * rr, v = Math.sin(a) * rr, w = s * k / 14 * r * 2.1;
+      pts.push(axe === 'y' ? [x + u, y + w, z + v] : axe === 'x' ? [x + w, y + u, z + v] : [x + u, y + v, z + w]);
+    }
+    tuyau(L, pts, r, c);
+  };
+  const chai = chaiEtBureau();
+  {
+    enseigne('CHAI', facade(chai, 0, 0.12), 5.75, 2.2, 0.62, '#5b3a2a', '#f1e2c4');
+  }
+  /* -- Le parvis du chai (Teddy, 24/11/2026 : « des artefacts viticoles, réalistes, et que ça vive »). Au nord de la grande
+     porte, le chantier des barriques, le poste de rinçage (une barrique couchée sur son berceau d'inox, le nettoyeur haute
+     pression et son tuyau, une flaque, le caniveau à grille), des barriques rincées debout qui s'égouttent ; dans le coin
+     contre le muret, une remorque plateau chargée de caisses de vendange que l'on range sur des palettes, deux palox ;
+     près du bureau, un demi-fût planté (le vieux pressoir à cage est près de l'arbre de la cour). Ceux qui y travaillent, les caisses (en instances), le
+     chien, les moineaux : parvis.js. Rien sur les passages des véhicules (la cour, la porte, le bureau), ni sur la marche
+     arrière qui ressort du chai (chai.js, cheminSortie). */
   // le chantier contre le chai : deux madriers, six barriques couchées, cinq par-dessus, dans les creux
   bati.push(B(0.12, 0.12, 4.6, '#5a3f2b', -77.25, 0.06, -44.45), B(0.12, 0.12, 4.6, '#5a3f2b', -76.75, 0.06, -44.45));
   for (let i = 0; i < 6; i++) barrique(-77, 0.47, -46.3 + i * 0.74);
@@ -1403,13 +1519,8 @@ void main() {
   bati.push(B(0.5, 0.62, 0.62, '#e0b12a', -81.6, 0.5, -47.6), B(0.52, 0.06, 0.64, '#2b2b30', -81.6, 0.82, -47.6), B(0.04, 0.5, 0.04, '#2b2b30', -81.85, 1.05, -47.85), B(0.04, 0.5, 0.04, '#2b2b30', -81.85, 1.05, -47.35));
   bati.push(B(0.04, 0.04, 0.54, '#2b2b30', -81.85, 1.3, -47.6), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.95, 'z'), C(0.17, 0.17, 0.1, 10, '#2b2b30', -81.62, 0.2, -47.25, 'z'));
   bati.push(C(0.2, 0.2, 0.3, 10, '#2f4a32', -81.55, 1.0, -47.6, 'z'));
-  {
-    const pts = [[-81.3, -47.35], [-81.0, -46.95], [-80.5, -46.9], [-80.1, -46.8], [-79.75, -46.85], [-79.45, -46.7]]; // jusqu'aux pieds du rinceur, entre ses deux places
-    for (let i = 1; i < pts.length; i++) {
-      const [ax, az] = pts[i - 1], [bx, bz] = pts[i], l = Math.hypot(bx - ax, bz - az);
-      bati.push(C(0.022, 0.022, l + 0.04, 5, '#1e1e22', (ax + bx) / 2, 0.05, (az + bz) / 2, 'z', Math.atan2(bx - ax, bz - az)));
-    }
-  }
+  // (jusqu'aux pieds du rinceur, entre ses deux places)
+  tuyau(bati, [[-81.3, -47.35], [-81.0, -46.95], [-80.5, -46.9], [-80.1, -46.8], [-79.75, -46.85], [-79.45, -46.7]].map(([x, z]) => [x, 0.05, z]), 0.022, '#1e1e22', 5);
   col.boiteC(-81.6, -47.6, 0.7, 0.75);
   // l'enrouleur d'eau au mur, à côté de la porte
   bati.push(C(0.26, 0.26, 0.1, 12, '#c0392b', -76.12, 1.2, -47.9, 'x'), C(0.22, 0.22, 0.14, 12, '#2f6b3a', -76.18, 1.2, -47.9, 'x'), B(0.05, 1.1, 0.06, '#5d6b78', -76.06, 0.55, -47.9));
@@ -3257,9 +3368,9 @@ void main() {
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
   lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
-  // gerbeur électrique de Marc : transpalette.js) dans la troisième travée
+  // gerbeur électrique de Marc : transpalette.js) dans la troisième travée, contre le poteau, à côté de la remorque rangée
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
-  lieux.transpalette = { x: -62.75, z: -84.4, h: 0 };
+  lieux.transpalette = { x: -64.45, z: -84.4, h: 0 };
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   // deux voitures de visiteurs sur le parking du domaine ; la voiture du personnel de l'imprimerie, garée dans la cour de
   // l'entrepôt, entre ses deux lignes blanches
@@ -3290,6 +3401,10 @@ void main() {
      les six places des palox dans le hangar, près de la ligne d'habillage, en trois rangs de deux, l'un sur l'autre (le
      milieu du palox au sol ; y : posé sur le sol ou sur un autre ; h : le cap du chariot qui le pose, fourches vers la ligne). */
   lieux.remorque = { x: -94.5, z: -22, h: 0, approche: { x: -90, z: -4.8 } };
+  // Le reste du temps, elle est rangée vide sous le hangar, dans la troisième travée, le timon vers la cour (Teddy,
+  // 26/11/2026 : « pas tout le temps dehors, rangée près du carport ») : elle ne sort devant le domaine que pour la
+  // mission 3 (Marc la prépare). Sa boîte : x de -63,4 à -61,0, z de -88,7 à -82,4 (le broyeur commence à -89).
+  lieux.remorque.range = { x: -62.2, z: -85.4, h: 0 };
   // Au retour de l'imprimerie (mission 3), la remorque des bouteilles habillées se pose au chai : dans la cour, juste
   // derrière le portail, dans l'axe de l'allée, le timon vers le chai et la maison (chai : le milieu de son tandem ; arret :
   // la balise, sur l'allée ; le tracteur avance tout seul pour l'y poser, puis on la dételle)

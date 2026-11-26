@@ -7,8 +7,11 @@
 //    deux voisins, les feuilles prennent un voile bleuté. Une fois engagé dans un rang, il fait toute la parcelle tout
 //    seul, passage après passage, demi-tours compris : on ne gère que l'avance (main.js) ; la scène va trois fois plus
 //    vite.
-// 3. Dans le Registre phyto (téléphone), on note le traitement : les parcelles traitées, les produits et leurs doses, le
-//    stade (repris du dernier traitement), la cible. En bas des Grands Champs, pas de réseau : noté, envoyé quand ça capte.
+// 3. Dans le Registre phyto (téléphone), on note chaque parcelle dès qu'elle est traitée, avant la suivante (une saisie
+//    par parcelle ; Teddy, 26/11/2026) : la parcelle, les produits et leurs doses, le stade (repris du dernier
+//    traitement), la cible. L'enjambeur s'arrête au bout de la parcelle, le téléphone vibre (Registre phyto), on dit quelle
+//    appli ouvrir, et l'appli guide chaque écran (consignes, ce qu'il faut toucher) ; la suivante n'est pas traitée tant
+//    que celle-ci n'est pas notée. En bas des Grands Champs, pas de réseau : noté, envoyé tout seul quand ça capte.
 // Pour finir toujours : l'objectif est recalculé à chaque image d'après l'état ; l'appli refuse une saisie qui ne
 // correspond pas à ce qui a été fait, et dit pourquoi.
 import { TRAITEMENT as TX } from './textes.js';
@@ -22,6 +25,7 @@ const TOUR = 4.2;           // rayon des demi-tours dans les tournières (l'enja
 // engagé dans un rang : à moins de 0,9 m de l'axe d'un passage, dans son sens à 0,45 rad près (il pulvérise déjà)
 const ENGAGE_X = 0.9, ENGAGE_CAP = 0.45;
 const RAPPEL = 8;           // secondes au moins entre deux aides dites en route
+const ARRET = 2.5;          // secondes où l'enjambeur freine tout seul, une parcelle finie (main.js : conduire)
 const ENVOI = 1.5;          // secondes de réseau retrouvé avant l'envoi de ce qui attend
 // pas de réseau en bas des Grands Champs (le chemin, la parcelle, le hameau)
 export const sansReseau = p => p.x > -72 && p.x < 4 && p.z > 22;
@@ -30,8 +34,6 @@ export const sansReseau = p => p.x > -72 && p.x < 4 && p.z > 22;
 const ENTREES = { perrieres: { x: -147, z: -114 }, clos: { x: -36, z: -114 }, grandschamps: { x: -29, z: 26 } };
 const RESEAU = { x: -55, z: 14 };
 const STABLES = new Set(['debut', 'message', 'preparer', 'traiter', 'fin', 'dodo', 'libre']);
-
-const aNoter = p => p.traitee && !p.notee;
 
 export class Traitement {
   // c : { monde (vignes, traiter), particules, pulve (le pulvérisateur de l'enjambeur, enjambeur.js), deplier (ses bras),
@@ -56,6 +58,8 @@ export class Traitement {
     this.guidage = false;        // l'enjambeur est dans une parcelle du jour : le guidage peut suivre les passages
     this.engage = false;         // engagé dans un rang : il fait toute la parcelle tout seul, on ne gère que l'avance
     this.tEnvoi = 0; this.tSon = 0; this.guideDit = false; this.dit = false; this.tObj = 0;
+    this.tArret = 0;             // une parcelle finie : l'enjambeur freine tout seul (main.js)
+    this.aDire = null;           // ce qui se dit une fois le téléphone fermé (il couvre les sous-titres)
   }
   get actif() { return this.etape !== 'avant'; }
   // (des listes neuves : pour l'objectif, dix fois par seconde, et le téléphone ; à chaque image, voir premiereATraiter,
@@ -65,6 +69,8 @@ export class Traitement {
   get enAttente() { return this.registre.filter(l => l.statut === 'attente'); }
   get attend() { for (const l of this.registre) if (l.statut === 'attente') return true; return false; }
   get premiereATraiter() { for (const p of this.jour) if (!p.traitee) return p; return null; }
+  // une parcelle traitée attend sa saisie : la suivante attend (pas de balise, les rampes restent repliées)
+  get attendNote() { for (const p of this.parcelles) if (p.traitee && !p.notee) return true; return false; }
   get fini() { for (const p of this.jour) if (!p.notee) return false; return !this.attend; }
   noms(l) { const n = l.map(p => p.nom); return n.length > 1 ? n.slice(0, -1).join(', ') + ' et ' + n[n.length - 1] : n[0]; }
   // l'enjambeur conduit (le pulvérisateur est dessus)
@@ -121,7 +127,7 @@ export class Traitement {
     if (e === 'dodo') return this.j.finVue ? null : L.maison;
     if (e === 'preparer') return L.aire;
     if (e !== 'traiter') return null;
-    if (!this.j.auVolant && this.parcelles.some(aNoter)) return null; // à pied : on note, rien à rejoindre
+    if (this.attendNote) return null; // une parcelle à noter : on la note d'abord, rien à rejoindre
     const p = this.prochaine;
     if (p) {
       if (this.dans(8) !== p) return ENTREES[p.id];
@@ -201,22 +207,19 @@ export class Traitement {
   get objectif() {
     const e = this.etape, O = TX.objectifs, j = this.j;
     if (e === 'avant') return null;
-    if (e === 'debut' || e === 'message') return O.message;
+    if (e === 'debut' || e === 'message') return O.message(j.tactile);
     if (e === 'preparer') return this.enEnjambeur ? O.aire : O.enjambeur;
     if (e === 'dodo') return O.dodo;
     if (e === 'fin' || e === 'libre') return O.fin;
     if (e === 'remplir') return O.aire;
-    // traiter : noter ce qui est traité dès qu'on s'arrête ; sinon traiter ce qui reste ; envoyer ce qui attend
-    // (on note les deux parcelles près du domaine une fois toutes deux traitées ; les Grands Champs, sur place, tout de suite)
+    // traiter : une parcelle traitée se note tout de suite (une saisie par parcelle), avant la suivante ; puis la
+    // suivante ; enfin, ce qui attend part quand ça capte
     const aN = this.aNoter, p = this.prochaine;
-    if (aN.length && (!p || !j.auVolant || j.tel.ouvert || aN.some(x => !x.reseau) || !this.aTraiter.some(x => x.reseau))) return (this.reseau ? O.noter : O.noterIci)(this.noms(aN));
+    if (aN.length) return (this.reseau ? O.noter : O.noterIci)(this.noms(aN), j.tactile);
     if (p) {
-      const proches = this.aTraiter.filter(x => x.reseau), cur = this.dans(8);
-      const liste = cur && !cur.traitee ? [cur] : proches.length ? proches : this.aTraiter;
-      const pc = cur && !cur.traitee ? Math.floor(100 * cur.faites / cur.total) : 0;
-      return O.traiter(this.noms(liste), pc);
+      const cur = this.dans(8), pc = cur === p ? Math.floor(100 * p.faites / p.total) : 0;
+      return O.traiter(p.nom, this.jour.reduce((n, x) => n + (x.traitee ? 1 : 0), 1), pc); // (la n-ième, dans l'ordre où on les fait)
     }
-    if (aN.length) return (this.reseau ? O.noter : O.noterIci)(this.noms(aN));
     if (this.attend) return O.envoyer;
     return O.fin;
   }
@@ -226,6 +229,9 @@ export class Traitement {
     if (this.etape === 'avant') return;
     this.t += dt; this.horloge += dt;
     this.tRappel = Math.max(0, this.tRappel - dt);
+    this.tArret = Math.max(0, this.tArret - dt);
+    // (ce qui restait à dire de la parcelle finie ne sert plus : la suite d'abord)
+    if (this.aDire && !j.tel.ouvert) { j.hud.vider(); j.hud.dire(this.aDire); this.aDire = null; }
     // l'itinéraire : refait si l'on s'en est écarté de plus de 25 m
     if (this.itin && !this.itin.p && (this.tItin -= dt) <= 0) {
       this.tItin = 0.5;
@@ -281,16 +287,19 @@ export class Traitement {
   traiter(dt) {
     const j = this.j, hud = j.hud;
     for (const p of this.jour) if (!p.traitee && p.faites >= p.total * FAITE) {
-      p.traitee = true; this.itin = null;
+      // finie : l'enjambeur s'arrête, le téléphone vibre (Registre phyto) ; on la note avant la suivante
+      p.traitee = true; this.itin = null; this.tArret = ARRET;
       son.jouer('succes');
       hud.banniere(...TX.bannieres.traitee(p.nom), 3);
-      if (!p.reseau) hud.dire(TX.dialogues.sansReseau);
-      else if (this.aTraiter.some(x => x.reseau)) hud.dire(TX.dialogues.parcelleFinie(p.nom));
-      else hud.dire(TX.dialogues.noter);
+      hud.vider();
+      hud.dire((p.reseau ? TX.dialogues.parcelleFinie : TX.dialogues.sansReseau)(p.nom, j.tactile));
+      this.notifier('phyto');
     }
     // arrivé dans une parcelle du jour avec la bouillie : le guidage ; avec un autre véhicule : il faut l'enjambeur
     if (this.guidage && !this.guideDit) { this.guideDit = true; hud.dire(TX.dialogues.guidage(j.tactile)); }
     if (j.auVolant && j.veh.genre !== 'enjambeur' && this.dans(2)) this.aider(TX.dialogues.pasEnjambeur, 'parcelle');
+    // dans la parcelle suivante sans avoir noté la précédente : d'abord la saisie
+    if (this.attendNote && this.enEnjambeur && !j.tel.ouvert) { const d = this.dans(2); if (d && !d.traitee) this.aider(TX.dialogues.dAbord(this.noms(this.aNoter)), 'noter'); }
     // au bout des passages sans avoir tout traité (on en a sauté, à la main), ou loin d'eux : on refait le plan depuis ici
     if (this.itin && this.itin.p && j.auVolant && (this.tItin -= dt) <= 0) {
       this.tItin = 0.5;
@@ -319,7 +328,7 @@ export class Traitement {
   // ailleurs. pas : ses descentes traitent les rangs qu'elles longent en roulant ; appelé à chaque pas de la conduite
   // (main.js), même accélérée.
   rampes(dt) {
-    const P = this.c.pulve, p = this.prete && this.enEnjambeur ? this.dans(8) : null;
+    const P = this.c.pulve, p = this.prete && this.enEnjambeur && !this.attendNote ? this.dans(8) : null;
     this.guidage = !!p && !p.traitee;
     // engagé dans un rang, il le reste jusqu'au bout de la parcelle (ou si l'on en sort, ou qu'on descend)
     if (!this.guidage) this.engage = false;
@@ -375,6 +384,8 @@ export class Traitement {
       if (!s.parcelles.size) return A.aucune;
       const non = this.parcelles.filter(p => s.parcelles.has(p.id) && !p.traitee);
       if (non.length) return A.pasTraitee(this.noms(non), non.length);
+      const deja = this.parcelles.filter(p => s.parcelles.has(p.id) && p.notee);
+      if (deja.length) return A.deja(this.noms(deja), deja.length);
       return null;
     }
     if (s.etape === 'produits') {
@@ -416,6 +427,9 @@ export class Traitement {
     this.saisie = null;
     son.jouer(en ? 'envoye' : 'notif');
     j.hud.banniere(...(en ? TX.bannieres.note(parcs.length) : TX.bannieres.attente), 3);
+    // la suite, dite une fois le téléphone fermé : la parcelle suivante, ou remonter là où ça capte
+    const suite = this.premiereATraiter;
+    this.aDire = !en ? TX.dialogues.noteAttente : suite ? TX.dialogues.note(suite.nom) : null;
     return en;
   }
 }

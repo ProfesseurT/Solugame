@@ -722,27 +722,58 @@ if (scenario === 'traitement') {
       CL.teleporter(-86, -66, Math.PI); CL.step(20); CL.finirGeste(3000); CL.step(10); // (l'échelle, en bas et en haut : plus long)
       log.push(['à l\'aire de remplissage, la bouillie est prête ; on est de nouveau au volant de l\'enjambeur', T.prete && T.etape === 'traiter' && J.auVolant && J.veh.genre === 'enjambeur']);
       const [p1, t1, e1, g1, k1] = traiter('perrieres', -147, -116);
-      const [p2, t2, e2, g2] = traiter('clos', -36, -116);
-      log.push([`Les Perrières (${t1.toFixed(0)} s) et Le Clos (${t2.toFixed(0)} s) traités : engagé dans un rang, l'enjambeur fait toute la parcelle, à plus de 97 %`, p1.traitee && p2.traitee && g1 && g2 && t1 < 160 && t2 < 160]);
+      log.push([`Les Perrières traitées (${t1.toFixed(0)} s) : engagé dans un rang, l'enjambeur fait toute la parcelle, à plus de 97 %, puis s'arrête au bout`, p1.traitee && g1 && t1 < 160 && Math.abs(CL.tr.v) < 0.5]);
       log.push([`engagé, le volant ne fait rien : la flèche de droite tenue ${(k1 / 60).toFixed(1)} s, il reste sur le rang (écart ${e1.toFixed(2)} m)`, k1 >= 60 && e1 < 0.6]);
-      log.push(['ensuite : les noter dans le Registre phyto', obj().startsWith('Notez le traitement')]);
-      tel.ouvrir('phyto'); tel.action('rp-nouveau'); tel.action('rp-cocher:grandschamps'); tel.action('rp-suite');
+      // une saisie par parcelle (Teddy, 26/11/2026) : on dit laquelle noter et quelle appli ouvrir ; le téléphone vibre,
+      // l'icône du Registre phyto est mise en évidence ; la parcelle suivante attend
+      log.push(['ensuite : noter Les Perrières, tout de suite (l\'objectif dit le téléphone et l\'appli ; le Registre phyto vibre)', obj().startsWith('Notez Les Perrières dans le Registre phyto') && tel.notif === 'phyto' && !T.cible]);
+      tel.ouvrir('accueil');
+      log.push(['l\'écran d\'accueil : la notification du Registre phyto, son icône mise en évidence', !!document.querySelector('#app .ph-notif[data-a="ouvrir:phyto"]') && !!document.querySelector('#app .ph-ico.conseil [class~="phyto"]')]);
+      tel.fermer();
+      { // dans Le Clos sans avoir noté Les Perrières : les rampes restent repliées, on dit de noter d'abord
+        const c = T.parcelles.find(q => q.id === 'clos');
+        CL.teleporter(-36, -116, 0); CL.step(10); CL.ctrl.ky = -1; CL.step(300); CL.ctrl.ky = 0; CL.step(20);
+        log.push(['dans Le Clos sans avoir noté Les Perrières : rien n\'est traité, on dit de noter d\'abord', c.faites === 0 && !T.guidage && T.ouvert < 0.05 && T.aideCle === 'noter']);
+      }
+      tel.ouvrir();
+      const cons = () => document.querySelector('#app .consigne')?.textContent || '';
+      log.push(['le téléphone s\'ouvre sur le Registre phyto : la consigne, « Noter un traitement » mis en évidence', tel.app === 'phyto' && cons().includes('Noter un traitement') && !!document.querySelector('#app [data-a="rp-nouveau"].guide')]);
+      tel.action('rp-nouveau');
+      log.push(['étape 1 : la consigne dit de cocher Les Perrières, mise en évidence', cons().includes('Cochez Les Perrières') && !!document.querySelector('#app .rp-case.guide[data-a="rp-cocher:perrieres"]')]);
+      tel.action('rp-cocher:clos'); tel.action('rp-suite');
       const refusP = tel.app === 'phytoP' && toast().includes('pas encore traitée');
-      tel.action('rp-cocher:grandschamps'); tel.action('rp-cocher:perrieres'); tel.action('rp-cocher:clos'); tel.action('rp-suite');
+      tel.action('rp-cocher:clos'); tel.action('rp-cocher:perrieres');
+      const suiteVue = !!document.querySelector('#app [data-a="rp-suite"].guide');
+      tel.action('rp-suite');
+      const guideDose = cons().includes('1,5 kg/ha') && !!document.querySelector('#app [data-a="rp-dose:cuivre:1"].guide');
       tel.action('rp-dose:synthese:1'); tel.action('rp-suite'); const refusBio = tel.app === 'phytoD' && toast().includes('bio');
       tel.action('rp-dose:synthese:-1'); tel.action('rp-dose:soufre:1'); tel.action('rp-suite'); const refusCuve = tel.app === 'phytoD' && toast().includes('pas dans la cuve');
       tel.action('rp-dose:soufre:-1'); for (let i = 0; i < 2; i++) tel.action('rp-dose:cuivre:1'); tel.action('rp-suite');
       const refusDose = tel.app === 'phytoD' && toast().includes('1,5 kg/ha');
       tel.action('rp-dose:cuivre:1'); tel.action('rp-suite'); tel.action('rp-suite'); tel.action('rp-cible:Oïdium'); tel.action('rp-suite');
-      const refusCible = tel.app === 'phytoC';
+      const refusCible = tel.app === 'phytoC' && !!document.querySelector('#app .rp-puce.guide[data-a="rp-cible:Mildiou"]');
       tel.action('rp-cible:Oïdium'); tel.action('rp-cible:Mildiou'); tel.action('rp-suite'); tel.action('rp-enregistrer');
+      log.push(['le registre guide chaque écran (la parcelle, le + de la dose, la cible, Suivant quand c\'est juste)', suiteVue && guideDose]);
       log.push(['le registre refuse une parcelle pas traitée, un produit pas bio, le soufre (pas dans la cuve), une mauvaise dose, une autre cible', refusP && refusBio && refusCuve && refusDose && refusCible]);
-      log.push(['enregistré : une ligne de plus, envoyée, qui dit qui a saisi et quand', T.registre.length === 3 && T.registre[0].statut === 'envoye' && T.registre[0].par.startsWith('vous') && !/· 0/.test(T.registre[0].quand)]);
+      log.push(['enregistré : une ligne de plus, Les Perrières seules, envoyée, qui dit qui a saisi et quand ; la suite : Le Clos', T.registre.length === 3 && T.registre[0].parcelles.join() === 'Les Perrières' && T.registre[0].statut === 'envoye' && T.registre[0].par.startsWith('vous') && !/· 0/.test(T.registre[0].quand) && cons().includes('Le Clos')]);
+      tel.fermer(); CL.step(30);
+      log.push(['le téléphone fermé : direction Le Clos (parcelle 2 sur 3)', obj().includes('Le Clos') && obj().includes('2 sur 3') && !T.aDire]);
+      const [p2, t2, e2, g2] = traiter('clos', -36, -116);
+      log.push([`Le Clos traité (${t2.toFixed(0)} s), puis à noter`, p2.traitee && g2 && t2 < 160 && obj().startsWith('Notez Le Clos')]);
+      tel.ouvrir('phyto'); tel.action('rp-nouveau'); tel.action('rp-cocher:perrieres'); tel.action('rp-suite');
+      const refusDeja = tel.app === 'phytoP' && toast().includes('déjà notée');
+      tel.action('rp-cocher:perrieres'); tel.fermer(); T.saisie = null;
+      noter(['clos']);
+      log.push(['Le Clos : Les Perrières refusées (déjà notées), puis Le Clos noté et envoyé', refusDeja && T.registre.length === 4 && T.registre[0].parcelles.join() === 'Le Clos' && T.registre[0].statut === 'envoye']);
       tel.fermer(); CL.step(30);
       const [p3, t3] = traiter('grandschamps', -29, 24);
-      log.push([`Les Grands Champs traités (${t3.toFixed(0)} s) ; pas de réseau : la noter sur place`, p3.traitee && !T.reseau && obj().startsWith('Notez-le sur place') && document.querySelector('#tel-res').textContent === 'Pas de service']);
-      noter(['grandschamps']);
-      log.push(['sans réseau : noté, en attente d\'envoi', T.registre[0].statut === 'attente' && toast().includes('quand ça capte')]);
+      log.push([`Les Grands Champs traités (${t3.toFixed(0)} s) ; pas de réseau : la noter quand même, sur place`, p3.traitee && !T.reseau && obj().startsWith('Sans réseau, notez quand même Les Grands Champs') && document.querySelector('#tel-res').textContent === 'Pas de service']);
+      tel.ouvrir('phyto'); tel.action('rp-nouveau'); tel.action('rp-cocher:grandschamps'); tel.action('rp-suite');
+      for (let i = 0; i < 3; i++) tel.action('rp-dose:cuivre:1');
+      tel.action('rp-suite'); tel.action('rp-suite'); tel.action('rp-cible:Mildiou'); tel.action('rp-suite');
+      const consSans = cons().includes('Pas de réseau ici');
+      tel.action('rp-enregistrer');
+      log.push(['sans réseau : la consigne le dit ; noté, en attente d\'envoi ; l\'appli dit qu\'il partira dès que ça capte', consSans && T.registre[0].statut === 'attente' && toast().includes('quand ça capte') && !!document.querySelector('#app .rp-sync.non') && cons().includes('remontez vers la route')]);
       tel.fermer(); CL.step(30);
       log.push(['objectif : remonter vers la route', obj().includes('ça capte')]);
       CL.teleporter(-55, 12, Math.PI); CL.step(200);
@@ -794,8 +825,8 @@ if (scenario === 'habillage') {
       log.push(['avant la mission 3, Viticode l\'annonce', app().includes('mission 3') && !H.actif]);
       tel.fermer();
       CL.versMission2(); CL.step(60); CL.versMission3(); CL.step(300);
-      log.push(['au réveil, le jeudi : la mission 3, le message de l\'imprimerie ; la remorque n\'est pas encore là, Marc non plus',
-        H.actif && J.minutes >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 480 && !R.attelee && CL.mRem.groupe.userData.cache && marc.etat === 'dedans' && tel.notif === 'messages' && obj().includes('imprimerie')]);
+      log.push(['au réveil, le jeudi : la mission 3, le message de l\'imprimerie ; la remorque est rangée vide sous le hangar, Marc pas encore là',
+        H.actif && J.minutes >= 2 * 1440 + 420 && J.minutes < 2 * 1440 + 480 && !R.attelee && Math.hypot(R.ici.x - L.remorque.range.x, R.ici.z - L.remorque.range.z) < 0.5 && CL.mRem.palox.userData.vu.every(v => !v) && marc.etat === 'dedans' && tel.notif === 'messages' && obj().includes('imprimerie')]);
       tel.ouvrir('messages'); tel.action('fil:imprimerie'); tel.fermer(); CL.step(60);
       log.push(['message lu : l\'échantillon, au chai', H.etape === 'jour' && obj().includes('chai') && H.cible === J.carton]);
       // l'échantillon, à pied, au carton ouvert du chai
@@ -809,7 +840,7 @@ if (scenario === 'habillage') {
       log.push([`en van, en conduite assistée jusqu'au labo (${a.t} s) : aucun choc (${a.chocs})`, a.ok && a.chocs === 0]);
       CL.finirGeste(3000); CL.step(60 * 4);
       log.push(['échantillon donné, l\'œnologue le rentre au labo ; pendant ce temps, Marc a préparé la remorque, à sa place', H.echantillon === 'depose' && CL.gens3.liste[0].etat !== 'dehors' && J.auVolant
-        && !CL.mRem.groupe.userData.cache && Math.hypot(R.ici.x - L.remorque.x, R.ici.z - L.remorque.z) < 0.5 && marc.etat === 'dehors' && obj().includes('Marc')]);
+        && CL.mRem.palox.userData.vu.every(v => v) && Math.hypot(R.ici.x - L.remorque.x, R.ici.z - L.remorque.z) < 0.5 && marc.etat === 'dehors' && obj().includes('Marc')]);
       CL.step(60 * 26);
       log.push(['le bulletin arrive (Messages)', H.bulletin && tel.notif === 'messages' && H.fil === 'labo']);
       tel.ouvrir('messages'); tel.action('fil:labo');
