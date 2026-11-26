@@ -12,9 +12,10 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Lance un script node du dossier scripts/ et garde sa sortie (affichée seulement en cas d'échec). Huit à la fois au plus
-// (PARALLELE) : dix-sept Chrome ensemble, le jeu mettait plus d'une minute à démarrer et un banc échouait sans raison.
-const PARALLELE = Number(process.env.PARALLELE || 8);
+// Lance un script node du dossier scripts/ et garde sa sortie (affichée seulement en cas d'échec). Six à la fois au plus
+// (PARALLELE) : dix-sept Chrome ensemble, le jeu mettait plus d'une minute à démarrer ; huit, des bancs (souple, la
+// glisse du château) tombaient parfois sur un état un peu différent, le jeu tournant en temps réel entre deux appels.
+const PARALLELE = Number(process.env.PARALLELE || 6);
 let enCours = 0;
 const attente = [];
 const lancer = (args, env = {}) => new Promise(ok => {
