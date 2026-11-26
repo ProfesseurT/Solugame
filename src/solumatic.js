@@ -13,7 +13,7 @@
 // chaufferie (au fioul), les sanitaires, le local ménage, les moyens généraux, entourés du couloir. Seule la disposition
 // des pièces est reprise du plan (ni l'adresse, ni le reste du document).
 import * as THREE from 'three';
-import { B, C, S, fusion, MAT, UNI } from './modeles.js';
+import { B, C, S, fusion, UNI } from './modeles.js';
 import { perso } from './perso.js';
 import { Pieton } from './pieton.js';
 import { logoSolumatic } from './logo.js';

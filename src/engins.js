@@ -825,6 +825,107 @@ const lin = k => z => {
 };
 // stations d'un passage de roue (centre za, rayon ra) : bords, à 50 degrés, sommet
 const archeZ = (za, ra) => [za - ra, za - ra * 0.766, za, za + ra * 0.766, za + ra];
+/* ---------------------------------------------------------------- décor : véhicules garés, figés
+   Un véhicule qui ne bougera jamais (garé dans une cour) n'a pas besoin de ses maillages à part : il est fondu dans son
+   quartier du décor, comme les murs (aucun appel de dessin de plus). */
+
+// Un modèle (un groupe de maillages, compactés ou non) figé en géométries du décor : chaque pièce dans le repère du
+// modèle, attributs en flottants (position, normale, couleur, type), comme celles de B(), prêtes pour fusion() avec le
+// reste d'un quartier. Seules les pièces de la matière commune (MAT) ; les feux et le gyrophare sont laissés.
+const MF = new THREE.Matrix4(), MI = new THREE.Matrix4();
+export function figer(objet) {
+  objet.updateMatrixWorld(true);
+  MI.copy(objet.matrixWorld).invert();
+  const out = [];
+  objet.traverse(o => {
+    if (!o.isMesh || o.material !== MAT || !o.visible) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry, f = new THREE.BufferGeometry();
+    for (const [nom, k] of [['position', 3], ['normal', 3], ['color', 3], ['aMat', 1]]) {
+      const a = g.attributes[nom];
+      if (!a) continue;
+      const v = new Float32Array(a.count * k);
+      for (let i = 0; i < a.count; i++) for (let c = 0; c < k; c++) v[i * k + c] = a.getComponent(i, c);
+      f.setAttribute(nom, new THREE.BufferAttribute(v, k));
+    }
+    if (!f.attributes.normal) f.computeVertexNormals();
+    f.applyMatrix4(MF.multiplyMatrices(MI, o.matrixWorld));
+    out.push(f);
+  });
+  return out;
+}
+
+// Un camion porteur à plateau (7,5 t, cabine avancée), garé : géométries dans son repère (l'avant vers +z, au sol), à
+// poser dans le décor (modeles.js : poser). La cabine (pare-brise incliné, son pare-soleil, la calandre et ses barres,
+// le pare-chocs et ses phares, les clignotants, les feux de gabarit du toit, les portières et leurs vitres, les poignées,
+// les rétroviseurs sur leurs bras, deux marchepieds, l'échappement vertical), le châssis, le réservoir et le coffre à
+// batteries, les garde-boue et leurs bavettes, les roues (jumelées à l'arrière), le plateau de bois, ses ridelles
+// d'aluminium et leurs ranchers, la cloison avant à claire-voie, les feux arrière, la plaque, la barre anti-encastrement.
+// couleur : la cabine. Rend { geos, plateau : la hauteur du plancher, long : [arrière, avant] du plateau }.
+export function camion(couleur = '#f2f3f1') {
+  const at = new Atelier(), L = [], P = [couleur, T.carrosserie], FONCE = '#2b2d32', NR = '#1d1f23', ALU = '#a3aab2';
+  // la cabine : un bloc dont la face avant penche vers l'arrière ; zf(y) : sa face avant à la hauteur y
+  const y0 = 0.98, y1 = 2.95, zA = 3.42, zH = 3.24, zr = 1.98, zf = y => zA + (zH - zA) * (y - y0) / (y1 - y0);
+  const zA2 = zA - 0.12, zH2 = zH - 0.12, xs = y => 1.15 - 0.05 * (y - y0) / (y1 - y0); // (xs : le flanc, à la hauteur y)
+  bloc(at, [[-1.15, y0, zr], [1.15, y0, zr], [1.15, y0, zA2], [-1.15, y0, zA2], [-1.1, y1, zr + 0.02], [1.1, y1, zr + 0.02], [1.1, y1, zH2], [-1.1, y1, zH2]], ...P);
+  bloc(at, [[-1.04, y0, zA2], [1.04, y0, zA2], [1.04, y0, zA], [-1.04, y0, zA], [-1.0, y1, zH2], [1.0, y1, zH2], [1.0, y1, zH], [-1.0, y1, zH]], ...P);
+  // les coins avant en pans coupés, le toit un peu bombé
+  for (const s of [1, -1]) { at.quad([s * 1.15, y0, zA2], [s * 1.04, y0, zA], [s * 1.0, y1, zH], [s * 1.1, y1, zH2], ...P, [s, 0, 1]); at.tri([s * 1.1, y1, zH2], [s * 1.0, y1, zH], [s * 1.0, y1, zH2], ...P, [0, 1, 0]); }
+  bloc(at, [[-1.08, y1, zr + 0.06], [1.08, y1, zr + 0.06], [1.04, y1, zH - 0.04], [-1.04, y1, zH - 0.04], [-0.9, y1 + 0.09, zr + 0.2], [0.9, y1 + 0.09, zr + 0.2], [0.88, y1 + 0.09, zH - 0.2], [-0.88, y1 + 0.09, zH - 0.2]], ...P);
+  // le pare-brise, son joint noir, le pare-soleil ; les essuie-glaces
+  const vy0 = 1.98, vy1 = 2.74, av = [0, 0.09, 1];
+  at.quad([-1.02, vy0 - 0.04, zf(vy0 - 0.04) + 0.006], [1.02, vy0 - 0.04, zf(vy0 - 0.04) + 0.006], [1.0, vy1 + 0.04, zf(vy1 + 0.04) + 0.006], [-1.0, vy1 + 0.04, zf(vy1 + 0.04) + 0.006], NR, 0, av);
+  at.quad([-0.97, vy0, zf(vy0) + 0.012], [0.97, vy0, zf(vy0) + 0.012], [0.95, vy1, zf(vy1) + 0.012], [-0.95, vy1, zf(vy1) + 0.012], VITRE, undefined, av);
+  L.push(B(2.12, 0.08, 0.22, NR, 0, 2.84, zH + 0.04));
+  for (const x of [-0.45, 0.35]) barre(at, [x, vy0 + 0.03, zf(vy0) + 0.03], [x + 0.36, vy0 + 0.22, zf(vy0 + 0.22) + 0.03], 0.008, NR, 0);
+  // la calandre (ses barres, l'emblème), le pare-chocs, les phares et leurs clignotants, les feux de gabarit du toit
+  at.quad([-0.82, 1.28, zf(1.28) + 0.01], [0.82, 1.28, zf(1.28) + 0.01], [0.82, 1.82, zf(1.82) + 0.01], [-0.82, 1.82, zf(1.82) + 0.01], NR, 0, av);
+  for (let y = 1.36; y < 1.8; y += 0.1) at.quad([-0.78, y, zf(y) + 0.018], [0.78, y, zf(y) + 0.018], [0.78, y + 0.03, zf(y + 0.03) + 0.018], [-0.78, y + 0.03, zf(y + 0.03) + 0.018], '#8d9298', T.carrosserie, av);
+  L.push(B(0.22, 0.12, 0.02, '#cfd3d8', 0, 1.9, zf(1.9) + 0.02));
+  L.push(B(2.34, 0.36, 0.26, '#3b3f46', 0, 0.86, zA + 0.03), B(2.3, 0.05, 0.27, '#55585e', 0, 1.06, zA + 0.03));
+  for (const s of [1, -1]) {
+    L.push(B(0.46, 0.2, 0.03, '#26282c', s * 0.78, 0.9, zA + 0.17), B(0.38, 0.14, 0.02, '#dbe3e8', s * 0.76, 0.9, zA + 0.18), B(0.14, 0.12, 0.02, '#d07a22', s * 1.04, 0.9, zA + 0.17));
+    L.push(B(0.2, 0.08, 0.02, '#f4efe2', s * 0.9, 1.2, zf(1.2) + 0.012));
+  }
+  for (const x of [-0.35, 0, 0.35]) L.push(B(0.1, 0.05, 0.05, '#e8962a', x, y1 + 0.12, zH - 0.24));
+  // les portières : les vitres, le joint, la poignée ; deux marchepieds ; les rétroviseurs sur leurs bras
+  for (const s of [1, -1]) {
+    const x = y => s * (xs(y) + 0.008), cot = [s, 0, 0];
+    at.quad([x(1.98), 1.98, 2.3], [x(1.98), 1.98, 3.1], [x(2.75), 2.75, 3.0], [x(2.75), 2.75, 2.3], VITRE, undefined, cot);
+    at.quad([x(0.98), 0.98, 2.22], [x(0.98), 0.98, 2.25], [x(2.82), 2.82, 2.25], [x(2.82), 2.82, 2.22], NR, 0, cot);
+    L.push(B(0.03, 0.04, 0.2, '#55585e', s * (xs(1.72) + 0.015), 1.72, 2.45));
+    L.push(B(0.32, 0.04, 0.48, '#3b3f46', s * 1.02, 0.55, 2.72), B(0.3, 0.04, 0.48, '#3b3f46', s * 1.04, 0.82, 2.72), B(0.04, 0.32, 0.04, FONCE, s * 1.16, 0.7, 2.5), B(0.04, 0.32, 0.04, FONCE, s * 1.16, 0.7, 2.94));
+    barre(at, [s * 1.12, 2.62, 3.12], [s * 1.38, 2.6, 3.22], 0.018, NR, 0); barre(at, [s * 1.12, 2.0, 3.16], [s * 1.38, 2.2, 3.22], 0.018, NR, 0);
+    L.push(B(0.07, 0.48, 0.24, NR, s * 1.42, 2.36, 3.22), B(0.07, 0.42, 0.2, '#3a5068', s * 1.42, 2.36, 3.1));
+  }
+  // derrière la cabine : l'échappement vertical, le filtre à air ; le châssis, le réservoir, le coffre à batteries
+  L.push(C(0.07, 0.07, 1.7, 8, '#cfd3d8', -0.98, 2.15, zr - 0.12), C(0.075, 0.075, 0.12, 8, NR, -0.98, 3.0, zr - 0.12), C(0.16, 0.16, 0.7, 10, NR, 0.95, 2.0, zr - 0.18));
+  for (const s of [1, -1]) L.push(B(0.12, 0.28, 6.4, FONCE, s * 0.46, 0.78, -0.2));
+  L.push(C(0.26, 0.26, 0.9, 12, ALU, -0.82, 0.72, 0.55, 'z'), B(0.04, 0.32, 0.06, FONCE, -0.62, 0.72, 0.2), B(0.04, 0.32, 0.06, FONCE, -0.62, 0.72, 0.9));
+  L.push(B(0.42, 0.42, 0.72, '#2b2d32', 0.82, 0.72, 0.55), B(0.43, 0.04, 0.73, '#55585e', 0.82, 0.94, 0.55));
+  for (const s of [1, -1]) L.push(B(0.05, 0.05, 1.4, '#7d8288', s * 1.13, 0.6, -0.55), B(0.05, 0.05, 1.4, '#7d8288', s * 1.13, 0.86, -0.55));
+  // les roues : simples à l'avant, jumelées à l'arrière ; les garde-boue et leurs bavettes
+  const R = 0.46, ZAV = 2.42, ZAR = -1.55, roueEn = (x, z, cote, dedans) => { const g = roue(R, 0.27, 12, cote, dedans, '#c4c8cd').clone(); deplacer(g, x, R, z); L.push(g); };
+  for (const s of [1, -1]) { roueEn(s * 0.98, ZAV, s, true); roueEn(s * 1.1, ZAR, s, false); roueEn(s * 0.82, ZAR, s, true); }
+  for (const s of [1, -1]) {
+    L.push(B(0.36, 0.05, 1.1, NR, s * 0.98, 0.99, ZAV), B(0.36, 0.3, 0.05, NR, s * 0.98, 0.84, ZAV + 0.55));
+    L.push(B(0.62, 0.05, 1.2, NR, s * 0.96, 1.0, ZAR), B(0.6, 0.42, 0.02, NR, s * 0.96, 0.58, ZAR - 0.66));
+  }
+  // le plateau : le plancher de bois, son cadre, les ridelles et leurs ranchers, la cloison avant à claire-voie
+  const zp0 = -3.3, zp1 = 1.9, zc = (zp0 + zp1) / 2, lp = zp1 - zp0, yP = 1.16;
+  L.push(B(2.44, 0.12, lp + 0.04, '#3b3f46', 0, 1.04, zc), B(2.4, 0.06, lp, '#8d7c66', 0, yP - 0.03, zc));
+  for (const s of [1, -1]) {
+    L.push(B(0.04, 0.44, lp, ALU, s * 1.2, yP + 0.22, zc), B(0.05, 0.04, lp, '#8d9298', s * 1.2, yP + 0.44, zc));
+    for (const z of [zp0 + 0.03, zp0 + lp / 4, zc, zp1 - lp / 4, zp1 - 0.03]) L.push(B(0.07, 0.52, 0.07, '#7d8288', s * 1.21, yP + 0.22, z));
+  }
+  L.push(B(2.4, 0.44, 0.04, ALU, 0, yP + 0.22, zp0), B(2.44, 1.36, 0.07, '#3b3f46', 0, yP + 0.68, zp1));
+  for (let x = -1.05; x <= 1.06; x += 0.15) L.push(B(0.03, 1.2, 0.03, '#55585e', x, yP + 0.7, zp1 - 0.05));
+  // l'arrière : les feux, les catadioptres, la plaque, la barre anti-encastrement
+  for (const s of [1, -1]) L.push(B(0.34, 0.13, 0.05, '#9a1820', s * 0.92, 0.86, zp0 - 0.03), B(0.12, 0.13, 0.05, '#e9e6e0', s * 0.62, 0.86, zp0 - 0.03), B(0.1, 0.06, 0.02, '#c47a2a', s * 1.15, 0.86, zp0 - 0.03));
+  L.push(B(0.52, 0.11, 0.02, '#ecebe3', 0, 0.74, zp0 - 0.03), B(2.2, 0.1, 0.1, '#3b3f46', 0, 0.5, zp0 + 0.05));
+  for (const x of [-0.6, 0.6]) L.push(B(0.08, 0.36, 0.08, FONCE, x, 0.7, zp0 + 0.08));
+  return { geos: [...at.geos(), ...L], plateau: yP, long: [zp0, zp1] };
+}
+
 const MODELES = {
   citadine: {
     zAv: 1.2, zAr: -1.2, ra: 0.36, rr: 0.3, xr: 0.72, wr: 0.67, portes: [0.8, -0.54, -1.16], poignees: [0.0, -0.95],
@@ -888,7 +989,7 @@ export function voitureConduite(couleur, nom) {
   for (const e of corps.userData.essieux) corps.remove(e); // ses roues tournent et braquent à part
   const groupe = new THREE.Group(), caisse = new THREE.Group();
   groupe.add(caisse); caisse.add(corps);
-  const rG = compacter(roue(M.rr, 0.2, 10, 1, false)), rD = compacter(roue(M.rr, 0.2, 10, -1, false));
+  const rG = compacter(roue(M.rr, 0.2, 14, 1, false)), rD = compacter(roue(M.rr, 0.2, 14, -1, false));
   const { rouesAr, rouesAv, pivots, essieu } = roues(groupe, [rG, rD, rG, rD], M.xr, M.rr, M.zAr, M.xr, M.rr, M.zAv);
   const P = posteVoiture(M), L = M.zs[M.zs.length - 1], W = Math.max(...M.W.map(w => w[1])), s = P.siege;
   return {
@@ -1050,7 +1151,7 @@ export function voiture(couleur, modele, roule = false, ouvrante = false) {
     extra.push(B(2 * wi - 0.1, 0.14, 0.48, SIEGE, 0, 0.5, zb), B(2 * wi - 0.1, 0.5, 0.12, SIEGE, 0, 0.8, zb - 0.27));
     for (const x of [0.42, -0.42]) extra.push(B(0.24, 0.15, 0.1, SIEGE, x, 1.14, zb - 0.29));
     // roues : fusionnées à la caisse pour une voiture garée ; à part pour une voiture qui roule (voir plus bas)
-    if (!roule) for (const [x, z] of [[M.xr, M.zAv], [-M.xr, M.zAv], [M.xr, M.zAr], [-M.xr, M.zAr]]) extra.push(deplacer(roue(M.rr, 0.2, 10, x > 0 ? 1 : -1, false).clone(), x, M.rr, z));
+    if (!roule) for (const [x, z] of [[M.xr, M.zAv], [-M.xr, M.zAv], [M.xr, M.zAr], [-M.xr, M.zAr]]) extra.push(deplacer(roue(M.rr, 0.2, 14, x > 0 ? 1 : -1, false).clone(), x, M.rr, z));
     // les vitres à part : transparentes (MAT_VITRE), on voit l'habitacle
     const lv = at.lots.get(VITRE + '|'), atV = new Atelier();
     at.lots.delete(VITRE + '|'); atV.lots.set(VITRE + '|', lv);
@@ -1085,7 +1186,7 @@ export function voiture(couleur, modele, roule = false, ouvrante = false) {
   if (roule) {
     // un essieu : ses deux roues, autour de son axe (géométrie partagée par modèle)
     let ge = ESSIEUX.get(nom);
-    if (!ge) { ge = fusion([deplacer(roue(M.rr, 0.2, 10, 1, false).clone(), M.xr, 0, 0), deplacer(roue(M.rr, 0.2, 10, -1, false).clone(), -M.xr, 0, 0)]); ESSIEUX.set(nom, ge); }
+    if (!ge) { ge = fusion([deplacer(roue(M.rr, 0.2, 14, 1, false).clone(), M.xr, 0, 0), deplacer(roue(M.rr, 0.2, 14, -1, false).clone(), -M.xr, 0, 0)]); ESSIEUX.set(nom, ge); }
     m.userData.essieux = [M.zAv, M.zAr].map(z => { const e = new THREE.Mesh(ge, MAT); e.position.set(0, M.rr, z); e.castShadow = true; m.add(e); return e; });
     m.userData.rayon = M.rr;
   }

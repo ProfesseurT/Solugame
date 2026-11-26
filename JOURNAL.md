@@ -892,3 +892,18 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Isolé** (main.js `isoler`) : au seuil, derrière le fondu au noir, tout l'extérieur est retiré de la scène (346 objets, il en reste 42 : la lumière, le personnage, l'intérieur, la porte, ceux qui y travaillent) et remis en sortant. Dedans, ni rendu ni calcul du dehors : pas de carte d'ombre, ni passants, ni voitures, ni parvis, ni tonnellerie, ni village (seuls l'œnologue, l'étiqueteur et Marc continuent : la mission 3 en dépend). Palier moyen, 1280 x 800 : 1,4 ms par image, 17 appels de dessin, 59 000 triangles. Les 34 personnes sont créées en approchant (3 ms chacune, une toutes les trois images, à moins de 60 m), ne sont dessinées et animées que si aucune cloison ne les cache, et moins souvent de loin.
 
 **Vérifié** : banc `nuit` (on entre par la façade est, l'extérieur retiré, 34 personnes, la caméra à 2,13 m sous le plafond ; dans l'entrée, le banc arrête ; un développeur part au café ; la balle roule ; on ressort, les 346 objets reviennent), captures (devanture, façade est, chaque pièce, de jour et de nuit, sur ordinateur et sur téléphone), tous les bancs.
+
+## 26/11/2026 · Retours de Teddy (30) : les détails qui traînent (premier lot)
+
+**Demande** : « fais attention à tous les détails qui traînent : les camions qui sont garés, le design de certaines voitures, les détails des bâtiments, afin d'avoir quelque chose d'assez joli et qualitatif ; travaille en autonomie pour lisser tout ça et optimiser le code ; le nettoyage sera fait à la fin ».
+
+**Fait** (un tour du monde en captures, puis ce qui détonnait) :
+- Le camion de la tonnellerie était un assemblage de boîtes (une cabine en cube, des roues qui dépassaient) : un vrai porteur à plateau (engins.js `camion`) : cabine avancée vert sombre, pare-brise incliné et son pare-soleil, calandre à barres, pare-chocs et phares, clignotants, feux de gabarit, portières vitrées au nom de la Tonnellerie du Coteau, rétroviseurs sur leurs bras, marchepieds, échappement vertical, réservoir, coffre à batteries, garde-boue et bavettes, roues jumelées, plateau de bois, ridelles d'aluminium et ranchers, cloison à claire-voie, feux arrière, barre anti-encastrement ; ses huit barriques debout, sanglées.
+- Le chariot élévateur de la tonnellerie, lui aussi en boîtes : c'est maintenant celui de l'imprimerie, figé dans le décor (engins.js `figer` : un modèle détaillé devient des géométries de son quartier, sans appel de dessin de plus).
+- Les fenêtres des maisons étaient des rectangles gris : chacune a son meneau et ses petits-bois (deux battants de trois carreaux, six triangles plaqués sur la vitre) ; de même à la tonnellerie. Les fenêtres des tours du château : un encadrement mouluré, une croix de pierre, un appui.
+- Les voitures : des roues à quatorze pans au lieu de dix (elles ne font plus des décagones).
+- Le parking de Solumatic était vide : trois voitures garées. Le panneau du parking des visiteurs du domaine, reculé d'un mètre.
+- L'imprimerie, nue au sud et à l'ouest : la bande de plaques translucides sous le bandeau, ses montants ; la porte de secours, son pictogramme, son applique ; le coffret électrique et le compteur de gaz.
+- Le banc `chateau` : l'emprunt d'une voiture est vérifié par ce que le jeu propose (`CL.voitureProche`), pas seulement par l'étiquette (un touriste tout près fait passer « Servir un verre » devant) ; trois imports inutilisés retirés.
+
+**Vérifié** : captures avant et après (le camion de trois côtés, le chariot, les fenêtres de la mairie, les tours, le parking, l'imprimerie), tous les bancs.

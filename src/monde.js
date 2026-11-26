@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
-import { Atelier } from './engins.js';
+import { Atelier, camion, figer } from './engins.js';
+import { chariot } from './remorque.js';
 import { SOLU, ENTREE, FENETRES, VITRINES, VITRINE, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
 import { logoSolumatic } from './logo.js';
 import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
@@ -665,10 +666,20 @@ void main() {
     L.push(teinter(g, TAILLE));
     plaques.length = 0;
   };
+  // Les petits-bois d'une fenêtre de w x hh (deux battants de trois carreaux) : le meneau, deux traverses, plaqués sur la
+  // vitre, en quadrilatères tournés vers f (six triangles par fenêtre) ; axe 'z' : une façade, 'x' : un pignon
+  const petitsBois = (x, y, z, f, axe = 'z', w = 0.74, hh = 1.1, c = '#efe7d6') => {
+    const P = [], p = (u, v) => (axe === 'z' ? [x + u, v, z] : [x, v, z - u]);
+    const q = (u0, u1, v0, v1) => { const a = p(u0, v0), b = p(u1, v0), cc = p(u1, v1), d = p(u0, v1); if (f > 0) P.push(...a, ...b, ...cc, ...a, ...cc, ...d); else P.push(...a, ...cc, ...b, ...a, ...d, ...cc); };
+    q(-0.025, 0.025, y - hh / 2, y + hh / 2);
+    for (const dy of [-hh / 6, hh / 6]) q(-w / 2, w / 2, y + dy - 0.013, y + dy + 0.013);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.computeVertexNormals();
+    return teinter(g, c);
+  };
   const fenetre = (L, x, y, z, f, volets, pierre) => {
     if (pierre) plaque(x, y, z + f * 0.006, 'z', f, 1.2, 1.58);
     L.push(B(0.98, 1.34, 0.08, '#efe7d6', x, y, z + f * 0.02));
-    L.push(B(0.74, 1.1, 0.1, rnd() < 0.2 ? '#4a3a2a' : '#2f3c4f', x, y, z + f * 0.035)); // certaines fenêtres sont déjà allumées
+    L.push(B(0.74, 1.1, 0.1, rnd() < 0.2 ? '#4a3a2a' : '#2f3c4f', x, y, z + f * 0.035), petitsBois(x, y, z + f * 0.087, f)); // certaines fenêtres sont déjà allumées
     if (f > 0) L.push(B(1.12, 0.08, 0.2, APPUI, x, y - 0.71, z + f * 0.07)); // appui, côté rue
     if (volets) L.push(B(0.46, 1.32, 0.06, volets, x - 0.75, y, z + f * 0.05), B(0.46, 1.32, 0.06, volets, x + 0.75, y, z + f * 0.05));
   };
@@ -1586,7 +1597,7 @@ void main() {
       c.fillStyle = '#2c4f8a'; c.beginPath(); c.roundRect(W * 0.08, H * 0.18, H * 0.64, H * 0.64, 10); c.fill();
       c.fillStyle = '#ffffff'; c.font = `bold ${Math.round(H * 0.5)}px Arial, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('P', W * 0.08 + H * 0.32, H * 0.52);
       c.fillStyle = '#5a3f2b'; c.font = `bold ${Math.round(H * 0.28)}px Georgia, serif`; c.textAlign = 'left'; c.fillText('Visiteurs', W * 0.08 + H * 0.78, H * 0.52);
-    }, 1.3, 0.5, -109.7, 1.3, -47.4, Math.PI / 2);
+    }, 1.3, 0.5, -110.4, 1.3, -46.7, Math.PI / 2);
   }
   /* -- l'aire de remplissage (mission 2 ; Teddy, 24/11/2026 : « une espèce de fosse pour le tracteur, avec des détails ») :
      un bac de béton entre deux murets de rétention, où le tracteur entre par le sud et ressort au nord vers les vignes
@@ -2070,9 +2081,13 @@ void main() {
       L.push(C(r + 0.42, r + 0.12, 0.7, 18, TAILLE, x, h - 0.35, z), C(r + 0.45, r + 0.45, 0.9, 18, TUF, x, h + 0.45, z));
       for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; L.push(B(0.22, 0.5, 0.3, TAILLE, x + Math.sin(a) * (r + 0.22), h - 0.85, z + Math.cos(a) * (r + 0.22), a)); }
       L.push(C(0, r + 0.75, toitH, 18, ARD, x, h + 0.9 + toitH / 2, z), C(0.05, 0.07, 1.8, 6, '#7a7f88', x, h + 0.9 + toitH + 0.6, z), S(0.16, '#c9a23a', x, h + 0.9 + toitH + 1.5, z));
+      // ses fenêtres : la vitre sur un fond de pierre, l'encadrement mouluré qui la dépasse, la croix de pierre (meneau et
+      // traverse), l'appui
       if (fen) for (const a of dirs) for (let y = 3.4; y < h - 2; y += 4) {
-        const sx = Math.sin(a), sz = Math.cos(a);
-        L.push(B(1.5, 2.2, 0.1, TAILLE, x + sx * (r + 0.02), y, z + sz * (r + 0.02), a), B(1.0, 1.7, 0.12, verre(), x + sx * (r + 0.05), y, z + sz * (r + 0.05), a));
+        const sx = Math.sin(a), sz = Math.cos(a), p = (o, w, hh, d, c, dy = 0, dl = 0) => L.push(B(w, hh, d, c, x + sx * (r + o) + sz * dl, y + dy, z + sz * (r + o) - sx * dl, a));
+        p(0.02, 1.45, 2.3, 0.1, TAILLE); p(0.05, 1.0, 1.8, 0.12, verre());
+        for (const s of [1, -1]) { p(0.08, 0.16, 2.12, 0.1, TAILLE, 0, s * 0.58); p(0.08, 1.32, 0.16, 0.1, TAILLE, s * 0.98); }
+        p(0.1, 0.1, 1.8, 0.06, TAILLE); p(0.1, 1.0, 0.1, 0.06, TAILLE, 0.36); p(0.12, 1.55, 0.12, 0.32, APPUI, -1.12);
       }
       cols.push([x - r, z - r, x + r, z + r]);
     };
@@ -2419,6 +2434,20 @@ void main() {
     for (const x of [167.2, 168.47, 169.73, 171.0]) L.push(B(0.06, 1.3, 0.24, ALU, x, 1.65, z0 + ep / 2));
     L.push(B(0.04, 1.3, 1.4, VERRE_E, x1 - ep / 2, 1.65, 21.7), B(0.28, 0.06, 1.5, ALU, x1 - 0.04, 0.98, 21.7));
     for (const z of [21.0, 22.4]) L.push(B(0.24, 1.3, 0.06, ALU, x1 - ep / 2, 1.65, z));
+    // le long pan sud et le pignon ouest : sous le bandeau, la bande de plaques translucides qui éclaire le hangar ; au sud,
+    // la porte de secours, son pictogramme et son applique ; à l'ouest, le coffret électrique et le compteur de gaz
+    for (const [axe, c, s, lo, hi] of [['x', z1, 1, x0 + 0.5, x1 - 0.5], ['z', x0, -1, z0 + 0.5, z1 - 0.5]]) {
+      pan(L, axe, c + s * 0.05, lo, hi, 4.85, 5.6, '#dfe8ee', 0.03);
+      for (const y of [4.83, 5.62]) pan(L, axe, c + s * 0.07, lo - 0.04, hi + 0.04, y - 0.03, y + 0.03, ALU, 0.04);
+      for (let u = lo; u <= hi + 0.01; u += (hi - lo) / Math.round((hi - lo) / 1.25)) pan(L, axe, c + s * 0.07, u - 0.03, u + 0.03, 4.8, 5.65, ALU, 0.04);
+    }
+    {
+      const xp = 162.5, f = z1;
+      L.push(B(1.1, 2.2, 0.08, GRIS, xp, 1.1, f + 0.05), B(0.95, 2.1, 0.05, '#7d8288', xp, 1.05, f + 0.08), B(0.5, 0.04, 0.06, '#c0392b', xp, 1.05, f + 0.12), B(0.4, 0.15, 0.03, '#2e9e4f', xp, 2.45, f + 0.06));
+      L.push(B(0.2, 0.12, 0.14, NOIR, xp + 0.9, 2.6, f + 0.08), B(0.14, 0.05, 0.1, '#ffe1a0', xp + 0.9, 2.55, f + 0.12), B(1.6, 0.03, 0.9, '#8f8a80', xp, 0.015, f + 0.45));
+      I.push(B(0.95, 2.1, 0.02, '#7d8288', xp, 1.05, f - ep - 0.02));
+      L.push(B(0.14, 0.9, 0.6, '#c9ccd1', x0 - 0.08, 1.25, 30.0), B(0.02, 0.06, 0.2, NOIR, x0 - 0.16, 1.4, 30.0), B(0.14, 0.5, 0.4, '#e0b13a', x0 - 0.08, 0.8, 28.9), C(0.03, 0.03, 0.8, 6, '#e0b13a', x0 - 0.06, 0.4, 28.5));
+    }
     // l'enseigne, tournée vers la départementale ; celle de la grande porte
     enseigne('IMPRIMERIE SAINT-VINCENT', { x: 160.5 + DX_EN, z: z0 - 0.07, rot: Math.PI }, 4.55, 10.4, 1.0, BANDE, '#f4f1ea');
     enseigne('ÉTIQUETTES · HABILLAGE', { x: 160.5 + DX_EN, z: z0 - 0.07, rot: Math.PI }, 3.6, 5.4, 0.5, '#f4f1ea', BANDE);
@@ -2840,8 +2869,8 @@ void main() {
       for (const z of [P0 - 0.2, P1 + 0.2]) L.push(B(0.12, PH + 0.1, 0.4, TU, x0 - 0.04, (PH + 0.1) / 2, z));
       L.push(B(0.12, 0.45, P1 - P0 + 0.8, TU, x0 - 0.04, PH + 0.25, (P0 + P1) / 2));
       L.push(B(x1 - x0 + 0.1, 0.4, z1 - z0 + 0.1, '#a99a82', xm, 0.2, zm));
-      for (const z of [-37.0, -20.0]) L.push(B(0.06, 1.3, 1.1, '#2f3c4f', x0 - 0.03, 2.4, z), B(0.1, 0.1, 1.3, TU, x0 - 0.05, 1.72, z), B(0.1, 0.12, 1.3, TU, x0 - 0.05, 3.1, z));
-      for (const x of [237.5, 245.0]) L.push(B(1.1, 1.3, 0.06, '#2f3c4f', x, 2.4, z1 + 0.03), B(1.3, 0.1, 0.1, TU, x, 1.72, z1 + 0.05), B(1.3, 0.12, 0.1, TU, x, 3.1, z1 + 0.05));
+      for (const z of [-37.0, -20.0]) L.push(B(0.06, 1.3, 1.1, '#2f3c4f', x0 - 0.03, 2.4, z), B(0.1, 0.1, 1.3, TU, x0 - 0.05, 1.72, z), B(0.1, 0.12, 1.3, TU, x0 - 0.05, 3.1, z), petitsBois(x0 - 0.063, 2.4, z, -1, 'x', 1.1, 1.3, '#5b3a2a'));
+      for (const x of [237.5, 245.0]) L.push(B(1.1, 1.3, 0.06, '#2f3c4f', x, 2.4, z1 + 0.03), B(1.3, 0.1, 0.1, TU, x, 1.72, z1 + 0.05), B(1.3, 0.12, 0.1, TU, x, 3.1, z1 + 0.05), petitsBois(x, 2.4, z1 + 0.063, 1, 'z', 1.1, 1.3, '#5b3a2a'));
       L.push(...toit(x1 - x0, z1 - z0, 3.4, ARD, xm, H, zm, true, { mur: MO }));
       L.push(B(0.8, 4.6, 0.8, '#8c5a44', 245.0, H + 2.3, -36.0), B(0.9, 0.12, 0.9, '#6e4a3a', 245.0, H + 4.62, -36.0));
       // la grande porte de planches, ouverte : glissée au nord sur son rail
@@ -2933,24 +2962,23 @@ void main() {
       }
       for (const [x, z] of [[222.4, -5.3], [223.1, -5.9], [222.3, -6.1]]) barrique(x, 0.475, z, 'y', false);
       boites.push([221.7, -6.6, 223.7, -4.7]);
-      // le camion de livraison, garé devant l'entrée de la cour, chargé de barriques debout
+      // le camion de livraison, garé devant l'entrée de la cour, chargé de barriques debout (sanglées), le nom de la
+      // tonnellerie sur ses portières ; le chariot élévateur, garé près du stock (le même que celui de l'imprimerie, figé)
       {
-        const cx = 217.6, cz = -34.0;
-        L.push(B(2.1, 0.3, 6.4, '#2b2b30', cx, 0.62, cz), B(2.3, 0.08, 4.4, '#8d7c66', cx, 1.0, cz - 0.6));
-        for (const s of [-1, 1]) L.push(B(0.05, 0.35, 4.4, '#9aa0a6', cx + s * 1.13, 1.2, cz - 0.6));
-        L.push(B(2.3, 0.35, 0.05, '#9aa0a6', cx, 1.2, cz - 2.8), B(2.3, 2.1, 1.9, '#f2f3f1', cx, 1.65, cz + 2.45), B(2.2, 0.8, 0.04, '#2f3c4f', cx, 2.15, cz + 3.41), B(0.04, 0.6, 1.0, '#2f3c4f', cx - 1.16, 2.2, cz + 2.6), B(0.04, 0.6, 1.0, '#2f3c4f', cx + 1.16, 2.2, cz + 2.6));
-        L.push(B(2.2, 0.3, 0.1, '#55585e', cx, 0.75, cz + 3.42), B(0.3, 0.15, 0.04, '#ffe1a0', cx - 0.8, 1.05, cz + 3.43), B(0.3, 0.15, 0.04, '#ffe1a0', cx + 0.8, 1.05, cz + 3.43));
-        for (const z of [cz + 2.2, cz - 1.3, cz - 2.3]) for (const s of [-1, 1]) L.push(C(0.42, 0.42, 0.3, 12, '#1e1e22', cx + s * 0.98, 0.42, z, 'x'), C(0.22, 0.22, 0.31, 8, '#9aa0a6', cx + s * 0.98, 0.42, z, 'x'));
-        for (const dx of [-0.55, 0.55]) for (const dz of [-2.3, -1.15, 0]) barrique(cx + dx, 1.515, cz - 0.6 + dz + 0.6, 'y', false);
-        boites.push([cx - 1.2, cz - 3.2, cx + 1.2, cz + 3.5]); contact.tache(cx, cz, 1.5, 3.6, 0.4);
+        const cx = 217.6, cz = -34.6, K = camion('#2f4a3a'), [zp0] = K.long;
+        poser(K.geos, cx, cz, 0, L);
+        for (const dx of [-0.55, 0.55]) for (let k = 0; k < 4; k++) barrique(cx + dx, K.plateau + 0.475, cz + zp0 + 0.55 + k * 0.82, 'y', false);
+        for (let k = 0; k < 4; k++) { const z = cz + zp0 + 0.55 + k * 0.82; L.push(B(2.3, 0.03, 0.06, '#e8962a', cx, K.plateau + 0.96, z)); for (const s of [1, -1]) L.push(B(0.02, 0.5, 0.06, '#e8962a', cx + s * 1.16, K.plateau + 0.72, z)); }
+        for (const s of [1, -1]) atlas.poser(512, 200, (c, W, H) => {
+          c.clearRect(0, 0, W, H); c.fillStyle = '#efe3c8'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.font = 'bold 70px Georgia, serif'; c.fillText('Tonnellerie', W / 2, H * 0.3); c.font = 'italic 56px Georgia, serif'; c.fillText('du Coteau', W / 2, H * 0.74);
+        }, 0.78, 0.3, cx + s * 1.152, 1.52, cz + 2.66, s * Math.PI / 2);
+        boites.push([cx - 1.45, cz - 3.4, cx + 1.45, cz + 3.5]); contact.tache(cx, cz, 1.5, 3.6, 0.4);
       }
-      // le chariot élévateur, garé près du stock
       {
-        const cx = 224.6, cz = -13.6, J = '#e0b13a';
-        L.push(B(1.1, 0.9, 1.9, J, cx, 0.75, cz), B(0.9, 0.5, 0.6, '#2b2b30', cx, 1.3, cz + 0.5), B(0.05, 2.0, 0.05, '#2b2b30', cx - 0.5, 2.1, cz - 0.6), B(0.05, 2.0, 0.05, '#2b2b30', cx + 0.5, 2.1, cz - 0.6), B(0.05, 2.0, 0.05, '#2b2b30', cx - 0.5, 2.1, cz + 0.6), B(0.05, 2.0, 0.05, '#2b2b30', cx + 0.5, 2.1, cz + 0.6), B(1.1, 0.06, 1.3, '#2b2b30', cx, 3.1, cz));
-        L.push(B(0.12, 2.6, 0.12, '#3b3f46', cx - 0.3, 1.3, cz - 1.05), B(0.12, 2.6, 0.12, '#3b3f46', cx + 0.3, 1.3, cz - 1.05), B(0.12, 0.05, 1.1, '#3b3f46', cx - 0.25, 0.1, cz - 1.6), B(0.12, 0.05, 1.1, '#3b3f46', cx + 0.25, 0.1, cz - 1.6));
-        for (const [dz, r] of [[-0.6, 0.32], [0.65, 0.26]]) for (const s of [-1, 1]) L.push(C(r, r, 0.22, 10, '#1e1e22', cx + s * 0.55, r, cz + dz, 'x'));
-        boites.push([cx - 0.7, cz - 2.2, cx + 0.7, cz + 1.0]);
+        const cx = 224.6, cz = -13.6;
+        poser(figer(chariot().groupe), cx, cz, Math.PI, L);
+        boites.push([cx - 0.65, cz - 2.35, cx + 0.65, cz + 1.3]); contact.tache(cx, cz - 0.4, 0.7, 1.4, 0.3);
       }
       // un tas de copeaux, une brouette
       L.push(C(0.2, 1.1, 0.55, 10, '#c9a87a', 226.0, 0.27, -41.0), C(0.05, 0.9, 0.3, 10, '#b98f5a', 226.4, 0.5, -41.2));
@@ -3208,7 +3236,9 @@ void main() {
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
   // deux voitures de visiteurs sur le parking du domaine ; la voiture du personnel de l'imprimerie, garée dans la cour de
   // l'entrepôt, entre ses deux lignes blanches
-  lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b']];
+  lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b'],
+    // le parking de Solumatic : trois places prises, le nez vers le bâtiment
+    [216.75, -47.3, Math.PI, '#c9cdd2'], [219.25, -47.3, Math.PI, '#1f2a3a'], [224.25, -47.3, Math.PI, '#f2efe6']];
   /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,
      à côté de sa porte, tourné vers la route ; le véhicule s'arrête sur la départementale, devant. L'entrepôt de
      l'imprimeur-étiqueteur : arret, la balise et le bout de l'itinéraire, dans la cour, cap au sud ; la conduite assistée

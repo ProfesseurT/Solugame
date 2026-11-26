@@ -481,7 +481,8 @@ if (scenario === 'chateau') {
         const roule = v.s - s0, i = Math.min(v.C.n - 1, Math.floor(v.s) + 14);
         J.joueur.placer(v.C.X[i], v.C.Z[i], 0); CL.step(60 * 5);
         const d = Math.hypot(J.joueur.pos.x - v.x, J.joueur.pos.z - v.z), arret = v.v < 0.3, klaxon = v.klaxon;
-        const emprunte = [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Emprunter la voiture'));
+        // (l'étiquette, ou ce que le jeu proposerait : un touriste tout près fait passer « Servir un verre » devant)
+        const emprunte = CL.voitureProche === v || [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Emprunter la voiture'));
         J.joueur.placer(C.x, C.z - 24, 0); CL.step(60 * 4);
         log.push(['une voiture monte au château (' + roule.toFixed(0) + ' m en 10 s) ; devant le joueur, elle s\'arrête (à ' + d.toFixed(1) + ' m) et klaxonne, on peut l\'emprunter (' + [arret, klaxon, emprunte].join(' ') + ') ; elle repart (' + v.v.toFixed(1) + ' m/s)', roule > 40 && arret && d > 2.5 && klaxon && emprunte && v.v > 1.5]);
         J.minutes = 21 * 60; CL.step(10);

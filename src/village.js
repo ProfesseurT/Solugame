@@ -16,7 +16,7 @@
 // cachés au-delà de 260 m ; les terrasses servent de 11 h à 23 h, les touristes viennent de 8 h 30 à 19 h 30 (ils
 // n'arrivent ni ne partent sous les yeux). Les voitures roulent toujours (un point sur un chemin, rien de plus).
 import * as THREE from 'three';
-import { B, C, fusion, MAT } from './modeles.js';
+import { C, fusion, MAT } from './modeles.js';
 import { Pieton, Passant } from './pieton.js';
 import { ROUTE, CHATEAU, DEMI, sol } from './relief.js';
 import { VILLAGE } from './textes.js';

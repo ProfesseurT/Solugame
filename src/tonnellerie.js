@@ -11,7 +11,7 @@
 // Ils travaillent de 7 h 30 à 18 h 30 et n'arrivent ni ne partent sous les yeux ; hors de ces heures, le feu couve. Ils
 // saluent qui passe tout près. Rien n'est calculé quand la caméra est loin.
 import * as THREE from 'three';
-import { B, C, S, fusion, MAT } from './modeles.js';
+import { B, C, fusion, MAT } from './modeles.js';
 import { perso } from './perso.js';
 import { Pieton } from './pieton.js';
 import { son } from './audio.js';
