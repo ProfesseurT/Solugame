@@ -192,10 +192,11 @@ export class Tracteur {
       if (col.resoudre(c, RC)) { touche = true; nx += col.nx; nz += col.nz; }
       for (let j = 0; j < voitures.length; j++) {
         const vo = voitures[j];
-        // ses deux cercles le long de son axe (sur la départementale : x, dans son sens ; au château : ax, az, village.js)
-        const ax = vo.ax ?? vo.sens, az = vo.az ?? 0;
+        // ses deux cercles le long de son axe (sur la départementale : x, dans son sens ; au château : ax, az, village.js ;
+        // un cycliste, velos.js : deux petits cercles, dc et rc)
+        const ax = vo.ax ?? vo.sens, az = vo.az ?? 0, dc = vo.dc ?? 1.1;
         for (let k = -1; k <= 1; k += 2) {
-          const vx = vo.x + k * 1.1 * ax, vz = vo.z + k * 1.1 * az, dx = c.x - vx, dz = c.z - vz, d2 = dx * dx + dz * dz, R = RC + 1.0;
+          const vx = vo.x + k * dc * ax, vz = vo.z + k * dc * az, dx = c.x - vx, dz = c.z - vz, d2 = dx * dx + dz * dz, R = RC + (vo.rc ?? 1.0);
           if (d2 < R * R && d2 > 1e-6) {
             const d = Math.sqrt(d2), p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d;
             vo.cogner(this, -dx / d, -dz / d); // la voiture encaisse le choc
@@ -327,7 +328,7 @@ const CER = [[0, 0, 0, 0], [0, 0, 0, 0]];
 const LOIN_VOIE = 5.5;
 function cercles(o) {
   const p = o.veh;
-  if (!p) { const c = CER[0]; c[0] = o.x; c[1] = o.z; c[2] = 0.9; c[3] = 2.4; return 1; }
+  if (!p) { const c = CER[0]; c[0] = o.x; c[1] = o.z; c[2] = o.r ?? 0.9; c[3] = o.demi ?? 2.4; return 1; } // (un cycliste : r, demi ; velos.js)
   const sx = Math.sin(p.h), cz = Math.cos(p.h);
   for (let k = 0; k < 2; k++) { const c = CER[k], off = p.d.off[k]; c[0] = o.x + sx * off; c[1] = o.z + cz * off; c[2] = p.d.r; c[3] = p.d.r; }
   return 2;
@@ -341,6 +342,8 @@ export class Voiture {
     this.choc = 0; this.tChoc = 0; this.detresse = 0; this.secX = 0; this.secXv = 0; this.secZ = 0; this.secZv = 0; this.cogne = false;
     // dépassement : 0 dans sa voie, 1 clignote, 2 déboîte et double, 3 se rabat
     this.dep = 0; this.tDep = 0; this.xPasse = 0; this.tCl = 0; this.cligno = 0; // cligno : 1 à gauche, -1 à droite
+    // un cycliste qu'on double (velos.js) : on le suit un moment, puis on passe à cheval sur la ligne du milieu (zPasse)
+    this.passe = null; this.zPasse = this.zAutre; this.suivi = 0; this.immobile = 0;
     this.base = sens > 0 ? Math.PI / 2 : -Math.PI / 2;
     mesh.rotation.y = this.base;
     mesh.position.set(x, 0, this.z);
@@ -367,8 +370,8 @@ export class Voiture {
     this.obst = obst;
     return libre;
   }
-  // la voie d'en face est-elle libre pour doubler ?
-  voieLibre(obstacles, voitures) {
+  // la voie d'en face est-elle libre pour doubler ? (portee : jusqu'où l'on regarde les voitures d'en face)
+  voieLibre(obstacles, voitures, portee = 120) {
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
       if (Math.abs(o.z - this.zAutre) > LOIN_VOIE) continue;
@@ -382,7 +385,7 @@ export class Voiture {
       const o = voitures[i];
       if (o === this) continue;
       const dx = (o.x - this.x) * this.sens;
-      if (dx > -12 && dx < 120 && (o.sens !== this.sens || o.dep)) return false;
+      if (dx > -12 && dx < portee && (o.sens !== this.sens || o.dep)) return false;
     }
     return true;
   }
@@ -406,14 +409,14 @@ export class Voiture {
     this.secZv = ressort(dt, this.secZ, this.secZv, 0, 10, 0.25); this.secZ += this.secZv * dt;
     this.secX = borne(this.secX, -0.12, 0.12); this.secZ = borne(this.secZ, -0.12, 0.12);
     if (this.detresse > 0) this.detresse -= dt;
-    const libre = this.ecart(obstacles, voitures, this.dep === 2 ? this.zAutre : this.z);
+    const libre = this.ecart(obstacles, voitures, this.dep === 2 ? this.zPasse : this.z);
     // vitesse voulue : garder 1,2 s d'écart et pouvoir s'arrêter à 2 m en freinant à 2,5 m/s² ;
     // accélération et freinage progressifs (à-coups bornés)
     // devant le tracteur ou le van, on s'arrête plus loin : il doit pouvoir manœuvrer (demi-tour en trois temps)
     const marge = Math.max(0, libre - (this.obst && this.obst.veh ? 6 : 2));
     let cible = Math.min(this.vmax, marge / 1.2, Math.sqrt(5 * marge));
     if (this.detresse > 0) cible = 0; // arrêtée le temps de reprendre ses esprits
-    if (this.dep === 2 && Math.abs(this.z - this.zVoie) < 2.2) cible = Math.min(cible, 1.5); // déboîte au pas
+    if (this.dep === 2 && !this.passe && Math.abs(this.z - this.zVoie) < 2.2) cible = Math.min(cible, 1.5); // déboîte au pas
     let aV = borne((cible - this.v) * 2, -7, 2.2);
     if (libre < 1) aV = -9;
     this.a += borne(aV - this.a, -14 * dt, 4 * dt);
@@ -429,21 +432,35 @@ export class Voiture {
     } else { this.arret = 0; this.klaxon = false; }
 
     // doubler ce qui bloque la route (le tracteur arrêté, le personnage), si la voie d'en face est libre
-    if (this.dep === 0 && this.obst && this.arret > 2 && this.voieLibre(obstacles, voitures)) { this.dep = 1; this.tDep = 0; this.xPasse = this.obst.x; }
+    // (un véhicule du joueur qui manœuvre, un demi-tour : on ne le double qu'une fois resté immobile un moment)
+    this.immobile = this.obst && this.obst.veh && Math.abs(this.obst.veh.v) > 0.3 ? 0 : this.immobile + dt;
+    if (this.dep === 0 && this.obst && this.arret > 2 && this.immobile > 2.5 && this.voieLibre(obstacles, voitures)) { this.dep = 1; this.tDep = 0; this.xPasse = this.obst.x; this.passe = null; this.zPasse = this.zAutre; }
+    // derrière un cycliste (velos.js) : on le suit à sa vitesse, puis, rien n'arrivant en face (de loin : doubler un vélo
+    // prend du temps), on le double à cheval sur la ligne du milieu (1,5 m entre lui et nous). Si quelqu'un arrive en face
+    // quand on est encore derrière lui, on se rabat derrière ; à sa hauteur, on finit ; devant lui, on se rabat devant.
+    if (this.dep === 0 && this.obst && this.obst.velo && libre < 16) {
+      this.suivi += dt;
+      if (this.suivi > 1.2 && this.voieLibre(obstacles, voitures, 230)) { this.dep = 1; this.tDep = 0; this.passe = this.obst; this.zPasse = this.zVoie + (this.zAutre - this.zVoie) * 0.55; }
+    } else if (this.dep === 0) this.suivi = Math.min(0, this.suivi + dt);
+    if (this.passe && (this.dep === 1 || this.dep === 2) && !this.voieLibre(obstacles, voitures, 80)) {
+      const av = (this.x - this.passe.x) * this.sens;
+      if (av < -3.2) { this.dep = 3; this.tDep = 0; this.passe = null; this.suivi = -4; }
+      else if (av > 4.6) { this.dep = 3; this.tDep = 0; this.passe = null; }
+    }
     if (this.dep) this.tDep += dt;
     if (this.dep === 1 && this.tDep > 1.1) this.dep = 2;
-    if (this.dep === 2 && (this.x - this.xPasse) * this.sens > 9 && this.ecart(obstacles, voitures, this.zVoie) > 3) { this.dep = 3; this.tDep = 0; }
+    if (this.dep === 2 && (this.x - (this.passe ? this.passe.x : this.xPasse)) * this.sens > 9 && this.ecart(obstacles, voitures, this.zVoie) > 3) { this.dep = 3; this.tDep = 0; this.passe = null; }
     if (this.dep === 3 && Math.abs(this.z - this.zVoie) < 0.05) this.dep = 0;
-    const zC = this.dep === 2 ? this.zAutre : this.zVoie;
+    const zC = this.dep === 2 ? this.zPasse : this.zVoie;
     const dz = borne(zC - this.z, -1.7 * dt, 1.7 * dt);
     this.z += dz;
-    this.cligno = this.dep === 1 || (this.dep === 2 && Math.abs(this.z - this.zAutre) > 0.3) ? 1 : this.dep === 3 ? -1 : 0;
+    this.cligno = this.dep === 1 || (this.dep === 2 && Math.abs(this.z - this.zPasse) > 0.3) ? 1 : this.dep === 3 ? -1 : 0;
 
     this.x += this.sens * this.v * dt;
     // les roues tournent (un maillage par essieu, engins.js)
     const ess = this.mesh.userData.essieux;
     if (ess) { const a = this.v * dt / this.mesh.userData.rayon; for (const e of ess) e.rotation.x += a; }
-    if (this.x * this.sens > 340) { this.x = -340 * this.sens; this.dep = 0; this.z = this.zVoie; }
+    if (this.x * this.sens > 340) { this.x = -340 * this.sens; this.dep = 0; this.z = this.zVoie; this.passe = null; }
     this.mesh.position.set(this.x, 0, this.z);
     // la voiture s'oriente un peu quand elle change de voie ; la caisse se secoue après un choc
     this.mesh.rotation.set(this.secX, this.base - Math.atan2(dz / dt, Math.max(2, this.v)) * this.sens, this.secZ, 'YXZ');

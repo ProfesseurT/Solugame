@@ -9,6 +9,7 @@ import { Atelier, camion, figer } from './engins.js';
 import { chariot } from './remorque.js';
 import { SOLU, ENTREE, FENETRES, VITRINES, VITRINE, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
 import { logoSolumatic } from './logo.js';
+import { rangeVelos, veloSeul } from './velos.js';
 import { naturelle, forme, sol, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
 
 export { SOLEIL };
@@ -3154,6 +3155,27 @@ void main() {
     return { porteSolu, toitSolu, interieurSolu, vitresSolu, gens: I.gens, murs: I.murs, portes: I.portes, babyfoot: I.babyfoot };
   }
   const za = zoneActivites();
+  /* ------------------------------------------------------------ les vélos garés (velos.js : rangeVelos, veloSeul ; Teddy,
+     26/11/2026 : « on doit pouvoir voir des vélos dans la rue aussi »). Fondus dans le décor de leur quartier (aucun appel de
+     dessin de plus), une boîte de collision chacun, leur propre tirage au sort (rien ne bouge ailleurs). Un range-vélos (des
+     arceaux) sur la place, à côté de l'église ; un vélo contre le mur, à côté de l'épicerie ; d'autres contre les murs de la
+     départementale ; deux arceaux près de la terrasse du bar ; au château, au bord du belvédère ; chez Solumatic, près du
+     parking ; contre l'atelier de la tonnellerie. (Pour une école : rangeVelos(bati, col, x, z, rot, { type: 'ratelier',
+     genres: ['enfant'], n, garnis }).) Rend la liste des places (lieux.velos). */
+  function garerVelos() {
+    const l = [];
+    const R = (x, z, rot, o) => l.push({ x, z, genre: 'range', n: rangeVelos(bati, col, x, z, rot, o) });
+    const S = (x, z, rot, genre, c, o) => { veloSeul(bati, col, x, z, rot, genre, c, o); l.push({ x, z, genre, n: 1 }); };
+    R(108, -47, Math.PI / 2, { n: 4, garnis: 5, graine: 11 });
+    S(75.2, 2.25, Math.PI / 2, 'ville', '#c9a23a', { contre: 1, panier: 'fleurs' });
+    S(43, 1.9, Math.PI / 2, 'vae', '#5d6b72', { contre: 1 });
+    S(130, 17.77, -Math.PI / 2, 'ville', '#33343a', { contre: 1, selle2: '#1d1e21' });
+    R(89.4, -62.3, 0, { n: 2, garnis: 3, graine: 23 });
+    { const a = 0.45, r = 36.7; R(CHATEAU.x + Math.cos(a) * r, CHATEAU.z + Math.sin(a) * r, Math.PI / 2 - a, { n: 3, garnis: 4, graine: 37, genres: ['vae', 'vae', 'course', 'ville'] }); }
+    R(226.8, -50.5, 0, { n: 3, garnis: 3, graine: 41, genres: ['vae', 'course', 'vtt'] });
+    S(240.5, -15.62, Math.PI / 2, 'ville', '#6b6f73', { contre: 1, selle2: '#1d1e21' });
+    return l;
+  }
   definirInterieur(interieurs); // le chai et l'entrepôt : le soleil coupé, les lampes
   const moulin = hameau();
   const enseignes = atlas.maillage();
@@ -3162,6 +3184,7 @@ void main() {
   // les vitres des boutiques, transparentes (un seul maillage)
   if (vitresB.length) { const vb = new THREE.Mesh(fusion(vitresB), MAT_VITRINE); vb.renderOrder = 3; vb.name = 'vitrines'; scene.add(vb); }
 
+  const velosGares = garerVelos();
   bati.ajouter(scene, true, porteurs);
   proches.ajouter(scene, false, porteurs); // les marchandises des vitrines : seulement de près (maj)
   const ao = contact.maillage();
@@ -3366,6 +3389,7 @@ void main() {
     versChai: [[-92, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
+  lieux.velos = velosGares; // les vélos garés (velos.js ; essais)
   lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
   // gerbeur électrique de Marc : transpalette.js) dans la troisième travée, contre le poteau, à côté de la remorque rangée

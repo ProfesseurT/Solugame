@@ -671,6 +671,15 @@ export const VILLAGE = {
   belvedere: ['Quelle vue sur la vallée !', 'On voit les vignes jusqu\'au bourg.', 'Bonjour !'],
 };
 
+// Les cyclistes (velos.js) : la sonnette, un véhicule qui fonce sur eux, le saut de côté, le vélo relevé
+export const VELOS = {
+  sonnette: ['Dring dring !', 'Pardon, je passe !', 'Attention, vélo !', 'Dring !'],
+  attention: ['Hé, doucement !', 'Attention !', 'Oh là !'],
+  saute: ['Waouh !', 'Ouh là !', 'Aïe aïe aïe !'],
+  chute: ['Non mais ça va pas ?!', 'Eh ! Il y a un vélo !', 'On ne voit pas les cyclistes, ou quoi ?', 'Mon vélo !'],
+  repart: ['Bon, il n\'a rien. On repart.', 'Plus de peur que de mal.', 'Les tracteurs, je vous jure !', 'Allez, en selle.'],
+};
+
 export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],

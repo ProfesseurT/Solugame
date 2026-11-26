@@ -26,6 +26,10 @@ const JAMBES = [[OS.cuisseG, 1, 0], [OS.cuisseD, -1, 0.5]];
 // poste de conduite du tracteur (repère de sa caisse) : assise, plancher, centre et rayon du volant ; le van donne le sien (p.poste)
 const POSTE_TRACTEUR = { assise: 1.5, plancher: 1.24, volant: new THREE.Vector3(0, 1.9, -0.18), rayon: 0.2 };
 const BRAS = [OS.brasG, OS.coudeG, OS.mainG, OS.brasD, OS.coudeD, OS.mainD];
+// à vélo (velos.js : p.velo, un Float64Array de VL.N nombres) : le dessus de la selle, les poignées gauche et droite, les
+// axes des pédales gauche et droite (x, y, z, repère du vélo penché, en mètres) ; l'angle du pédalier ; danseuse et pied à
+// terre (0 à 1) ; le sol sous le pied gauche ; les doigts et la paume de la main gauche (des directions) ; le roulis du vélo
+export const VL = { selle: 0, mainG: 3, mainD: 6, pedG: 9, pedD: 12, mani: 15, danseuse: 16, pied: 17, sol: 18, doigts: 21, paume: 24, roulis: 27, N: 28 };
 // pose debout gardée le temps de la mélanger à la pose au volant (monter, descendre)
 const MEMO = Array.from({ length: 32 }, () => new THREE.Quaternion()), vMemo = new THREE.Vector3();
 
@@ -162,7 +166,8 @@ export class Anim {
     this.ry += (cy - this.ry) * kl(dt, 4.5); this.rp += (cp - this.rp) * kl(dt, 4.5);
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
-    if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
+    if (p.velo) this.poseVelo(p, br); // à vélo (velos.js)
+    else if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
     else if (conduite) this.poseConduite(dt, p, t, br);
     else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
@@ -517,6 +522,62 @@ export class Anim {
     A.vin.scale.y = Math.max(0.02, 1 - entre(1.9, 3.3, t));
     this.brasIK(3, vG.x - 0.035, vG.y + 0.01, vG.z - 0.06, -0.7, -0.7, -0.2, w);
     o[OS.tete].rotation.x -= 0.22 * boit * w;                         // la tête part un peu en arrière en buvant
+  }
+
+  /* ---------------------------------------------------------------- à vélo (velos.js)
+     p.velo : la pose demandée (indices VL), dans le repère du vélo penché, en mètres ; le personnage est posé à son origine,
+     sans rotation. Assis sur la selle, le buste penché juste ce qu'il faut pour que les mains tiennent le cintre (un angle
+     calculé : un vélo de ville se conduit droit, un vélo de course couché sur le cintre), les pieds sur les pédales qui
+     tournent (la cheville suit la pédale ; le pied pointe vers le bas en bas du coup de pédale, le talon descend en haut),
+     les mains aux poignées, le regard devant. En danseuse : debout sur les pédales, le bassin au-dessus du pédalier, qui
+     balance du côté de la pédale qui descend. Pied à terre : glissé devant la selle, le pied gauche au sol, le droit sur la
+     pédale haute, le corps droit quand le vélo penche. Une jambe ne tire jamais : le bassin descend s'il le faut. */
+  poseVelo(p, br) {
+    const o = this.o, V = p.velo, k = 1 / this.m.echelle, dm = this.m.dim;
+    if (!this.colonne) { this.colonne = o[OS.ventre].position.y + o[OS.poitrine].position.y + o[OS.brasG].position.y; this.epaule = Math.abs(o[OS.brasG].position.x); }
+    const dan = V[VL.danseuse], pied = V[VL.pied], th = V[VL.mani];
+    // le bassin : sur la selle ; en danseuse, au-dessus des pédales ; pied à terre, glissé devant
+    const bal = Math.sin(th) * 0.05 * dan;
+    let bx = V[VL.selle] * k + bal, by = V[VL.selle + 1] * k + 0.105 + 0.12 * dan - 0.06 * pied, bz = V[VL.selle + 2] * k - 0.035 + 0.1 * dan + 0.2 * pied;
+    // les chevilles : la plante du pied sur la pédale (ou le pied gauche au sol), le pied penché selon le tour de pédale
+    for (let j = 0; j < 2; j++) {
+      const P = j ? VL.pedD : VL.pedG, phi = j ? th : th + PI, tg = 0.21 + 0.14 * Math.cos(phi), c = Math.cos(tg), s = Math.sin(tg);
+      let ax = V[P] * k, ay = V[P + 1] * k + 0.016 * k + CH * c + 0.11 * s, az = V[P + 2] * k + CH * s - 0.11 * c, a = tg;
+      if (j === 0 && pied > 0) { ax += (V[VL.sol] * k - ax) * pied; ay += (V[VL.sol + 1] * k + CH - ay) * pied; az += (V[VL.sol + 2] * k - az) * pied; a = tg * (1 - pied); }
+      PIEDS[6 * j + X] = ax; PIEDS[6 * j + Y] = ay; PIEDS[6 * j + Z] = az; PIEDS[6 * j + TG] = a;
+      // la jambe atteint sa cheville : le bassin pas plus haut (raccordé sans cassure sur 3 cm)
+      const sg = JAMBES[j][1], dx = ax - bx - sg * dm.xh, dz = az - bz, Lm = (L1 + L2) * 0.985;
+      const haut = ay + Math.sqrt(Math.max(0.0025, Lm * Lm - dx * dx - dz * dz)) - DIM.yHanche, h = Math.max(0.03 - Math.abs(by - haut), 0) / 0.03;
+      by = Math.min(by, haut) - h * h * 0.0075;
+    }
+    // le buste : penché pour que les épaules soient à une longueur de bras (coudes un peu pliés) des poignées
+    const gy = (V[VL.mainG + 1] + V[VL.mainD + 1]) * 0.5 * k - by, gz = (V[VL.mainG + 2] + V[VL.mainD + 2]) * 0.5 * k - bz;
+    // (en danseuse, les bras plus tendus et le buste plus couché, au-dessus du cintre)
+    const ecart = Math.max(0, Math.abs(V[VL.mainG] - V[VL.mainD]) * 0.5 * k - this.epaule), Ls = this.colonne, dT = (0.86 + 0.06 * dan) * (DIM.bras + DIM.avantBras);
+    const R = Math.hypot(gy, gz), cA = borne((R * R + Ls * Ls - (dT * dT - ecart * ecart)) / (2 * Ls * R), -1, 1);
+    const al = borne(Math.max(Math.atan2(gz, gy) - Math.acos(cA), 0.6 * dan), 0.04, 1.3);
+    // le corps reste droit quand le vélo penche, pied à terre ; il balance un peu en pédalant
+    const roul = V[VL.roulis] * pied * 0.85 + 0.025 * Math.sin(th) * (1 - pied) + 0.06 * bal * 8;
+    const b = o[OS.bassin];
+    b.position.set(bx, by, bz);
+    b.rotation.set(0.3 * al, -0.04 * Math.sin(th) * (1 - pied), roul);
+    o[OS.ventre].rotation.set(0.3 * al + br * 0.3, this.ry * 0.1, -roul * 0.4);
+    o[OS.poitrine].rotation.set(0.4 * al - br, this.ry * 0.2 + 0.03 * Math.sin(th) * (1 - pied), -roul * 0.3);
+    o[OS.tete].rotation.set(-Math.min(0.95 * al, 0.95) + 0.04 + this.rp * 0.85, this.ry * 0.66, -roul * 0.3); // (le regard devant soi, la nuque relevée)
+    this.reperes();
+    for (let j = 0; j < 2; j++) this.jambe(JAMBES[j][0], JAMBES[j][1], PIEDS[6 * j + X], PIEDS[6 * j + Y], PIEDS[6 * j + Z], PIEDS[6 * j + TG], JAMBES[j][1] * (0.05 + 0.12 * pied * (1 - j)), 0.6);
+    // les mains aux poignées : la paume (velos.js : celle de la main gauche ; la droite en miroir), les doigts autour
+    const fx = V[VL.doigts], fy = V[VL.doigts + 1], fz = V[VL.doigts + 2], nx = V[VL.paume], ny = V[VL.paume + 1], nz = V[VL.paume + 2];
+    for (let c = 0; c <= 3; c += 3) {
+      const sg = c === 0 ? 1 : -1, P = c === 0 ? VL.mainG : VL.mainD;
+      ex.set(-nx, -sg * ny, -sg * nz);
+      ey.set(-sg * fx, -fy, -fz).addScaledVector(ex, -(ex.x * -sg * fx + ex.y * -fy + ex.z * -fz)).normalize();
+      ez.crossVectors(ex, ey);
+      qTel.setFromRotationMatrix(mR.makeBasis(ex, ey, ez));
+      v1.set(V[P] * k, V[P + 1] * k, V[P + 2] * k).addScaledVector(ex, sg * 0.02).addScaledVector(ey, 0.085);
+      this.brasIK(c, v1.x, v1.y, v1.z, sg * 0.8, -0.6, -0.3, 1);
+      this.mainVers(c, qTel, 1);
+    }
   }
 
   // Oriente la main (c : 0 gauche, 3 droite) selon q, exprimé dans le repère du personnage

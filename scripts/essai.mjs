@@ -20,6 +20,10 @@
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
+//   velos     les cyclistes : ils roulent sur leurs chemins, les pieds sur les pédales, une voiture ralentit derrière un
+//             cycliste et le double de loin, bloqué par le joueur il sonne, met pied à terre et le contourne, un véhicule
+//             lancé sur lui (mode WTF compris) : il s'écarte ou saute, jamais touché, et repart ; la conduite assistée le
+//             double sans choc ; les vélos garés ; le phare la nuit
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
@@ -1099,6 +1103,142 @@ if (scenario === 'poids') {
   const r = await ev(() => { CL.profil(20); return CL.profil(120); });
   console.log(`conduite total ${Object.values(r).reduce((a, b) => a + b, 0).toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
+}
+
+if (scenario === 'velos') {
+  // les vélos et les cyclistes (velos.js) : ils roulent sur leurs chemins ; les pieds sur les pédales ; une voiture ralentit
+  // derrière un cycliste et le double de loin ; bloqué par le joueur, il freine, sonne, met pied à terre, le contourne ; un
+  // véhicule lancé sur lui : il s'écarte ou saute, jamais touché (mode WTF compris) ; les vélos garés ; la conduite
+  // assistée double un cycliste sans choc ; le phare la nuit
+  const r = await ev(() => {
+    const log = [], V = CL.velos, J = CL.jeu, C = V.cyclistes, V3 = CL.camera.position.constructor;
+    CL.jouer(); CL.step(120);
+    // la caméra suit un cycliste (il est créé en approchant : le vélo, puis le cycliste)
+    const suivre = (c, n, dx = 2.6, dy = 1.1) => { for (let k = 0; k < n; k++) { const s = Math.sin(c.h), co = Math.cos(c.h); CL.photo(c.x + co * dx, c.y + dy, c.z - s * dx, c.x, c.y + 0.8, c.z); CL.step(1); } };
+    const loinVoitures = () => { for (const w of CL.voitures()) w.x = w.sens > 0 ? -330 : 330; };
+    // 1. ils roulent, sur leurs chemins
+    const p0 = C.map(c => [c.x, c.z]);
+    CL.step(600);
+    const actifs = C.filter(c => c.actif), avancent = actifs.filter(c => Math.hypot(c.x - p0[c.i][0], c.z - p0[c.i][1]) > 8).length;
+    const surChemin = actifs.every(c => c.etat !== 'roule' || Math.abs(c.dec) <= Math.max(c.ch.G[0], c.ch.D[0]) + 1.4);
+    log.push([`${actifs.length} cyclistes à 17 h 40 (sur ${C.length}), ${avancent} ont roulé plus de 8 m en 10 s, tous sur leur chemin`, actifs.length >= 9 && avancent >= actifs.length - 2 && surChemin]);
+    log.push(['cinq genres de vélos (ville, course, VTT, électrique, enfant), des casques', new Set(C.map(c => c.genre)).size === 5 && C.filter(c => c.def.casque).length >= 6]);
+    // 2. les pieds sur les pédales (la plante du pied sur le dessus de la pédale), qui tournent
+    {
+      let pire = 0, n = 0, tours = 0;
+      for (const i of [0, 1, 7, 8]) {
+        const c = C[i]; suivre(c, 50);
+        const m0 = c.mani;
+        for (let k = 0; k < 90; k++) {
+          suivre(c, 1); CL.scene.updateMatrixWorld();
+          if (!c.p || c.etat !== 'roule' || !c.vu) continue;
+          for (const [pied, pedale, gauche] of [[12, 5, true], [15, 6, false]]) {
+            if (gauche && c.pied > 0.3) continue;
+            const b = c.p.m.os[pied].localToWorld(new V3(0, -0.08, 0.11)), q = c.m.os[pedale].getWorldPosition(new V3()); q.y += 0.016;
+            pire = Math.max(pire, b.distanceTo(q)); n++;
+          }
+        }
+        tours += Math.abs(c.mani - m0) > 3 ? 1 : 0;
+      }
+      log.push([`les pieds sur les pédales : ${n} mesures, au pire à ${(pire * 100).toFixed(1)} cm ; le pédalier tourne (${tours} sur 4)`, n > 300 && pire < 0.05 && tours >= 3]);
+    }
+    // 3. une voiture de la départementale derrière un cycliste : elle ralentit, le suit, puis le double à cheval sur la ligne
+    {
+      const c = C[0], v = CL.voitures().find(w => w.sens > 0);
+      // (rien en face pendant l'essai : celles qui vont vers l'ouest partent de derrière lui)
+      suivre(c, 10); for (const w of CL.voitures()) w.x = w.sens > 0 ? -330 : c.x - 60;
+      v.x = c.x - 40; v.z = v.zVoie; v.v = v.vmax; v.dep = 0; v.passe = null; v.suivi = 0;
+      let gapMin = 1e9, ralenti = false, double = false, latMin = 1e9;
+      for (let k = 0; k < 60 * 25 && !double; k++) {
+        suivre(c, 1, -4, 3);
+        const dx = c.x - v.x;
+        if (Math.abs(v.z - c.z) < 1.6 && dx > 0) gapMin = Math.min(gapMin, dx - 2.1 - 0.95);
+        if (dx > 0 && dx < 25 && v.v < v.vmax - 1.5) ralenti = true;
+        if (Math.abs(dx) < 3) latMin = Math.min(latMin, Math.abs(v.z - c.z));
+        if (v.x > c.x + 6) double = true;
+      }
+      log.push([`une voiture ralentit derrière le cycliste (au plus près ${gapMin.toFixed(1)} m), puis le double à ${latMin.toFixed(1)} m de côté`, ralenti && double && gapMin > 0.8 && latMin > 2.4]);
+    }
+    // 4. bloqué par le joueur à pied : il freine, sonne, s'arrête pied à terre, puis le contourne
+    {
+      const c = C[1]; loinVoitures(); suivre(c, 10);
+      const so = V.sonnettes, j = J.joueur;
+      j.placer(c.x + Math.sin(c.h) * 16, c.z + Math.cos(c.h) * 16, c.h + Math.PI);
+      let dmin = 1e9, arret = false, pied = false, passe = false;
+      for (let k = 0; k < 60 * 20 && !passe; k++) {
+        suivre(c, 1, -3, 2.5);
+        dmin = Math.min(dmin, Math.hypot(c.x - j.pos.x, c.z - j.pos.z));
+        if (c.v < 0.05) arret = true;
+        if (c.pied > 0.9) pied = true;
+        if ((c.x - j.pos.x) * Math.sin(c.h) + (c.z - j.pos.z) * Math.cos(c.h) > 2.5) passe = true;
+      }
+      log.push([`bloqué par le joueur : il sonne (${V.sonnettes - so} fois), s'arrête pied à terre, puis le contourne sans le toucher (au plus près ${dmin.toFixed(2)} m)`, V.sonnettes > so && arret && pied && passe && dmin > 0.9]);
+      j.placer(J.lieux.depart.x, J.lieux.depart.z, 0);
+    }
+    // 5. un véhicule lancé sur un cycliste : il s'écarte, ou saute (le vélo couché), jamais touché ; il remonte et repart.
+    // En mode WTF aussi (personne n'est aplati).
+    const monter = () => { const p = CL.vehicule('van').p.pos; CL.teleporter(p.x + 2.4, p.z, 0); CL.step(3); CL.agir(); CL.finirGeste(); };
+    monter();
+    for (const [i, wtf] of [[1, false], [0, true]]) {
+      J.wtf = wtf; loinVoitures();
+      const c = C[i];
+      suivre(c, 20);
+      // (lancé à 14 m/s, 35 m derrière lui, droit sur lui ; on garde l'accélérateur jusqu'à l'avoir dépassé)
+      CL.teleporter(c.x - Math.sin(c.h) * 35, c.z - Math.cos(c.h) * 35, c.h); CL.step(1);
+      const tr = CL.tr, ct = CL.ctrl; tr.v = 14; ct.ky = -1; ct.kx = 0;
+      let dmin = 1e9, saute = false, ecarte = false;
+      const t0 = c.touches || 0, x0 = c.x, z0 = c.z;
+      for (let k = 0; k < 60 * 6; k++) {
+        CL.step(1);
+        const ax = Math.sin(tr.h), az = Math.cos(tr.h);
+        const px = c.etat === 'roule' ? c.x : c.p.pos.x, pz = c.etat === 'roule' ? c.z : c.p.pos.z;
+        for (const o of tr.d.off) dmin = Math.min(dmin, Math.hypot(px - tr.pos.x - ax * o, pz - tr.pos.z - az * o) - tr.d.r - 0.34);
+        if (c.etat !== 'roule') saute = true;
+        if (Math.abs(c.dec) > 1) ecarte = true;
+        if ((tr.pos.x - x0) * ax + (tr.pos.z - z0) * az > 25) ct.ky = 1; // (passé : on freine)
+        if (ct.ky > 0 && Math.abs(tr.v) < 0.3) ct.ky = 0;
+      }
+      ct.ky = 0;
+      for (let k = 0; k < 60 * 14 && c.etat !== 'roule'; k++) CL.step(1);
+      log.push([`${wtf ? 'mode WTF : ' : ''}un véhicule lancé sur un cycliste : il ${saute ? 'saute de côté' : 'se range'}, jamais touché (au plus près ${dmin.toFixed(2)} m), il repart (${c.etat})`, (saute || ecarte) && dmin > 0 && (c.touches || 0) === t0 && c.etat === 'roule']);
+    }
+    J.wtf = false;
+    // 6. la conduite assistée : derrière un cycliste, elle le suit puis le double (rien n'arrive en face), sans choc
+    {
+      CL.tr.v = 0; CL.step(2); CL.agir(); CL.finirGeste(); // (on descend du van)
+      const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.4, p.z, 0); CL.step(3); CL.agir(); CL.finirGeste();
+      CL.mission.etape = 'retour'; CL.mission.itin = null;
+      const c = C[2]; loinVoitures();
+      c.s = 335 - 60; V.placer(c); // (le cycliste vers l'ouest, en x = 60 ; le tracteur 30 m derrière lui, vers le domaine)
+      CL.teleporter(c.x - Math.sin(c.h) * 30, 8.4, c.h); CL.step(2);
+      const tr = CL.tr, ct = CL.ctrl; ct.id = 1; ct.jx = 0; ct.jy = 0;
+      let chocs = 0, double = false, latMin = 1e9;
+      for (let k = 0; k < 60 * 30 && !double; k++) {
+        CL.step(1);
+        if (tr.chocVu > 0.15) chocs++;
+        const lo = (tr.pos.x - c.x) * Math.sin(c.h) + (tr.pos.z - c.z) * Math.cos(c.h);
+        if (Math.abs(lo) < 2.5) latMin = Math.min(latMin, Math.abs((tr.pos.x - c.x) * Math.cos(c.h) - (tr.pos.z - c.z) * Math.sin(c.h)));
+        if (lo > 6) double = true;
+      }
+      ct.id = null;
+      log.push([`la conduite assistée double un cycliste (à ${latMin.toFixed(2)} m de côté), sans choc (${chocs})`, double && chocs === 0 && latMin > 2.0]);
+      CL.agir(); CL.finirGeste();
+    }
+    // 7. les vélos garés : au bourg (place, épicerie, bar, murs), au château, chez Solumatic, à la tonnellerie ; ils arrêtent
+    {
+      const G = J.lieux.velos, n = G.reduce((a, g) => a + g.n, 0), q = { x: G[0].x, z: G[0].z };
+      log.push([`${n} vélos garés en ${G.length} endroits, un range-vélos arrête qui passe`, G.length >= 8 && n >= 18 && CL.col.resoudre(q, 0.3)]);
+    }
+    // 8. la nuit, ceux qui roulent encore ont leur phare allumé
+    {
+      J.minutes = Math.floor(J.minutes / 1440) * 1440 + 1200; CL.step(2);
+      const c = C[2]; suivre(c, 30);
+      log.push(['la nuit, le phare et le feu arrière allumés', c.actif && !!c.lampe && c.lampe.av.visible && c.lampe.ar.visible]);
+    }
+    return log;
+  }).catch(e => [['scénario interrompu : ' + e.message, false]]);
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('velos');
 }
 
 if (scenario === 'photo') {
