@@ -445,7 +445,11 @@ export class Ecole {
     // chacun ses goûts : la liste de son âge, commencée ailleurs selon l'enfant et selon la récréation (on ne joue pas
     // toujours au même jeu)
     const tour = jourDe(this.minutes || 0) * 5 + Math.floor(hm / 90);
-    for (const e of dansLaCour) { const L = e.gouts, k = (e.def.i * 5 + tour) % L.length; e.prefs = [...L.slice(k), ...L.slice(0, k), 'balade']; }
+    for (const e of dansLaCour) {
+      const L = e.gouts, k = (e.def.i * 5 + tour) % L.length; e.prefs = [...L.slice(k), ...L.slice(0, k), 'balade'];
+      // (deux récréations sur trois, une partie de ballon : les grands la préfèrent)
+      if (tour % 3 !== 2 && e.def.age >= 9 && (e.def.i + tour) % 3 !== 0) { e.prefs.splice(e.prefs.indexOf('ballon'), 1); e.prefs.unshift('ballon'); }
+    }
     const choix = new Map();
     for (const e of dansLaCour) {
       if (attente && !e.def.garderieMatin) { J.attente.membres.push(e); choix.set(e, -1); continue; }
@@ -485,7 +489,7 @@ export class Ecole {
       case 'marelle': P.x = E.marelle.x - 0.35 + i * 0.55; P.z = E.marelle.z0 + 0.7; break;
       case 'ronde': { const a = i / Math.max(1, j.membres.length) * Math.PI * 2; P.x = E.ronde.x + Math.cos(a) * E.ronde.r; P.z = E.ronde.z + Math.sin(a) * E.ronde.r; break; }
       case 'ballon': { const T = E.terrain; if (i === 0) { P.x = E.but.x; P.z = E.but.z + 0.6; } else { P.x = mix(T.x0 + 1, T.x1 - 1, ((i * 0.37) % 1)); P.z = mix(T.z0 + 3, T.z1 - 1, ((i * 0.61) % 1)); } break; }
-      case 'billes': { const a = i / 3 * Math.PI * 2 + 0.4; P.x = E.billes.x + Math.cos(a) * 0.55; P.z = E.billes.z + Math.sin(a) * 0.55; break; }
+      case 'billes': { const a = i / 3 * Math.PI * 2 + 0.4; P.x = E.billes.x + Math.cos(a) * 0.7; P.z = E.billes.z + Math.sin(a) * 0.7; break; }
       case 'banc': { const a = i * 0.9 + 0.3; P.x = E.rond.x + Math.cos(a) * (E.rond.r + 0.55); P.z = E.rond.z + Math.sin(a) * (E.rond.r + 0.55); break; }
       case 'chat': { const Z = E.chat; P.x = mix(Z.x0, Z.x1, ((i * 0.43 + 0.2) % 1)); P.z = mix(Z.z0, Z.z1, ((i * 0.71 + 0.1) % 1)); break; }
       case 'attente': { P.x = 123.6 + (i % 7) * 1.25 + (Math.floor(i / 7) % 2) * 0.6; P.z = -11.6 - Math.floor(i / 7) * 0.9; break; }
