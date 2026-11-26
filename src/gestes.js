@@ -809,4 +809,31 @@ export class Gestes {
     const ouverte = v.m.coulissante && v.m.coulissante.position.z < -0.1;
     this.lancer([...(ouverte ? [...this.auVehicule(v, Object.keys(v.m.chargeur)[0]), ...this.fermerCote(v)] : []), ...this.etapesMonter(v, installe)]);
   }
+
+  /* ------------------------------------------------------------ caresser le chien (chien.js ; Teddy, 26/11/2026) */
+  // Il s'arrête et se tourne vers nous (couché, il reste couché et se met sur le dos) ; on va devant lui (ou à côté de son
+  // poitrail), on s'agenouille (anim.js : caresse), la main droite sur sa tête et sa nuque (ou sur son ventre), on le
+  // caresse ; il remue la queue, lèche la main, gémit de plaisir ; on se relève. dire() : une réplique, une fois à genoux.
+  // La caméra regarde la scène de côté. S'il s'en va (un véhicule arrive), on se relève aussitôt.
+  caresser(chien, dire, fin) {
+    const place = { x: 0, z: 0, h: 0 }, cadre = { x: 0, z: 0, h: 0 }, main = new THREE.Vector3(), l = new THREE.Vector3(), C = { x: 0, y: 0, z: 0, w: 0 };
+    let dit = false;
+    this.lancer([
+      { action: () => { chien.debutCaresse(this.j.pos.x, this.j.pos.z, place, cadre); this.cadre = cadre; } },
+      ...this.allerA(() => place, () => place.h),
+      {
+        debut: () => { const j = this.j; j.caresse = C; C.w = 0; j.regard = chien.teteMonde; j.v = 0; },
+        maj: (dt, t, u, T) => {
+          const parti = chien.etat !== 'caresse';
+          chien.pendantCaresse(T, main); this.local(main, l);
+          C.x = l.x; C.y = l.y; C.z = l.z;
+          C.w = parti ? Math.max(0, C.w - dt * 3) : lisse(T / 0.6) * (1 - lisse((T - 4.6) / 0.55));
+          if (!dit && T > 0.9 && !parti) { dit = true; dire(); }
+          this.immobile(dt, t);
+          return T > 5.2 || (parti && C.w <= 0);
+        },
+      },
+      { action: () => { const j = this.j; j.caresse = null; j.regard = null; chien.finCaresse(); } },
+    ], fin);
+  }
 }

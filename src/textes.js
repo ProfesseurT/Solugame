@@ -698,3 +698,8 @@ export const MISSIONS = {
   enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', dodo: 'La journée de traitement finie : rentrez dormir', habillage: 'L\'habillage, en cours', libre: 'Les trois missions gagnées : le domaine est à vous' },
   reprise: 'Partie reprise',
 };
+
+// Le chien du domaine (chien.js) : ce qu'on lui dit en le caressant (gestes.js : caresser)
+export const CHIEN = {
+  caresse: ['Brave chien !', 'Qui c\'est le bon chien ?', 'Allez, une caresse.', 'T\'es un bon gardien, toi.', 'Doucement, doucement...', 'Tu veux des grattouilles ?', 'Tu as bien gardé la cour ?'],
+};

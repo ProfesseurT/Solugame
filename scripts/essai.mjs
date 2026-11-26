@@ -1101,6 +1101,152 @@ if (scenario === 'poids') {
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
 }
 
+if (scenario === 'chien') {
+  // le chien du domaine (Teddy, 26/11/2026) : il se balade dans la cour ; un véhicule lancé sur lui (couché, debout, assis ;
+  // en tracteur, en van, mené par un geste ; en mode WTF aussi) : il se lève et part au galop, jamais dans l'emprise du
+  // véhicule ; on le caresse (l'étiquette, le geste à genoux, la main sur lui ; couché, il se met sur le dos) ; la nuit il est
+  // rentré, invisible ; le matin il ressort ; il ne gêne ni le tracteur (geste, chemin du hangar) ni la tournée
+  const r = await ev(async () => {
+    const J = CL.jeu, C = CL.chien, log = [];
+    const etq = t => [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith(t));
+    // l'écart (m) entre le corps du chien (poitrail, milieu, arrière-train) et l'emprise du véhicule v ; négatif : dedans
+    const ecart = v => {
+      const h = v.p.h, c = Math.cos(h), s = Math.sin(h), fx = Math.sin(C.h), fz = Math.cos(C.h);
+      let m = 1e9;
+      for (const o of [0.42, 0, -0.45]) {
+        const dx = C.x + fx * o - v.p.pos.x, dz = C.z + fz * o - v.p.pos.z, x = dx * c - dz * s, z = dx * s + dz * c;
+        for (const [x0, x1, z0, z1] of v.m.dims.emprise) {
+          const ex = Math.max(x0 - x, 0, x - x1), ez = Math.max(z0 - z, 0, z - z1);
+          m = Math.min(m, ex || ez ? Math.hypot(ex, ez) : -Math.min(x - x0, x1 - x, z - z0, z1 - z));
+        }
+      }
+      return m;
+    };
+    // le chien posé en (x, z), cap h, dans une posture (0 debout, 1 assis, 2 couché), tranquille
+    const poser = (x, z, h, p) => {
+      C.x = x; C.z = z; C.h = h; C.v = 0; C.cible = false; C.menace = false;
+      if (p === 2) C.coucher({ x, z, h, p: 0 }, true); else { C.faire(p ? 'assis' : 'debout', 60); C.W.fill(0); C.W[p] = 1; C.post = p; C.file.length = 0; }
+      C.duree = 60; C.replacerPieds(); CL.step(30);
+    };
+    // un véhicule lancé sur lui : on monte, on le pose à d m, droit sur le chien, à fond pendant n images ; rend l'écart le
+    // plus petit, s'il a fui, en combien de temps il s'est levé (depuis qu'il fuit), la vitesse du véhicule au plus près
+    const foncer = (genre, d, n = 300, recul = false) => {
+      // (sur l'allée, du portail vers le chai : il arrive du sud, cap au nord ; en marche arrière, du nord. On monte loin du
+      // chien : sinon « Caresser le chien » passe avant « Monter »)
+      const v = CL.vehicule(genre), sg = recul ? -1 : 1;
+      if (J.auVolant) { CL.agir(); CL.finirGeste(); }
+      v.p.placer(C.x, C.z + sg * (d + 6), Math.PI); CL.teleporter(C.x - 2.4, C.z + sg * (d + 6), 0); CL.step(3); CL.agir(); CL.finirGeste();
+      if (!J.auVolant || J.veh !== v) throw new Error('pas monté dans ' + genre);
+      CL.tr.placer(C.x, C.z + sg * d, Math.PI); CL.step(2);
+      let mini = 1e9, fui = -1, leve = -1, t = 0, vp = 0;
+      const couche = C.W[0] < 0.2;
+      CL.ctrl.ky = recul ? 1 : -1;
+      for (let i = 0; i < n; i++) {
+        CL.step(1); t += 1 / 60;
+        const e = ecart(v); if (e < mini) { mini = e; vp = Math.abs(v.p.v); }
+        if (C.etat === 'fuit' && fui < 0) fui = t;
+        if (couche && fui >= 0 && leve < 0 && C.W[0] > 0.6) leve = t - fui;
+      }
+      // on freine jusqu'à l'arrêt, on descend
+      for (let i = 0; i < 300 && Math.abs(CL.tr.v) > 0.2; i++) { CL.ctrl.ky = CL.tr.v > 0 ? 1 : -1; CL.step(1); }
+      CL.ctrl.ky = 0; CL.step(10);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      if (J.auVolant) throw new Error('pas descendu de ' + genre);
+      return { mini, fui: fui >= 0, leve, couche, vmax: vp };
+
+    };
+    try {
+      CL.jouer(); CL.step(120);
+      log.push(['le chien est là, dehors, dessiné (' + C.m.nTri + ' triangles, ' + C.m.os.length + ' os)', C.dehors && C.g.visible && C.m.nTri < 9000 && !!CL.scene.getObjectByName('chien')]);
+      // il se balade : trois minutes de jeu, le joueur loin (sur la route)
+      CL.teleporter(-60, 10, 0); CL.step(5); CL.teleporter(-92, -36, 0); CL.step(5);
+      { const etats = new Set(), postures = new Set(); let chemin = 0, x0 = C.x, z0 = C.z, dehors = 0, chai = 0;
+        for (let i = 0; i < 60 * 180; i++) {
+          CL.step(1);
+          etats.add(C.etat); postures.add(C.dominante()); chemin += Math.hypot(C.x - x0, C.z - z0); x0 = C.x; z0 = C.z;
+          if (C.x < -113.1 || C.x > -76.2 || C.z < -71.1 || C.z > -34.4) dehors++;
+          if (C.x > -76.2 && C.z > -65 && C.z < -39) chai++;
+        }
+        log.push([`il se balade dans la cour : ${chemin.toFixed(0)} m en 3 min, ${etats.size} activités (${[...etats].join(', ')}), ${postures.size} postures`, chemin > 25 && etats.size >= 4 && postures.size >= 2]);
+        log.push(['il ne sort pas de la cour, n\'entre pas dans le chai', dehors === 0 && chai === 0]); }
+      // un véhicule lancé sur lui : couché, debout, assis ; en tracteur, en van ; en mode WTF aussi
+      for (const [genre, p, wtf, d] of [['tracteur', 2, false, 16], ['tracteur', 0, false, 14], ['tracteur', 1, false, 12], ['van', 2, false, 22], ['van', 0, true, 18], ['tracteur', 2, true, 9], ['van', 1, true, 6]]) {
+        J.wtf = wtf; poser(-90, -44, Math.PI * 0.8, p);
+        const r = foncer(genre, d);
+        const nom = ['debout', 'assis', 'couché'][p];
+        log.push([`${genre} lancé sur lui (${nom}, à ${d} m${wtf ? ', mode WTF' : ''}, ${r.vmax.toFixed(1)} m/s au plus près) : ${r.fui ? 'il fuit' : 'il ne fuit pas'}${r.couche ? ', debout en ' + r.leve.toFixed(2) + ' s' : ''}, jamais dans l'emprise (au plus près ${r.mini.toFixed(2)} m)`, r.fui && r.mini > 0.25 && (!r.couche || (r.leve >= 0 && r.leve < 0.6))]);
+
+      }
+      J.wtf = false;
+      // en marche arrière
+      { poser(-90, -44, 0, 2); const r = foncer('tracteur', 5, 360, true); log.push([`tracteur en marche arrière sur lui (${r.vmax.toFixed(1)} m/s) : il fuit, au plus près ${r.mini.toFixed(2)} m`, r.fui && r.mini > 0.25]); }
+      // un véhicule mené par un geste (comme l'entrée au chai) : le tracteur roule tout seul sur un chemin qui passe sur lui
+      {
+        const v = CL.vehicule('tracteur'); poser(-88, -40, 0, 2);
+        const pts = []; for (let i = 0; i <= 60; i++) pts.push([-88 - 12 + i * 0.4, -40]);
+
+        v.p.placer(pts[0][0], pts[0][1], Math.PI / 2);
+        J.gestes.lancer([J.gestes.rouler(v, pts, 3.5)]);
+        let mini = 1e9, fui = false;
+        for (let i = 0; i < 300 && J.gestes.actif; i++) { CL.step(1); mini = Math.min(mini, ecart(v)); if (C.etat === 'fuit') fui = true; }
+        J.gestes.g = null; J.gestes.roule = false; v.p.v = 0; CL.step(30);
+        log.push([`un tracteur mené par un geste passe sur lui : il fuit, au plus près ${mini.toFixed(2)} m`, fui && mini > 0.25]);
+      }
+      // garde-fou : posé dans l'emprise d'un véhicule (arrêté), il en est sorti aussitôt
+      { const v = CL.vehicule('van'); poser(v.p.pos.x, v.p.pos.z, 0, 0); CL.step(2); log.push([`posé sous le van, il en est sorti (écart ${ecart(v).toFixed(2)} m)`, ecart(v) > 0]); }
+      // le caresser : debout ou assis, il s'assoit devant nous ; couché, il se met sur le dos
+      for (const p of [0, 2]) {
+        poser(-95, -40, 0, p); CL.teleporter(C.x + 0.9, C.z + 0.9, -2.4); CL.step(20);
+        const propose = etq('Caresser le chien');
+        CL.agir(); CL.step(2);
+        let genou = 0, main = 9, dos = 0, leche = 0;
+        for (let i = 0; i < 600 && J.gestes.actif; i++) {
+          CL.step(1);
+          const k = CL.joueur.caresse; if (k) genou = Math.max(genou, k.w);
+          if (k && k.w > 0.9) { const m = CL.joueur.m.os[9]; const w = m.getWorldPosition(C.teteMonde.clone()); main = Math.min(main, Math.hypot(w.x - C.teteMonde.x, w.z - C.teteMonde.z) - (C.caresse.dos ? 0.3 : 0)); }
+          dos = Math.max(dos, C.W[4]); leche = Math.max(leche, C.leche);
+        }
+        CL.step(10);
+        log.push([`le caresser (${p ? 'couché : sur le dos' : 'debout : il s\'assoit'}) : « Caresser le chien », à genoux (${genou.toFixed(2)}), la main sur lui (${main.toFixed(2)} m), le geste fini`, propose && genou > 0.95 && main < 0.4 && !J.gestes.actif && !CL.joueur.caresse && (p ? dos > 0.8 : leche > 0.5) && C.etat !== 'caresse']);
+      }
+      // la nuit : le soir, il rentre à la maison par la porte (invisible) ; le matin, il ressort
+      {
+        C.faire('debout', 5); J.minutes = Math.floor(J.minutes / 1440) * 1440 + 1194; CL.teleporter(-96, -52, 0); CL.step(5);
+        let rentre = false; for (let i = 0; i < 60 * 90 && !rentre; i++) { CL.step(1); rentre = C.etat === 'dedans'; }
+        log.push([`le soir (${J.heureTxt}), il rentre à la maison par la porte : invisible`, rentre && !C.g.visible && !C.dehors && Math.abs(C.x + 100) < 0.6]);
+        J.minutes += 120; CL.step(30);
+        log.push(['la nuit (' + J.heureTxt + '), il est dedans', !C.dehors && !C.g.visible && !etq('Caresser le chien')]);
+        J.minutes = (Math.floor(J.minutes / 1440) + 1) * 1440 + 400; CL.step(10);
+        log.push(['6 h 40 : encore dedans', !C.dehors && !C.g.visible]);
+        let sorti = false; for (let i = 0; i < 60 * 100 && !sorti; i++) { CL.step(1); sorti = C.dehors && C.g.visible; }
+        CL.step(60 * 4);
+        log.push([`le matin (${J.heureTxt}), il ressort de la maison`, sorti && C.dehors && C.z > -59.5]);
+        // on dort (le soir, lui dehors) : au réveil (7 h), il est dedans ; il sort peu après
+        J.minutes = Math.floor(J.minutes / 1440) * 1440 + 1080; CL.step(10);
+        CL.teleporter(-100, -56.8, Math.PI); CL.step(20); CL.agir(); CL.finirGeste(); CL.step(5);
+        log.push(['rentré dormir à 18 h : au réveil (' + J.heureTxt + '), il est encore dedans', J.heureTxt === '07:00' && !C.dehors && !C.g.visible]);
+      }
+      // il ne gêne pas le tracteur : couché sur le chemin du hangar, le tracteur y passe (mené par un geste) sans choc
+      {
+        J.minutes = Math.floor(J.minutes / 1440) * 1440 + 600; CL.step(5); C.sortir(); CL.step(60 * 3);
+        const v = CL.vehicule('tracteur'); poser(-80.4, -64.5, 0, 2);
+        const P = [[-73.75, -84.5], [-73.75, -79.0], [-74.2, -75.6], [-77.0, -72.8], [-79.6, -68.5], [-80.4, -64.0], [-82.0, -60.0], [-86.5, -56], [-86.5, -50.6]], pts = [];
+        for (let i = 1; i < P.length; i++) for (let k = 0; k < 10; k++) pts.push([P[i - 1][0] + (P[i][0] - P[i - 1][0]) * k / 10, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * k / 10]);
+        pts.push(P[P.length - 1]);
+
+        v.p.placer(-73.75, -84.5, 0);
+        J.gestes.lancer([J.gestes.rouler(v, pts, 6)]);
+        let mini = 1e9, chocs = 0;
+        for (let i = 0; i < 500 && J.gestes.actif; i++) { CL.step(1); mini = Math.min(mini, ecart(v)); if (v.p.chocVu > 0.15) chocs++; }
+        const fini = !J.gestes.actif && Math.hypot(v.p.pos.x + 86.5, v.p.pos.z + 50.6) < 0.5;
+        log.push([`le tracteur passe sur le chemin du hangar où il était couché : il s'écarte (au plus près ${mini.toFixed(2)} m), le tracteur arrive sans choc`, fini && chocs === 0 && mini > 0.25]);
+      }
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + e.stack, false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+}
+
 if (scenario === 'photo') {
   await ev(() => { CL.jouer(); CL.step(30); });
   const vues = {
