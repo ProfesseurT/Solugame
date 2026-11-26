@@ -78,6 +78,8 @@ export function dateJeu(j, forme = 'longue') {
 export const HORAIRES = {
   commerce: [7 * 60, 19 * 60 + 30],
   restaurant: [7 * 60, 19 * 60 + 30],
+  // les restaurateurs du coin (restaurateurs.js), devant leur porte : à partir de 9 h, avant c'est la mise en place
+  tenancier: [9 * 60, 19 * 60 + 30],
   labo: [7 * 60, 18 * 60 + 30],
   imprimerie: [7 * 60, 19 * 60 + 30],
   domaine: [7 * 60, 19 * 60 + 30],

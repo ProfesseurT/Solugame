@@ -332,7 +332,8 @@ export class Mission {
   // chose à y faire : une commande à préparer, des tâches du jour, une tournée à lancer. Pas la nuit : de 8 h à 20 h.
   relancer(dt) {
     const j = this.j, tel = j.tel;
-    if (tel.ouvert || tel.notif || j.pc.ouvert || j.gestes.actif || !['journee', 'livraisons'].includes(this.etape) || !appelPossible(j.minutes)) { this.tRelance = 0; return; }
+    // (la relance d'un restaurateur du coin ne retient pas celle de la tournée : telephone.js, notifResto)
+    if (tel.ouvert || (tel.notif && !tel.notifResto) || j.pc.ouvert || j.gestes.actif || !['journee', 'livraisons'].includes(this.etape) || !appelPossible(j.minutes)) { this.tRelance = 0; return; }
     if ((this.tRelance += dt) < RELANCE) return;
     this.tRelance = 0;
     const c = this.clients.find(x => x.statut === 'commande');

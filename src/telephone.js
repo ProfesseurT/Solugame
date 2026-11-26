@@ -90,8 +90,9 @@ export class Telephone {
     $('voile').classList.remove('vu');
   }
   basculer() { if (this.ouvert) { if (this.jeu.mission.peutFermer()) this.fermer(); } else this.ouvrir(); }
-  notifier(app) {
-    this.notif = app; this.jeu.hud.notifier(app ? 1 : 0);
+  // resto : une relance des restaurateurs du coin (restaurateurs.js) ; celle d'une mission la remplace
+  notifier(app, resto = false) {
+    this.notif = app; this.notifResto = !!(app && resto); this.jeu.hud.notifier(app ? 1 : 0);
     if (this.ouvert && ['accueil', 'bureau', 'commande', 'tournee'].includes(this.app)) this.afficher();
   }
 
@@ -100,6 +101,7 @@ export class Telephone {
     const [nom, arg, arg2] = a.split(':');
     const m = this.jeu.mission, R = this.jeu.traitement, H = this.H;
     if (!m.peutFermer() && (nom === 'accueil' || nom === 'ouvrir')) return; // pendant un appel, on reste en ligne
+    if (nom.startsWith('r-')) { if (this.jeu.restos && this.jeu.restos.action(this, nom, arg)) this.afficher(); return; } // les restaurateurs du coin
     switch (nom) {
       case 'accueil': this.app = 'accueil'; this.fil = null; break;
       case 'ouvrir': this.app = arg; this.fil = null; this.confirme = null; if (arg === this.notif) this.notifier(null); break;
@@ -244,7 +246,7 @@ export class Telephone {
   // Le bureau sur le portable du bureau du chai (« Au domaine sur l'ordinateur », page du bureau) : les mêmes écrans,
   // sans l'en-tête du téléphone
   vuePortable() {
-    if (!['bureau', 'commande', 'tournee', 'message'].includes(this.app)) this.app = 'bureau';
+    if (!['bureau', 'commande', 'tournee', 'message', 'restoCmd'].includes(this.app)) this.app = 'bureau';
     this.surPortable = true;
     const h = this[this.app]();
     this.surPortable = false;
@@ -266,7 +268,7 @@ export class Telephone {
   accueil() {
     const R = this.jeu.traitement, H = this.H, m3 = H && H.actif, m2 = !m3 && R && R.actif; // le lendemain : la journée de traitement ; le jour d'après : l'habillage
     const n = this.notif === 'bureau'
-      ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.jeu.mission.message)}</span></button>`
+      ? `<button class="ph-notif" data-a="ouvrir:bureau"><span class="ic bureau">${ICONES.bureau}</span><span><b>Le bureau</b><br>${esc(this.notifResto && this.jeu.restos ? this.jeu.restos.message : this.jeu.mission.message)}</span></button>`
       : this.notif === 'messages' && m3 ? `<button class="ph-notif" data-a="fil:${H.fil}"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(HX.messages[H.fil].de)}</b><br>${esc(H.message)}</span></button>`
         : this.notif === 'messages' && m2 ? `<button class="ph-notif" data-a="fil:claire"><span class="ic messages">${ICONES.messages}</span><span><b>${esc(TX.message.de)}</b><br>${esc(TX.message.apercu)}</span></button>`
           : this.notif === 'phyto' && m2 && R.aNoter.length ? `<button class="ph-notif" data-a="ouvrir:phyto"><span class="ic phyto">${ICONES.phyto}</span><span><b>Registre phyto</b><br>${esc(TX.app.notif(R.noms(R.aNoter)))}</span></button>` : '';
@@ -299,6 +301,8 @@ export class Telephone {
     else if (aCharger) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Commande${aCharger > 1 ? 's' : ''} signée${aCharger > 1 ? 's' : ''}</p><b>${aCharger} à charger au chai</b></div>`;
     else if (e === 'journee' && prets) carte = `<div class="carte-a-faire bureau"><p class="ap-sur">Tournée du jour</p><b>${prets} arrêt${prets > 1 ? 's' : ''} prêt${prets > 1 ? 's' : ''}</b><button class="ap-bt plein" data-a="ouvrir:tournee">Voir la tournée</button></div>`;
     else if (m.pcDispo && !this.surPortable) carte = `<p class="consigne">${esc(CONSIGNE_RETOUR)}</p>`;
+    const RR = this.jeu.restos; // les restaurateurs du coin : leur rappel du moment (si la tournée n'a rien de plus pressé), leur rubrique
+    if (!carte && RR) carte = RR.carte();
     // le règlement en retard : une tâche du jour, qu'on ajoute soi-même à la tournée
     const r = m.retardataire, planifie = r.statut !== 'a_planifier';
     const reglement = `<div class="rappel"><span class="av" style="background:${r.coul}">${r.ini}</span><div class="rq"><b>${esc(r.nom)} · ${esc(r.lieu)}</b>
@@ -315,7 +319,7 @@ export class Telephone {
       <div class="tuiles"><div class="tu rouge"><b>1</b>Rappel en retard</div><div class="tu bleu"><b>2</b>Rappels du jour</div><div class="tu rouge"><b>1</b>Règlement en retard</div></div>
       <p class="ap-h">À faire aujourd'hui</p>${lignes}
       <p class="ap-h">Règlement en retard</p>${reglement}
-      <p class="ap-h">Prospect</p>${prospect}</div>`;
+      <p class="ap-h">Prospect</p>${prospect}${RR ? RR.rubrique() : ''}</div>`;
   }
   // Commandes : le formulaire du client en cours, la confirmation d'envoi, ou la liste
   commande() {
@@ -345,7 +349,8 @@ export class Telephone {
       const qte = x.statut === 'commande' ? 'Quantité à saisir' : `${x.cartons} cartons`;
       return `<div class="arret"><span class="num" style="background:${x.coul}">${x.ini}</span><div class="rq"><b>${x.numero} · ${esc(x.nom)}</b><span>${qte} · ${esc(x.produit)}</span></div>${act}</div>`;
     }).join('');
-    return tete + `<div class="ap-corps"><p class="ap-sur">Commandes du jour</p>${lignes || `<p class="ap-txt">${esc(BUREAU.aucuneCommande)}</p>`}${m.clients.some(x => x.statut === 'signee') ? `<p class="ap-note">${esc(BUREAU.signee)}</p>` : ''}</div>`;
+    const resto = this.jeu.restos ? this.jeu.restos.lignesCommandes() : ''; // (les restaurateurs du coin)
+    return tete + `<div class="ap-corps"><p class="ap-sur">Commandes du jour</p>${lignes || resto ? lignes + resto : `<p class="ap-txt">${esc(BUREAU.aucuneCommande)}</p>`}${m.clients.some(x => x.statut === 'signee') || (resto && this.jeu.restos.signees.length) ? `<p class="ap-note">${esc(BUREAU.signee)}</p>` : ''}</div>`;
   }
   message() {
     const c = this.jeu.mission.client(this.client);
@@ -395,9 +400,11 @@ export class Telephone {
       <div class="reg-choix"><button class="ap-bt" data-a="effacer">Effacer</button><button class="ap-bt plein" id="bt-livrer" data-a="livrer" disabled>Valider la livraison</button></div></div>`;
   }
   appel() {
-    const c = this.jeu.mission.client(this.client);
+    const c = this.appelResto || this.jeu.mission.client(this.client); // (appelResto : un restaurateur du coin)
     return `<div class="ph-appel"><p class="ap-sur">Appel en cours</p><span class="av grand" style="background:${c.coul}">${c.ini}</span><b>${esc(c.nom)}</b><span id="ph-duree">00:00</span><div class="onde"><i></i><i></i><i></i><i></i><i></i></div><p id="ph-ligne" class="ph-ligne"></p></div>`;
   }
+  // la commande d'un restaurateur du coin (restaurateurs.js), préparée pendant l'appel
+  restoCmd() { return this.jeu.restos.ecranCommande(this); }
   /* ------------------------------------------------------------ Viticode (mission 3), comme viticode.fr
      La fiche produit (les champs, les ingrédients préchargés par catégorie, la déclaration nutritionnelle et sa
      calculatrice, la consommation responsable), publiée : son QR code (télécharger, copier) ; la personnalisation du QR
@@ -678,7 +685,8 @@ export class Telephone {
       const gagnee = !!G[M.id], etat = gagnee ? '<b class="ms-e ok">Gagnée ✓</b>' : M.id === cours ? '<b class="ms-e cours">En cours</b>' : '<b class="ms-e">À venir</b>';
       return `<div class="ms"><p class="ms-n">${esc(M.n)}${etat}</p><p class="ms-t">${esc(M.titre)}</p><p class="ap-note">${esc(M.texte)}</p>${gagnee ? `<button class="ap-bt" data-a="rejouer:${M.id}">Rejouer</button>` : ''}</div>`;
     }).join('');
-    return this.entete('Missions', 'missions') + `<div class="ap-corps">${conf}${lignes}<p class="ap-note">${esc(MISSIONS.note)}</p></div>`;
+    const resto = this.jeu.restos ? this.jeu.restos.ligneMissions() : ''; // (hors mission : les restaurateurs du coin, dès le premier rencontré)
+    return this.entete('Missions', 'missions') + `<div class="ap-corps">${conf}${lignes}${resto}<p class="ap-note">${esc(MISSIONS.note)}</p></div>`;
   }
   reglages() {
     const h = this.jeu.choixHeros;

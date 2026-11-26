@@ -729,6 +729,9 @@ void main() {
      peint en code et éclairé (atlas, matière sans ombre : une boutique allumée). Il donne la profondeur sans creuser la
      maison. V reçoit les vitres. Repère de la maison : façade en z = d / 2, x le long de la façade. */
   const BOIS_E = '#6b4a30', LUEUR = '#ffe1a0', VERRE = '#3a5068';
+  // les boutiques qui sont des salles de restaurant (pas d'étagères en vitrine) : le restaurant et l'auberge, et ceux des
+  // restaurateurs à découvrir (restaurantsBourg, relaisCroisee : brasserie, pizzeria, table gastronomique, relais routier)
+  const SALLES = new Set(['resto', 'brasserie', 'pizzeria', 'gastro', 'routier']);
   function devanture(L, V, Pm, o, w, d) {
     const C = o.vitrine, CF = assombrir(C, 0.7), z0 = d / 2, vw = w * 0.56, vx = -w * 0.14, xp = w * 0.33;
     const X0 = Math.max(-w / 2 + 0.3, vx - vw / 2 - 0.3), X1 = Math.min(w / 2 - 0.3, xp + 0.85), cx = (X0 + X1) / 2, lw = X1 - X0;
@@ -744,7 +747,7 @@ void main() {
     V.push(B(gw, 2.06, 0.01, VERRE, gx, 1.67, z0 + 0.24));
     // dans la vitrine : planche du fond et, sauf au restaurant, deux étagères ; les marchandises
     L.push(B(gw, 0.04, 0.22, BOIS_E, gx, 0.66, z0 + 0.11));
-    const table = o.boutique === 'resto';
+    const table = SALLES.has(o.boutique);
     if (!table) for (const y of [1.3, 1.85]) L.push(B(gw, 0.03, 0.12, BOIS_E, gx, y, z0 + 0.07));
     marchandises(Pm, o.boutique, g0, g1, z0);
     // porte vitrée : panneau bas, montants, traverse, vitre, poignée de laiton
@@ -800,6 +803,30 @@ void main() {
       }
       L.push(C(0.045, 0.055, 0.2, 8, '#c9a55a', g0 + 0.3, 0.68 + 0.1, z0 + 0.1), C(0.007, 0.007, 0.26, 5, '#f4f1ea', g0 + 0.3, 0.68 + 0.33, z0 + 0.1), C(0.035, 0.03, 0.05, 8, '#2b2b30', g0 + 0.3, 0.68 + 0.025, z0 + 0.1));
       L.push(B(0.36, 0.24, 0.18, '#e8eaec', g1 - 0.35, 0.68 + 0.12, z0 + 0.1), B(0.2, 0.1, 0.01, '#dfeef8', g1 - 0.38, 0.68 + 0.16, z0 + 0.195), B(0.06, 0.03, 0.01, '#2f9e63', g1 - 0.22, 0.68 + 0.07, z0 + 0.195));
+    } else if (genre === 'pizzeria') {
+      // la pizzeria : des pots de basilic, des boîtes de tomates, l'huile d'olive, la pelle à pizza appuyée au fond
+      for (let x = g0 + 0.25; x < g1 - 0.2; x += 0.55) L.push(C(0.09, 0.07, 0.13, 8, '#b5532e', x, 0.745, z0 + 0.1), S(0.1, '#3f7a2e', x, 0.86, z0 + 0.1, 1, 0.8, 1));
+      for (let x = g0 + 0.5; x < g1 - 0.4; x += 0.55) L.push(C(0.045, 0.045, 0.11, 8, '#c0392b', x, 0.735, z0 + 0.16), C(0.046, 0.046, 0.03, 8, '#e8dcc0', x, 0.74, z0 + 0.16));
+      L.push(C(0.03, 0.035, 0.3, 6, '#5a6b2f', g1 - 0.3, 0.83, z0 + 0.06), C(0.012, 0.012, 0.08, 5, '#d9c27a', g1 - 0.3, 1.02, z0 + 0.06));
+      L.push(B(0.34, 0.4, 0.02, '#c9a87a', g0 + 0.45, 0.9, z0 + 0.03), B(0.04, 0.9, 0.02, '#a8825a', g0 + 0.45, 1.55, z0 + 0.03));
+    } else if (genre === 'brasserie') {
+      // la brasserie : l'ardoise du plat du jour, une rangée de verres à pied, un seau à glace et sa bouteille
+      L.push(B(0.6, 0.78, 0.03, '#2b2b30', g0 + 0.5, 1.12, z0 + 0.06), B(0.66, 0.05, 0.05, '#6b4a30', g0 + 0.5, 1.53, z0 + 0.06));
+      for (let x = g0 + 1.0; x < g1 - 0.6; x += 0.16) L.push(C(0.006, 0.006, 0.1, 4, '#d6e6ea', x, 0.73, z0 + 0.12), C(0.03, 0.018, 0.06, 6, '#d6e6ea', x, 0.81, z0 + 0.12));
+      L.push(C(0.09, 0.08, 0.2, 10, '#b9bec4', g1 - 0.35, 0.78, z0 + 0.1), C(0.03, 0.03, 0.26, 6, '#1f3b2a', g1 - 0.35, 0.92, z0 + 0.1), S(0.2, '#4f7a32', g1 - 0.8, 1.0, z0 + 0.1, 1, 1.4, 0.6));
+    } else if (genre === 'gastro') {
+      // la table gastronomique : un grand bouquet dans un vase, le menu encadré, deux bougies (presque rien : c'est voulu)
+      const xm = (g0 + g1) / 2;
+      L.push(C(0.07, 0.1, 0.36, 10, '#e8e4dc', xm, 0.86, z0 + 0.1));
+      for (const [dx, dy, c] of [[0, 0.32, '#f4f1ea'], [-0.12, 0.25, '#e8b4b8'], [0.12, 0.26, '#f4f1ea'], [-0.05, 0.4, '#d23a4a'], [0.07, 0.38, '#e8b4b8'], [0, 0.18, '#4f7a32']]) L.push(S(0.08, c, xm + dx, 0.86 + dy, z0 + 0.1));
+      L.push(B(0.36, 0.48, 0.02, '#c9a55a', g0 + 0.4, 1.05, z0 + 0.06), B(0.3, 0.42, 0.025, '#f4f1ea', g0 + 0.4, 1.05, z0 + 0.065));
+      for (const x of [g1 - 0.5, g1 - 0.3]) L.push(C(0.022, 0.022, 0.16, 6, '#f1e8d2', x, 0.76, z0 + 0.1), B(0.02, 0.03, 0.02, LUEUR, x, 0.86, z0 + 0.1));
+    } else if (genre === 'routier') {
+      // le relais routier : la machine à café, les tasses empilées, l'ardoise du menu ouvrier, un thermos
+      L.push(B(0.42, 0.46, 0.3, '#2b2d32', g0 + 0.4, 0.91, z0 + 0.1), B(0.3, 0.12, 0.02, '#a3aab2', g0 + 0.4, 1.02, z0 + 0.26), C(0.02, 0.02, 0.06, 5, '#a3aab2', g0 + 0.4, 0.82, z0 + 0.22));
+      for (let k = 0; k < 4; k++) L.push(C(0.04, 0.035, 0.06, 8, '#f4f1ea', g0 + 0.8, 0.71 + k * 0.06, z0 + 0.12));
+      L.push(B(0.62, 0.8, 0.03, '#23272a', (g0 + g1) / 2, 1.1, z0 + 0.06), B(0.68, 0.05, 0.05, '#c9a55a', (g0 + g1) / 2, 1.52, z0 + 0.06));
+      L.push(C(0.06, 0.06, 0.3, 8, '#c0392b', g1 - 0.35, 0.83, z0 + 0.1), S(0.22, '#4f7a32', g1 - 0.8, 0.95, z0 + 0.1, 1, 1.2, 0.6));
     } else { // restaurant, auberge : une plante, l'ardoise du menu, des bougies
       L.push(C(0.15, 0.12, 0.3, 8, '#b5532e', g0 + 0.3, 0.83, z0 + 0.11), S(0.24, '#4f7a32', g0 + 0.3, 1.2, z0 + 0.11, 1, 1.3, 0.55));
       L.push(B(0.42, 0.58, 0.03, '#2b2b30', g1 - 0.4, 1.0, z0 + 0.12, 0), B(0.46, 0.04, 0.05, '#6b4a30', g1 - 0.4, 1.3, z0 + 0.12));
@@ -890,6 +917,41 @@ void main() {
       etageres(['#a8662a', '#2f5d3a', '#cfe0ea', '#6e1f2e', '#d9a832'], 14, 22, 6);
       c.fillStyle = '#5a3c26'; c.fillRect(0, sol - H * 0.2, W, H * 0.2); c.fillStyle = '#c9a55a'; c.fillRect(0, sol - H * 0.21, W, 4);
       for (let x = W * 0.12; x < W; x += W * 0.18) { c.fillStyle = '#2b2018'; c.fillRect(x - 2, sol - H * 0.12, 4, H * 0.12); c.beginPath(); c.ellipse(x, sol - H * 0.12, 12, 4, 0, 0, 7); c.fill(); }
+    } else if (genre === 'pizzeria') {
+      // le four à bois au fond (sa voûte de briques, la gueule où le feu luit, les bûches), les tables aux nappes rouges
+      const fx = porte ? W * 0.5 : W * 0.72, fy = sol - H * 0.12;
+      c.fillStyle = '#8a4a2e'; c.beginPath(); c.ellipse(fx, fy, H * 0.3, H * 0.34, 0, Math.PI, 0); c.fill(); c.fillRect(fx - H * 0.3, fy, H * 0.6, H * 0.12);
+      c.strokeStyle = '#6a3420'; c.lineWidth = 1.5; for (let y = fy - H * 0.3; y < fy; y += 9) { c.beginPath(); c.moveTo(fx - H * 0.28, y); c.lineTo(fx + H * 0.28, y); c.stroke(); }
+      const fe = c.createRadialGradient(fx, fy, 2, fx, fy, H * 0.16); fe.addColorStop(0, '#fff1a8'); fe.addColorStop(0.45, '#ff9a2e'); fe.addColorStop(1, '#5a1e10');
+      c.fillStyle = fe; c.beginPath(); c.ellipse(fx, fy, H * 0.13, H * 0.12, 0, Math.PI, 0); c.fill();
+      c.fillStyle = '#6b4a30'; for (let k = 0; k < 5; k++) c.fillRect(fx + H * 0.34, sol - 8 - k * 7, 40, 6);
+      if (!porte) for (let x = W * 0.12; x < W * 0.5; x += W * 0.2) {
+        c.fillStyle = '#5a3c26'; c.fillRect(x - 28, sol - H * 0.24, 5, H * 0.24); c.fillRect(x + 23, sol - H * 0.24, 5, H * 0.24);
+        c.fillStyle = '#b8322a'; c.beginPath(); c.ellipse(x, sol - H * 0.14, 32, 8, 0, 0, 7); c.fill(); c.fillRect(x - 32, sol - H * 0.14, 64, H * 0.1);
+        c.fillStyle = '#f4f1ea'; for (let k = -24; k < 30; k += 16) c.fillRect(x + k, sol - H * 0.14, 8, H * 0.1);
+      }
+    } else if (genre === 'brasserie') {
+      // le comptoir de zinc et ses pompes, le grand miroir doré au-dessus des banquettes rouges, les tables de marbre
+      c.fillStyle = '#c9a55a'; c.fillRect(W * 0.08, H * 0.2, W * (porte ? 0.84 : 0.5), H * 0.28); c.fillStyle = '#d9e2e6'; c.fillRect(W * 0.1, H * 0.22, W * (porte ? 0.8 : 0.46), H * 0.24);
+      c.fillStyle = '#7a2233'; c.fillRect(0, sol - H * 0.22, W * (porte ? 1 : 0.6), H * 0.14);
+      if (!porte) {
+        c.fillStyle = '#8f9aa3'; c.fillRect(W * 0.64, sol - H * 0.24, W * 0.34, H * 0.24); c.fillStyle = '#c4ccd2'; c.fillRect(W * 0.63, sol - H * 0.26, W * 0.36, 5);
+        for (let x = W * 0.68; x < W * 0.95; x += 18) { c.fillStyle = '#c9a55a'; c.fillRect(x, sol - H * 0.38, 4, H * 0.12); c.fillStyle = '#2b2018'; c.fillRect(x - 2, sol - H * 0.4, 8, 6); }
+        for (let x = W * 0.12; x < W * 0.6; x += W * 0.16) { c.fillStyle = '#e8e4dc'; c.beginPath(); c.ellipse(x, sol - H * 0.12, 20, 5, 0, 0, 7); c.fill(); c.fillStyle = '#2b2b30'; c.fillRect(x - 2, sol - H * 0.12, 4, H * 0.12); }
+      }
+    } else if (genre === 'gastro') {
+      // une salle feutrée : deux grandes toiles, des tables aux nappes blanches jusqu'au sol, un lustre de plus
+      for (let x = W * 0.2; x < W * 0.9; x += W * 0.45) { c.fillStyle = '#c9a55a'; c.fillRect(x - 40, H * 0.22, 80, 56); c.fillStyle = ['#3d5f8e', '#7a2233'][Math.floor(r() * 2)]; c.fillRect(x - 35, H * 0.22 + 5, 70, 46); c.fillStyle = 'rgba(255,240,210,.35)'; c.beginPath(); c.arc(x - 8, H * 0.22 + 22, 12, 0, 7); c.fill(); }
+      const lu = c.createRadialGradient(W / 2, H * 0.1, 2, W / 2, H * 0.1, H * 0.4); lu.addColorStop(0, 'rgba(255,248,225,.9)'); lu.addColorStop(1, 'rgba(255,248,225,0)'); c.fillStyle = lu; c.fillRect(0, 0, W, H);
+      for (let x = W * 0.18; x < W; x += W * 0.32) { c.fillStyle = '#fbfaf6'; c.beginPath(); c.ellipse(x, sol - H * 0.2, 36, 8, 0, 0, 7); c.fill(); c.fillRect(x - 36, sol - H * 0.2, 72, H * 0.2); c.fillStyle = '#ffe1a0'; c.beginPath(); c.arc(x, sol - H * 0.24, 3, 0, 7); c.fill(); c.fillStyle = '#d6e6ea'; c.fillRect(x - 14, sol - H * 0.27, 3, 8); c.fillRect(x + 11, sol - H * 0.27, 3, 8); }
+    } else if (genre === 'routier') {
+      // la grande salle : des tables en rang aux nappes à carreaux, le comptoir et sa machine à café, la télévision au mur
+      c.fillStyle = '#2b2d32'; c.fillRect(W * 0.72, H * 0.2, 70, 42); c.fillStyle = '#5f8fb8'; c.fillRect(W * 0.72 + 4, H * 0.2 + 4, 62, 34);
+      c.fillStyle = '#8a5a34'; c.fillRect(W * 0.62, sol - H * 0.2, W * 0.36, H * 0.2); c.fillStyle = '#2b2d32'; c.fillRect(W * 0.7, sol - H * 0.32, 26, H * 0.12);
+      if (!porte) for (let x = W * 0.08; x < W * 0.55; x += W * 0.17) {
+        for (let k = 0; k < 6; k++) { c.fillStyle = k % 2 ? '#f4f1ea' : '#c0392b'; c.fillRect(x + k * 11, sol - H * 0.15, 11, H * 0.05); c.fillStyle = k % 2 ? '#c0392b' : '#f4f1ea'; c.fillRect(x + k * 11, sol - H * 0.1, 11, H * 0.05); }
+        c.fillStyle = '#5a3c26'; c.fillRect(x + 4, sol - H * 0.05, 4, H * 0.05); c.fillRect(x + 56, sol - H * 0.05, 4, H * 0.05);
+      }
     } else { // salle de restaurant : cadres, tables nappées, chaises, bougies
       for (let x = W * 0.12; x < W * 0.9; x += W * 0.26) { c.fillStyle = '#6b4a30'; c.fillRect(x, H * 0.3, 38, 28); c.fillStyle = ['#7a8f6a', '#c98a4a', '#8e5a6a'][Math.floor(r() * 3)]; c.fillRect(x + 4, H * 0.3 + 4, 30, 20); }
       for (let x = W * 0.16; x < W; x += W * 0.3) {
@@ -1045,8 +1107,11 @@ void main() {
     // collision : la maison, et sa devanture (36 cm devant la façade) ; une devanture ajoutée après coup (le laboratoire) a
     // sa boîte à part, posée une fois les herbes semées (leur tirage au sort ne bouge pas)
     const tourne = Math.abs(Math.sin(o.rot || 0)) > 0.5, av = o.vitrine && !o.tirage ? 0.36 : 0, r0 = o.rot || 0;
-    const bx = col.boiteC(o.x + Math.sin(r0) * av / 2, o.z + Math.cos(r0) * av / 2, tourne ? d + av : w, tourne ? w : d + av);
-    bx.haut = true;
+    // (tard : une maison ajoutée après coup là où l'herbe pousse, le relais routier : sa boîte posée une fois les herbes
+    // semées, leur tirage au sort ne bouge pas)
+    const bcx = o.x + Math.sin(r0) * av / 2, bcz = o.z + Math.cos(r0) * av / 2, bw = tourne ? d + av : w, bd = tourne ? w : d + av;
+    const bx = o.tard ? { x0: bcx - bw / 2, z0: bcz - bd / 2, x1: bcx + bw / 2, z1: bcz + bd / 2 } : col.boiteC(bcx, bcz, bw, bd);
+    if (o.tard) plusTard.push(() => { col.boiteC(bcx, bcz, bw, bd).haut = true; }); else bx.haut = true;
     if (o.vitrine && o.tirage) {
       const a = d / 2 + 0.18, cx = o.x + Math.sin(r0) * a, cz = o.z + Math.cos(r0) * a;
       plusTard.push(() => { col.boiteC(cx, cz, tourne ? 0.36 : w, tourne ? w : 0.36).haut = true; });
@@ -1415,6 +1480,54 @@ void main() {
     panneau(direction('Les Grands Champs', 34), 2.0, 0.34, -51.8, 2.0, 15.2, Math.PI / 2);
     rnd = rndMonde;
     return ailes;
+  }
+  /* Le Relais de la Croisée, un relais routier au bord de la départementale, en face de l'embranchement de la route du
+     château (un restaurateur à découvrir : restaurateurs.js). Un long bâtiment bas, façade vers la route (devanture, store,
+     enseigne), sa terrasse de tables sous parasols, son parking de gravier (un camion de livraison, deux voitures :
+     lieux.garees), le grand panneau au bord de la route. Son propre tirage au sort ; ses collisions posées après les
+     herbes (tard), les herbes de son parking réduites à rien. */
+  function relaisCroisee() {
+    const rndMonde = rnd;
+    rnd = hasard(5157);
+    const o = maison({ x: -178, z: 31, w: 15, d: 9, h: 4.3, ht: 2.4, rot: Math.PI, volets: '#7a2233', vitrine: '#7a2233', boutique: 'routier', porteC: '#7a2233', lucarnes: false, plantes: false, tard: true });
+    amenager({ id: 'croisee', nom: 'RELAIS DE LA CROISÉE', c: '#7a2233', encre: '#f3e7c9', chaise: '#c0392b', nappe: '#f4f1ea', graine: 5158,
+      tables: [[-5.6, 1.5], [-3.6, 1.5], [-1.6, 1.5]], plantes: [[3.6, 0.5, 'olivier']], ardoise: [2.6, 1.6], menu: ['Menu ouvrier', 'Entrée, plat, fromage', 'Dessert, café', 'Plat du jour'], tenancier: [6.4, 0.85] }, o);
+    // des parasols au-dessus des tables (pas de store)
+    for (const lx of [-5.6, -3.6, -1.6]) { const t = facade(o, lx, 1.5); bati.push(C(0.025, 0.025, 1.75, 5, '#e8e4dc', t.x, 1.63, t.z), C(0, 1.15, 0.4, 8, '#7a2233', t.x, 2.68, t.z), C(1.15, 1.15, 0.06, 8, '#f3e7c9', t.x, 2.47, t.z, 'y', 0, 0)); }
+    // le parking de gravier, de la route à la façade ; ses bordures de béton
+    const PK = { x0: -191, z0: 14.3, x1: -164, z1: 26.4 };
+    bati.push(B(PK.x1 - PK.x0, 0.06, PK.z1 - PK.z0, '#cfc1a0', (PK.x0 + PK.x1) / 2, 0.03, (PK.z0 + PK.z1) / 2));
+    for (const x of [PK.x0, PK.x1]) bati.push(B(0.18, 0.12, PK.z1 - PK.z0, '#d9cdb2', x, 0.06, (PK.z0 + PK.z1) / 2));
+    rect(PK.x0, PK.z0, PK.x1, PK.z1, '#cfc1a0'); SANS_HERBE.push([PK.x0 - 0.3, PK.z0 - 0.3, PK.x1 + 0.3, 36.3]);
+    // le camion de livraison garé le long de la route, chargé de palettes filmées ; le nom du transporteur aux portières
+    {
+      const cx = -184.6, cz = 18.6, r = Math.PI / 2, K = camion('#3c5a8a'), [zp0] = K.long, co = Math.cos(r), si = Math.sin(r);
+      const M = (lx, y, lz) => ({ x: cx + lx * co + lz * si, y, z: cz + lz * co - lx * si });
+      poser(K.geos, cx, cz, r, bati);
+      for (let k = 0; k < 3; k++) { const q = M(0, K.plateau, zp0 + 0.75 + k * 1.3); bati.push(B(1.1, 0.13, 1.1, '#a8825a', q.x, q.y + 0.065, q.z, r), B(1.02, 0.95, 1.02, '#dcd6c8', q.x, q.y + 0.6, q.z, r)); }
+      for (const s of [1, -1]) {
+        const q = M(s * 1.152, 1.52, 2.66);
+        atlas.poser(256, 100, (c, W, H) => {
+          c.clearRect(0, 0, W, H); c.fillStyle = '#f2efe6'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.font = 'bold 32px Georgia, serif'; c.fillText('Transports', W / 2, H * 0.3); c.font = 'italic 30px Georgia, serif'; c.fillText('Gaudrel', W / 2, H * 0.74);
+        }, 0.78, 0.3, q.x, q.y, q.z, s * Math.PI / 2 + r);
+      }
+      plusTard.push(() => { col.boiteO(cx, cz + 0.05, 2.9, 6.9, r); });
+      contact.tache(cx, cz, 3.6, 1.5, 0.4);
+    }
+    // le grand panneau au bord de la route, sur deux poteaux, tourné vers elle
+    {
+      const x = -169, z = 15.0;
+      for (const dx of [-1.9, 1.9]) bati.push(C(0.08, 0.08, 4.2, 8, '#5d6b78', x + dx, 2.1, z));
+      bati.push(B(4.6, 1.5, 0.1, '#5b3a2a', x, 3.55, z + 0.06));
+      enseigne('RELAIS DE LA CROISÉE', { x, z: z - 0.02, rot: Math.PI }, 3.85, 4.4, 0.8, '#7a2233', '#f3e7c9');
+      atlas.poser(512, 64, (c, W, H) => {
+        c.fillStyle = '#f3e7c9'; c.fillRect(0, 0, W, H); c.fillStyle = '#7a2233'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = 'bold 34px Georgia, serif'; c.fillText('RESTAURANT · MENU OUVRIER', W / 2, H / 2 + 2);
+      }, 4.4, 0.55, x, 3.05, z - 0.02, Math.PI);
+      plusTard.push(() => { for (const dx of [-1.9, 1.9]) col.boiteC(x + dx, z, 0.25, 0.25); });
+    }
+    rnd = rndMonde;
   }
   // point sur la façade (coordonnées monde) : lx le long de la façade, avance devant
   const facade = (o, lx, avance) => {
@@ -1796,11 +1909,123 @@ void main() {
     // (plus de panneau à l'entrée : Teddy, 25/11/2026, « c'est moche »)
   }
 
+  /* ------------------------------------------------------------ les restaurateurs à découvrir (restaurateurs.js)
+     Teddy, 26/11/2026 : « des missions un peu cachées, mais purement commerciales : si on visite un resto, chaque
+     tenancier peut demander une dégustation [...] Tu peux en mettre pas mal, même vers le château. » Quatre maisons du
+     bourg reçoivent une devanture (elles tirent quand même au sort les fenêtres qu'elle remplace : tirage, le bourg ne
+     bouge pas) : la Brasserie des Mariniers (rangée nord, x = 46), la Pizzeria Bella Vigna (rangée sud, x = 114), Chez
+     Paulette, le bistrot de la place (x = 108, face à la fontaine), La Table de Clémence (rue de la place, x = 86,
+     z = -24) ; le Relais de la Croisée, un relais routier sur la départementale, face à l'embranchement de la route du
+     château (relaisCroisee). Leur enseigne, leur terrasse (tables, chaises, paravents, jardinières, l'ardoise du menu), la
+     place de leur tenancier (lieux.restaurateurs : devant sa porte, tourné vers la rue). Positions dans le repère de la
+     maison (facade : lx le long de la façade, av devant). Leurs collisions sont posées après les herbes. Les trois
+     restaurants du château ont leur tenancier aussi (restaurateurs.js, d'après lieux.chateau.restos). */
+  const RESTO_LIEUX = {};
+  // là où un platelage, une allée, le parking du relais couvrent l'herbe : les herbes hautes y sont tirées au sort comme
+  // avant, puis réduites à rien (le tirage ne bouge pas)
+  const SANS_HERBE = [];
+  const sansHerbe = (x, z, rot, w, d) => { const t = Math.abs(Math.sin(rot)) > 0.5, ex = (t ? d : w) / 2 + 0.3, ez = (t ? w : d) / 2 + 0.3; SANS_HERBE.push([x - ex, z - ez, x + ex, z + ez]); };
+  const RESTOS_BOURG = {
+    n46: { id: 'mariniers', nom: 'BRASSERIE DES MARINIERS', c: '#22313f', encre: '#e8c66a', banne: '#7a2233', genre: 'brasserie', chaise: '#b08a5a', graine: 461,
+      tables: [[-3.3, 1.05], [-1.3, 1.05], [0.7, 1.05]], paravents: [-4.3], ardoise: [4.08, 0.5], menu: ['Plat du jour', 'Andouillette', 'Friture de Loire', 'Pichets'], tenancier: [1.88, 1.6] },
+    s114: { id: 'bellavigna', nom: 'PIZZERIA BELLA VIGNA', c: '#2f6b3a', encre: '#f3e7c9', banne: '#b8322a', genre: 'pizzeria', chaise: '#2d2d33', nappe: '#b8322a', graine: 1141,
+      tables: [[-3.9, 1.05], [-1.9, 1.05], [0.1, 1.05]], plantes: [[1.95, 0.45, 'olivier']], buches: [-5.1, 0.45], ardoise: [2.45, 1.65], menu: ['Au feu de bois', 'Margherita', 'Quattro formaggi', 'Tiramisu'], tenancier: [4.9, 0.8] },
+    p108: { id: 'paulette', nom: 'CHEZ PAULETTE', c: '#a8452f', encre: '#f6e6c4', banne: '#a8452f', genre: 'bar', chaise: '#b08a5a', graine: 1087, platelage: 3.0,
+      tables: [[-3.6, 1.15], [-1.6, 1.15], [0.4, 1.15], [-2.6, 2.45], [-0.6, 2.45], [1.4, 2.45]], jardinieres: true, ardoise: [-4.7, 3.35], menu: ['Café, croissant', 'Croque-monsieur', 'Œufs mayo', 'Ballon de blanc'], tenancier: [3.4, 1.7] },
+    'r86-24': { id: 'clemence', nom: 'LA TABLE DE CLÉMENCE', c: '#2b2b30', encre: '#e3c98a', genre: 'gastro', graine: 8624,
+      plantes: [[1.52, 0.4, 'buis'], [3.72, 0.4, 'buis']], pupitre: [-2.8, 0.75], allee: 3.25, tenancier: [0.55, 1.05] },
+  };
+  // la devanture d'une maison qui devient un restaurant (rien sans R)
+  const devantureDe = R => (R ? { vitrine: R.c, boutique: R.genre, banne: R.banne, porteC: R.c, tirage: true } : {});
+  // L'enseigne, la terrasse et la place du tenancier d'un restaurant (R : RESTOS_BOURG ou le relais) devant sa maison o ;
+  // son propre tirage au sort (fleurs, bouteilles), aucune collision avant les herbes
+  function amenager(R, o) {
+    const P = (lx, av) => facade(o, lx, av), rot = o.rot || 0, Y = o.y || 0, rr = hasard(R.graine), w = o.w, boites = [];
+    const tourne = (h, lx, lz) => [lx * Math.cos(h) + lz * Math.sin(h), -lx * Math.sin(h) + lz * Math.cos(h)];
+    portes[R.id] = o.entree;
+    enseigne(R.nom, P(-w * 0.14, 0.37), Y + 3.05, Math.min(5.8, w * 0.58), 0.54, R.c, R.encre);
+    // un platelage de bois et ses lames (devant le bistrot de la place : sur l'herbe)
+    if (R.platelage) {
+      const q = P(0, R.platelage / 2 + 0.05); bati.push(B(w - 0.4, 0.06, R.platelage, '#8d7c66', q.x, Y + 0.03, q.z, rot)); sansHerbe(q.x, q.z, rot, w - 0.4, R.platelage);
+      for (let k = 0; k < Math.floor(R.platelage / 0.32); k++) { const l = P(0, 0.2 + k * 0.32); bati.push(B(w - 0.4, 0.004, 0.025, '#6e5a44', l.x, Y + 0.062, l.z, rot)); }
+    }
+    // une allée de pavés de la rue à la porte (la table gastronomique, sur sa pelouse)
+    if (R.allee) { const q = P(w * 0.33 + 0.065, R.allee / 2 + 0.1); bati.push(B(1.5, 0.05, R.allee, '#cdb998', q.x, Y + 0.025, q.z, rot)); sansHerbe(q.x, q.z, rot, 1.5, R.allee); }
+    // les tables rondes et leurs deux chaises (l'une en face de l'autre, le long de la façade), le couvert, une carafe
+    for (const [lx, av] of R.tables || []) {
+      const t = P(lx, av);
+      bati.push(C(0.36, 0.36, 0.035, 12, R.nappe || '#ece5d8', t.x, Y + 0.74, t.z), C(0.03, 0.03, 0.72, 6, '#2d2d33', t.x, Y + 0.37, t.z), C(0.2, 0.22, 0.03, 8, '#2d2d33', t.x, Y + 0.015, t.z));
+      if (R.nappe) bati.push(C(0.37, 0.37, 0.16, 12, R.nappe, t.x, Y + 0.68, t.z, 'y', 0, 1)); // (la nappe qui tombe)
+      for (const sg of [-1, 1]) {
+        const c = P(lx + sg * 0.62, av), h = Math.atan2(t.x - c.x, t.z - c.z), fx = Math.sin(h), fz = Math.cos(h);
+        bati.push(B(0.42, 0.05, 0.4, R.chaise, c.x, Y + 0.45, c.z, h), B(0.42, 0.42, 0.04, R.chaise, c.x - fx * 0.19, Y + 0.7, c.z - fz * 0.19, h));
+        for (const [ax, az] of [[-0.17, -0.16], [0.17, -0.16], [-0.17, 0.16], [0.17, 0.16]]) { const [ox, oz] = tourne(h, ax, az); bati.push(B(0.03, 0.44, 0.03, '#2d2d33', c.x + ox, Y + 0.22, c.z + oz)); }
+        const px = t.x + (c.x - t.x) * 0.36, pz = t.z + (c.z - t.z) * 0.36, [gx, gz] = tourne(h, -0.16, 0.06);
+        bati.push(C(0.12, 0.12, 0.012, 10, '#fbfbfa', px, Y + 0.764, pz), C(0.028, 0.022, 0.1, 6, '#d6e6ea', px + gx, Y + 0.81, pz + gz));
+      }
+      if (rr() < 0.6) bati.push(C(0.045, 0.05, 0.24, 8, rr() < 0.5 ? '#3a1820' : '#cfe6f2', t.x, Y + 0.88, t.z));
+      boites.push([t.x, t.z, 1.9, 0.9]);
+      contact.tache(t.x, t.z, 0.95, 0.95, 0.25, Y + 0.07);
+    }
+    // des paravents de verre au bout de la terrasse (la brasserie), perpendiculaires à la façade
+    for (const lx of R.paravents || []) {
+      const q = P(lx, 1.05);
+      bati.push(B(0.06, 1.3, 1.9, R.c, q.x, Y + 0.65, q.z, rot), B(0.08, 0.06, 1.94, R.c, q.x, Y + 1.32, q.z, rot));
+      bati.push(B(0.02, 1.0, 1.7, '#3a5068', q.x, Y + 0.75, q.z, rot));
+      boites.push([q.x, q.z, 0.12, 1.9]);
+    }
+    // des jardinières fleuries aux deux bouts (le bistrot)
+    if (R.jardinieres) for (const sg of [-1, 1]) {
+      const q = P(sg * (w / 2 - 0.3), 1.6);
+      bati.push(B(0.42, 0.45, 2.5, '#6b4a30', q.x, Y + 0.25, q.z, rot), teinter(B(0.36, 0.3, 2.4, '#4f7a3a', q.x, Y + 0.6, q.z, rot), '#4f7a3a', T.feuillage));
+      for (let k = 0; k < 6; k++) { const f = P(sg * (w / 2 - 0.3), 0.6 + k * 0.4); bati.push(S(0.08, ['#d23a4a', '#f4f1ea', '#e0457a'][Math.floor(rr() * 3)], f.x, Y + 0.78, f.z)); }
+      boites.push([q.x, q.z, 0.42, 2.5]);
+    }
+    // des plantes en pot : un olivier, des buis taillés en boule
+    for (const [lx, av, genre] of R.plantes || []) {
+      const q = P(lx, av);
+      bati.push(C(0.22, 0.17, 0.42, 10, genre === 'buis' ? '#3b3f46' : '#b5532e', q.x, Y + 0.21, q.z));
+      if (genre === 'buis') bati.push(teinter(S(0.32, '#3f6b34', q.x, Y + 0.72, q.z, 1, 1, 1, 1), '#3f6b34', T.feuillage));
+      else bati.push(C(0.04, 0.06, 0.9, 6, '#6b5a48', q.x, Y + 0.85, q.z), teinter(S(0.42, '#8a9a6a', q.x, Y + 1.45, q.z, 1, 0.8, 1, 1), '#8a9a6a', T.feuillage));
+      boites.push([q.x, q.z, 0.46, 0.46]);
+    }
+    // les bûches du four à bois, rangées contre le mur (la pizzeria)
+    if (R.buches) {
+      const q = P(R.buches[0], R.buches[1]);
+      for (let k = 0; k < 9; k++) { const l = P(R.buches[0] + (k % 3 - 1) * 0.17, R.buches[1]); bati.push(C(0.075, 0.075, 0.62, 7, k % 2 ? '#7a5a3a' : '#8a6a48', l.x, Y + 0.08 + Math.floor(k / 3) * 0.145, l.z, 'x', rot)); }
+      boites.push([q.x, q.z, 0.6, 0.7]);
+    }
+    // l'ardoise du menu (sur son chevalet) ou le pupitre du menu (la table gastronomique), tournés vers la rue
+    const ardoise = (lx, av, titre, lignes, pupitre) => {
+      const q = P(lx, av), nx = Math.sin(rot), nz = Math.cos(rot);
+      if (pupitre) bati.push(C(0.025, 0.025, 1.0, 6, '#c9a55a', q.x, Y + 0.5, q.z), C(0.16, 0.18, 0.03, 10, '#2b2b30', q.x, Y + 0.015, q.z), B(0.4, 0.52, 0.04, '#2b2b30', q.x, Y + 1.12, q.z, rot));
+      else {
+        bati.push(B(0.62, 0.86, 0.05, '#6b4a30', q.x, Y + 0.55, q.z, rot));
+        for (const sg of [-1, 1]) { const l = P(lx + sg * 0.26, av - 0.1); bati.push(B(0.04, 0.95, 0.04, '#6b4a30', l.x, Y + 0.47, l.z, rot)); }
+      }
+      atlas.poser(128, 176, (c, W, H) => {
+        c.fillStyle = pupitre ? '#f4f1ea' : '#23272a'; c.fillRect(0, 0, W, H); c.strokeStyle = pupitre ? '#c9a55a' : '#8a6a48'; c.lineWidth = 8; c.strokeRect(4, 4, W - 8, H - 8);
+        c.fillStyle = pupitre ? '#2b2b30' : '#f2efe6'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = 'italic bold 17px Georgia, serif'; c.fillText(titre, W / 2, 26);
+        c.font = '13px Georgia, serif'; lignes.forEach((l, i) => c.fillText(l, W / 2, 58 + i * 26));
+      }, pupitre ? 0.36 : 0.54, pupitre ? 0.48 : 0.74, q.x + nx * (pupitre ? 0.025 : 0.03), Y + (pupitre ? 1.12 : 0.56), q.z + nz * (pupitre ? 0.025 : 0.03), rot);
+      boites.push([q.x, q.z, 0.6, 0.5]);
+    };
+    if (R.ardoise) ardoise(R.ardoise[0], R.ardoise[1], R.menu[0], R.menu.slice(1));
+    if (R.pupitre) ardoise(R.pupitre[0], R.pupitre[1], 'Menu', ['Dégustation', 'en six temps', 'Poissons de Loire', 'Sur réservation'], true);
+    // la place du tenancier, tourné vers la rue
+    const t = P(R.tenancier[0], R.tenancier[1]);
+    RESTO_LIEUX[R.id] = { x: +t.x.toFixed(2), z: +t.z.toFixed(2), h: rot, porte: o.entree };
+    plusTard.push(() => { for (const [x, z, bw, bd] of boites) col.boiteO(x, z, bw, bd, rot); });
+  }
+
   // Le bourg : maisons le long de la départementale
   const nord = [[34, 10, 8, 6.2], [46, 9, 8, 7], [58, 11, 9, 6.5, 'boul'], [80, 9, 8, 7.5, 'epicerie'], [110, 11, 8, 6.6, 'resto'], [124, 10, 8, 7], [137, 11, 9, 6.4]];
   for (const [x, w, d, h, t] of nord) {
     const resto = t === 'resto';
-    const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t === 'boul' ? '#6b2a2a' : t ? '#2f4a6b' : null, boutique: resto ? 'resto' : t === 'boul' ? 'boulangerie' : t, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined });
+    const RB = RESTOS_BOURG['n' + x]; // (un restaurateur à découvrir)
+    const o = maison({ x, z: 1.5 - d / 2, w, d, h, rot: 0, volets: resto ? '#2f5d50' : pick(VOLETS), vitrine: resto ? '#2f5d50' : t === 'boul' ? '#6b2a2a' : t ? '#2f4a6b' : null, boutique: resto ? 'resto' : t === 'boul' ? 'boulangerie' : t, banne: resto ? '#2f5d50' : null, porteC: resto ? '#2f5d50' : undefined, ...devantureDe(RB) });
+    if (RB) amenager(RB, o);
     if (t === 'epicerie') portes.epicerie = o.entree;
     if (resto) portes.treille = o.entree;
     if (t === 'boul') enseigne('BOULANGERIE', facade(o, -w * 0.14, 0.37), 3.05, 4.6, 0.54, '#efe0b4', '#6b3d1f');
@@ -1818,7 +2043,9 @@ void main() {
   // bleu-gris, sa verrerie en vitrine, l'intérieur carrelé de blanc, l'enseigne et une plaque de laiton près de la porte
   let labo = null;
   for (const [x, w, d, h] of [[40, 10, 8, 6.5], [54, 9, 8, 7], [68, 12, 9, 6.4], [84, 10, 8, 7], [100, 10, 8, 6.6], [114, 11, 9, 7.2], [128, 10, 8, 6.4], [142, 12, 9, 6.8]]) {
-    const o = maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS), ...(x === 128 ? { vitrine: '#4f6272', boutique: 'labo', porteC: '#4f6272', tirage: true } : {}) });
+    const RB = RESTOS_BOURG['s' + x]; // (un restaurateur à découvrir)
+    const o = maison({ x, z: 18.5 + d / 2, w, d, h, rot: Math.PI, volets: pick(VOLETS), ...(x === 128 ? { vitrine: '#4f6272', boutique: 'labo', porteC: '#4f6272', tirage: true } : {}), ...devantureDe(RB) });
+    if (RB) amenager(RB, o);
     if (x !== 128) continue;
     labo = o; portes.labo = o.entree;
     enseigne('LABORATOIRE D\'ŒNOLOGIE', facade(o, -w * 0.14, 0.37), 3.05, 6.2, 0.54, '#4f6272', '#f3efe6');
@@ -1852,7 +2079,9 @@ void main() {
   for (const [x0, x1, p] of [[45, 49.5], [58.5, 62], [74, 79, 1], [89, 95, 1], [105, 108.5], [119.5, 123], [133, 136]]) cloture(x0, x1, 18.75, p);
   // rue de la place
   for (const z of [-14, -24]) {
-    maison({ x: 86, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: Math.PI / 2, volets: pick(VOLETS) });
+    const RB = RESTOS_BOURG['r86' + z]; // (un restaurateur à découvrir)
+    const o = maison({ x: 86, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: Math.PI / 2, volets: pick(VOLETS), ...devantureDe(RB) });
+    if (RB) amenager(RB, o);
     maison({ x: 104, z, w: z === -14 ? 9 : 8, d: 8, h: 6.6 + rnd(), rot: -Math.PI / 2, volets: pick(VOLETS) });
   }
   // la place : cave, bar, mairie, église
@@ -1864,7 +2093,7 @@ void main() {
   const bar = maison({ x: 82, z: -70, w: 11, d: 9, h: 6.6, rot: 0, volets: '#1f3b4d', vitrine: '#1f3b4d', boutique: 'bar', banne: '#1f3b4d' });
   enseigne('BAR LE CEP', facade(bar, -11 * 0.14, 0.37), 3.05, 4.4, 0.54, '#1f3b4d', '#f2d488');
   portes.bar = bar.entree;
-  maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS) });
+  amenager(RESTOS_BOURG.p108, maison({ x: 108, z: -70, w: 10, d: 8, h: 7, rot: 0, volets: pick(VOLETS), ...devantureDe(RESTOS_BOURG.p108) })); // (Chez Paulette)
   const mairie = maison({ x: 95, z: -87, w: 14, d: 9, h: 8.2, rot: 0, volets: '#5d6f86', drapeau: true, porteC: '#3e4f63' });
   enseigne('MAIRIE', facade(mairie, 0, 0.14), 7.55, 3.2, 0.62, '#efe8da', '#2b2b3a');
   /* L'église Saint-Vincent (le patron des vignerons), façade vers la place : clocher-porche, nef, chevet arrondi.
@@ -3156,6 +3385,7 @@ void main() {
   const za = zoneActivites();
   definirInterieur(interieurs); // le chai et l'entrepôt : le soleil coupé, les lampes
   const moulin = hameau();
+  relaisCroisee(); // (le relais routier de la départementale : un restaurateur à découvrir)
   const enseignes = atlas.maillage();
   scene.add(enseignes);
   if (atlas.lumineux) scene.add(atlas.lumineux);
@@ -3212,7 +3442,7 @@ void main() {
         q.setFromAxisAngle(axe, rnd() * 6.28);
         // dans l'entrepôt de l'imprimeur, sa cour et son accès (mission 3) : tirée au sort comme avant (la suite du tirage
         // ne bouge pas), mais réduite à rien
-        const s = dansEntrepot(x, z, 0.6) || (x > -80 && x < -58 && z > -95 && z < -72) ? 0 : 1; // (ni dans le hangar du domaine, ni devant)
+        const s = dansEntrepot(x, z, 0.6) || (x > -80 && x < -58 && z > -95 && z < -72) || SANS_HERBE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) ? 0 : 1; // (ni dans le hangar du domaine, ni devant ; ni sous les terrasses des restaurateurs)
         m.compose(pv.set(x, 0, z), q, e.set(k * s, k * (0.8 + rnd() * 0.5) * s, k * s));
         im.setMatrixAt(i, m); im.setColorAt(i, c.copy(pick(TEINTES)));
       }
@@ -3372,12 +3602,17 @@ void main() {
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
   lieux.transpalette = { x: -64.45, z: -84.4, h: 0 };
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
+  // les restaurateurs à découvrir (restaurateurs.js) : la place de chacun devant son restaurant, tourné vers la rue (ceux du
+  // château : d'après lieux.chateau.restos)
+  lieux.restaurateurs = RESTO_LIEUX;
   // deux voitures de visiteurs sur le parking du domaine ; au hameau des Grands Champs, une voiture sur le gravier devant
   // la maison de l'ouest (x de -72 à -64, z de 123 à 133), à côté de sa porte (elle était garée dedans) ; la voiture du
   // personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
   lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-61.4, 131.6, Math.PI - 0.06, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b'],
     // le parking de Solumatic : trois places prises, le nez vers le bâtiment
-    [216.75, -47.3, Math.PI, '#c9cdd2'], [219.25, -47.3, Math.PI, '#1f2a3a'], [224.25, -47.3, Math.PI, '#f2efe6']];
+    [216.75, -47.3, Math.PI, '#c9cdd2'], [219.25, -47.3, Math.PI, '#1f2a3a'], [224.25, -47.3, Math.PI, '#f2efe6'],
+    // le parking du Relais de la Croisée, sur la départementale : deux voitures, le nez vers le restaurant
+    [-171.4, 21.2, 0, '#8a3a32'], [-168.2, 21.2, 0, '#e9e6de']];
   /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,
      à côté de sa porte, tourné vers la route ; le véhicule s'arrête sur la départementale, devant. L'entrepôt de
      l'imprimeur-étiqueteur : arret, la balise et le bout de l'itinéraire, dans la cour, cap au sud ; la conduite assistée

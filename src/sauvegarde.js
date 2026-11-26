@@ -4,8 +4,9 @@
 // - la partie en cours, enregistrée toute seule à des moments sûrs (main.js : sauver ; rien en train de se jouer : ni
 //   geste, ni chargement, ni livraison, ni appel), reprise à l'accueil par « Continuer » : ce qui a été fait est gardé
 //   (mission.js et mission2.js : instantane, reprendre), on reprend au domaine.
+// À part, les restaurateurs du coin (restaurateurs.js) : ils survivent aux missions rejouées.
 // Rejouer une mission recharge la page (tout repart de zéro, sans rien oublier de remettre) et la lance aussitôt (aLancer).
-const CLE = 'tournee-generale-partie', LANCER = 'tournee-generale-lancer', V = 1;
+const CLE = 'tournee-generale-partie', LANCER = 'tournee-generale-lancer', RESTOS = 'tournee-generale-restos', V = 1;
 
 const lire = () => {
   try { const o = JSON.parse(localStorage.getItem(CLE)); if (o && o.v === V) return o; } catch (_) { /* illisible, ou interdit */ }
@@ -33,4 +34,8 @@ export const SAUVE = {
   aLancer() {
     try { const id = sessionStorage.getItem(LANCER); sessionStorage.removeItem(LANCER); return id; } catch (_) { return null; }
   },
+  // Les restaurateurs du coin (restaurateurs.js), à part : qui l'on a rencontré, où en est chacun (relance, commande,
+  // signature). Ce n'est pas une mission : rejouer une mission ne l'efface pas.
+  get restos() { try { const o = JSON.parse(localStorage.getItem(RESTOS)); if (o && o.v === V) return o; } catch (_) { /* illisible, ou interdit */ } return null; },
+  enregistrerRestos(o) { try { localStorage.setItem(RESTOS, JSON.stringify({ v: V, ...o })); } catch (_) { /* navigation privée, ou plein */ } },
 };
