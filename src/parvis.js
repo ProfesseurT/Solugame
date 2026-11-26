@@ -118,9 +118,9 @@ export class Parvis {
   peupler(hud) {
     if (this.ouvriers.length) return;
     const sc = this.c.scene;
-    const ri = new Pieton(perso({ peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', barbe: true, tenue: 'salopette', haut: '#3d5a80', bas: '#3d5a80',
+    const ri = new Pieton(perso({ peau: '#43291e', cheveux: '#17120f', nature: 'crepu', coiffure: 'rase', barbe: 'courte', tenue: 'salopette', haut: '#3d5a80', bas: '#3d5a80',
       bottes: true, chaussures: '#2f4a32', chapeau: 'bonnet', chapeauC: '#c8553d', lunettes: false }));
-    const po = new Pieton(perso({ femme: true, peau: '#f1c27d', cheveux: '#6b4423', coiffure: 'queue', tenue: 'pull', haut: '#7a8f6a', bas: '#3a3f47',
+    const po = new Pieton(perso({ femme: true, peau: '#d29f78', cheveux: '#3f2a1c', nature: 'boucle', coiffure: 'queue', tenue: 'pull', haut: '#7a8f6a', bas: '#3a3f47',
       bottes: true, chaussures: '#3a3a3a', lunettes: false }));
     ri.placer(SPOTS[0][0], SPOTS[0][1], 0); po.placer(REM[N - this.k - 1][0], Z_REM, 0);
     for (const p of [ri, po]) { sc.add(p.m.groupe); p.etq = hud.etiquette('', 'bulle'); }

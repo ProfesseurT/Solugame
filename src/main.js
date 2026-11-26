@@ -5,7 +5,7 @@ import { construireMonde, BRUME, SOLEIL } from './monde.js';
 import { UNI, compacter, indexer, MAT } from './modeles.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture, voitureConduite, allumerPhares, geoCartonOuvert } from './engins.js';
-import { perso, HEROS } from './perso.js';
+import { perso, HEROS, tirerApparence } from './perso.js';
 import { Pieton, Passant } from './pieton.js';
 import { Tracteur, Voiture, natureSol } from './vehicules.js';
 import { Camera } from './camera.js';
@@ -133,7 +133,8 @@ const traces = new Traces(scene);
 const effets = new EffetsVehicule(particules, traces, col, rnd); // fumée, traces, feuilles, gravillons du véhicule conduit
 
 /* ------------------------------------------------------------------ personnages, tracteur, voitures */
-let choixHeros = stocke.lire('tournee-generale-heros') === 'vigneronne' ? 'vigneronne' : 'vigneron';
+let choixHeros = stocke.lire('tournee-generale-heros') || 'vigneron';
+if (!HEROS[choixHeros]) choixHeros = 'vigneron';
 let joueur = new Pieton(perso(HEROS[choixHeros]));
 scene.add(joueur.m.groupe);
 joueur.placer(L.depart.x, L.depart.z, L.depart.h);
@@ -185,18 +186,21 @@ placerChariot(mTP, L.transpalette, col);
 let dechChai = null;
 const pilote = new Pilote(); // conduite assistée au doigt (pilote.js)
 
-const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'];
-const CHEV = ['#2b1d0e', '#6b4423', '#b55239', '#d9c08c', '#c9c9c9', '#151515'];
 const HAUTS = ['#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#7f8c8d', '#e84393', '#34495e', '#f1ece2'];
 const BAS = ['#2c3e50', '#34495e', '#5d4037', '#455a64', '#1e272e', '#6d4c41', '#8a7f6a'];
-// un passant tiré au sort (r : le tirage au sort, celui du jeu par défaut)
-const unPassant = (extra, r = rnd) => {
+// Un passant tiré au sort (r : le tirage au sort, celui du jeu par défaut ; oa : options de l'apparence, perso.js
+// tirerApparence : age, assis, canne...). Il prend à r autant de tirages qu'avant, dans le même ordre (ce qui est tiré
+// ensuite, trajets compris, ne bouge pas) ; ils servent de graine à son apparence, tirée à part (teint, cheveux, âge,
+// silhouette, et dehors en décembre : manteau, doudoune, écharpe, bonnet). Une tenue de travail (un tablier, une tenue
+// imposée) reste telle quelle, portée par un jeune ou un adulte.
+const unPassant = (extra = {}, r = rnd, oa = {}) => {
   const pk = a => a[Math.floor(r() * a.length)];
-  return perso({
-    peau: pk(PEAUX), cheveux: pk(CHEV), coiffure: pk(['court', 'court', 'chauve', 'chignon', 'queue']), barbe: r() < 0.25,
-    haut: pk(HAUTS), bas: pk(BAS), chapeau: r() < 0.2 ? 'beret' : r() < 0.12 ? 'casquette' : null, chapeauC: pk(['#1f2a44', '#3b3b3b', '#7a2233']),
-    lunettes: r() < 0.2, ...extra,
-  });
+  const g0 = r(), g1 = r(), g2 = r(), g3 = r(), haut = pk(HAUTS), bas = pk(BAS);
+  let g4 = r(); if (g4 >= 0.2) g4 += r();
+  const g5 = r(), g6 = r();
+  const ra = hasard(Math.floor(g0 * 2147483647) ^ Math.floor(g1 * 65536) << 15 ^ Math.floor((g2 + g3 + g4 + g5 + g6) * 1e6));
+  const travail = !!(extra.tablier || extra.tenue);
+  return perso({ haut, bas, ...tirerApparence(ra, { hiver: !travail, actif: travail, ...oa }), ...extra });
 };
 // Les habitants du bourg (passants, clients, figurants assis) ne se voient pas depuis l'accueil : ils sont créés juste
 // après la première image 3D, ou au plus tard au lancement de la partie. Le bouton Jouer s'allume d'autant plus tôt.
@@ -209,13 +213,14 @@ const RUES = [[28, 3.9, 152, 5.9], [28, 3.9, 152, 5.9], [28, 3.9, 152, 5.9], [28
 let peuple = false, peuplePrevu = false;
 // les clients, devant chez eux (ils se tournent vers vous quand vous approchez), et des figurants assis
 const CLIENTS_3D = {
-  cave: { peau: '#e8b896', cheveux: '#9a9a9a', coiffure: 'chauve', barbe: true, haut: '#f0ece4', col: '#f0ece4', bas: '#2f2f35', tablier: '#3b2a26', lunettes: true },
-  bar: { peau: '#b07a4f', cheveux: '#151515', coiffure: 'court', barbe: true, haut: '#1f3b4d', col: '#f2d488', bas: '#2c2c30', tablier: '#e9e3d6' },
-  treille: { peau: '#f1c27d', cheveux: '#6b4423', coiffure: 'chignon', haut: '#f4f1ea', col: '#f4f1ea', bas: '#34343a', tablier: '#f4f1ea' },
+  // (les traits, perso.js : un caviste âgé à la barbe blanche, un barman au dégradé, une cheffe aux tresses...)
+  cave: { age: 'aine', voute: 0.5, peau: '#e8b896', cheveux: '#dedbd4', coiffure: 'chauve', barbe: 'pleine', haut: '#f0ece4', col: '#f0ece4', bas: '#2f2f35', tablier: '#3b2a26', lunettes: true, lunettesC: '#5a3a22' },
+  bar: { peau: '#523326', cheveux: '#17120f', nature: 'crepu', coiffure: 'degrade', barbe: 'courte', iris: '#1f1612', haut: '#1f3b4d', col: '#f2d488', bas: '#2c2c30', tablier: '#e9e3d6' },
+  treille: { femme: true, peau: '#724b36', cheveux: '#22170f', nature: 'crepu', coiffure: 'tresses', attache: true, iris: '#3b2a1e', haut: '#f4f1ea', col: '#f4f1ea', bas: '#34343a', tablier: '#f4f1ea' },
   // l'épicier en retard de paiement, devant sa boutique, le chèque prêt
-  epicerie: { peau: '#d9a27e', cheveux: '#5a4a3a', coiffure: 'court', barbe: true, haut: '#7a5c3f', col: '#e9e1cf', bas: '#2f3440', tablier: '#2f4a6b' },
+  epicerie: { peau: '#e4b38a', cheveux: '#5a4a3a', coiffure: 'court', barbe: 'moustache', haut: '#7a5c3f', col: '#e9e1cf', bas: '#2f3440', tablier: '#2f4a6b' },
   // le patron de l'Auberge du Moulin, le prospect, en veste de cuisine
-  auberge: { peau: '#c68642', cheveux: '#2b1d0e', coiffure: 'court', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
+  auberge: { peau: '#c5926c', cheveux: '#17120f', coiffure: 'degrade', haut: '#f4f1ea', col: '#f4f1ea', bas: '#2f2f35', tablier: '#5a6b2f' },
   // mission 3 : Hélène, l'œnologue, en blouse blanche ; Julien, l'étiqueteur de l'imprimerie, en bleu de travail ; Marc,
   // le salarié du domaine, en salopette verte
   labo: { femme: true, peau: '#f0c8a0', cheveux: '#3b2a1a', coiffure: 'chignon', haut: '#f4f6f8', col: '#f4f6f8', bas: '#3a3f4a', tablier: '#f4f6f8', lunettes: true },
@@ -226,7 +231,7 @@ function peupler() {
   if (peuple) return;
   peuple = true;
   for (let i = 0; i < 7; i++) {
-    const p = new Passant(unPassant(), L.place, rnd);
+    const p = new Passant(unPassant({}, rnd, { canne: true }), L.place, rnd);
     scene.add(p.p.m.groupe);
     p.bulle = 0; p.cri = hud.etiquette('Hé !', 'bulle'); p.p.etq = p.cri;
     passants.push(p);
@@ -238,7 +243,7 @@ function peupler() {
   };
   for (const id of ['cave', 'bar', 'treille']) client3D(id);
   for (const s of [L.banc, ...L.terrasse.slice(0, 2)]) {
-    const p = new Pieton(unPassant(s === L.banc ? { chapeau: 'beret', chapeauC: '#1f2a44', cheveux: '#c9c9c9' } : {}));
+    const p = new Pieton(unPassant({}, rnd, s === L.banc ? { age: 'aine', assis: true, chapeau: 'beret' } : { assis: true }));
     p.assis = true;
     p.m.groupe.position.set(s.x, -0.34, s.z); p.m.groupe.rotation.y = s.h;
     p.sync(0, 0); p.pos.copy(p.m.groupe.position); p.etq = hud.etiquette('', 'bulle');
@@ -249,7 +254,7 @@ function peupler() {
   // les gens de la rue
   const rr = hasard(31);
   for (const zone of RUES) {
-    const p = new Passant(unPassant({}, rr), zone, rr);
+    const p = new Passant(unPassant({}, rr, { canne: true }), zone, rr);
     scene.add(p.p.m.groupe);
     p.bulle = 0; p.cri = hud.etiquette('Hé !', 'bulle'); p.p.etq = p.cri;
     passants.push(p);
@@ -273,7 +278,7 @@ function peupler() {
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
 function asseoirConducteur(vo, r = rConducteurs) {
-  const p = new Pieton(unPassant({}, r)), P = vo.mesh.userData.poste;
+  const p = new Pieton(unPassant({}, r, { assis: true })), P = vo.mesh.userData.poste;
   vo.mesh.add(p.m.groupe); p.m.groupe.position.copy(P.siege);
   p.assis = true; p.poste = P; p.volant = 0; p.m.maillage.castShadow = false;
   p.caler();
@@ -391,7 +396,7 @@ const jeu = {
     if (this.auVolant) { tm.caisse.add(joueur.m.groupe); joueur.m.groupe.position.copy(tm.siege); }
     else scene.add(joueur.m.groupe);
     joueur.sync(0, temps);
-    for (const b of document.querySelectorAll('.perso')) b.setAttribute('aria-pressed', String(b.dataset.h === h));
+    for (const b of document.querySelectorAll('.perso')) b.setAttribute('aria-pressed', String(b.dataset.h === h.replace('2', ''))); // (l'autre apparence compte)
     if (etat === 'accueil') allerPlan(0); // l'accueil montre le personnage choisi
   },
   finVue: false,
@@ -1371,8 +1376,9 @@ function allerPlan(i) {
 
 /* ------------------------------------------------------------------ écrans */
 for (const b of document.querySelectorAll('.perso')) {
-  b.setAttribute('aria-pressed', String(b.dataset.h === choixHeros));
-  b.addEventListener('click', () => jeu.changerHeros(b.dataset.h));
+  // vigneron ou vigneronne, en gardant l'apparence choisie dans les Réglages (perso.js : HEROS, vigneron2...)
+  b.setAttribute('aria-pressed', String(b.dataset.h === choixHeros.replace('2', '')));
+  b.addEventListener('click', () => jeu.changerHeros(b.dataset.h + (choixHeros.endsWith('2') ? '2' : '')));
 }
 // Jouer : la mission 1 ; ou directement la mission 2 ou la 3 (la tournée prend un bon quart d'heure)
 function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la partie enregistrée)
@@ -1489,6 +1495,7 @@ mesures.script = Math.round(performance.now() - T0);
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col, restos,
+  perso, tirerApparence, Pieton, unPassant, // (les personnages : planches de visages, banc diversite)
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   // rentrer dormir d'un coup (essais) : devant la porte de la maison, le geste joué jusqu'au bout ; 7 h, le lendemain

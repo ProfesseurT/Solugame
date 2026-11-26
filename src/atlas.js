@@ -1,6 +1,6 @@
 // L'atlas des personnages : une seule texture (1024 x 512, mipmaps), dessinée en code au premier personnage créé.
 // Elle porte les visages (trois variantes), les yeux, la main, les poches, et les matières des vêtements, des cheveux
-// et de la peau. Aucune image à charger.
+// (lisses, crépus ou bouclés, tresses, locks) et de la peau. Aucune image à charger.
 //
 // Convention (lue par le shader de perso.js) : le canal alpha dit si le texel est « teinté ».
 //  - alpha 255 : le texel est un multiplicateur de la couleur du sommet (204 = x 1, 255 = x 1,25). Ainsi un seul
@@ -27,6 +27,8 @@ const PAVES = [
   ['cheveux', 128, 384, 128, 0.07, 0.12], ['barbe', 256, 384, 128, 0.05, 0.05], ['paille', 384, 384, 128, 0.08, 0.08],
   ['imprime', 512, 384, 128, 0.11, 0.11], ['velours', 640, 384, 128, 0.07, 0.07],
   ['feutre', 768, 384, 64, 0.05, 0.05], ['semelle', 832, 384, 64, 0.05, 0.05], ['fermeture', 768, 448, 64, 1, 0.03], ['ceinture', 832, 448, 64, 0.06, 1],
+  // les cheveux crépus et bouclés, les tresses, les locks (dans les cases restées libres : l'atlas garde sa taille)
+  ['crepu', 896, 128, 128, 0.045, 0.045], ['tresses', 896, 384, 128, 0.1, 0.11], ['locks', 832, 192, 64, 0.055, 0.07],
 ];
 // [nom, x, y, largeur, hauteur]
 const ENTIERES = [
@@ -217,6 +219,47 @@ const MOTIFS = {
     for (let y = 0, i = 0; y < T; y++) for (let x = 0; x < T; x++, i++) {
       const piq = (y === 6 || y === T - 7) && (x & 3) < 2;
       gris(t, i, (piq ? 1.18 : 0.95) + 0.08 * (g[i] - 0.5) - (y < 2 || y > T - 3 ? 0.12 : 0));
+    }
+  },
+  // cheveux crépus (afro, coupe courte), et bouclés à plus grande échelle (perso.js) : de petites boucles serrées, chacune
+  // éclairée au sommet et qui s'enroule, des creux sombres entre elles, des touffes plus claires ou plus sombres. Points
+  // tirés dans une grille de 8 px (périodique), le plus proche et le suivant (cellules de Voronoï).
+  crepu(T, t) {
+    const n = T / 8, P = new Float32Array(n * n * 2), g = bruit(T, 4), f = bruit(T, 14);
+    for (let k = 0; k < n * n; k++) { P[k * 2] = (k % n) * 8 + 1 + 6 * hacher(k, 71); P[k * 2 + 1] = ((k / n) | 0) * 8 + 1 + 6 * hacher(k, 72); }
+    for (let y = 0, i = 0; y < T; y++) for (let x = 0; x < T; x++, i++) {
+      let d1 = 99, d2 = 99, ax = 0, ay = 0;
+      const cx = x >> 3, cy = y >> 3;
+      for (let j = -1; j <= 1; j++) for (let l = -1; l <= 1; l++) {
+        const qx = (cx + l + n) % n, qy = (cy + j + n) % n, k = qy * n + qx;
+        const px = P[k * 2] + (cx + l - qx) * 8, py = P[k * 2 + 1] + (cy + j - qy) * 8, dx = x + 0.5 - px, dy = y + 0.5 - py, d = Math.hypot(dx, dy);
+        if (d < d1) { d2 = d1; d1 = d; ax = dx; ay = dy; } else if (d < d2) d2 = d;
+      }
+      const bosse = 1 - Math.min(1, d1 / 5.2) ** 2, spire = 0.5 + 0.5 * Math.sin(Math.atan2(ay, ax) * 2 + d1 * 1.7);
+      const creux = 1 - Math.min(1, (d2 - d1) / 2.2);
+      const m = 0.68 + 0.36 * bosse * (0.72 + 0.28 * spire) - 0.2 * creux + 0.16 * (g[i] - 0.5) + 0.06 * (f[i] - 0.5);
+      rvb(t, i, m, m, m * 0.98);
+    }
+  },
+  // tresses (box braids) : des nattes côte à côte dans le sens du motif (huit par motif), rondes, chacune faite de mèches
+  // croisées en chevrons ; un sillon sombre entre deux ; chacune un peu plus claire ou plus sombre, décalée en hauteur
+  tresses(T, t) {
+    const L = 14, P = 14, g = bruit(T, 8);
+    for (let y = 0, i = 0; y < T; y++) for (let x = 0; x < T; x++, i++) {
+      const c = (x / L) | 0, u = ((x % L) + 0.5 - L / 2) / (L / 2), au = Math.abs(u), rond = Math.sqrt(Math.max(0, 1 - au * au));
+      const ph = (y + hacher(c, 81) * P + au * 5 + (u < 0 ? P / 2 : 0)) % P / P, lobe = Math.sin(Math.PI * ph);
+      const m = (0.5 + 0.55 * rond * (0.62 + 0.38 * lobe)) * (0.9 + 0.2 * hacher(c, 82)) - (au > 0.86 ? 0.22 : 0) + 0.05 * (g[i] - 0.5);
+      rvb(t, i, m, m, m * 0.98);
+    }
+  },
+  // locks : trois mèches feutrées par motif, d'épaisseur irrégulière sur leur longueur, rondes, au grain serré, des creux
+  // entre elles
+  locks(T, t) {
+    const L = T / 3, g = bruit(T, 12), f = bruit(T, 24), w = [bruit1(T, 6, 91), bruit1(T, 6, 92), bruit1(T, 6, 93)], fibre = bruit1(T, 24, 94);
+    for (let y = 0, i = 0; y < T; y++) for (let x = 0; x < T; x++, i++) {
+      const c = (x / L) | 0, l = L * (0.36 + 0.12 * w[c][y]), u = Math.abs((x % L) + 0.5 - L / 2) / l, rond = Math.sqrt(Math.max(0, 1 - u * u));
+      const m = u < 1 ? (0.56 + 0.5 * rond) * (0.9 + 0.16 * fibre[y]) + 0.12 * (f[i] - 0.5) : 0.42 + 0.1 * g[i];
+      rvb(t, i, m, m, m * 0.98);
     }
   },
 };

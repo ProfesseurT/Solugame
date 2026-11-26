@@ -59,9 +59,9 @@ export class Tonnellerie {
     if (this.ouvriers.length) return;
     const sc = this.c.scene, T = (o) => new Pieton(perso({ bottes: false, lunettes: false, ...o }));
     // le tablier de cuir des tonneliers
-    const ce = T({ peau: '#d9a27e', cheveux: '#5a4a3a', coiffure: 'court', barbe: true, tenue: 'chemise', haut: '#6b7f99', bas: '#3a3f47', tablier: '#6b4a30', chapeau: 'beret', chapeauC: '#2b2b30', chaussures: '#3b3b42' });
-    const ch = T({ peau: '#e0ac69', cheveux: '#2b1d0e', coiffure: 'court', tenue: 'salopette', haut: '#4a5a3a', bas: '#4a5a3a', tablier: '#5a3f2b', chapeau: 'casquette', chapeauC: '#8a3a32', chaussures: '#4a3424' });
-    const ro = T({ femme: true, peau: '#f1c27d', cheveux: '#7a5230', coiffure: 'queue', tenue: 'pull', haut: '#8a6a48', bas: '#34343a', tablier: '#6b4a30', chaussures: '#3a3a3a' });
+    const ce = T({ peau: '#e4b38a', cheveux: '#6e6a66', coiffure: 'court', barbe: 'pleine', tenue: 'chemise', haut: '#6b7f99', bas: '#3a3f47', tablier: '#6b4a30', chapeau: 'beret', chapeauC: '#2b2b30', chaussures: '#3b3b42' });
+    const ch = T({ femme: true, peau: '#835a40', cheveux: '#22170f', nature: 'crepu', coiffure: 'locks', attache: true, tenue: 'salopette', haut: '#4a5a3a', bas: '#4a5a3a', tablier: '#5a3f2b', chapeau: 'casquette', chapeauC: '#8a3a32', chaussures: '#4a3424' });
+    const ro = T({ femme: true, peau: '#c5926c', cheveux: '#17120f', nature: 'boucle', coiffure: 'queue', tenue: 'pull', haut: '#8a6a48', bas: '#34343a', tablier: '#6b4a30', chaussures: '#3a3a3a' });
     ce.placer(BILLOT.x - 0.8, BILLOT.z, Math.PI / 2); ch.placer(FEUX[0][0] - 0.85, FEUX[0][1], Math.PI / 2); ro.placer(PORTE.x, PORTE.z, -Math.PI / 2);
     for (const p of [ce, ch, ro]) { sc.add(p.m.groupe); p.etq = hud.etiquette('', 'bulle'); }
     for (const [p, o] of [[ce, this.masse], [ce, this.chasse], [ch, this.goupillon]]) { p.m.groupe.add(o); o.scale.setScalar(1 / p.m.echelle); o.visible = true; }

@@ -142,8 +142,9 @@ class Touriste extends Passant {
 }
 
 export class Village {
-  // c : { scene, camera, hud, lieux, unPassant(extra, r), voiture(couleur) : son maillage (dans la scène), conducteur(vo),
-  // passantVit(p, dt, danger, ecraseur) : comme un passant du bourg, emettre } (main.js)
+  // c : { scene, camera, hud, lieux, unPassant(extra, r, oa) : un passant tiré au sort (oa : son apparence, perso.js
+  // tirerApparence), voiture(couleur) : son maillage (dans la scène), conducteur(vo), passantVit(p, dt, danger, ecraseur) :
+  // comme un passant du bourg, emettre } (main.js)
   constructor(c) {
     this.c = c; this.L = c.lieux.chateau; this.gens = []; this.file = []; this.prepare = false; this.vus = true; this.n = 0; this.garees = [];
     this.chemin = cheminVoitures(); this.voitures = []; this.r = hasard(3311); this.pos = [];
@@ -181,7 +182,7 @@ export class Village {
   }
   // attablé : à la place i de la terrasse R, un verre à la main (sept sur dix) ; il regarde son voisin
   attable(R, i, r) {
-    const pl = R.places[i], p = new Pieton(this.c.unPassant({}, r));
+    const pl = R.places[i], p = new Pieton(this.c.unPassant({}, r, { assis: true }));
     p.assis = true; p.y0 = pl.y; p.h = pl.h;
     p.m.groupe.position.set(pl.x, pl.y - 0.34, pl.z); p.m.groupe.rotation.y = pl.h;
     const boit = r() < 0.7;
@@ -206,14 +207,14 @@ export class Village {
     this.ajouter({ p, genre: 'serveur', R, P, lxP, etat: 'dedans', t: 1 + r() * 4, pts: [], k: 0, table: 0, plateau, nom: 'serveur' });
   }
   touriste(zone, r, vise) {
-    const t = new Touriste(this.c.unPassant({ chapeau: r() < 0.3 ? 'casquette' : null }, r), zone, r, vise);
+    const t = new Touriste(this.c.unPassant({}, r, { canne: true, ...(r() < 0.3 ? { chapeau: 'casquette' } : {}) }), zone, r, vise); // (la casquette si elle va avec la coiffure)
     t.cri = this.c.hud.etiquette('', 'bulle'); t.p.etq = t.cri; t.bulle = 0;
     this.c.scene.add(t.p.m.groupe);
     this.ajouter({ p: t.p, t, genre: 'touriste', etq: t.cri, nom: 'touristes' });
   }
   // au belvédère : assis sur un banc, tourné vers la vallée
   surBanc(b, r) {
-    const p = new Pieton(this.c.unPassant({}, r));
+    const p = new Pieton(this.c.unPassant({}, r, { assis: true }));
     p.assis = true; p.y0 = b.y; p.h = b.h;
     p.m.groupe.position.set(b.x, b.y - 0.34, b.z); p.m.groupe.rotation.y = b.h;
     p.sync(0, 0); p.pos.copy(p.m.groupe.position);
@@ -223,7 +224,7 @@ export class Village {
   // à la balustrade du belvédère, qui regarde la vallée ; de temps en temps, une photo
   contemple(da, r) {
     const CH = CHATEAU, b = Math.PI / 4 + da, x = CH.x + Math.cos(b) * (CH.tour + 6.0), z = CH.z + Math.sin(b) * (CH.tour + 6.0);
-    const p = new Pieton(this.c.unPassant({}, r));
+    const p = new Pieton(this.c.unPassant({}, r, { canne: true }));
     p.placer(x, z, Math.atan2(Math.cos(b), Math.sin(b)));
     this.c.scene.add(p.m.groupe);
     this.ajouter({ p, genre: 'balustrade', t: 3 + r() * 10, photo: false, nom: 'belvedere', h0: p.h });

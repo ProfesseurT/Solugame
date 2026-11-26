@@ -148,6 +148,7 @@ export class Passant {
     this.cible = { x: 0, z: 0 }; this.attente = rnd() * 3; this.fuite = 0; this.bulle = 0;
     // chacun son pas : flâneur, pressé
     this.allure = rnd() < 0.15 ? 1.9 + rnd() * 0.4 : 0.9 + rnd() * 0.65;
+    if (modele.aine) this.allure = Math.min(this.allure * 0.62, 0.95); // les aînés, à petits pas (perso.js)
     this.vu = new THREE.Vector3(); this.tVu = 0; this.ux = 0; this.uz = 1; this.dx = NaN; this.dz = 0; this.fx = 0; this.fz = 0;
     this.ecrase = 0; // mode WTF : aplati par un véhicule, secondes qui restent avant d'être tout à fait relevé
     this.nouvelleCible();
