@@ -351,6 +351,10 @@ if (scenario === 'voitures') {
     try {
       CL.jouer(); CL.step(60);
       log.push(['un conducteur dans chaque voiture de la départementale', CL.voitures().length === 4 && CL.voitures().every(v => v.conducteur)]);
+      // aucune voiture garée ne mord sur un bâtiment (Teddy, 26/11/2026 : celle du hameau était encastrée dans une maison) :
+      // quinze points de son emprise, testés comme la caméra teste les murs
+      { const dans = CL.GAREES.filter(g => { const co = Math.cos(g.h), si = Math.sin(g.h); return [-0.85, 0, 0.85].some(lx => [-1.9, -1, 0, 1, 1.9].some(lz => CL.col.dedans(g.x + lx * co + lz * si, g.z + lz * co - lx * si))); });
+        log.push([`aucune des ${CL.GAREES.length} voitures garées n'est dans un bâtiment` + (dans.length ? ` (${dans.map(g => g.x.toFixed(1) + ', ' + g.z.toFixed(1)).join(' ; ')})` : ''), CL.GAREES.length >= 16 && !dans.length]); }
       { const ex = CL.voitures().map(v => { const c = v.conducteur; c.m.groupe.visible = true; c.pos.set(v.x, 0, v.z); c.sync(1 / 60, 1); return depasse(c, v.mesh.userData.poste); });
         log.push(['la tête des conducteurs passe sous le toit (' + ex.map(e => (e * 100).toFixed(0)).join(', ') + ' cm)', ex.every(e => e < 0)]); }
       { const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.step(5); }

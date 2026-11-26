@@ -3372,9 +3372,10 @@ void main() {
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
   lieux.transpalette = { x: -64.45, z: -84.4, h: 0 };
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
-  // deux voitures de visiteurs sur le parking du domaine ; la voiture du personnel de l'imprimerie, garée dans la cour de
-  // l'entrepôt, entre ses deux lignes blanches
-  lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-65.5, 131.5, 0.15, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b'],
+  // deux voitures de visiteurs sur le parking du domaine ; au hameau des Grands Champs, une voiture sur le gravier devant
+  // la maison de l'ouest (x de -72 à -64, z de 123 à 133), à côté de sa porte (elle était garée dedans) ; la voiture du
+  // personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
+  lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-61.4, 131.6, Math.PI - 0.06, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b'],
     // le parking de Solumatic : trois places prises, le nez vers le bâtiment
     [216.75, -47.3, Math.PI, '#c9cdd2'], [219.25, -47.3, Math.PI, '#1f2a3a'], [224.25, -47.3, Math.PI, '#f2efe6']];
   /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,

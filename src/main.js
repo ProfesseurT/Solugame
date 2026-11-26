@@ -1457,7 +1457,7 @@ mesures.script = Math.round(performance.now() - T0);
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
-  habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
+  habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil
