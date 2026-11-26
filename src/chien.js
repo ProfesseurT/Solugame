@@ -8,9 +8,10 @@
 // au poitrail (deux taches), sous la queue ; double ergot aux pattes arrière ; truffe noire, yeux bruns.
 //
 // Le modèle : un seul maillage animé (un SkinnedMesh de 28 os, comme les personnages : la même matière et la même texture,
-// le poil est la zone « cheveux » de l'atlas, couché le long du corps et des pattes), construit en code au premier passage
-// près du domaine : volumes tournés le long d'un axe (corps, cou, tête, mâchoire, oreilles, queue, chaque segment de patte),
-// couleurs par sommet (le noir et le feu fondus l'un dans l'autre), peau souple aux jointures du dos, du cou et de la queue.
+// donc pas de programme de plus ; le poil est la zone « barbe » de l'atlas, un grain court et serré, couché le long du
+// corps et des pattes), construit en code au premier passage près du domaine (5 ms) : volumes tournés le long d'un axe
+// (corps, cou, tête, mâchoire, oreilles, queue, chaque segment de patte), environ 6 000 triangles ; couleurs par sommet (le
+// noir et le feu fondus l'un dans l'autre) ; peau souple aux jointures du dos, du cou, de la tête et de la queue.
 //
 // L'animation est procédurale, sans allocation par image : des postures (debout, assis, couché en sphinx, couché sur le
 // flanc pour dormir, sur le dos pour qu'on le caresse, l'étirement), mélangées os par os ; aux allures (pas, trot, galop),
@@ -33,8 +34,7 @@ import { sol } from './relief.js';
 import { hasard, hache, angle, versAngle, borne, lisse, entre, mix, amortir } from './outils.js';
 
 const PI = Math.PI, TAU = 2 * PI;
-// le poil : la zone de l'atlas des personnages aux poils courts (un grain serré, pas des mèches)
-
+// le poil : la zone de l'atlas des personnages aux poils courts (un grain serré : les mèches des cheveux faisaient des rayures)
 const FOURRURE = Z.barbe;
 const kl = (dt, r) => amortir(dt, r);
 
@@ -50,7 +50,7 @@ const C_LANGUE = new THREE.Color('#c35a6a'), C_DENT = new THREE.Color('#ece6d6')
 const BASSIN = 0, DOS = 1, POITRINE = 2, COU = 3, TETE = 4, MACH = 5, LANGUE = 6, OREG = 7, ORED = 8, Q1 = 9, Q2 = 10, Q3 = 11;
 // les pattes : avant gauche, avant droite, arrière gauche, arrière droite ; quatre os chacune (épaule ou hanche, coude ou
 // grasset, poignet ou jarret, pied)
-const AV = { y: 0.47, z: 0.31, x: 0.1, L: [0.19, 0.26, 0.075] }, AR = { y: 0.52, z: -0.31, x: 0.095, L: [0.21, 0.26, 0.13] };
+const AV = { y: 0.47, z: 0.31, x: 0.092, L: [0.19, 0.26, 0.075] }, AR = { y: 0.52, z: -0.31, x: 0.092, L: [0.21, 0.26, 0.13] };
 const JAMBES = [
   { s: 1, av: true, os: [12, 13, 14, 15], parent: POITRINE, D: AV },
   { s: -1, av: true, os: [16, 17, 18, 19], parent: POITRINE, D: AV },
@@ -58,6 +58,8 @@ const JAMBES = [
   { s: -1, av: false, os: [24, 25, 26, 27], parent: BASSIN, D: AR },
 ];
 const NOS = 28;
+// la tête un peu plus forte que ses volumes (largeur, hauteur, longueur) : celle d'un chien de berger, pas d'un lévrier
+const TETE_K = [1.1, 1.08, 1];
 // position de chaque os dans la pose de construction (repère du chien), son parent
 const POS = [], PAR = [];
 const os = (i, p, x, y, z) => { POS[i] = [x, y, z]; PAR[i] = p; };
@@ -71,7 +73,8 @@ for (const J of JAMBES) {
 }
 // le coussinet, sous l'os du pied (repère du pied, posé à plat) ; les pieds au repos, debout (repère du chien)
 const PIED_Y = -0.03, PIED_Z = 0.018;
-const NEUTRE = [[0.1, 0.2], [-0.1, 0.2], [0.095, -0.4], [-0.095, -0.4]];
+const NEUTRE = [[0.095, 0.2], [-0.095, 0.2], [0.092, -0.4], [-0.092, -0.4]];
+
 // le paturon au repos (de l'articulation au pied, vers l'avant, rad) : l'avant un peu incliné, l'arrière presque droit
 const PATURON = [0.3, 0.3, 0.12, 0.12];
 
@@ -143,6 +146,22 @@ function loft(F, an, n, o) {
   }
   F.normales(s0, i0, n, m);
 }
+// un anneau de plus entre deux (Catmull-Rom sur les centres et les tailles) : une forme plus lisse, sans plus de données
+function affiner(an) {
+  const r = [], cr = (a, b, c, d) => -0.0625 * a + 0.5625 * b + 0.5625 * c - 0.0625 * d;
+  for (let i = 0; i < an.length; i++) {
+    r.push(an[i]);
+    if (i === an.length - 1) break;
+    const A = an[Math.max(0, i - 1)], B = an[i], C = an[i + 1], D = an[Math.min(an.length - 1, i + 2)], m = { c: [0, 0, 0] };
+    for (let k = 0; k < 3; k++) m.c[k] = cr(A.c[k], B.c[k], C.c[k], D.c[k]);
+    for (const k of ['a', 'b', 'bb', 'ab', 'p']) if (B[k] !== undefined) m[k] = Math.max(0, cr(A[k] ?? B[k], B[k], C[k] ?? B[k], D[k] ?? C[k] ?? B[k]));
+    // (près d'un bout fermé, la moitié de l'anneau voisin)
+    if (!B.a || !C.a) { m.a = (B.a + C.a) / 2; m.b = (B.b + C.b) / 2; if (B.bb !== undefined) m.bb = ((B.bb ?? B.b) + (C.bb ?? C.b)) / 2; }
+    if (B.d) m.d = B.d;
+    r.push(m);
+  }
+  return r;
+}
 // ellipsoïde de centre c, de demi-axes (rx, ry, rz), son axe le long de z (ou de o.d) ; nr anneaux
 function boule(F, c, rx, ry, rz, n, nr, o) {
   const an = [], d = o.d || [0, 0, 1], l = Math.hypot(d[0], d[1], d[2]);
@@ -155,7 +174,7 @@ function boule(F, c, rx, ry, rz, n, nr, o) {
 // un cône (griffe, croc) de la base b (rayon r) à la pointe p
 function cone(F, b, p, r, o) {
   const d = [p[0] - b[0], p[1] - b[1], p[2] - b[2]];
-  loft(F, [{ c: b, a: 0, b: 0, d }, { c: b, a: r, b: r, p: 2, d }, { c: p, a: 0, b: 0, d }], 5, { tu: 0.05, tv: 0.05, zone: Z.uni, ...o });
+  loft(F, [{ c: b, a: 0, b: 0, d }, { c: b, a: r, b: r, p: 2, d }, { c: p, a: 0, b: 0, d }], 4, { tu: 0.05, tv: 0.05, zone: Z.uni, ...o });
 }
 
 /* ---------------------------------------------------------------- les marques feu (repère du chien, pose de construction) */
@@ -172,7 +191,6 @@ function feuTete(x, y, z) {
   const sourcils = Math.max(doux(0.009, 0.017, Math.hypot(x - 0.04, y - 0.882, z - 0.556)), doux(0.009, 0.017, Math.hypot(x + 0.04, y - 0.882, z - 0.556)));
   const yc = z < 0.6 ? 0.836 : 0.822, museau = entre(0.575, 0.615, z) * (1 - entre(yc - 0.002, yc + 0.012, y));
   const joues = entre(0.5, 0.575, z) * (1 - entre(0.818, 0.834, y)) * entre(0.026, 0.046, Math.abs(x));
-
   return Math.max(sourcils, museau, joues);
 }
 // une patte : la hauteur au-dessus du sol, debout (h), et le côté intérieur (vers le corps) : les « bas rouges » montent
@@ -190,10 +208,11 @@ function construire() {
     [-0.025, 0.628, 0.385, 0.134, 0.8, 2.2], [0.055, 0.637, 0.352, 0.143, 0.74, 2.2], [0.125, 0.651, 0.332, 0.146, 0.7, 2.2], [0.195, 0.663, 0.326, 0.144, 0.68, 2.2],
     [0.255, 0.661, 0.33, 0.138, 0.68, 2.2], [0.305, 0.642, 0.35, 0.126, 0.72, 2.2], [0.35, 0.603, 0.385, 0.104, 0.8, 2.1], [0.383, 0.558, 0.425, 0.076, 0.9, 2.05],
     [0.405, 0.512, 0.465, 0.04, 1, 2], [0.413, 0.49, 0.49, 0, 1, 2]];
-  loft(F, CORPS.map(([z, h, b, a, ab, p]) => ({ c: [0, (h + b) / 2, z], a, b: (h - b) / 2, ab, p, d: [0, 0, 1] })), 20, { feu: feuCorps, os: osCorps, tu: 0.035, tv: 0.09 });
+  loft(F, affiner(CORPS.map(([z, h, b, a, ab, p]) => ({ c: [0, (h + b) / 2, z], a, b: (h - b) / 2, ab, p, d: [0, 0, 1] }))), 16, { feu: feuCorps, os: osCorps, tu: 0.035, tv: 0.09 });
+
   // le cou : du poitrail et du garrot jusque sous le crâne (U : vers le haut et l'arrière ; b : la crête, bb : la gorge)
-  const COUS = [[0.265, 0.545, 0.118, 0.145], [0.315, 0.605, 0.106, 0.128], [0.365, 0.672, 0.092, 0.108], [0.41, 0.74, 0.08, 0.09], [0.445, 0.795, 0.07, 0.078], [0.47, 0.84, 0.056, 0.062], [0.485, 0.862, 0, 0]];
-  loft(F, COUS.map(([z, y, a, b]) => ({ c: [0, y, z], a, b, p: 2.2 })), 16, {
+  const COUS = [[0.265, 0.545, 0.118, 0.145], [0.315, 0.605, 0.108, 0.13], [0.365, 0.672, 0.096, 0.116], [0.41, 0.74, 0.084, 0.098], [0.445, 0.795, 0.073, 0.082], [0.47, 0.84, 0.058, 0.064], [0.485, 0.862, 0, 0]];
+  loft(F, affiner(COUS.map(([z, y, a, b]) => ({ c: [0, y, z], a, b, p: 2.2 }))), 16, {
     feu: feuCorps, tu: 0.035, tv: 0.09,
     os: (x, y, z, t) => (t < 0.12 ? [POITRINE, 1, COU] : t < 0.4 ? [POITRINE, 1 - lisse((t - 0.12) / 0.28), COU] : t < 0.72 ? [COU, 1, TETE] : [COU, 1 - lisse((t - 0.72) / 0.28) * 0.7, TETE]),
   });
@@ -220,7 +239,7 @@ function construire() {
     void i0;
   }
   // la langue (sur l'os de la langue), les crocs
-  boule(F, [0, 0.795, 0.615], 0.024, 0.006, 0.055, 10, 5, { os: LANGUE, couleur: C_LANGUE, zone: Z.uni });
+  boule(F, [0, 0.795, 0.615], 0.024, 0.006, 0.055, 8, 4, { os: LANGUE, couleur: C_LANGUE, zone: Z.uni });
   for (const s of [1, -1]) {
     cone(F, [s * 0.02, 0.801, 0.688], [s * 0.019, 0.789, 0.69], 0.0035, { os: TETE, couleur: C_DENT });
     cone(F, [s * 0.018, 0.794, 0.676], [s * 0.018, 0.805, 0.679], 0.003, { os: MACH, couleur: C_DENT });
@@ -228,9 +247,9 @@ function construire() {
   // la truffe et ses narines ; les yeux (bruns, un reflet)
   boule(F, [0, 0.827, 0.713], 0.027, 0.02, 0.016, 12, 6, { os: TETE, couleur: C_TRUFFE, zone: Z.cuir });
   for (const s of [1, -1]) {
-    boule(F, [s * 0.01, 0.822, 0.727], 0.0055, 0.0038, 0.003, 6, 3, { os: TETE, couleur: C_LEVRE, zone: Z.uni });
-    boule(F, [s * 0.0475, 0.852, 0.566], 0.012, 0.0105, 0.012, 10, 6, { os: TETE, couleur: C_OEIL, zone: Z.uni, d: [s * 0.45, 0, 0.9] });
-    boule(F, [s * 0.0538, 0.857, 0.5745], 0.0024, 0.0024, 0.002, 5, 3, { os: TETE, couleur: C_REFLET, zone: Z.uni });
+    boule(F, [s * 0.01, 0.822, 0.727], 0.0055, 0.0038, 0.003, 5, 2, { os: TETE, couleur: C_LEVRE, zone: Z.uni });
+    boule(F, [s * 0.0475, 0.852, 0.566], 0.012, 0.0105, 0.012, 9, 5, { os: TETE, couleur: C_OEIL, zone: Z.uni, d: [s * 0.45, 0, 0.9] });
+    boule(F, [s * 0.0538, 0.857, 0.5745], 0.0024, 0.0024, 0.002, 4, 2, { os: TETE, couleur: C_REFLET, zone: Z.uni });
   }
   // les oreilles, naturelles, mi-tombantes : elles montent un peu en dehors, la pointe se replie vers l'avant
   for (const [s, b] of [[1, OREG], [-1, ORED]]) {
@@ -247,7 +266,7 @@ function construire() {
   // les pattes, droites (de haut en bas) ; [y relatif à l'os, demi-largeur, devant, derrière]
   for (const J of JAMBES) {
     const { s, av } = J, [b1, b2, b3, b4] = J.os, X = POS[b1][0], par = J.parent;
-    const seg = (b, rings, haut, n = 12) => {
+    const seg = (b, rings, haut, n = 10) => {
       const [bx, by, bz] = POS[b];
       loft(F, rings.map(([y, a, f, r, oz = 0]) => ({ c: [bx, by + y, bz + oz], a, b: f, bb: r, p: 2.2, d: [0, -1, 0] })), n, {
         feu: (x, y) => basRouge(haut(y - by), borne(-(x - X) * s / 0.03, 0, 1), av ? 0.155 : 0.19), tu: 0.03, tv: 0.07,
@@ -256,36 +275,48 @@ function construire() {
     };
     if (av) {
       // l'épaule et le bras ; le coude ; l'avant-bras ; le poignet ; le paturon
-      seg(b1, [[0.075, 0.042, 0.052, 0.058], [0.02, 0.055, 0.066, 0.07], [-0.05, 0.053, 0.062, 0.066], [-0.12, 0.047, 0.05, 0.058], [-0.18, 0.04, 0.038, 0.048], [-0.205, 0, 0, 0]], () => 0.5, 12);
-      boule(F, [X, POS[b2][1] + 0.008, POS[b2][2] - 0.024], 0.033, 0.038, 0.032, 10, 5, { os: b2 });
+      seg(b1, [[0.06, 0.022, 0.03, 0.034], [0.03, 0.044, 0.056, 0.062], [-0.03, 0.05, 0.062, 0.066], [-0.1, 0.046, 0.052, 0.06], [-0.17, 0.04, 0.04, 0.05], [-0.205, 0, 0, 0]], () => 0.5, 12);
+      boule(F, [X, POS[b2][1] + 0.008, POS[b2][2] - 0.024], 0.033, 0.038, 0.032, 8, 4, { os: b2 });
       seg(b2, [[0.025, 0.04, 0.042, 0.048], [-0.03, 0.039, 0.04, 0.045], [-0.1, 0.034, 0.035, 0.036], [-0.18, 0.029, 0.03, 0.029], [-0.245, 0.026, 0.027, 0.025], [-0.268, 0, 0, 0]], y => 0.36 + y);
-      boule(F, [X, POS[b3][1], POS[b3][2] + 0.002], 0.028, 0.029, 0.028, 10, 5, { os: b3, couleur: FEU });
+      boule(F, [X, POS[b3][1], POS[b3][2] + 0.002], 0.028, 0.029, 0.028, 8, 4, { os: b3, couleur: FEU });
       seg(b3, [[0.012, 0.026, 0.026, 0.026], [-0.04, 0.025, 0.026, 0.024], [-0.07, 0.026, 0.028, 0.025], [-0.088, 0, 0, 0]], y => 0.1 + y);
       // l'ergot de devant, à l'intérieur du paturon
-      cone(F, [X - s * 0.018, POS[b3][1] - 0.035, POS[b3][2] - 0.006], [X - s * 0.024, POS[b3][1] - 0.05, POS[b3][2] - 0.002], 0.005, { os: b3, couleur: TMP.copy(FEU).multiplyScalar(0.85).clone(), zone: Z.cheveux });
+      cone(F, [X - s * 0.018, POS[b3][1] - 0.035, POS[b3][2] - 0.006], [X - s * 0.024, POS[b3][1] - 0.05, POS[b3][2] - 0.002], 0.005, { os: b3, couleur: TMP.copy(FEU).multiplyScalar(0.85).clone(), zone: FOURRURE });
     } else {
       // la cuisse (la culotte, garnie derrière) ; le grasset ; la jambe ; la pointe du jarret ; le canon
-      seg(b1, [[0.08, 0.058, 0.07, 0.07], [0.03, 0.072, 0.08, 0.11], [-0.04, 0.072, 0.08, 0.125], [-0.11, 0.064, 0.07, 0.115], [-0.17, 0.052, 0.058, 0.08], [-0.21, 0.042, 0.048, 0.054], [-0.235, 0, 0, 0]], () => 0.45, 12);
-      boule(F, [X, POS[b2][1] + 0.004, POS[b2][2] + 0.012], 0.04, 0.042, 0.036, 10, 5, { os: b2 });
+      seg(b1, [[0.07, 0.035, 0.045, 0.05], [0.035, 0.064, 0.075, 0.1], [-0.03, 0.07, 0.08, 0.122], [-0.1, 0.064, 0.07, 0.115], [-0.17, 0.052, 0.058, 0.08], [-0.21, 0.042, 0.048, 0.054], [-0.235, 0, 0, 0]], () => 0.45, 12);
+      boule(F, [X, POS[b2][1] + 0.004, POS[b2][2] + 0.012], 0.04, 0.042, 0.036, 8, 4, { os: b2 });
       seg(b2, [[0.015, 0.046, 0.05, 0.062], [-0.05, 0.042, 0.045, 0.068], [-0.12, 0.035, 0.034, 0.056], [-0.19, 0.028, 0.027, 0.036], [-0.25, 0.024, 0.023, 0.025], [-0.272, 0, 0, 0]], y => 0.331 + y * 0.66);
       boule(F, [X, POS[b3][1] + 0.008, POS[b3][2] - 0.026], 0.019, 0.026, 0.018, 8, 4, { os: b3, feu: () => 1 });
       seg(b3, [[0.012, 0.025, 0.024, 0.026], [-0.06, 0.023, 0.023, 0.023], [-0.12, 0.024, 0.026, 0.023], [-0.142, 0, 0, 0]], y => 0.156 + y);
       // le double ergot, à l'intérieur du canon, bas : deux doigts l'un au-dessus de l'autre, et leurs griffes
       for (const [dy, dz] of [[-0.082, -0.004], [-0.103, 0.002]]) {
         const c = [X - s * 0.026, POS[b3][1] + dy, POS[b3][2] + dz];
-        boule(F, c, 0.009, 0.013, 0.01, 6, 4, { os: b3, feu: () => 1, d: [0, 1, 0] });
+        boule(F, c, 0.009, 0.013, 0.01, 5, 3, { os: b3, feu: () => 1, d: [0, 1, 0] });
         cone(F, [c[0] - s * 0.004, c[1] - 0.008, c[2] + 0.004], [c[0] - s * 0.008, c[1] - 0.016, c[2] + 0.01], 0.0032, { os: b3, couleur: C_GRIFFE });
       }
     }
     // le pied : le dessus (feu), les quatre doigts, les griffes ; le coussinet dessous
     const [px, py, pz] = POS[b4], k = av ? 1 : 0.92;
     const piedC = (x, y) => (y < py - 0.026 ? C_COUSSINET : TMP.copy(FEU).multiplyScalar(0.95));
-    boule(F, [px, py - 0.011, pz + 0.014 * k], 0.034 * k, 0.023, 0.04 * k, 12, 5, { os: b4, couleur: piedC });
+    boule(F, [px, py - 0.011, pz + 0.014 * k], 0.034 * k, 0.023, 0.04 * k, 10, 4, { os: b4, couleur: piedC });
     for (const [dx, dz] of [[0.013, 0.051], [-0.013, 0.051], [0.031, 0.039], [-0.031, 0.039]]) {
       const c = [px + dx * k, py - 0.017, pz + dz * k];
-      boule(F, c, 0.012 * k, 0.012, 0.014, 6, 4, { os: b4, couleur: piedC });
+      boule(F, c, 0.012 * k, 0.012, 0.014, 5, 3, { os: b4, couleur: piedC });
       cone(F, [c[0], c[1] + 0.002, c[2] + 0.009], [c[0], c[1] - 0.009, c[2] + 0.02], 0.0034, { os: b4, couleur: C_GRIFFE });
     }
+  }
+  // la tête, plus forte (plus large et plus haute, pas plus longue) : autour de son os, ce qu'il porte (crâne, mâchoire,
+  // langue, oreilles) ; les os qu'elle porte aussi (construire n'est appelé qu'une fois)
+  {
+    const [tx, ty, tz] = POS[TETE], TT = new Set([TETE, MACH, LANGUE, OREG, ORED]), P = F.p, N = F.n;
+    for (let i = 0; i < F.nv; i++) {
+      if (!TT.has(F.si[i * 4])) continue;
+      P[i * 3] = tx + (P[i * 3] - tx) * TETE_K[0]; P[i * 3 + 1] = ty + (P[i * 3 + 1] - ty) * TETE_K[1]; P[i * 3 + 2] = tz + (P[i * 3 + 2] - tz) * TETE_K[2];
+      N[i * 3] /= TETE_K[0]; N[i * 3 + 1] /= TETE_K[1]; N[i * 3 + 2] /= TETE_K[2];
+      const l = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1; N[i * 3] /= l; N[i * 3 + 1] /= l; N[i * 3 + 2] /= l;
+    }
+    for (const b of [MACH, LANGUE, OREG, ORED]) { const p = POS[b]; p[0] = tx + (p[0] - tx) * TETE_K[0]; p[1] = ty + (p[1] - ty) * TETE_K[1]; p[2] = tz + (p[2] - tz) * TETE_K[2]; }
   }
   // la géométrie : indexée, compactée (coordonnées de texture sur 16 bits : uv / UVK, comme les personnages)
   const g = new THREE.BufferGeometry();
@@ -374,9 +405,11 @@ export class Chien {
     this.x = -77.25; this.z = -63.4; this.h = -PI / 2; this.v = 0; this.om = 0;
     this.W = new Float32Array(NPOST); this.W[SPHINX] = 1; this.post = SPHINX; this.file = []; this.vitePost = 3;
     this.ph = 0; this.wIK = 0;
-    this.pieds = JAMBES.map(() => ({ x: 0, z: 0, ax: 0, az: 0, y: 0, vol: false, saute: false, q: 0, p3: 0, p4: 0 }));
-    // la tête (lacet, tangage), la queue, les oreilles, la gueule
-    this.ly = 0; this.lp = 0; this.regard = null; this.tCoup = 2; this.cy = 0; this.cp = 0;
+    // chaque pied : où il est (x, y, z), d'où il est parti (ax, az), où il se posera (lx, lz), en l'air ou non ; son paturon
+    // (p3, au décollage a3) et son pied (p4)
+    this.pieds = JAMBES.map(() => ({ x: 0, z: 0, y: 0, ax: 0, az: 0, lx: 0, lz: 0, vol: false, saute: false, p3: 0, a3: 0, p4: 0 }));
+    // la tête (lacet, tangage ; coups d'œil), la queue, les oreilles, la gueule
+    this.ly = 0; this.lp = 0; this.tCoup = 2; this.cy = 0; this.cp = 0;
     this.queueA = 0.1; this.queueF = 4; this.queuePh = 0; this.queueH = 0; this.oreilles = 0; this.halete = 0; this.gueule = 0; this.langue = 0; this.leche = 0; this.flaire = 0;
     this.teteMonde = new THREE.Vector3();
     this.dehors = true; this.penche = 0;
@@ -384,19 +417,21 @@ export class Chien {
     // ce qu'il fait (etat), depuis quand, jusqu'à quand ; où il va (cx, cz), à quelle allure, et ensuite (suite, hFin)
     this.etat = 'couche'; this.tEtat = 0; this.duree = 40; this.cible = false; this.cx = 0; this.cz = 0; this.allure = 0; this.suite = null; this.hFin = null; this.hVoulu = null;
     this.tBloque = 0; this.sansMurs = false; this.dort = false; this.tDort = 8; this.spot = COUCHAGES[0];
-    this.voulu = true; this.minPrec = NaN; this.vuJoueur = 99; this.tSalut = 0; this.tAboie = 0; this.envieSuivre = 0; this.tSuit = 0; this.arretJ = 0;
-    this.humeur = 0; this.peur = 0; this.bond = 0; this.tSon = 0; this.qui = null;
+    this.voulu = true; this.minPrec = NaN; this.vuJoueur = 99; this.tSalut = 0; this.tAboie = 0; this.envieSuivre = 0; this.arretJ = 0;
+    this.humeur = 0; this.peur = 0; this.essouffle = 0; this.bond = 0; this.tSon = 0; this.qui = null; this.tPas = 0;
+    // l'heure (minutes du jour) ; un point libre trouvé (px, pz) ; une sonde (sx, sz, sOk)
+    this.m24 = 0; this.px = 0; this.pz = 0; this.sx = 0; this.sz = 0; this.sOk = true; this.sonderMobile = null;
     // les véhicules (mobiles) : leur dernière position et leur vitesse (estimée d'une image à l'autre)
     this.mx = new Float64Array(16); this.mz = new Float64Array(16); this.mv = new Float64Array(16); this.mvu = new Uint8Array(16); this.dtM = 0;
-    this.menace = false; this.mT = 1e9; this.mk = -1; this.calme = 0; this.fx = 0; this.fz = 0;
+    this.menace = false; this.mT = 1e9; this.mk = -1; this.calme = 0;
     this.ml = { x: 0, z: 0, h: 0, lx: 0, lz: 0, X0: 0, X1: 0, Z0: 0, Z1: 0, v: 0 };
     this.voirMobile = (k, x, z, h, E) => this.evaluer(k, x, z, h, E);
     this.pousserMobile = (k, x, z, h, E) => this.horsDe(k, x, z, h, E);
     this.pousserGens = (x, z, r) => this.horsDeGens(x, z, r);
     this.etq = c.hud.etiquette('', 'bulle'); this.etqJ = c.hud.etiquette('', 'bulle');
-    this.ejx = 0; this.ejz = 0; this.jvx = 0; this.jvz = 0;
-
-    this.caresse = { T: 0, dos: false, x: 0, z: 0 };
+    // le pas du joueur (suivre à côté de lui) ; le geste de la caresse
+    this.ejx = 0; this.ejz = 0; this.jvx = 0; this.jvz = 0; this.dJ = 99; this.qJ = null;
+    this.caresse = { T: 0, dos: false };
   }
 
   /* ------------------------------------------------------------ le modèle, au premier passage près du domaine */
@@ -617,7 +652,6 @@ export class Chien {
     }
     // se lever d'un bond (il fuit)
     if (this.bond > 0) g.position.y += 0.1 * Math.sin(PI * (1 - this.bond));
-
     o[TETE].getWorldPosition(this.teteMonde);
   }
 
@@ -761,7 +795,7 @@ export class Chien {
   /* ------------------------------------------------------------ ce qu'il fait */
   aller(x, z, v, suite, hFin = null) {
     this.etat = 'va'; this.tEtat = 0; this.cible = true; this.cx = borne(x, COUR.x0, COUR.x1); this.cz = borne(z, COUR.z0, COUR.z1);
-    this.allure = v; this.suite = suite; this.hFin = hFin; this.hVoulu = null; this.tBloque = 0; this.sansMurs = false; this.flaireV = 0;
+    this.allure = v; this.suite = suite; this.hFin = hFin; this.hVoulu = null; this.tBloque = 0; this.sansMurs = false;
     this.viser(DEBOUT, 4);
   }
   // un point libre (ni mur, ni véhicule garé, ni l'aire de remplissage), à une distance de r0 à r1 d'ici
@@ -793,7 +827,7 @@ export class Chien {
     this.viser(SPHINX, 2.5);
   }
   faire(nom, duree) {
-    this.etat = nom; this.tEtat = 0; this.duree = duree; this.cible = false;
+    this.etat = nom; this.tEtat = 0; this.duree = duree; this.cible = false; this.tPas = 0;
     this.viser(nom === 'assis' || nom === 'guet' || nom === 'visite' || nom === 'salue' ? ASSIS : nom === 'etire' ? ETIRE : DEBOUT, nom === 'etire' ? 2.2 : 3);
   }
   // ce qu'il fait ensuite, au hasard (son propre tirage)
@@ -901,7 +935,6 @@ export class Chien {
           else if (s === 'guet') this.faire('guet', 10 + this.rnd() * 14);
           else if (s === 'visite') this.faire('visite', 10 + this.rnd() * 12);
           else if (s === 'debout') this.faire('debout', 2 + this.rnd() * 4);
-
           else this.choisir(c);
         } else if (this.tBloque > 1.5) this.choisir(c);
         break;
@@ -917,7 +950,7 @@ export class Chien {
         break;
       case 'flaire':
         // le nez au sol, quelques pas lents d'un endroit à l'autre
-        if (!this.cible && this.tEtat - (this.tPas || 0) > 1.1 && this.rnd() < 0.5) { this.tPas = this.tEtat; if (this.pointLibre(0.4, 1.3)) { this.cible = true; this.cx = this.px; this.cz = this.pz; this.allure = 0.45; } }
+        if (!this.cible && this.tEtat - this.tPas > 1.1 && this.rnd() < 0.5) { this.tPas = this.tEtat; if (this.pointLibre(0.4, 1.3)) { this.cible = true; this.cx = this.px; this.cz = this.pz; this.allure = 0.45; } }
         if (this.tEtat > this.duree) this.choisir(c);
         break;
       case 'boit': case 'assis': case 'debout': case 'guet': case 'visite': case 'apres':
@@ -1018,7 +1051,7 @@ export class Chien {
     const ore = this.dort ? -0.2 : et === 'guet' || et === 'alerte' || (voit && this.humeur < 0.3) ? 0.8 : -0.75 * Math.max(this.humeur - 0.3, this.peur) / 0.7;
     this.oreilles += (ore - this.oreilles) * kl(dt, 5);
     // il halète après avoir couru (et quand on le caresse) ; la gueule s'ouvre, la langue sort
-    this.essouffle = Math.max(this.essouffle || 0, Math.abs(this.v) > 4 ? 1 : 0) - dt / 25;
+    this.essouffle = Math.max(this.essouffle, Math.abs(this.v) > 4 ? 1 : 0) - dt / 25;
     const hal = Math.max(0, Math.min(1, this.essouffle), et === 'caresse' ? 0.7 : 0, et === 'boit' ? 0.3 : 0);
     this.halete += (hal - this.halete) * kl(dt, 2);
     this.gueule = this.halete * (0.2 + 0.05 * Math.sin(t * 19)) + this.leche * 0.12;

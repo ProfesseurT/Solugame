@@ -22,7 +22,6 @@
 //   chien     le chien du domaine : il se balade dans la cour ; un véhicule lancé sur lui (couché, debout, assis ; tracteur,
 //             van, marche arrière, mené par un geste ; mode WTF aussi) : il fuit, jamais dans l'emprise ; on le caresse ; le
 //             soir il rentre, la nuit il est dedans, le matin il ressort ; il ne gêne pas le tracteur sur le chemin du hangar
-
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
@@ -1157,7 +1156,6 @@ if (scenario === 'chien') {
       CL.agir(); CL.finirGeste(); CL.step(5);
       if (J.auVolant) throw new Error('pas descendu de ' + genre);
       return { mini, fui: fui >= 0, leve, couche, vmax: vp };
-
     };
     try {
       CL.jouer(); CL.step(120);
@@ -1179,7 +1177,6 @@ if (scenario === 'chien') {
         const r = foncer(genre, d);
         const nom = ['debout', 'assis', 'couché'][p];
         log.push([`${genre} lancé sur lui (${nom}, à ${d} m${wtf ? ', mode WTF' : ''}, ${r.vmax.toFixed(1)} m/s au plus près) : ${r.fui ? 'il fuit' : 'il ne fuit pas'}${r.couche ? ', debout en ' + r.leve.toFixed(2) + ' s' : ''}, jamais dans l'emprise (au plus près ${r.mini.toFixed(2)} m)`, r.fui && r.mini > 0.25 && (!r.couche || (r.leve >= 0 && r.leve < 0.6))]);
-
       }
       J.wtf = false;
       // en marche arrière
@@ -1188,7 +1185,6 @@ if (scenario === 'chien') {
       {
         const v = CL.vehicule('tracteur'); poser(-88, -40, 0, 2);
         const pts = []; for (let i = 0; i <= 60; i++) pts.push([-88 - 12 + i * 0.4, -40]);
-
         v.p.placer(pts[0][0], pts[0][1], Math.PI / 2);
         J.gestes.lancer([J.gestes.rouler(v, pts, 3.5)]);
         let mini = 1e9, fui = false;
@@ -1214,7 +1210,6 @@ if (scenario === 'chien') {
         }
         CL.step(10);
         log.push([`le caresser (${!p ? 'debout : il s\'assoit, lèche la main' : surLeDos ? 'couché : il se met sur le dos' : 'couché : il reste couché, lèche la main'}) : « Caresser le chien », à genoux (${genou.toFixed(2)}), la main sur lui (${main.toFixed(2)} m), le geste fini`, propose && genou > 0.95 && main < 0.4 && !J.gestes.actif && !CL.joueur.caresse && (surLeDos ? dos > 0.8 : leche > 0.5) && surLeDos === (p === 2 && sorte < 0.5) && C.etat !== 'caresse']);
-
       }
       // la nuit : le soir, il rentre à la maison par la porte (invisible) ; le matin, il ressort
       {
@@ -1240,7 +1235,6 @@ if (scenario === 'chien') {
         const P = [[-73.75, -84.5], [-73.75, -79.0], [-74.2, -75.6], [-77.0, -72.8], [-79.6, -68.5], [-80.4, -64.0], [-82.0, -60.0], [-86.5, -56], [-86.5, -50.6]], pts = [];
         for (let i = 1; i < P.length; i++) for (let k = 0; k < 10; k++) pts.push([P[i - 1][0] + (P[i][0] - P[i - 1][0]) * k / 10, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * k / 10]);
         pts.push(P[P.length - 1]);
-
         v.p.placer(-73.75, -84.5, 0);
         J.gestes.lancer([J.gestes.rouler(v, pts, 6)]);
         let mini = 1e9, chocs = 0;

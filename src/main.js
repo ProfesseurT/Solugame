@@ -1145,8 +1145,7 @@ function reperes(dt, ego, cible) {
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
-  const vc = !vp && !caresse && !pcPres && !jeu.dedans
- && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
+  const vc = !vp && !caresse && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
   hud.placer(etqPrendre, vc ? vc.x : 0, 2.3 + (vc ? vc.y ?? (vc.m ? vc.m.position.y : 0) : 0), vc ? vc.z : 0, !!vc); // (au château : sur son plateau)
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);

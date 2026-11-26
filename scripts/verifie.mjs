@@ -37,7 +37,6 @@ const parcours = await Promise.all([
   lancer(['scripts/essai.mjs', 'habillage', '390x844', 'habillage']).then(r => ({ ...r, nom: 'mission 3, l\'habillage' })),
   lancer(['scripts/essai.mjs', 'sauvegarde', '390x844', 'sauvegarde']).then(r => ({ ...r, nom: 'sauvegarde, reprise et missions rejouées' })),
   lancer(['scripts/essai.mjs', 'chien', '1280x800', 'chien']).then(r => ({ ...r, nom: 'le chien du domaine (balade, fuite, caresse, nuit)' })),
-
 ]);
 for (const r of parcours) {
   if (r.code !== 0 || !r.sortie.includes('Aucune erreur.')) echec(r.nom, r.sortie);
