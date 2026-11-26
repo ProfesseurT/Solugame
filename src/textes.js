@@ -609,8 +609,23 @@ export const energie = (degre, glucides) => {
 // tournée ; le lendemain matin, jour du traitement.
 // Les bureaux de Solumatic (solumatic.js) : ce que disent ceux qui y travaillent quand on passe près de leur poste (rien
 // sur les produits : un bonjour)
+// Les bureaux de Solumatic (solumatic.js) : ce que dit chacun quand on passe tout près, selon sa pièce (rien sur les
+// logiciels : des mots de bureau) ; les buts au baby-foot
 export const SOLUMATIC = {
-  bonjour: ['Bonjour ! Bienvenue chez Solumatic.', 'Salut ! Le café est dans la salle à manger.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !', 'Ah, bonjour ! Je termine un appel et je suis à vous.'],
+  bonjour: ['Bonjour ! Bienvenue chez Solumatic.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !'],
+  dev: ['Salut ! Je suis en plein dedans, je reviens vers toi.', 'Le café ? Dans la cuisine, à Mars.', 'Chut, ça compile.', 'Salut ! Tu as vu le tableau des tâches ?', 'Bonjour ! Encore une relecture et je pousse.'],
+  commercial: ['Bonjour ! Je suis au téléphone avec un domaine, deux minutes.', 'Salut ! Belle journée pour appeler les vignerons.', 'Bonjour ! Le patron est à Uranus, au fond.', 'Je note le rappel et je suis à vous.'],
+  patron: ['Bienvenue chez Solumatic ! Faites comme chez vous.', 'Bonjour ! La porte est toujours ouverte.', 'Ah, bonjour ! Vous avez vu Atlas ? C\'est là qu\'on se réunit.'],
+  associe: ['Bonjour ! Neptune, c\'est mon bureau. Entrez.', 'Salut ! La réunion est à Mercure, si vous la cherchez.', 'Bonjour ! Je relis un contrat, je suis à vous.'],
+  technicien: ['Salut ! Je change un disque, ce PC repart ce soir.', 'Attention, câbles partout !', 'Bonjour ! L\'atelier, c\'est la maintenance.'],
+  formateur: ['On reprend : tout le monde voit l\'écran ?', 'Bonjour ! La formation est à Soleil, installez-vous.', 'Une question ? Levez la main.'],
+  stagiaire: ['Bonjour ! On est en formation.', 'Chut, on écoute.', 'Bonjour ! Pause dans dix minutes.'],
+  reunion: ['On fait le point, on en a pour un moment.', 'Bonjour ! Réunion en cours.', 'Vous restez avec nous ?'],
+  babyfoot: ['Pas de pissette !', 'Tu joues la gagne ?', 'Attends, je suis en défense.', 'Revanche à midi !'],
+  cafe: ['Un café ? La machine est sur le comptoir.', 'On parlait du week-end.', 'Salut ! Il reste des croissants.'],
+  pause: ['Bonjour ! Petite pause.', 'Salut ! Il y a du café chaud.'],
+  bureau: ['Bonjour ! Bienvenue chez Solumatic.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !'],
+  but: ['But !', 'Et un but !', 'Gamelle !'],
 };
 
 // Le parvis de la tonnellerie (tonnellerie.js) : le tonnelier qui cercle, le chauffeur, le rouleur

@@ -367,7 +367,7 @@ export const son = {
   // un pas sur le sol donné ('asphalte', 'paves', 'gravier', 'herbe', 'vigne'), à la vitesse v (m/s)
   pas(sol, v) { if (ctx && actif) unPas(sol, v || 1.5); },
   // l'ambiance autour de (x, z) à l'heure du jeu (minutes depuis minuit) ; à appeler à chaque image
-  ambiance(dt, x, z, minutes, aPied = true) {
+  ambiance(dt, x, z, minutes, aPied = true, dedans = false) {
     if (!ctx || !A) return;
     tAmb -= dt;
     if (tAmb > 0) return;
@@ -377,8 +377,9 @@ export const son = {
     const dp = Math.hypot(x - PLACE.x, z - PLACE.z), kr = borne(1 - (dp - 6) / 28, 0, 1);
     A.brancherRumeur(kr > 0);
     A.rg.gain.setTargetAtTime(0.035 * kr * kr, t, 0.6);
-    // vent : un peu plus présent dans les vignes, loin du bourg
-    A.vg.gain.setTargetAtTime(dp > 90 ? 0.026 : 0.016, t, 2);
+    // vent : un peu plus présent dans les vignes, loin du bourg ; dedans, à peine (ni oiseaux ni grillons)
+    A.vg.gain.setTargetAtTime(dedans ? 0.004 : dp > 90 ? 0.026 : 0.016, t, dedans ? 0.4 : 2);
+    if (dedans) return;
     // oiseaux, surtout à pied, et moins près de la route ; la nuit (de 19 h 30 à 6 h 40), les grillons
     tOiseau -= 0.25;
     if (tOiseau <= 0) {
@@ -400,6 +401,18 @@ export const son = {
     if (!ctx || !actif || k < 0.02) return;
     const t = ctx.currentTime;
     bruit(t, 0.05, 2600, 0.22 * k, 'bandpass'); note(1180, t, 0.18, 'triangle', 0.05 * k, sfx, 0, true); note(310, t, 0.12, 'sine', 0.09 * k, sfx, 0, true);
+  },
+  // des touches de clavier (les bureaux de Solumatic) : quelques clics secs, k de 0 à 1 selon la distance
+  clavier(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime;
+    for (let i = 0, n = 2 + Math.floor(Math.random() * 4); i < n; i++) bruit(t + i * (0.07 + Math.random() * 0.06), 0.012, 3200 + Math.random() * 1800, 0.035 * k, 'bandpass');
+  },
+  // une balle de baby-foot frappée : un coup de bois, sec
+  babyfoot(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime;
+    bruit(t, 0.03, 1500, 0.12 * k, 'bandpass'); note(620, t, 0.06, 'triangle', 0.04 * k, sfx, 0, true);
   },
   feu(k) {
     if (!ctx || !actif || k < 0.02) return;

@@ -1,5 +1,5 @@
 // La caméra : elle suit le personnage ou le véhicule, cadre une scène (gestes.js), se pose dans une pièce (le bureau et
-// la halle du chai), enchaîne les plans de l'accueil.
+// la halle du chai), suit à hauteur d'homme dans les bureaux de Solumatic, enchaîne les plans de l'accueil.
 import * as THREE from 'three';
 import { angle, borne, amortir as lisser } from './outils.js';
 import { sol } from './relief.js';
@@ -138,25 +138,63 @@ export class Camera {
     this.fovPose = this.c.fov; this.fovPlus = 0;
     this.pret = true;
   }
-  // Dans les bureaux de Solumatic (solumatic.js) : une vue plongeante (le toit n'est pas dessiné, les cloisons s'arrêtent
-  // à 2,75 m) qui suit le personnage (x, z) ; tournée à la main, elle garde son cap (les commandes suivent son axe) ;
-  // pincer ou la molette : plus près, plus loin
-  plongee(dt, x, z) {
+  // Dans les bureaux de Solumatic (solumatic.js) : la caméra suit derrière le personnage, à hauteur d'homme, sous le faux
+  // plafond ; on la tourne à la main comme dehors (pincer : plus près, plus loin), elle revient derrière toute seule. Les
+  // cloisons la rapprochent (murs : des boîtes [x0, z0, x1, z1] ; elle reste à 25 cm de leur face) : elle rentre vite,
+  // ressort lentement, et monte un peu quand elle est tout près. Rend sa distance au personnage (de tout près, main.js ne
+  // le dessine plus).
+  interieur(dt, x, z, h, v, murs, plafond, portes = []) {
     const ct = this.ctrl;
     if (ct) {
       const r = ct.cam;
-      if (r.x || r.y) { this.yaw = angle(this.yaw - r.x); r.x = r.y = 0; }
-      if (ct.kcam) this.yaw = angle(this.yaw - ct.kcam * 2.1 * dt);
-      if (r.zoom !== 1) { this.zoom = borne(this.zoom * r.zoom, 0.6, 1.6); r.zoom = 1; }
-      r.recentrer = false;
+      if (r.x || r.y) { this.tourner(-r.x, r.y); r.x = r.y = 0; }
+      if (ct.kcam || ct.kcamY) this.tourner(-ct.kcam * 2.1 * dt, ct.kcamY * 1.1 * dt);
+      if (r.zoom !== 1) { this.zoom = borne(this.zoom * r.zoom, 0.6, 1.4); r.zoom = 1; }
+      if (r.recentrer) { r.recentrer = false; this.tMain = 99; this.recentre = true; }
     }
-    const k = this.pret ? lisser(dt, 3.5) : 1, d = 3.8 * this.zoom, h = 10.5 * this.zoom;
-    this.pos.x += (x - Math.sin(this.yaw) * d - this.pos.x) * k; this.pos.y += (h - this.pos.y) * k; this.pos.z += (z - Math.cos(this.yaw) * d - this.pos.z) * k;
-    this.regard.x += (x - this.regard.x) * k; this.regard.y += (0.6 - this.regard.y) * k; this.regard.z += (z - this.regard.z) * k;
+    this.tMain += dt;
+    const pret = this.pret, av = Math.abs(v);
+    if (!pret) { this.tMain = 99; this.tangage = 0; }
+    if (this.tMain > 2.2) {
+      const reprise = Math.min(1, (this.tMain - 2.2) / 1.2), d = angle(h - this.yaw), face = (1 + Math.cos(d)) / 2;
+      let k = 1.7 * Math.min(1, av / 2.5) * face * face;
+      if (this.recentre) { k = Math.max(k, 4); if (Math.abs(d) < 0.03) this.recentre = false; }
+      this.yaw = angle(this.yaw + d * lisser(dt, k * reprise));
+      this.tangage *= 1 - lisser(dt, 0.9 * reprise);
+    }
+    // le point suivi : la nuque, avec un peu d'avance dans le sens de la marche
+    const la = borne(v * 0.16, 0, 0.6), ka = pret ? lisser(dt, 2.4) : 1;
+    this.ax += (Math.sin(h) * la - this.ax) * ka; this.az += (Math.cos(h) * la - this.az) * ka;
+    const kc = pret ? lisser(dt, 12) : 1;
+    this.cx += (x + this.ax - this.cx) * kc; this.cz += (z + this.az - this.cz) * kc;
+    const px = this.cx, pz = this.cz, yx = Math.sin(this.yaw), yz = Math.cos(this.yaw);
+    // jusqu'où reculer sans entrer dans un mur (à 25 cm près) ; la première embrasure traversée (sP) : on y passe sous le
+    // linteau, la caméra plus bas
+    const D = 2.6 * this.zoom, m = 0.25;
+    let libre = D, sP = 0;
+    for (let s = 0.08; s <= D + 0.1; s += 0.08) {
+      const qx = px - yx * s, qz = pz - yz * s;
+      let dedans = false;
+      for (let i = 0; i < murs.length; i++) { const b = murs[i]; if (qx > b[0] - m && qx < b[2] + m && qz > b[1] - m && qz < b[3] + m) { dedans = true; break; } }
+      if (dedans) { libre = Math.max(0.15, s - 0.08); break; }
+      if (!sP) for (let i = 0; i < portes.length; i++) { const b = portes[i]; if (qx > b[0] - 0.1 && qx < b[2] + 0.1 && qz > b[1] - 0.1 && qz < b[3] + 0.1) { sP = s; break; } }
+    }
+    if (!pret) this.dCol = libre;
+    else this.dCol += (libre - this.dCol) * lisser(dt, libre < this.dCol ? 16 : 2.2);
+    const d = Math.min(D, this.dCol), el = 0.3 + this.tangage * 0.45;
+    let hy = Math.min(plafond - 0.3, 1.55 + d * Math.sin(el) + (D - d) * 0.18);
+    // la ligne de la nuque à la caméra passe sous le linteau (2,1 m) de l'embrasure qu'elle traverse ; la hauteur lissée
+    if (sP && sP < d) hy = Math.min(hy, 1.55 + 0.42 * d / sP);
+    this.hInt = pret && this.hInt != null ? this.hInt + (hy - this.hInt) * lisser(dt, 5) : hy; hy = this.hInt;
+    this.pos.set(px - yx * d * Math.cos(el), hy, pz - yz * d * Math.cos(el));
+    this.regard.set(px + yx * 1.6, 1.15 - Math.max(0, -this.tangage) * 1.5 + Math.max(0, this.tangage) * 0.5, pz + yz * 1.6);
     this.c.position.copy(this.pos); this.c.lookAt(this.regard);
-    if (Math.abs(this.c.fov - this.fovBase) > 0.02) { this.c.fov = this.fovBase; this.c.updateProjectionMatrix(); }
-    this.fovPose = this.c.fov; this.fovPlus = 0;
+    const fov = this.fovBase + 6;
+    if (Math.abs(this.c.fov - this.fovPose) > 1e-3) this.fovBase = this.c.fov;
+    if (Math.abs(fov - this.c.fov) > 0.02) { this.c.fov = fov; this.c.updateProjectionMatrix(); }
+    this.fovPose = this.c.fov; this.fovPlus = 6;
     this.pret = true;
+    return d;
   }
   // Un plan de l'accueil (main.js : PLANS), à la fraction u de sa durée : la caméra glisse de P.de à P.a en regardant de
   // P.vise à P.viseA. Large : le sujet passe à droite du titre ; étroit : en haut de l'écran, au-dessus des boutons.

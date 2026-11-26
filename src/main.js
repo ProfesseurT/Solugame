@@ -79,12 +79,26 @@ const paliers = new Paliers({
   regler(q) { monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800); regarder(); taches.mat.opacity = q.tache; },
 });
 // Jusqu'où la caméra dessine : loin dehors (la brume du palier) ; dans le bureau du chai, la pièce seulement (le monde
-// extérieur, derrière les murs, n'est pas dessiné, ni le ciel) ; chez Solumatic, vu d'en haut, un peu plus (loin)
+// extérieur, derrière les murs, n'est pas dessiné, ni le ciel) ; chez Solumatic, tout le bâtiment (loin), et de plus près
+// (la caméra frôle les cloisons : son plan proche à 8 cm)
 let vueDedans = false, vueLoin = 16;
 function regarder(dedans = vueDedans, loin = 16) {
   vueDedans = dedans; if (dedans) vueLoin = loin;
-  camera.far = dedans ? vueLoin : paliers.q.brume[1] * 1.6 + 60; camera.updateProjectionMatrix();
+  camera.far = dedans ? vueLoin : paliers.q.brume[1] * 1.6 + 60; camera.near = dedans && vueLoin > 20 ? 0.08 : 0.3; camera.updateProjectionMatrix();
   monde.ciel.visible = !dedans;
+}
+// Chez Solumatic, l'extérieur n'est ni dessiné ni calculé : on retire de la scène tout ce qui n'est pas l'intérieur (la
+// lumière, le personnage, la porte d'entrée, ceux qui y travaillent, les taches de contact restent) et on le remet en
+// sortant (solumatic.js : passer, derrière le fondu au noir). Le rendu ne parcourt plus le monde, la carte d'ombre n'est
+// plus refaite, la vie du bourg attend (bourg : seuls l'œnologue, l'étiqueteur et Marc continuent, la mission 3 en
+// dépend).
+let isoles = null;
+const GARDES = new Set();
+function isoler(oui) {
+  if (oui && !isoles) {
+    isoles = scene.children.filter(o => !GARDES.has(o));
+    scene.remove(...isoles);
+  } else if (!oui && isoles) { scene.add(...isoles); isoles = null; }
 }
 // Repère de la lumière (le même que celui de la caméra d'ombre) : on cale son centre sur la grille de texels
 const LX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SOLEIL).normalize();
@@ -564,7 +578,8 @@ const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
 // les bureaux de Solumatic, dans la zone d'activités (solumatic.js) : la porte d'entrée, ceux qui y travaillent
-const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, regarder });
+for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
+const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, garder: o => GARDES.add(o) });
 const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le village du château qui vit (village.js) : ses terrasses, ses touristes, ses deux voitures qui montent et
@@ -879,7 +894,7 @@ function marcher(dtm) {
   horsDesVoitures();
   // un pas chaque fois qu'un pied se pose (la foulée, anim.js, fait deux pas par cycle)
   const pp = Math.floor(joueur.anim.ph * 2);
-  if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
+  if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(jeu.dedans === 'solumatic' ? solu.sol(joueur.pos.x, joueur.pos.z) : natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
 }
 
 // La vie du bourg : les passants (ils s'écartent du véhicule qui arrive), les clients (ils se tournent vers vous et font
@@ -924,14 +939,17 @@ function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
   DANGER.wtf = jeu.wtf;
   const danger = jeu.auVolant ? DANGER : null, ecraseur = jeu.wtf && jeu.auVolant && Math.abs(tr.v) > 2.5;
-  for (const p of passants) passantVit(p, dtm, danger, ecraseur);
-  clients.maj(dtm, temps, ego, jeu.auVolant);
+  if (!isoles) {
+    for (const p of passants) passantVit(p, dtm, danger, ecraseur);
+    clients.maj(dtm, temps, ego, jeu.auVolant);
+  }
   gens3.maj(dtm, temps, ego, jeu.auVolant);
   { const marc = gens3.liste[2]; if (marc) {
     if (habillage.sms && habillage.attelee && !habillage.marc && marc.etat === 'dedans') jeu.marc.attendre();
     jeu.marc.maj(dtm, temps);
     esquiver(marc, dtm);
   } }
+  if (isoles) return; // (chez Solumatic, le bourg attend ; seuls l'œnologue, l'étiqueteur et Marc continuent : la mission 3)
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
   tonnellerie.maj(dtm, PARVIS_C);
@@ -1124,13 +1142,13 @@ function miseAJour(dt) {
   att.maj(dtm, !gestes.roule, voitures);
   if (dech && !dech.fini) { dech.maj(dtm, temps); if (dech.fini) finDechargement(); }
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
-  son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant);
+  son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant, !!jeu.dedans);
   bourg(dtm, ego);
   phares();
-  particules.fontaine(dtm, L.fontaine);
+  if (!isoles) particules.fontaine(dtm, L.fontaine);
   enCours().update(dt);
   // la ligne d'habillage tourne dès que les premiers palox sont rentrés (mission 3) ; le chariot, dessiné de près
-  if (monde.ligne) monde.ligne.maj(dtm, habillage.decharge || (!!dech && dech.avancement > 0.15), camera.position.x, camera.position.z);
+  if (monde.ligne && !isoles) monde.ligne.maj(dtm, habillage.decharge || (!!dech && dech.avancement > 0.15), camera.position.x, camera.position.z);
   voirChariot(mChariot, camera.position.x, camera.position.z);
   voirChariot(mTP, camera.position.x, camera.position.z);
   // la barre d'état du téléphone : sans réseau en bas des Grands Champs (mission 2)
@@ -1190,7 +1208,8 @@ const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05], 
 function majTaches() {
   const t = taches;
   t.debut();
-  if (!jeu.auVolant) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0, joueur.pos.y);
+  if (!jeu.auVolant && joueur.m.groupe.visible) t.poser(joueur.pos.x, joueur.pos.z, 0.42, 0.42, 0, joueur.pos.y);
+  if (isoles) { solu.taches(t); t.fin(); return; } // (chez Solumatic : ceux qui y sont, debout)
   for (const v of VEHICULES) { const [lx, lz] = TACHES[v.genre], g = v.m.groupe; t.poser(g.position.x, g.position.z, lx, lz, 0, g.position.y, g.quaternion); }
   { const g = mRem.groupe; t.poser(g.position.x, g.position.z, 1.2, 3.15, 0, g.position.y, g.quaternion); } // la remorque de palox
   if (mChariot.groupe.visible) { const g = mChariot.groupe; t.poser(g.position.x, g.position.z, 0.62, 1.35, 0, 0, g.quaternion); }
@@ -1225,7 +1244,7 @@ function avantRendu(ego) {
   placerLumiere(ego.x, ego.z, camLibre ? 0 : ego.y);
   voirLoin();
   majTaches();
-  monde.maj(camera.position.x, camera.position.z);
+  if (!isoles) monde.maj(camera.position.x, camera.position.z);
   // dans le bureau, la pièce ne reçoit pas d'ombre portée : on ne recalcule pas la carte d'ombre
   const q = paliers.q;
   if (q.ombres && !jeu.dedans && ++nOmbre >= q.ombrePas) {
@@ -1431,7 +1450,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; },
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; },
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },

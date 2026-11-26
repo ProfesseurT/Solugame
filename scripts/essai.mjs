@@ -932,24 +932,33 @@ if (scenario === 'nuit') {
       touche('keyup', 'ShiftLeft', 'Shift'); touche('keyup', 'ArrowUp'); CL.step(30);
       log.push(['au clavier : la flèche fait marcher (' + marche.toFixed(1) + ' m/s), Maj courir (' + course.toFixed(1) + ' m/s)', Math.abs(marche - 1.6) < 0.15 && course > 5]);
       log.push(['17 h 40 : la lumière dorée', nuit() === 0]);
-      // la zone d'activités : la tonnellerie vit (le feu, le cercleur, la rouleuse) ; on entre chez Solumatic (vue d'en haut,
-      // sans le toit, ceux qui y travaillent), les cloisons arrêtent, on ressort
+      // la zone d'activités : la tonnellerie vit (le feu, le cercleur, la rouleuse) ; on entre chez Solumatic par la façade
+      // est (l'extérieur est retiré de la scène, la caméra à hauteur d'homme, ceux qui y travaillent), les cloisons et les
+      // meubles arrêtent, un développeur va chercher un café, le baby-foot joue ; on ressort, tout revient
       {
-        const T = CL.tonnellerie, S = CL.solu, M = CL.monde, etq = t => [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith(t));
+        const T = CL.tonnellerie, S = CL.solu, M = CL.monde, LS = M.lieux.solumatic, etq = t => [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith(t));
         CL.teleporter(222.5, -30.5, 0.9); CL.step(60 * 20);
         log.push(['la tonnellerie vit : le cercleur frappe (' + T.ce.coups + ' coups en 20 s), le feu brûle, la rouleuse roule sa barrique (' + T.ro.etat + ')', T.ce.coups >= 18 && T.flammes.visible && T.ro.etat === 'roule' && T.futs.some(f => f.visible)]);
-        CL.teleporter(204.65, -51.8, Math.PI); CL.step(20);
-        const propose = etq('Entrer chez Solumatic');
+        CL.teleporter(LS.dehors.x + 0.6, LS.dehors.z, -Math.PI / 2); CL.step(20);
+        const propose = etq('Entrer chez Solumatic'), n0 = CL.scene.children.length;
         CL.agir(); CL.finirGeste(); CL.step(10);
-        log.push(['chez Solumatic : « Entrer », dedans (vue d\'en haut, sans le toit), cinq personnes à leur poste', propose && J.dedans === 'solumatic' && !M.toitSolu.visible && M.interieurSolu.visible && S.employes.length === 5 && S.employes.every(p => p.m.groupe.visible)]);
-        CL.teleporter(204.6, -60, Math.PI); CL.step(3);
-        touche('keydown', 'ArrowUp'); CL.step(60 * 8); touche('keyup', 'ArrowUp'); CL.step(10);
+        const n1 = CL.scene.children.length, c = CL.camera.position, j = CL.joueur.pos;
+        log.push(['chez Solumatic : « Entrer », dedans, l\'extérieur retiré de la scène (' + n0 + ' -> ' + n1 + ' objets), ' + S.gens.length + ' personnes', propose && J.dedans === 'solumatic' && CL.isoles && n1 < 60 && M.interieurSolu.visible && S.gens.length >= 30 && S.gens.every(g => g.p.m.groupe.visible)]);
+        log.push(['la caméra suit à hauteur d\'homme, sous le plafond (y = ' + c.y.toFixed(2) + ', à ' + Math.hypot(c.x - j.x, c.z - j.z).toFixed(2) + ' m)', c.y > 1.5 && c.y < 2.45 && Math.hypot(c.x - j.x, c.z - j.z) > 0.4]);
+        CL.teleporter(219.3, -61.3, Math.PI); CL.step(3);
+        touche('keydown', 'ArrowUp'); CL.step(60 * 4); touche('keyup', 'ArrowUp'); CL.step(10);
         const zN = CL.joueur.pos.z;
-        log.push(['dedans, on marche le long du hall jusqu\'à la cloison du bout (z = ' + zN.toFixed(2) + ')', zN > -67.7 && zN < -66.4]);
-        CL.teleporter(204.65, -55.6, 0); CL.step(10);
+        log.push(['dedans, on marche dans l\'entrée jusqu\'au banc, qui arrête (z = ' + zN.toFixed(2) + ')', zN > -62.5 && zN < -62.0]);
+        const m = S.marcheur, x0 = m.p.pos.x, b0 = S.balle.position.z;
+        m.marche.t = 0; CL.teleporter(215.9, -66.0, Math.PI); CL.step(60 * 26);
+        const loin = Math.hypot(m.p.pos.x - x0, m.p.pos.z - m.marche.z0);
+        log.push(['un développeur se lève et va jusqu\'à la cuisine (' + loin.toFixed(1) + ' m de sa place)', loin > 9 && !m.p.assis]);
+        CL.teleporter(206.3, -61.6, 0.15); CL.step(30);
+        log.push(['au baby-foot, la balle roule', S.balle.visible && Math.abs(S.balle.position.z - b0) > 0.01]);
+        CL.teleporter(LS.dedans.x - 0.3, LS.dedans.z, Math.PI / 2); CL.step(10);
         const sortir = etq('Sortir');
         CL.agir(); CL.finirGeste(); CL.step(5);
-        log.push(['on ressort : dehors, le toit revenu, l\'intérieur plus dessiné', sortir && !J.dedans && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.z > -53.4]);
+        log.push(['on ressort : dehors, l\'extérieur revenu (' + CL.scene.children.length + ' objets), le toit, l\'intérieur plus dessiné', sortir && !J.dedans && !CL.isoles && CL.scene.children.length === n0 && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.x > 221.9 && CL.joueur.m.groupe.visible]);
         CL.teleporter(-93, -58, 0); CL.step(5);
       }
       J.minutes = 19 * 60 + 15; CL.step(5);

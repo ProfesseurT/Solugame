@@ -615,16 +615,30 @@ export function compacter(g) {
   return g;
 }
 
-// Intérieurs où le soleil n'entre pas (le chai, l'entrepôt de l'imprimeur) : dans chaque boîte (min, max), la lumière
-// directe du soleil est coupée (la carte d'ombre plongerait tout dans le noir sous le toit) et des lampes éclairent
-// (lampes : [x, y, z], de la couleur de la boîte : suspensions chaudes du chai, néons froids de l'entrepôt) ; le ciel n'y
-// donne qu'un peu. Toutes les matières éclairées passent par ce morceau de shader de three.js : personnages, véhicules et
-// décor sont éclairés pareil. Fondu de 25 cm aux murs. Un seul appel, avec toutes les boîtes, avant la compilation des
-// shaders. boites : [{ min, max, lampes, couleur }].
+// Intérieurs où le soleil n'entre pas (le chai, l'entrepôt de l'imprimeur, les bureaux de Solumatic) : dans chaque boîte
+// (min, max), la lumière directe du soleil est coupée (la carte d'ombre plongerait tout dans le noir sous le toit) et des
+// lampes éclairent (lampes : [x, y, z], de la couleur de la boîte : suspensions chaudes du chai, néons froids de
+// l'entrepôt) ; le ciel n'y donne qu'un peu (fond). Toutes les matières éclairées passent par ce morceau de shader de
+// three.js : personnages, véhicules et décor sont éclairés pareil. Fondu de 25 cm aux murs. Une boîte peut avoir ses
+// pièces (pieces : [{ x0, x1, z0, z1, lampes }]) : une pièce n'est éclairée que par ses lampes (la lumière ne traverse pas
+// les cloisons), le reste par celles de la boîte ; force et portee règlent les lampes (force / (1 + d² portee)) ; relief :
+// les faces tournées vers le haut un peu plus claires que celles d'en dessous (les meubles ont du modelé). Un seul appel,
+// avec toutes les boîtes, avant la compilation des shaders. boites : [{ min, max, lampes, couleur, fond, force, portee,
+// pieces, relief }].
 export function definirInterieur(boites) {
-  const C = THREE.ShaderChunk, v = p => `vec3(${p.map(n => n.toFixed(2)).join(', ')})`;
-  const dans = boites.map(b => `{ vec3 cl_di = max( ${v(b.min)} - cl_pm, cl_pm - ${v(b.max)} ); cl_dehors = min( cl_dehors, smoothstep( -0.12, 0.12, max( cl_di.x, max( cl_di.y, cl_di.z ) ) ) ); }`);
-  const lampes = boites.flatMap(b => b.lampes.map(p => `{ vec3 d = cl_pm - ${v(p)}; cl_l += ${v(b.couleur || [1.0, 0.86, 0.68])} * 1.5 / ( 1.0 + dot( d, d ) * 0.05 ); }`));
+  const C = THREE.ShaderChunk, v = p => `vec3(${p.map(n => n.toFixed(2)).join(', ')})`, f = n => n.toFixed(3);
+  const dans = boites.map((b, i) => `vec3 cl_d${i} = max( ${v(b.min)} - cl_pm, cl_pm - ${v(b.max)} ); float cl_k${i} = smoothstep( -0.12, 0.12, max( cl_d${i}.x, max( cl_d${i}.y, cl_d${i}.z ) ) ); cl_dehors = min( cl_dehors, cl_k${i} );`);
+  const somme = (L, b) => L.map(p => `{ vec3 d = cl_pm - ${v(p)}; cl_b += ${f(b.force ?? 1.5)} / ( 1.0 + dot( d, d ) * ${f(b.portee ?? 0.05)} ); }`).join(' ');
+  const corps = boites.map((b, i) => {
+    const pieces = (b.pieces || []).map(q => `if ( cl_pm.x > ${f(q.x0)} && cl_pm.x < ${f(q.x1)} && cl_pm.z > ${f(q.z0)} && cl_pm.z < ${f(q.z1)} ) { ${somme(q.lampes, b)} }`);
+    pieces.push(`{ ${somme(b.lampes, b)} }`);
+    return `if ( cl_k${i} < 1.0 ) {
+    float cl_b = 0.0;
+    ${pieces.join('\n    else ')}
+    cl_l += ( ${v(b.fond || [0.5, 0.49, 0.47])} + ${v(b.couleur || [1.0, 0.86, 0.68])} * cl_b )${b.relief ? ' * cl_r' : ''};
+  }`;
+  });
+  const relief = boites.some(b => b.relief) ? 'vec3 cl_n = ( vec4( geometryNormal, 0.0 ) * viewMatrix ).xyz; float cl_r = 0.86 + 0.1 * cl_n.y + 0.05 * cl_n.x - 0.03 * cl_n.z;' : '';
   C.lights_fragment_begin = C.lights_fragment_begin
     .replace('vec3 geometryPosition = - vViewPosition;', `vec3 geometryPosition = - vViewPosition;
 vec3 cl_pm = ( vec4( geometryPosition - viewMatrix[ 3 ].xyz, 0.0 ) * viewMatrix ).xyz;
@@ -634,8 +648,9 @@ ${dans.join('\n')}`)
 #if defined( RE_IndirectDiffuse )
 if ( cl_dehors < 1.0 ) {
   vec3 cl_l = vec3( 0.0 );
-  ${lampes.join('\n  ')}
-  irradiance = mix( vec3( 0.5, 0.49, 0.47 ) + cl_l, irradiance, cl_dehors ); // dedans : une pénombre neutre, pas le ciel
+  ${relief}
+  ${corps.join('\n  ')}
+  irradiance = mix( cl_l, irradiance, cl_dehors ); // dedans : une pénombre neutre et les lampes, pas le ciel
 }
 #endif`;
 }
