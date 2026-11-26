@@ -22,7 +22,7 @@ import { son } from './audio.js';
 import { hasard, lisse, $, ouvert, dateJeu, jourDe, heureDe, majuscule } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS, CHIEN } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -31,6 +31,7 @@ import { Chai } from './chai.js';
 import { Verres } from './verres.js';
 import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
+import { Chien } from './chien.js';
 import { Tonnellerie } from './tonnellerie.js';
 import { Village } from './village.js';
 import { Restaurateurs } from './restaurateurs.js';
@@ -593,6 +594,25 @@ const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, 
 for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
 const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, garder: o => GARDES.add(o) });
 const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
+// Le chien du domaine (chien.js) : il vit dans la cour, s'écarte de tout véhicule qui roule vers lui, se laisse caresser,
+// dort à la maison. mobiles : ce qui peut rouler (les véhicules du joueur, la remorque, le transpalette de Marc) ; gens :
+// ce qu'il ne traverse pas (le joueur à pied, les ouvriers du parvis, Marc)
+const EMPRISE_TP = [[-0.55, 0.55, -0.8, 2.25]];
+const chien = new Chien({
+  scene, camera, hud, son, col, parvis, modele: () => joueur.m.maillage,
+  mobiles(f) {
+    for (let i = 0; i < VEHICULES.length && i < 14; i++) { const v = VEHICULES[i]; f(i, v.p.pos.x, v.p.pos.z, v.p.h, v.m.dims.emprise); }
+    f(14, att.pos.x, att.pos.z, att.h, mRem.dims.emprise);
+    f(15, mTP.groupe.position.x, mTP.groupe.position.z, mTP.groupe.rotation.y, EMPRISE_TP);
+  },
+  gens(f) {
+    if (!jeu.auVolant && !jeu.dedans && joueur.m.groupe.visible && !joueur.caresse) f(joueur.pos.x, joueur.pos.z, 0.32);
+    for (let i = 0; i < parvis.ouvriers.length; i++) { const o = parvis.ouvriers[i]; if (o.present) f(o.p.pos.x, o.p.pos.z, 0.32); }
+    const marc = gens3.liste[2]; if (marc && marc.p.m.groupe.visible) f(marc.p.pos.x, marc.p.pos.z, 0.34);
+  },
+});
+parvis.chien = chien;
+const etqCaresser = hud.action('Caresser le chien'); ETQ_ACTION.push(etqCaresser);
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le village du château qui vit (village.js) : ses terrasses, ses touristes, ses deux voitures qui montent et
 // redescendent (comme celles de la départementale : un conducteur, des phares, on les emprunte) ; AUTOS : toutes les
@@ -761,11 +781,14 @@ function agir() {
   if (verres.servable) { verres.servir(verres.servable); return; }
   if (restos.presentable) { restos.presenter(restos.presentable); return; } // un restaurateur du coin
   if (presMaison()) { dormir(); return; }
+  if (chien.caressable(joueur.pos)) { caresser(); return; }
   const v = vehiculeProche();
   if (v) { monter(v); return; }
   const vc = voitureProche();
   if (vc) prendreVoiture(vc);
 }
+// Caresser le chien (chien.js, gestes.js) : on s'agenouille près de lui ; une réplique dans une bulle (son propre tirage)
+function caresser() { ctrl.relacher(); gestes.caresser(chien, () => hud.bulle(chien.etqJ, CHIEN.caresse[Math.floor(chien.rnd() * CHIEN.caresse.length)], 2.6)); }
 const proj = new THREE.Vector3();
 function toucher(tp) {
   if (tel.ouvert || pc.ouvert || gestes.actif) return;
@@ -976,6 +999,7 @@ function bourg(dtm, ego) {
   if (isoles) return; // (chez Solumatic, le bourg attend ; seuls l'œnologue, l'étiqueteur et Marc continuent : la mission 3)
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
+  chien.maj(dtm, PARVIS_C);
   tonnellerie.maj(dtm, PARVIS_C);
   VILLAGE_C.t = temps; VILLAGE_C.minutes = jeu.minutes; VILLAGE_C.ego = ego; VILLAGE_C.aPied = !jeu.auVolant; VILLAGE_C.danger = danger; VILLAGE_C.ecraseur = ecraseur;
   village.maj(dtm, VILLAGE_C, klaxonVillage);
@@ -1146,12 +1170,15 @@ function reperes(dt, ego, cible) {
   // devant la porte de la maison du domaine : rentrer dormir
   const dodo = !pcPres && !servable && !pr && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
+  // le chien, tout près, à pied : le caresser (avant de monter dans un véhicule)
+  const caresse = !dodo && !pcPres && !servable && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !joueur.service && !gestes.actif && chien.caressable(joueur.pos);
+  hud.placer(etqCaresser, chien.x, chien.g.position.y + 1.1, chien.z, caresse);
   hud.placer(etqEchantillon, CARTON3.x, CARTON3.y + 0.8, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
-  const vp = !dodo && !pcPres && !pr && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
+  const vp = !caresse && !dodo && !pcPres && !pr && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
-  const vc = !vp && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
+  const vc = !vp && !caresse && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
   hud.placer(etqPrendre, vc ? vc.x : 0, 2.3 + (vc ? vc.y ?? (vc.m ? vc.m.position.y : 0) : 0), vc ? vc.z : 0, !!vc); // (au château : sur son plateau)
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
@@ -1259,6 +1286,7 @@ function majTaches() {
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y, m.position.y);
   parvis.taches(t, ombrePerso);
+  chien.taches(t, ombrePerso);
   tonnellerie.taches(t, ombrePerso);
   village.taches(t, ombrePerso);
   restos.taches(t, ombrePerso);
@@ -1599,3 +1627,4 @@ window.CL = {
     return ms.toFixed(2) + ' ms par image, ' + inf.render.calls + ' appels de dessin, ' + inf.render.triangles + ' triangles (ombres comprises), qualité ' + paliers.q.nom + ', ratio ' + paliers.ratio;
   },
 };
+window.CL.chien = chien; // le chien du domaine (essais)

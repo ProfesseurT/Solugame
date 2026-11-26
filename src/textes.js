@@ -955,3 +955,8 @@ export const RESTAURATEURS = {
   // l'app Missions : la ligne des restaurants, seulement une fois le premier rencontré
   missions: { n: 'Hors mission', titre: 'Les restaurants du coin', texte: (k, total, sg) => `${k} restaurateur${s(k)} rencontré${s(k)} sur ${total}${sg ? `, ${sg} commande${s(sg)} signée${s(sg)}` : ''}. Allez les voir à pied, faites goûter vos vins : le bureau dit quand les rappeler.` },
 };
+
+// Le chien du domaine (chien.js) : ce qu'on lui dit en le caressant (gestes.js : caresser)
+export const CHIEN = {
+  caresse: ['Brave chien !', 'Qui c\'est le bon chien ?', 'Allez, une caresse.', 'T\'es un bon gardien, toi.', 'Doucement, doucement...', 'Tu veux des grattouilles ?', 'Tu as bien gardé la cour ?'],
+};

@@ -420,6 +420,31 @@ export const son = {
     for (let i = 0; i < 3; i++) if (Math.random() < 0.6) bruit(t + Math.random() * 0.28, 0.012 + Math.random() * 0.02, 1800 + Math.random() * 2500, 0.06 * k, 'highpass');
     bruit(t, 0.32, 420, 0.02 * k);
   },
+  // le chien du domaine (chien.js), k de 0 à 1 selon la distance : il aboie (deux « wouf » graves, la voix qui monte puis
+  // retombe, un souffle), gémit de plaisir quand on le caresse (une plainte aiguë qui monte et retombe, deux fois), halète
+  // (deux souffles, dedans, dehors), lape à sa gamelle (trois coups de langue)
+  chien(nom, k) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime;
+    if (nom === 'aboie') {
+      for (const [d, f0] of [[0, 290], [0.26, 262]]) {
+        const o = note(f0, t + d, 0.18, 'sawtooth', 0.11 * k, sfx, 1400, true);
+        o.frequency.setValueAtTime(f0, t + d); o.frequency.linearRampToValueAtTime(f0 * 1.5, t + d + 0.035); o.frequency.exponentialRampToValueAtTime(f0 * 0.72, t + d + 0.18);
+        bruit(t + d, 0.11, 1100, 0.22 * k, 'bandpass');
+      }
+    } else if (nom === 'content') {
+      for (const [d, f0, l] of [[0, 880, 0.42], [0.5, 980, 0.3]]) {
+        const o = note(f0, t + d, l, 'sine', 0.045 * k, sfx);
+        o.frequency.setValueAtTime(f0, t + d); o.frequency.linearRampToValueAtTime(f0 * 1.45, t + d + l * 0.35); o.frequency.linearRampToValueAtTime(f0 * 1.12, t + d + l);
+      }
+      bruit(t, 0.25, 1700, 0.03 * k, 'bandpass');
+    } else if (nom === 'halete') {
+      bruit(t, 0.1, 1500, 0.05 * k, 'bandpass'); bruit(t + 0.16, 0.09, 1900, 0.04 * k, 'bandpass');
+      bruit(t + 0.3, 0.1, 1500, 0.05 * k, 'bandpass');
+    } else if (nom === 'lape') {
+      for (let i = 0; i < 3; i++) { bruit(t + i * 0.15, 0.035, 2000 + Math.random() * 400, 0.07 * k, 'bandpass'); note(700 + Math.random() * 200, t + i * 0.15, 0.03, 'sine', 0.025 * k, sfx, 0, true); }
+    }
+  },
   jouer(nom) {
     if (!ctx || !actif) return;
     const t = ctx.currentTime;

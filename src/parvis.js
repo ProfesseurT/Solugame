@@ -6,20 +6,19 @@
 //   quand on passe tout près, et de temps en temps pour souffler ;
 // - la porteuse range les caisses de vendange de la remorque sur les palettes, une à une (chaque caisse est une instance :
 //   leur nombre se conserve) ; la remorque vide, elle souffle ; on ne la recharge que quand personne ne regarde ;
-// - le chien du domaine, couché près du bureau, lève la tête et suit du regard qui approche, remue la queue ; la nuit, il
-//   dort ;
+// - (le chien du domaine vit à part : chien.js ; les moineaux s'en méfient aussi) ;
 // - des moineaux picorent le gravier et s'envolent sur la remorque, le muret, les barriques ou le bord du toit quand on
 //   approche, puis reviennent ;
 // - en hiver, la cheminée de la maison fume.
 // Les deux ouvriers travaillent de 7 h 30 à 18 h 30 : ils n'arrivent et ne partent que hors de la vue. La nuit, les moineaux
 // dorment. Rien n'est calculé quand la caméra est loin.
 import * as THREE from 'three';
-import { B, C, S, fusion, MAT } from './modeles.js';
+import { B, S, fusion, MAT } from './modeles.js';
 import { perso } from './perso.js';
 import { Pieton } from './pieton.js';
 import { son } from './audio.js';
 import { PARVIS } from './textes.js';
-import { hasard, angle, versAngle, borne, lisse } from './outils.js';
+import { hasard, versAngle, borne, lisse } from './outils.js';
 
 const rnd = hasard(83);
 const LIBRE = { resoudre: () => false, rangs: () => false }; // les ouvriers suivent des chemins dégagés
@@ -40,7 +39,6 @@ const NIDS = [[-86, -38.6, -79.3, -37.6], [-81, -42.9, -78.6, -42.1]];
 const PERCHES = [[-84.4, 0.79, -34.93], [-83.2, 0.79, -34.93], [-82.3, 0.79, -34.93], [-81.2, 1.11, -33.5], [-79.4, 1.11, -33.5], [-77.6, 1.11, -33.5],
   [-77, 1.43, -44.8], [-77, 1.43, -43.3], [-76.35, 6.25, -44.5], [-76.35, 6.25, -41.2]];
 const CHEMINEE = [[-95.37, 13.95, -64], [-95.03, 13.95, -64]];
-const NOIR = '#25211e', FEU = '#a8642f';
 
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), e1 = new THREE.Euler(0, 0, 0, 'YXZ');
 // chaque caisse un peu de travers (les piles ne sont jamais au cordeau)
@@ -72,7 +70,7 @@ export class Parvis {
     // le jet d'eau : un filet clair de la buse jusqu'à ce qu'il touche, qui s'évase
     this.jet = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.005, 1, 6, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), MAT_JET);
     this.jet.visible = false; this.jet.frustumCulled = false; this.jet.renderOrder = 3; sc.add(this.jet);
-    this.chien = this.creerChien(sc);
+    this.chien = null; // le chien du domaine (chien.js : main.js le pose ici, pour les moineaux)
     // les moineaux
     const geo = fusion([S(0.045, '#7b5a3c', 0, 0.06, 0, 1, 0.85, 1.6), S(0.03, '#5e4430', 0, 0.092, 0.06), B(0.012, 0.01, 0.026, '#3a3a3a', 0, 0.09, 0.095),
       B(0.035, 0.006, 0.07, '#4f3a28', 0, 0.07, -0.1), B(0.15, 0.006, 0.06, '#8a6a48', 0, 0.076, -0.005)]);
@@ -85,33 +83,6 @@ export class Parvis {
       this.vols.push({ n, x, y: 0.03, z, h: rnd() * 6.28, etat: 'sol', t: rnd(), tSaut: rnd() * 1.5, pic: 0, ax: x, ay: 0, az: z, bx: x, by: 0, bz: z, dur: 1, haut: 0 });
     }
     this.ouvriers = [];
-  }
-
-  // le chien, un beauceron couché en sphinx sur sa couverture, tourné vers la cour : le corps (pattes de devant allongées,
-  // feu aux pattes et au poitrail), la tête (crâne, museau effilé, truffe, taches feu au-dessus des yeux, oreilles
-  // dressées) et la queue sur leurs pivots. Trois maillages, sans ombre portée (sa tache de contact suffit).
-  creerChien(sc) {
-    const g = new THREE.Group(), patte = (x, z, sz = 1.4) => S(0.046, FEU, x, 0.036, z, 1, 0.7, sz);
-    const corps = new THREE.Mesh(fusion([
-      S(0.16, NOIR, 0, 0.2, -0.03, 1, 1.05, 2.45, 1), S(0.14, NOIR, 0, 0.25, 0.2, 1, 1.2, 1.15, 1), S(0.1, NOIR, 0, 0.34, 0.3, 1, 1.25, 1.1, 1),
-      S(0.075, FEU, 0, 0.17, 0.33, 1.3, 1, 0.7), S(0.125, NOIR, -0.11, 0.15, -0.25, 0.9, 1.15, 1.45, 1), S(0.125, NOIR, 0.11, 0.15, -0.25, 0.9, 1.15, 1.45, 1),
-      C(0.032, 0.042, 0.3, 6, FEU, -0.085, 0.05, 0.42, 'z'), C(0.032, 0.042, 0.3, 6, FEU, 0.085, 0.05, 0.42, 'z'),
-      patte(-0.085, 0.6), patte(0.085, 0.6), patte(-0.2, -0.07, 1.7), patte(0.2, -0.07, 1.7),
-    ]), MAT);
-    const tete = new THREE.Group(); tete.position.set(0, 0.38, 0.34); tete.rotation.order = 'YXZ';
-    tete.add(new THREE.Mesh(fusion([
-      S(0.09, NOIR, 0, 0.06, 0.04, 1, 0.95, 1.12, 1), C(0.034, 0.052, 0.15, 6, NOIR, 0, 0.03, 0.16, 'z'), S(0.04, FEU, 0, 0.0, 0.16, 1.15, 0.7, 1.7),
-      S(0.022, '#141414', 0, 0.045, 0.24, 1.1, 0.85, 0.8), B(0.026, 0.014, 0.012, FEU, -0.04, 0.1, 0.115), B(0.026, 0.014, 0.012, FEU, 0.04, 0.1, 0.115),
-      B(0.02, 0.02, 0.012, '#141414', -0.043, 0.076, 0.122), B(0.02, 0.02, 0.012, '#141414', 0.043, 0.076, 0.122),
-      C(0, 0.036, 0.11, 4, NOIR, -0.056, 0.17, 0.015), C(0, 0.036, 0.11, 4, NOIR, 0.056, 0.17, 0.015),
-    ]), MAT));
-    const queue = new THREE.Group(); queue.position.set(0, 0.22, -0.42); queue.rotation.order = 'YXZ';
-    queue.add(new THREE.Mesh(fusion([C(0.035, 0.022, 0.32, 5, NOIR, 0, 0, -0.16, 'z'), S(0.026, FEU, 0, 0, -0.33, 1, 1, 1.6)]), MAT));
-    g.add(corps, tete, queue);
-    for (const o of [corps, tete.children[0], queue.children[0]]) o.receiveShadow = true;
-    g.position.set(-77.3, 0, -63.4); g.rotation.y = -Math.PI / 2;
-    sc.add(g);
-    return { g, corps, tete, queue, h: -Math.PI / 2, ty: 0, tx: 0.4, tz: 0, queueA: 0, ph: 0, tPres: 0 };
   }
 
   // les deux ouvriers, en tenue de travail (leurs tenues sont fixées : elles ne changent rien aux autres)
@@ -181,12 +152,12 @@ export class Parvis {
         if (o === this.ri && !present) this.jet.visible = false;
       }
     }
-    // le chien et les moineaux ne sont dessinés (et animés) qu'à moins de 70 m : plus loin, quelques pixels
+    // les moineaux ne sont dessinés (et animés) qu'à moins de 70 m : plus loin, quelques pixels
     const pres = !loin && Math.hypot(cam.x + 79, cam.z + 48) < 70;
-    if (this.chien.g.visible !== pres) { this.chien.g.visible = pres; this.oiseaux.visible = pres; }
+    if (this.oiseaux.visible !== pres) this.oiseaux.visible = pres;
     if (loin) { this.jet.visible = false; return; }
     const jour = m > 430 && m < 1110;
-    if (pres) { this.majChien(dt, c, jour); this.majOiseaux(dt, c, jour); }
+    if (pres) this.majOiseaux(dt, c, jour);
     if (!this.ouvriers.length) return;
     if (this.ri.present) this.majRinceur(dt, c);
     if (this.po.present) this.majPorteuse(dt, c);
@@ -313,33 +284,14 @@ export class Parvis {
     this.parler(o, c, de, dt);
   }
 
-  majChien(dt, c, jour) {
-    const ch = this.chien, e = c.ego, dx = e.x - ch.g.position.x, dz = e.z - ch.g.position.z, d = Math.hypot(dx, dz);
-    // il dort la nuit (sauf si l'on vient tout près) ; le jour, il somnole tant que personne n'approche
-    const eveil = c.aPied ? (jour ? 9 : 4) : (jour ? 14 : 0);
-    const alerte = d < eveil, k = Math.min(1, dt * 3);
-    const lacet = alerte ? borne(angle(Math.atan2(dx, dz) - ch.h), -1.1, 1.1) : 0.15 * Math.sin(c.t * 0.21);
-    ch.ty += (lacet - ch.ty) * k; ch.tx += ((alerte ? -0.12 : jour ? 0.22 : 0.42) - ch.tx) * k;
-    // tout près, à pied : il penche la tête d'un côté puis de l'autre (curieux) ; on approche : il flaire
-    ch.tPres = c.aPied && d < 3 ? ch.tPres + dt : 0;
-    ch.tz += ((ch.tPres > 1 ? 0.3 * Math.sign(Math.sin(ch.tPres * 0.8)) : 0) - ch.tz) * Math.min(1, dt * 5);
-    const flaire = alerte && d > 2.5 && d < 8 ? 0.035 * Math.sin(c.t * 15) : 0;
-    ch.tete.rotation.set(ch.tx + flaire, ch.ty, ch.tz);
-    // la queue : elle bat quand on est près
-    const amp = alerte ? (d < 5 && c.aPied ? 0.6 : 0.2) : 0;
-    ch.queueA += (amp - ch.queueA) * k; ch.ph += dt * (d < 5 ? 9 : 4);
-    ch.queue.rotation.set(-0.45 + ch.queueA * 0.3, ch.queueA * Math.sin(ch.ph), 0);
-    ch.corps.scale.y = 1 + 0.025 * Math.sin(c.t * (alerte ? 3.4 : 2));
-  }
-
   majOiseaux(dt, c, jour) {
     const im = this.oiseaux;
     if (!jour) { im.count = 0; return; }
     im.count = this.vols.length;
-    const e = c.ego, po = this.po && this.po.present ? this.po.p.pos : null;
+    const e = c.ego, po = this.po && this.po.present ? this.po.p.pos : null, ch = this.chien && this.chien.g.visible ? this.chien : null;
     for (let i = 0; i < this.vols.length; i++) {
       const b = this.vols[i], [x0, z0, x1, z1] = NIDS[b.n];
-      const dj = Math.hypot(e.x - b.x, e.z - b.z), peur = dj < (c.aPied ? 3.5 : 9) || (po && Math.hypot(po.x - b.x, po.z - b.z) < 0.7);
+      const dj = Math.hypot(e.x - b.x, e.z - b.z), peur = dj < (c.aPied ? 3.5 : 9) || (po && Math.hypot(po.x - b.x, po.z - b.z) < 0.7) || (ch && Math.hypot(ch.x - b.x, ch.z - b.z) < 2.2);
       b.t += dt;
       let sx = 0.55;
       if (b.etat === 'sol') {
@@ -375,10 +327,8 @@ export class Parvis {
     if (Math.abs(x - b.x) + Math.abs(z - b.z) > 0.01) b.h = Math.atan2(x - b.x, z - b.z);
   }
 
-  // les taches de contact des ouvriers et du chien ; vu(m, x, z) : main.js, ombrePerso (dessiné ou non selon la distance)
+  // les taches de contact des ouvriers ; vu(m, x, z) : main.js, ombrePerso (dessiné ou non selon la distance)
   taches(t, vu) {
     for (const o of this.ouvriers) if (o.present && vu(o.p.m, o.p.pos.x, o.p.pos.z)) t.poser(o.p.pos.x, o.p.pos.z, 0.4, 0.4, 0, o.p.pos.y);
-    const g = this.chien.g.position;
-    if (this.chien.g.visible) t.poser(g.x, g.z, 0.3, 0.55, this.chien.h);
   }
 }

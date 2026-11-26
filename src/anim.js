@@ -168,6 +168,7 @@ export class Anim {
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
     if (p.appuis) this.poseAppuis(p.appuis);
+    if (p.caresse && p.caresse.w > 0.01 && !p.assis) this.poseCaresse(p.caresse);
 
     /* ------------------------------------------------ la pile de cartons, tenue des deux mains par le carton du bas */
     if (this.wPorte > 0.01) {
@@ -524,6 +525,23 @@ export class Anim {
     A.vin.scale.y = Math.max(0.02, 1 - entre(1.9, 3.3, t));
     this.brasIK(3, vG.x - 0.035, vG.y + 0.01, vG.z - 0.06, -0.7, -0.7, -0.2, w);
     o[OS.tete].rotation.x -= 0.22 * boit * w;                         // la tête part un peu en arrière en buvant
+  }
+
+  /* ---------------------------------------------------------------- à genoux pour caresser le chien (gestes.js : caresser)
+     C = { x, y, z, w } : où va la main droite (repère du personnage), w de 0 (debout) à 1. Le genou droit à terre, le pied
+     sur la pointe ; le pied gauche à plat devant, le genou levé ; le buste penché vers le chien ; la main gauche posée sur
+     le genou gauche. Mélangée à la pose debout. */
+  poseCaresse(C) {
+    const o = this.o, dm = this.m.dim, w = C.w, b = o[OS.bassin];
+    b.position.y = mix(b.position.y, 0.53, w); b.position.z = mix(b.position.z, -0.06, w);
+    b.rotation.x = mix(b.rotation.x, 0.1, w); b.rotation.y = mix(b.rotation.y, 0.12, w); b.rotation.z *= 1 - w;
+    o[OS.ventre].rotation.x = mix(o[OS.ventre].rotation.x, 0.3, w);
+    o[OS.poitrine].rotation.x = mix(o[OS.poitrine].rotation.x, 0.24, w);
+    this.reperes();
+    this.jambeW(OS.cuisseG, 1, dm.xh + 0.05, CH, 0.32, 0, 0.12, w);
+    this.jambeW(OS.cuisseD, -1, -dm.xh - 0.02, 0.13, -0.36, 1.15, -0.08, w);
+    this.brasIK(3, C.x, C.y, C.z, -0.7, -0.5, -0.5, w);
+    this.brasIK(0, dm.xh + 0.08, 0.47, 0.34, 0.6, -0.4, -1, w);
   }
 
   // Oriente la main (c : 0 gauche, 3 droite) selon q, exprimé dans le repère du personnage
