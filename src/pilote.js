@@ -143,6 +143,9 @@ export class Pilote {
     }
     for (let k = 0; k < voitures.length; k++) {
       const v = voitures[k], ex = v.x - pos.x, ez = v.z - pos.z, lo = ex * sx + ez * cz, la = ex * cz - ez * sx;
+      // (en tournant à gauche, la voiture d'en face arrêtée pour nous laisser passer, de côté, n'est pas devant nous : on ne
+      // l'attend pas, sinon chacun attend l'autre)
+      if (v.sens * sx < 0 && v.v < 0.5 && Math.abs(la) > 1.2) continue;
       if (lo > 0 && lo < 20 && Math.abs(la) < 2.2) vc = Math.min(vc, lo < 8 ? 0 : v.v * 0.9);
     }
     // céder le passage : au bout d'un chemin ou d'une rue (on roule vers la départementale), on arrive assez lentement

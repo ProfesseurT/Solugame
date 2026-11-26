@@ -1,6 +1,8 @@
 // Mission 2 : « La journée de traitement », le lendemain de la tournée de Noël (Teddy, 24/11/2026). Après la tournée, on
-// va dormir ; au réveil, le mercredi 9 décembre, Claire, la conseillère viticole, écrit : le passage d'hiver, bouillie
-// bordelaise seule (un traitement bio), contre le mildiou qui passe l'hiver, sur trois parcelles (l'ETA a fait les autres).
+// va dormir ; au réveil (le mercredi 9 décembre si la tournée a fini le soir même ; la date suit les jours du jeu :
+// outils.js, dateJeu), Claire, la conseillère viticole, écrit : le passage d'hiver, bouillie bordelaise seule (un
+// traitement bio), contre le mildiou qui passe l'hiver, sur trois parcelles (l'ETA a fait les autres). Aucun
+// professionnel sur place (Claire écrit) : rien ne ferme la nuit, on peut traiter et noter à toute heure.
 // 1. Au domaine, en enjambeur (le pulvérisateur y est installé ; le tracteur ne pulvérise pas : Teddy, 24/11/2026), à
 //    l'aire de remplissage : on prépare la bouillie.
 // 2. Dans chaque parcelle, l'enjambeur enjambe un rang : ses bras se déplient et ses descentes traitent ce rang et les
@@ -17,6 +19,7 @@
 import { TRAITEMENT as TX } from './textes.js';
 import { son } from './audio.js';
 import { ecart } from './reseau.js';
+import { dateJeu, jourDe } from './outils.js';
 
 const FAITE = 0.97;         // une parcelle est traitée quand 97 % de ses travées l'ont été
 const RANG_FAIT = 0.92;     // un rang l'est à 92 % (le guidage ne repasse plus dessus)
@@ -88,9 +91,12 @@ export class Traitement {
   // au réveil (main.js : dormir) : la bannière, le message de Claire
   demarrer() {
     this.etape = 'debut'; this.t = 0;
-    this.j.hud.banniere(...TX.bannieres.titre, 4.5);
+    this.j.hud.banniere(...TX.bannieres.titre(this.date), 4.5);
   }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
+  // la date du jour (« mercredi 9 décembre ») ; courte, sans l'année, pour le Registre phyto (« 9 décembre »)
+  get date() { return dateJeu(jourDe(this.j.minutes)); }
+  get dateCourte() { return dateJeu(jourDe(this.j.minutes), 'courte'); }
   // La sauvegarde (sauvegarde.js, main.js) : où en est la journée (message lu, bouillie prête, chaque parcelle et ses
   // travées traitées, le registre), prise hors des gestes, et sa reprise (l'enjambeur à sa place, ses bras repliés : main.js)
   get stable() { return STABLES.has(this.etape) && !this.j.gestes.actif; }
@@ -240,7 +246,7 @@ export class Traitement {
     }
     switch (this.etape) {
       case 'debut':
-        if (this.t > 1.2 && !this.dit) { this.dit = true; hud.dire(TX.dialogues.reveil); this.notifier('messages', TX.message.apercu); }
+        if (this.t > 1.2 && !this.dit) { this.dit = true; hud.dire(TX.dialogues.reveil(this.date)); this.notifier('messages', TX.message.apercu); }
         if (this.t > 4) this.aller(this.lu ? 'preparer' : 'message');
         break;
       case 'message':
@@ -417,11 +423,11 @@ export class Traitement {
     const s = this.saisie, j = this.j;
     if (!s || s.etape !== 'recap' || this.toutVerifier()) return null;
     const parcs = this.parcelles.filter(p => s.parcelles.has(p.id)), en = this.reseau;
-    const h = j.heureTxt.replace(/^0/, '').replace(':', ' h ');
+    const h = j.heureTxt.replace(/^0/, '').replace(':', ' h '), d = this.dateCourte;
     this.registre.unshift({
-      quand: `${TX.dateCourte} · ${h}`, parcelles: parcs.map(p => p.nom),
+      quand: `${d} · ${h}`, parcelles: parcs.map(p => p.nom),
       produits: TX.produits.filter(P => P.cuve).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`),
-      cibles: [...s.cibles], stade: TX.stade, par: `vous, le ${TX.dateCourte} à ${h}`, statut: en ? 'envoye' : 'attente',
+      cibles: [...s.cibles], stade: TX.stade, par: `vous, le ${d} à ${h}`, statut: en ? 'envoye' : 'attente',
     });
     for (const p of parcs) p.notee = true;
     this.saisie = null;

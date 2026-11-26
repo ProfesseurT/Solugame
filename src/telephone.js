@@ -2,10 +2,10 @@
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
 // chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
 // Tout texte vient de textes.js.
-import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, HABILLAGE as HX, EN_PREVENTE, MISSIONS } from './textes.js';
+import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, CONSIGNE_NUIT, TRAITEMENT as TX, HABILLAGE as HX, EN_PREVENTE, MISSIONS } from './textes.js';
 import { son } from './audio.js';
 import { SAUVE } from './sauvegarde.js';
-import { $, esc, eur } from './outils.js';
+import { $, esc, eur, dateJeu, jourDe, appelPossible, heureDe } from './outils.js';
 
 export const ICONES = {
   bureau: '<svg viewBox="0 0 24 24"><path d="M9 7V5.5h6V7" fill="none" stroke="#fff" stroke-width="2"/><rect x="3" y="7" width="18" height="12" rx="2.5" fill="#fff"/><rect x="3" y="11.5" width="18" height="1.6" fill="#8e2a3b" opacity=".35"/></svg>',
@@ -273,21 +273,25 @@ export class Telephone {
     // l'appli que la mission 2 veut qu'on ouvre (le message de Claire, puis chaque parcelle traitée à noter) : son icône
     // mise en évidence
     const voulue = m2 ? (R.aNoter.length ? 'phyto' : !R.lu ? 'messages' : null) : null;
-    const lieu = m3 ? `${esc(HX.date)} · ciel dégagé` : m2 ? `${esc(TX.date)} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : 'Le Bourg · ciel dégagé';
+    // la date du jour du jeu (outils.js : dateJeu ; la tournée peut finir le lendemain, les missions suivantes suivent)
+    const date = esc(dateJeu(jourDe(this.jeu.minutes)));
+    const lieu = m2 ? `${date} · ${R.reseau ? 'temps sec' : 'pas de réseau'}` : `${date} · ciel dégagé`;
     return `<div class="ph-accueil">
       <p class="ph-gheure">${esc(this.jeu.heureTxt)}</p><p class="ph-lieu">${lieu}</p>${n}
       <div class="ph-grille">${APPS.map(([id, nom]) => `<button class="ph-ico${id === voulue ? ' conseil' : ''}" data-a="ouvrir:${id}"><span class="ic ${id}">${ICONES[id]}${this.notif === id ? '<b class="pastille">1</b>' : ''}</span><span class="nom">${esc(nom)}</span></button>`).join('')}</div>
     </div>`;
   }
-  // Ma journée : les 3 rappels, avec l'action du moment pour chacun
+  // Ma journée : les 3 rappels, avec l'action du moment pour chacun ; le bureau appelle les clients de 8 h à 20 h (outils.js :
+  // appelPossible) : avant, après, le bouton dit pourquoi et quand rappeler
   bureau() {
-    const m = this.jeu.mission, e = m.etape;
+    const m = this.jeu.mission, e = m.etape, appel = appelPossible(this.jeu.minutes), tot = heureDe(this.jeu.minutes) < 12 * 60;
     const lignes = m.clients.map(c => {
-      let tag = `<span class="tag ${c.tagC}">${esc(c.tag)}</span>`, bt;
-      if (c.statut === 'a_traiter') bt = `<button class="ap-bt plein" data-a="rappel:${c.id}"${m.appelEnCours ? ' disabled' : ''}>${esc(c.action)}</button>`;
+      let tag = `<span class="tag ${c.tagC}">${esc(m.tagDe(c))}</span>`, bt;
+      if (c.statut === 'a_traiter' && !appel) { tag = `<span class="tag decroche">${tot ? 'Trop tôt pour appeler' : 'Trop tard pour appeler'}</span>`; bt = `<button class="ap-bt" disabled>${tot ? 'Dès 8 h' : 'Demain, 8 h'}</button>`; }
+      else if (c.statut === 'a_traiter') bt = `<button class="ap-bt plein" data-a="rappel:${c.id}"${m.appelEnCours ? ' disabled' : ''}>${esc(c.action)}</button>`;
       else if (c.statut === 'commande') bt = `<button class="ap-bt plein" data-a="cmd:${c.id}">Préparer la commande</button>`;
       else { const [k, t] = STATUTS[c.statut]; tag = `<span class="tag ${k}">${t}</span>`; bt = ''; }
-      return `<div class="rappel"><span class="av" style="background:${c.coul}">${c.ini}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(c.note)}</span><div class="rl">${tag}${bt}</div></div></div>`;
+      return `<div class="rappel"><span class="av" style="background:${c.coul}">${c.ini}</span><div class="rq"><b>${esc(c.nom)} · ${esc(c.lieu)}</b><span>${esc(m.noteDe(c))}</span><div class="rl">${tag}${bt}</div></div></div>`;
     }).join('');
     let carte = '';
     const prets = m.arretsPrets.length, aCharger = m.aCharger.length;
@@ -307,7 +311,7 @@ export class Telephone {
     const prospect = `<div class="rappel"><span class="av" style="background:${p.coul}">${p.ini}</span><div class="rq"><b>${esc(p.nom)} · ${esc(p.lieu)}</b>
       <span>${esc(p.statut === 'a_rappeler' ? p.fil : p.note)}</span><div class="rl">${etatP}</div></div></div><p class="ap-note">${esc(BUREAU.prospect)}</p>`;
     return this.entete('Le bureau', 'bureau') + this.onglets('bureau') + `<div class="ap-corps">${carte}
-      <p class="ap-sur">Ma journée</p><h3>Bonjour.</h3><p class="ap-sous">${esc(MESSAGE)}</p>
+      <p class="ap-sur">Ma journée</p><h3>${m.salut}.</h3><p class="ap-sous">${esc(m.resume)}</p>
       <div class="tuiles"><div class="tu rouge"><b>1</b>Rappel en retard</div><div class="tu bleu"><b>2</b>Rappels du jour</div><div class="tu rouge"><b>1</b>Règlement en retard</div></div>
       <p class="ap-h">À faire aujourd'hui</p>${lignes}
       <p class="ap-h">Règlement en retard</p>${reglement}
@@ -354,7 +358,7 @@ export class Telephone {
   // tout ce qui est prêt (complète, ou avec ce qui est déjà signé et chargé), ou l'on va à un seul arrêt
   tournee() {
     const m = this.jeu.mission, e = m.etape, libre = ['journee', 'livraisons'].includes(e) && !m.attenteBL && !m.attenteCheque;
-    const tete = this.entete('Tournée', 'bureau', 'ouvrir:bureau') + this.onglets('tournee');
+    const tete = this.entete('Tournée', 'bureau', 'ouvrir:bureau') + this.onglets('tournee'), nuit = m.fermes;
     const prets = m.arretsPrets, courant = m.arretCourant;
     const arrets = m.arrets.map((c, i) => {
       const id = c.id, g = m.genre(c), fait = m.fait(c), pret = m.pret(c), dansTour = e === 'livraisons' && m.tour.includes(id);
@@ -363,6 +367,7 @@ export class Telephone {
       if (fait) etat = `<span class="tag ok">${g === 'cheque' ? 'Récupéré' : g === 'prospect' ? 'Rencontré' : 'Livré'}</span>`;
       else if (id === courant) etat = '<span class="tag jour">En cours</span>';
       else if (dansTour) etat = '<span class="tag ok">Dans la tournée</span>';
+      else if (pret && !m.ouvertA(id)) etat = '<span class="tag decroche">Fermé</span>'; // (la nuit : outils.js, HORAIRES)
       else if (pret) etat = libre ? `<button class="ap-bt" data-a="aller:${id}">Y aller</button>` : '<span class="tag decroche">Prêt</span>';
       else if (g === 'client') etat = `<span class="tag decroche">${c.statut === 'signee' ? 'À charger au chai' : c.statut === 'envoyee' ? 'Signature en attente' : 'Commande à prendre'}</span>`;
       else etat = '<span class="tag decroche">À ajouter</span>';
@@ -371,6 +376,7 @@ export class Telephone {
     const tous = prets.length === m.arrets.filter(c => !m.fait(c)).length;
     let bas = '';
     if (m.attenteBL && m.blPret) bas = '<button class="ap-bt plein large" data-a="bl">Faire signer le bon de livraison</button>';
+    else if (nuit) bas = `<p class="consigne">${esc(CONSIGNE_NUIT)}</p>`;
     else if (libre && prets.length) bas = `<p class="ap-note">${esc(BUREAU.itineraire)} : ${Math.round(this.jeu.longueurTournee(prets) / 10) * 10} m.</p>
       <button class="ap-bt plein large" data-a="tournee">${tous ? 'Démarrer la tournée' : `Démarrer la tournée · ${prets.length} arrêt${prets.length > 1 ? 's' : ''} prêt${prets.length > 1 ? 's' : ''}`}</button>`;
     else if (!prets.length && !m.dehorsFini) bas = `<p class="ap-note">${esc(BUREAU.rienDePret)}</p>`;
@@ -607,7 +613,7 @@ export class Telephone {
     const R = this.jeu.traitement, S = R.saisie;
     if (!S) return this.phyto();
     const parcs = R.parcelles.filter(p => S.parcelles.has(p.id)), ha = parcs.reduce((s, p) => s + p.ha, 0);
-    return this.etapePhyto(5, TX.app.recap, `<div class="rp-ligne"><p class="rp-quand"><b>${esc(TX.dateCourte)} · ${esc(this.jeu.heureTxt.replace(/^0/, '').replace(':', ' h '))}</b></p>
+    return this.etapePhyto(5, TX.app.recap, `<div class="rp-ligne"><p class="rp-quand"><b>${esc(R.dateCourte)} · ${esc(this.jeu.heureTxt.replace(/^0/, '').replace(':', ' h '))}</b></p>
       <p>${esc(parcs.map(p => p.nom).join(', '))} · ${String(ha.toFixed(2)).replace('.', ',')} ha</p>
       <p class="rp-p">${esc(TX.produits.filter(P => P.cuve).map(P => `${P.nom} · ${String(P.dose).replace('.', ',')} ${P.unite}`).join(' ; '))}</p>
       <p class="rp-p">${esc([...S.cibles].join(', '))} · ${esc(TX.stade)}</p></div>${R.reseau ? '' : `<p class="ap-note rp-hors">${esc(TX.app.horsReseau)}</p>`}`, TX.app.enregistrer, R.reseau ? TX.app.guide.recap : TX.app.guide.recapSans);
@@ -619,7 +625,8 @@ export class Telephone {
       <button class="ap-bt plein cyan large" data-a="rp-exporter">Exporter</button>${this.apercuPhyto()}</div>`;
   }
   messages() {
-    const R = this.jeu.traitement, H = this.H, fils = R && R.actif ? [{ id: 'claire', ...TX.message }, ...MESSAGES] : [...MESSAGES];
+    const R = this.jeu.traitement, H = this.H, sec = dateJeu(jourDe(this.jeu.minutes) + 2, 'semaine'); // (Claire : il fait sec jusqu'au surlendemain)
+    const fils = R && R.actif ? [{ id: 'claire', ...TX.message, fil: TX.message.fil(sec) }, ...MESSAGES] : [...MESSAGES];
     // mission 3 : l'imprimerie (son message du matin, puis l'envoi du QR code et le BAT), le labo (le bulletin)
     if (H && H.actif) {
       if (H.bulletin) fils.unshift({ id: 'labo', ...HX.messages.labo });

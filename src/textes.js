@@ -6,7 +6,7 @@
 // est une tâche du jour, que le vigneron ajoute lui-même à sa tournée (et non un client qui appelle) : Teddy, 22/11/2026 ; « Vitisoft exporte
 // factures et encaissements vers le logiciel du comptable » et « calcule la DRM, validée dans CIEL » : fiche de faits.
 
-import { eur } from './outils.js';
+import { eur, majuscule } from './outils.js';
 
 export const VERSION = 'Démo 1.0';
 
@@ -16,6 +16,7 @@ export const EN_PREVENTE = Date.now() < PREVENTE_FIN;
 export const LP_URL = 'https://doc.solumatic.fr/registre-phyto-numerique-a-vous-de-jouer-qjxR-F.html?source=jeu-tournee-generale';
 
 const s = n => (n > 1 ? 's' : ''); // pluriel
+const liste = a => (a.length > 1 ? a.slice(0, -1).join(', ') + ' et ' + a[a.length - 1] : a[0] || ''); // « a, b et c »
 
 // la notification du matin, et le sous-titre de Ma journée
 export const MESSAGE_MATIN = '3 rappels, 1 règlement en retard et 1 prospect aujourd\'hui.';
@@ -30,6 +31,12 @@ export const NOTIFS = {
   commande: c => `Commande de ${c.nom} à préparer.`,
   taches: n => `${n} tâche${s(n)} du jour à traiter.`,
   prets: n => `${n} arrêt${s(n)} prêt${s(n)} : lancez la tournée.`,
+  // au réveil, la journée d'hier pas finie : ce qui reste (« Chaque matin, il vous dit qui rappeler, quoi proposer »)
+  reveil: r => `Ce matin : ${liste([
+    ...(r.appels ? [`${r.appels} rappel${s(r.appels)}`] : []), ...(r.commandes ? [`${r.commandes} commande${s(r.commandes)} à préparer`] : []),
+    ...(r.livraisons ? [`${r.livraisons} livraison${s(r.livraisons)}`] : []), ...(r.cheque ? ['le chèque de l\'Épicerie du Bourg'] : []),
+    ...(r.prospect ? ['la visite de l\'Auberge du Moulin'] : []), ...(r.pc ? ['Vitisoft, au bureau du chai'] : []),
+  ]) || 'rien de prévu'}.`,
 };
 
 export const OBJECTIFS = {
@@ -50,7 +57,16 @@ export const OBJECTIFS = {
   pc: n => `Vitisoft : règlement, factures, DRM (${n} sur 3)`,
   pcFini: 'Tout est fait : fermez Vitisoft',
   dodo: 'Il est tard : rentrez dormir, à la maison du domaine',
+  dodoJour: 'La journée de traitement, c\'est demain : rentrez dormir, à la maison du domaine',
   libre: 'Balade libre',
+  // la nuit (outils.js : HORAIRES), les clients fermés : d'abord ce qui se fait seul (charger au chai, les tâches du
+  // bureau, Vitisoft), sinon rentrer dormir ; le matin, avant 8 h, les clients ne s'appellent pas encore
+  nuit: {
+    dormir: 'Il fait nuit : les clients sont fermés. Rentrez dormir, la tournée reprend demain matin',
+    chai: 'Il fait nuit : chargez au chai les commandes signées, pour la tournée de demain',
+    pc: l => `Il fait nuit, les clients sont fermés : au bureau du chai, Vitisoft (${liste(l)})`,
+  },
+  tot: 'Il est tôt : le bureau appelle les clients à partir de 8 h',
 };
 
 // Les bannières (un titre, une ligne)
@@ -64,13 +80,13 @@ export const BANNIERES = {
 // « demande » : la quantité que le client donne au téléphone ; dans le bureau, la commande part de zéro.
 export const CLIENTS = [
   { id: 'cave', ini: 'CP', coul: '#8e2a3b', nom: 'Cave du Pressoir', du: 'la Cave du Pressoir', de: 'de la Cave du Pressoir', lieu: 'Le Bourg',
-    note: 'Rappel promis : réassort de Noël, 6 cartons attendus', tag: 'En retard · 3 j', tagC: 'retard', action: 'Appeler', mode: 'appel',
+    note: 'Rappel promis : réassort de Noël, 6 cartons attendus', tag: 'En retard · 3 j', tagJ: j => `En retard · ${3 + j} j`, tagC: 'retard', action: 'Appeler', mode: 'appel', fem: true,
     produit: 'Cuvée du Clos, rouge', demande: 6, pu: 9.5, numero: 'C-1194', bl: 'BL-0412', facture: 'F-2026-0127' },
   { id: 'bar', ini: 'LC', coul: '#1f3b4d', nom: 'Bar Le Cep', du: 'le Bar Le Cep', de: 'du Bar Le Cep', lieu: 'Le Bourg',
     note: 'Prend du crémant chaque fin d\'année, pas encore cette fois', tag: 'Aujourd\'hui', tagC: 'jour', action: 'Proposer', mode: 'message',
     produit: 'Crémant du Clos', demande: 2, pu: 11.5, numero: 'C-1195', bl: 'BL-0413', facture: 'F-2026-0128' },
   { id: 'treille', ini: 'LT', coul: '#2f5d50', nom: 'Restaurant La Treille', du: 'le Restaurant La Treille', de: 'du Restaurant La Treille', lieu: 'Le Bourg',
-    note: 'Commande toutes les 3 semaines, rien depuis 38 jours', tag: 'Décroche', tagC: 'decroche', action: 'Prendre des nouvelles', mode: 'appel',
+    note: 'Commande toutes les 3 semaines, rien depuis 38 jours', noteJ: j => `Commande toutes les 3 semaines, rien depuis ${38 + j} jours`, tag: 'Décroche', tagC: 'decroche', action: 'Prendre des nouvelles', mode: 'appel',
     produit: 'Cuvée du Clos, blanc', demande: 3, pu: 8.9, numero: 'C-1196', bl: 'BL-0414', facture: 'F-2026-0129' },
 ];
 
@@ -78,7 +94,7 @@ export const CLIENTS = [
 // (24 x 9,50 € HT = 228,00 € HT, TVA 20 % : 273,60 € TTC). C'est une tâche du jour : on ajoute le passage à sa
 // tournée, on récupère le chèque.
 export const RETARD = {
-  id: 'epicerie', ini: 'EB', coul: '#2f4a6b', nom: 'Épicerie du Bourg', du: 'l\'Épicerie du Bourg', lieu: 'Le Bourg',
+  id: 'epicerie', ini: 'EB', coul: '#2f4a6b', nom: 'Épicerie du Bourg', du: 'l\'Épicerie du Bourg', lieu: 'Le Bourg', fem: true,
   facture: 'F-2026-0098', ttc: 273.6, detail: '4 cartons de Cuvée du Clos, rouge',
 };
 // Le prospect de la tournée (données fictives) : un restaurant du hameau des Grands Champs, pas encore client. On ajoute
@@ -88,7 +104,7 @@ export const RETARD = {
 // commandes signées en ligne. » ; « Chaque matin, il vous dit qui rappeler, quoi proposer et pourquoi ». Choix de Teddy
 // (23/11/2026) : dégustation puis rappel, pas de commande.
 export const PROSPECT = {
-  id: 'auberge', ini: 'AM', coul: '#5a6b2f', nom: 'Auberge du Moulin', du: 'l\'Auberge du Moulin', lieu: 'Les Grands Champs',
+  id: 'auberge', ini: 'AM', coul: '#5a6b2f', nom: 'Auberge du Moulin', du: 'l\'Auberge du Moulin', lieu: 'Les Grands Champs', fem: true,
   note: 'Restaurant, pas encore client : passer le voir, lui faire goûter le rouge',
   fil: 'Visite : a goûté la Cuvée du Clos, rouge, pour sa carte d\'hiver. À rappeler.',
 };
@@ -96,6 +112,8 @@ export const PROSPECT = {
 // et, tout fait dehors, où se passe la suite
 export const CONSIGNE_QTE = c => `${c.nom} a demandé ${c.demande} carton${s(c.demande)}.`;
 export const CONSIGNE_RETOUR = 'Tout est fait dehors. La suite se passe dans Vitisoft, sur le portable du bureau du chai.';
+// la nuit, l'écran Tournée : les clients sont fermés (outils.js : HORAIRES)
+export const CONSIGNE_NUIT = 'Il fait nuit : les clients sont fermés. La tournée reprend demain matin, dès 7 h.';
 
 export const DIALOGUES = {
   intro: [{ qui: '', txt: '17 h 40. La journée n\'est pas finie.' }],
@@ -141,12 +159,13 @@ export const DIALOGUES = {
     cave: [{ qui: 'Cave du Pressoir', txt: 'Parfait ! Et la facture ? Depuis le 1er septembre, je reçois les factures électroniques.' }],
     bar: [{ qui: 'Bar Le Cep', txt: 'Juste à temps pour le réveillon. Je signe où ?' }],
     treille: [{ qui: 'La Treille', txt: 'Merci ! Posez-les en cuisine, je signe le bon.' }],
-    auberge: [
-      { qui: 'Auberge du Moulin', txt: 'Bonsoir ! Vous êtes du Clos Libre ? On m\'a parlé de votre rouge.' },
+    // (salut : « Bonjour » ou « Bonsoir », selon l'heure : mission.js)
+    auberge: salut => [
+      { qui: 'Auberge du Moulin', txt: `${salut} ! Vous êtes du Clos Libre ? On m'a parlé de votre rouge.` },
       { qui: 'Vous', txt: 'Je vous le fais goûter ?' },
     ],
-    epicerie: [
-      { qui: 'Vous', txt: 'Bonjour ! Je passe pour la facture en retard.' },
+    epicerie: salut => [
+      { qui: 'Vous', txt: `${salut} ! Je passe pour la facture en retard.` },
       { qui: 'Épicerie du Bourg', txt: 'Ah oui, pardon, je l\'avais oubliée ! Voici le chèque : 273,60 €.' },
       { qui: 'Vous', txt: 'Merci, je le saisis dans Vitisoft en rentrant.' },
     ],
@@ -157,12 +176,17 @@ export const DIALOGUES = {
     { qui: 'Vous', txt: 'C\'est noté dans le bureau : je vous rappelle.' },
   ],
   chequeDepose: [{ qui: '', txt: 'Chèque posé sur le bureau. Reste à saisir le règlement dans Vitisoft.' }],
-  livre: c => [{ qui: '', txt: `Bon de livraison ${c.bl} signé par ${c.du}.` }, ...(c.id === 'cave' ? [{ qui: 'Vous', txt: 'La facture part ce soir, depuis Vitisoft.' }] : [])],
+  livre: (c, soir) => [{ qui: '', txt: `Bon de livraison ${c.bl} signé par ${c.du}.` }, ...(c.id === 'cave' ? [{ qui: 'Vous', txt: `La facture part ${soir ? 'ce soir' : 'aujourd\'hui'}, depuis Vitisoft.` }] : [])],
   pcTracteur: [{ qui: '', txt: 'Descendez : le bureau du chai est là, sa porte donne sur la cour.' }],
   verre: [{ qui: 'Vous', txt: 'Un verre de Cuvée du Clos ? C\'est la maison qui offre.' }],
   retour: [{ qui: '', txt: 'Tournée terminée. Retour au bureau du chai : le chèque sur le bureau, puis Vitisoft, sur le portable.' }],
   retourPC: [{ qui: '', txt: 'Tournée terminée. Retour au bureau du chai : la suite est dans Vitisoft, sur le portable.' }],
-  merci: [{ qui: '', txt: 'Trois livraisons, trois factures, un chèque saisi, un prospect à rappeler et la DRM prête pour CIEL. Bonne soirée !' }],
+  merci: soir => [{ qui: '', txt: `Trois livraisons, trois factures, un chèque saisi, un prospect à rappeler et la DRM prête pour CIEL. ${soir ? 'Bonne soirée' : 'Bonne journée'} !` }],
+  // la nuit (outils.js : HORAIRES, APPELS) : arrivé chez un client fermé, pourquoi et quand repasser (avant 7 h : à
+  // l'ouverture) ; la tournée qu'on voudrait lancer ; un appel qu'on voudrait passer (avant 8 h ou après 20 h)
+  ferme: (c, tot) => [{ qui: '', txt: `${majuscule(c.du)} est ${c.fem ? 'fermée' : 'fermé'} à cette heure-ci. Je repasserai ${tot ? 'à l\'ouverture, à 7 h' : 'demain matin'}.` }],
+  tourneeNuit: [{ qui: '', txt: 'Les clients sont fermés à cette heure-ci : la tournée reprend demain matin.' }],
+  appelNuit: tot => (tot ? 'Trop tôt pour appeler un client : le bureau appelle dès 8 h.' : 'Trop tard pour appeler un client : rappel demain, dès 8 h.'),
 };
 
 // Ce que disent les passants à qui l'on sert un verre, et les automobilistes qu'on accroche (jamais méchant)
@@ -202,9 +226,9 @@ export const BUREAU = {
 // rubriques (libellés recopiés), tableau de bord en tuiles, fenêtre Règlement aux modes de paiement en tuiles.
 export const VITISOFT = {
   domaine: 'Domaine du Clos Libre',
-  // le soir de la tournée (choisi avant le 10 : la DRM de novembre se valide dans CIEL avant le 10 décembre)
-  date: { jour: 'mardi', n: '08', mois: 'décembre', courte: '08/12/2026' },
-  mois: 'Novembre 2026',
+  // (la date du tableau de bord, des factures et de leur échéance, à 30 jours : celle du jour du jeu, outils.js dateJeu ;
+  // le jour 0, le soir de la tournée, est le mardi 8 décembre 2026)
+  mois: 'Novembre 2026', echeanceJ: 30,
   menu: [
     ['Contacts', [['clients', 'Clients / contacts'], ['commerciaux', 'Commerciaux'], ['courtiers', 'Courtiers'], ['transporteurs', 'Transporteurs']]],
     ['Factures', [['factures', 'Liste des factures / Règlements'], ['faire', 'Faire une facture'], ['remises', 'Règlements / Remises banque'], ['avoirs', 'Avoirs']]],
@@ -225,7 +249,7 @@ export const VITISOFT = {
   // factures déjà réglées (données fictives) : numéro, date, client, TTC
   anciennes: [['F-2026-0126', '05/12/2026', 'Vente au caveau', 64.8], ['F-2026-0125', '03/12/2026', 'Vente au caveau', 129.6],
     ['F-2026-0112', '31/10/2026', 'Restaurant La Treille', 213.6]],
-  retardDate: '13/10/2026', retardEcheance: '12/11/2026', echeance: '07/01/2027',
+  retardDate: '13/10/2026', retardEcheance: '12/11/2026',
   parCheque: 'L\'Épicerie du Bourg a réglé par chèque.',
   arrivees: 'Commandes signées, arrivées du bureau sans ressaisie',
   factureCreee: 'Facture créée au format Factur-X : un PDF lisible, avec ses données que les logiciels savent lire.',
@@ -273,6 +297,8 @@ export const FIN = {
   sur: 'Fin de la mission 1',
   titre: 'C\'est ça, Tournée générale.',
   texte: 'Le bureau dans la poche pour vendre et livrer, Vitisoft au domaine pour les règlements, les factures et la DRM. Il est tard : rentrez dormir, la journée de traitement vous attend au réveil.',
+  // (la tournée finie en journée, le lendemain matin d'une nuit dormie : main.js finDemo)
+  texteJour: 'Le bureau dans la poche pour vendre et livrer, Vitisoft au domaine pour les règlements, les factures et la DRM. La journée de traitement, c\'est demain : rentrez dormir, elle vous attend au réveil.',
   h: 'La suite',
   suite: [
     'Mission 2 : la journée de traitement, avec le Registre phyto',
@@ -291,13 +317,14 @@ export const FIN = {
    Stat'Phyto. Parcelles retrouvées depuis le fichier Telepac. Aucune promesse de conformité (jamais « en règle ») :
    l'application enregistre, le contenu du registre reste sous la responsabilité de l'exploitant. Le registre devient
    numérique le 1er janvier 2027 (fiche de faits). La mission se passe le lendemain de la tournée de Noël (Teddy,
-   24/11/2026), le mercredi 9 décembre : aucune année n'est affichée dans l'appli ; avant le 1er janvier 2027
+   24/11/2026), le mercredi 9 décembre si la tournée a fini le soir même (la date suit les jours du jeu : outils.js,
+   dateJeu) : aucune année n'est affichée dans l'appli ; avant le 1er janvier 2027
    (EN_PREVENTE), chaque écran dit « aperçu, données fictives, ouverture le 1er janvier 2027 ».
    Le traitement du jour : un passage d'hiver de bouillie bordelaise seule, présenté comme réduisant le mildiou qui passe
    l'hiver (choix de Teddy, 24/11/2026 ; pratique trouvée seulement sur un site de jardinage, aucune source viticole). La
    bouillie bordelaise et le soufre mouillable sont utilisables en agriculture biologique. Doses, parcelles, noms : fictifs. */
 export const TRAITEMENT = {
-  date: 'mercredi 9 décembre', dateCourte: '9 décembre',
+  // (la date du jour : outils.js dateJeu, forme longue pour le téléphone, courte pour le registre)
   // les parcelles du domaine dans le registre (i : leur place dans PARCELLES, monde.js), celles du jour d'abord
   parcelles: [
     { id: 'perrieres', nom: 'Les Perrières', cep: 'Chenin', i: 0, jour: true, reseau: true },
@@ -323,8 +350,9 @@ export const TRAITEMENT = {
   ],
   message: {
     de: 'Claire, conseillère viticole', apercu: 'Le passage d\'hiver, aujourd\'hui...',
-    fil: [
-      'Bonjour ! Les feuilles tombent et il fait sec jusqu\'à vendredi : c\'est le bon jour pour votre passage d\'hiver.',
+    // (sec : le jour de la semaine jusqu'où il fait sec, deux jours après aujourd'hui : telephone.js)
+    fil: sec => [
+      `Bonjour ! Les feuilles tombent et il fait sec jusqu'à ${sec} : c'est le bon jour pour votre passage d'hiver.`,
       'Bouillie bordelaise seule, à 1,5 kg/ha, pour réduire le mildiou qui passe l\'hiver. Pas de soufre cette fois.',
       'L\'ETA a fait vos trois autres parcelles le 2 : il reste Les Perrières, Le Clos et Les Grands Champs. Notez chaque parcelle dans le Registre phyto dès qu\'elle est traitée.',
     ],
@@ -343,7 +371,7 @@ export const TRAITEMENT = {
     dodo: 'Rentrez dormir : demain, l\'habillage du Clos 2025',
   },
   dialogues: {
-    reveil: [{ qui: '', txt: 'Mercredi 9 décembre, le lendemain de la tournée.' }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
+    reveil: date => [{ qui: '', txt: `${majuscule(date)}, le lendemain de la tournée.` }, { qui: '', txt: 'Un message de Claire, la conseillère viticole.' }],
     luMessage: [{ qui: '', txt: 'La bouillie bordelaise, c\'est du cuivre : utilisable en bio. Le pulvérisateur est sur l\'enjambeur.' }],
     pasEnjambeur: [{ qui: '', txt: 'On pulvérise avec l\'enjambeur : c\'est lui qui porte le pulvérisateur.' }],
     remplir: [{ qui: '', txt: 'De l\'eau et la bouillie bordelaise : les cuves sont prêtes.' }, { qui: '', txt: 'Elles suffisent pour les trois parcelles.' }],
@@ -383,7 +411,7 @@ export const TRAITEMENT = {
     dose: (p, d) => `${p} : la dose de la cuve, ${d}.`,
     manque: 'Il manque le produit de la cuve : la bouillie bordelaise.',
     cibleJour: 'La cible : ce que dit Claire, le mildiou.',
-    deja: (noms, n) => `${noms} : déjà noté${n > 1 ? 'es' : 'e'} ce matin.`,
+    deja: (noms, n) => `${noms} : déjà noté${n > 1 ? 'es' : 'e'} aujourd'hui.`,
     // la notification sur l'écran d'accueil du téléphone, une parcelle traitée
     notif: nom => `${nom} traitée : à noter`,
     // les consignes dans les écrans de l'appli (c'est le jeu qui parle, pas l'appli) : quoi toucher, à chaque étape
@@ -402,7 +430,7 @@ export const TRAITEMENT = {
     attenteNote: n => `${n} saisie${n > 1 ? 's' : ''} en attente : envoyée${n > 1 ? 's' : ''} dès que ça capte.`,
   },
   bannieres: {
-    titre: ['Le lendemain', 'Mission 2 : la journée de traitement'],
+    titre: date => [majuscule(date), 'Mission 2 : la journée de traitement'],
     prete: ['Bouillie prête', 'Bouillie bordelaise 1,5 kg/ha'],
     traitee: nom => ['Parcelle traitée', nom],
     note: n => ['Traitement noté', `${n} parcelle${n > 1 ? 's' : ''} dans le registre`],
@@ -455,10 +483,11 @@ export const TRAITEMENT = {
    le tracteur tire ; puis (Teddy, 25/11/2026) l'échantillon pris au chai, la remorque préparée par un salarié pendant
    qu'on est au labo (il aide à l'atteler), l'imprimerie dans une petite zone d'activités hors du village, son message
    une nuit après (ou six heures), la remorque à aller rechercher et à poser au chai. Le lendemain de la journée de
-   traitement : jeudi 10 décembre ; le message de l'imprimerie, le vendredi matin. Le BAT (bon à tirer) :
+   traitement : jeudi 10 décembre quand chaque mission a tenu dans sa journée (la date suit les jours du jeu : outils.js,
+   dateJeu) ; le message de l'imprimerie, le lendemain matin. Les professionnels ne travaillent pas la nuit (Teddy,
+   26/11/2026 ; outils.js, HORAIRES) : le labo, Marc, l'imprimerie fermés, ce qui a besoin d'eux attend le matin. Le BAT (bon à tirer) :
    l'épreuve que l'imprimeur fait valider avant d'imprimer. Cuvée, analyse, lot, noms : fictifs. */
 export const HABILLAGE = {
-  date: 'jeudi 10 décembre', dateCourte: '10 décembre',
   // la cuvée à habiller et son analyse (le bulletin du labo) : degré en % vol, le reste pour 100 ml ; so2 en mg/L
   vin: { nom: 'Le Clos 2025', cuvee: 'Le Clos', millesime: '2025', couleur: 'rouge', appellation: 'Anjou', lot: 'L25CL1', degre: 12.5, glucides: 0.8, sucres: 0.2, so2: 64 },
   domaine: 'Domaine du Clos Libre',
@@ -518,15 +547,25 @@ export const HABILLAGE = {
     bat: 'Messages : validez le BAT de l\'imprimerie',
     entrepot: 'Emmenez la remorque à l\'imprimerie, dans la zone d\'activités après le bourg',
     dechargement: 'Julien rentre les palox au chariot élévateur',
-    attente: 'L\'habillage prend l\'après-midi : rentrez dormir au domaine, l\'imprimerie vous écrira',
+    attente: 'L\'habillage prend six heures : rentrez dormir au domaine, l\'imprimerie vous écrira',
     reprendreTracteur: 'Prenez le tracteur et allez chercher la remorque à l\'imprimerie',
     reprendre: 'Allez chercher la remorque à l\'imprimerie : arrêtez-vous à l\'entrée de la cour',
     chai: 'Ramenez la remorque au chai, et dételez-la dans la cour',
     marc: 'Marc rentre les palox au chai, avec le transpalette',
     fin: 'Le Clos 2025 est habillé',
+    // la nuit (outils.js : HORAIRES) : ce qui attend un professionnel fermé, quand rien ne reste à faire seul
+    nuit: {
+      labo: 'Il fait nuit : le labo d\'œnologie est fermé. Rentrez dormir, vous y porterez l\'échantillon demain matin',
+      bulletin: 'Le labo est fermé : le bulletin arrivera demain matin. Rentrez dormir',
+      bat: 'L\'imprimerie est fermée : le BAT arrivera demain matin. Rentrez dormir',
+      marc: 'Il fait nuit : Marc est rentré chez lui. Rentrez dormir, il vous aidera à atteler demain matin',
+      imprimerie: 'Il fait nuit : l\'imprimerie est fermée. Rentrez dormir, vous y emmènerez la remorque demain matin',
+      reprendre: 'Il fait nuit : l\'imprimerie est fermée. Rentrez dormir, vous reprendrez la remorque demain matin',
+      chai: 'Il fait nuit : Marc est rentré chez lui. Rentrez dormir, vous poserez la remorque au chai demain matin',
+    },
   },
   dialogues: {
-    reveil: [{ qui: '', txt: 'Jeudi 10 décembre. Aujourd\'hui, on habille le Clos 2025 : six palox.' }, { qui: '', txt: 'Un message de l\'imprimerie.' }],
+    reveil: date => [{ qui: '', txt: `${majuscule(date)}. Aujourd'hui, on habille le Clos 2025 : six palox.` }, { qui: '', txt: 'Un message de l\'imprimerie.' }],
     luMessage: [{ qui: '', txt: 'Pour le QR code, il me faut les valeurs du labo : un échantillon à l\'œnologue d\'abord.' }, { qui: '', txt: 'Il y a un carton du Clos ouvert dans le chai. Pendant ce temps, Marc sortira la remorque du hangar et la chargera.' }],
     echantillon: [{ qui: '', txt: 'Une bouteille du Clos : l\'échantillon pour le labo. Direction le bourg.' }],
     apresLabo: [{ qui: '', txt: 'Le bulletin arrivera sur le téléphone. Je rentre au domaine : la remorque doit être prête.' }],
@@ -554,10 +593,16 @@ export const HABILLAGE = {
     pasFichier: [{ qui: 'Julien', txt: 'Salut ! Il me faut d\'abord la contre-étiquette validée : le fichier du QR code, puis le BAT.' }],
     pasRemorque: [{ qui: 'Julien', txt: 'Et les bouteilles ? Les palox sont sur la remorque, au domaine : venez avec le tracteur.' }],
     entrepot: [{ qui: 'Julien', txt: 'Salut ! Dételez-la là, je prends le chariot.' }],
-    chariot: [{ qui: 'Julien', txt: 'Je rentre les palox et je lance la ligne. Ça prend l\'après-midi : je vous écris quand c\'est fini.' }],
+    // (aujourdhui : la ligne finit avant la fermeture ; sinon, demain matin : mission3.js)
+    chariot: aujourdhui => [{ qui: 'Julien', txt: `Je rentre les palox et je lance la ligne. Ça prend six heures : ${aujourdhui ? 'je vous écris quand c\'est fini' : 'elle finira demain matin, je vous écris'}.` }],
     decharge: [{ qui: '', txt: 'Les six palox sont rentrés, la ligne tourne. Il n\'y a plus qu\'à attendre : je rentre au domaine.' }],
-    patience: [{ qui: 'Julien', txt: 'La ligne tourne, ça prend l\'après-midi. Je vous écris quand c\'est prêt !' }],
-    reveilHabille: [{ qui: '', txt: 'Vendredi 11 décembre. Un message de l\'imprimerie.' }],
+    patience: [{ qui: 'Julien', txt: 'La ligne tourne, ça prend six heures. Je vous écris quand c\'est prêt !' }],
+    reveilHabille: date => [{ qui: '', txt: `${majuscule(date)}. Un message de l'imprimerie.` }],
+    // la nuit : arrivé chez un professionnel fermé, pourquoi et quand revenir (tot : avant 7 h, à l'ouverture)
+    laboFerme: tot => [{ qui: '', txt: `Le labo d'œnologie est fermé à cette heure-ci. J'y retourne ${tot ? 'à l\'ouverture' : 'demain matin'}.` }],
+    imprimerieFermee: tot => [{ qui: '', txt: `L'imprimerie est fermée à cette heure-ci. Je reviendrai ${tot ? 'à l\'ouverture' : 'demain matin'}.` }],
+    marcRentre: [{ qui: '', txt: 'Marc est rentré chez lui : on attellera demain matin.' }],
+    marcRentreChai: [{ qui: '', txt: 'Marc est rentré chez lui : je pose la remorque demain matin, il rentrera les palox avec le transpalette.' }],
     sms: [{ qui: '', txt: 'L\'imprimerie : c\'est habillé ! Je vais chercher la remorque, en tracteur.' }],
     julienAide: [{ qui: 'Julien', txt: 'Bonjour ! Mettez-vous en travers, là, et reculez sur le timon. Je m\'occupe de la goupille.' }],
     versChai: [{ qui: 'Julien', txt: 'C\'est bon ! Bonne route, et bonne vente.' }, { qui: '', txt: 'Je la ramène au chai.' }],
@@ -599,7 +644,7 @@ export const HABILLAGE = {
   },
   languesNote: 'La fiche s\'affiche dans la langue du téléphone ; 24 langues européennes.',
   bannieres: {
-    titre: ['Le surlendemain', 'Mission 3 : l\'habillage'],
+    titre: date => [majuscule(date), 'Mission 3 : l\'habillage'],
     bulletin: ['Bulletin du labo', 'Le Clos 2025, rouge'],
     publiee: ['Fiche publiée', 'Le QR code du Clos 2025'],
     envoye: ['Envoyé', 'Le QR code est chez l\'imprimeur'],

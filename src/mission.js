@@ -15,9 +15,16 @@
 // Pour que le joueur finisse toujours : l'objectif affiché est recalculé à chaque image d'après l'état de la journée ; le
 // bureau relance (la pastille du téléphone) quand il reste quelque chose à y faire ; arrêté devant un client qui n'est
 // pas prêt, on entend ce qui manque et où le faire.
+// La nuit (Teddy, 26/11/2026 : les professionnels ne travaillent pas la nuit ; outils.js, HORAIRES) : les clients ferment
+// à 19 h 30, une fois l'affaire en cours finie (clients.js : ils rentrent), et rouvrent à 7 h ; le bureau n'appelle et ne
+// relance que de 8 h à 20 h. Arrivé chez un client fermé, on entend pourquoi ; l'objectif propose d'abord ce qui se fait
+// seul (charger au chai, les tâches du bureau, Vitisoft au bureau du chai), sinon de rentrer dormir (la balise sur la
+// maison) ; au réveil, la journée reprend où elle en était, et le bureau dit ce qui reste. Les étoiles de retard ne
+// montent pas quand les clients sont fermés. La tournée se finit en une soirée, ou le lendemain.
 import { DIALOGUES, OBJECTIFS, NOTIFS, BANNIERES, CLIENTS, RETARD, PROSPECT } from './textes.js';
 import { son } from './audio.js';
 import { ecart } from './reseau.js';
+import { ouvert, appelPossible, heureDe, jourDe } from './outils.js';
 
 export const COULEUR = '#ff7a2f'; // la balise et l'itinéraire de la mission (main.js, hud.js)
 const RETARD_ETOILE = 40; // secondes avant chaque nouvelle étoile de retard
@@ -29,6 +36,9 @@ const RAPPEL = 8;         // secondes au moins entre deux aides dites en route
 const REDIRE = 25;        // la même aide, au même endroit : pas avant 25 s
 const RELANCE = 8;        // secondes après la fermeture du téléphone avant que le bureau ne relance
 const PROSPECT_LOIN = 25; // parti à plus de 25 m du prospect sans lui avoir servi un verre : la visite est à refaire
+// le métier de chaque arrêt, pour ses heures d'ouverture (outils.js : HORAIRES)
+const HORAIRE = { epicerie: 'commerce', cave: 'commerce', bar: 'commerce', treille: 'restaurant', auberge: 'restaurant' };
+const SOIR = 18 * 60;     // à partir de 18 h, on dit « Bonsoir » ; la facture part « ce soir »
 
 export class Mission {
   constructor(jeu) {
@@ -51,6 +61,7 @@ export class Mission {
     this.objAff = null; // l'objectif affiché
     this.tRappel = 0; this.aideCle = null; this.aideT = -1e9; this.tRelance = 0; // aides et relances
     this.introDite = false; this.dec = 0;
+    this.resume = NOTIFS.matin; // ce que le bureau dit de la journée (Ma journée) : le matin du jour 0, puis au réveil
   }
   client(id) { for (const c of this.clients) if (c.id === id) return c; return null; }
   compter(statut) { let n = 0; for (const c of this.clients) if (c.statut === statut) n++; return n; }
@@ -73,6 +84,67 @@ export class Mission {
       + (this.retardataire.statut === 'a_planifier' ? 0 : 1) + (this.prospect.statut === 'a_planifier' ? 0 : 1);
   }
   get ht() { return this.clients.reduce((s, c) => s + this.htClient(c), 0); }
+
+  /* ------------------------------------------------------------ les heures d'ouverture (outils.js : HORAIRES)
+     Un arrêt fermé ne se fait pas (on dit pourquoi) ; le soir, le client rentre une fois l'affaire en cours finie
+     (clients.js : horaire, occupe) ; quand tous les arrêts qui restent sont fermés, c'est la nuit de la tournée (fermes) :
+     l'objectif propose ce qui se fait seul, sinon de rentrer dormir. */
+  horaire(id) { return HORAIRE[id] || 'commerce'; }
+  ouvertA(id) { return ouvert(this.j.minutes, this.horaire(id)); }
+  // une affaire en cours avec lui : une livraison (les cartons posés, le bon à signer), le chèque, la dégustation
+  occupe(id) { return this.attenteBL === id || (id === RETARD.id && this.attenteCheque) || (id === PROSPECT.id && ['visite', 'deguste'].includes(this.prospect.statut)); }
+  get fermes() {
+    let reste = false;
+    for (const id of ORDRE) { if (this.fait(this.arretDe(id))) continue; reste = true; if (this.ouvertA(id) || this.occupe(id)) return false; }
+    return reste;
+  }
+  get soir() { const h = heureDe(this.j.minutes); return h >= SOIR || h < 5 * 60; }
+  get salut() { return heureDe(this.j.minutes) >= SOIR ? 'Bonsoir' : 'Bonjour'; }
+  arrivee(id) { const A = DIALOGUES.arrivee[id]; return typeof A === 'function' ? A(this.salut) : A; }
+  // les tâches du bureau qui se font maintenant : une commande à préparer, un passage à ajouter, un appel (de 8 h à 20 h)
+  get tachesPossibles() {
+    return this.compter('commande') + (this.retardataire.statut === 'a_planifier' ? 1 : 0) + (this.prospect.statut === 'a_planifier' ? 1 : 0)
+      + (appelPossible(this.j.minutes) ? this.compter('a_traiter') : 0);
+  }
+  // ce qu'il y a à faire dans Vitisoft (le chèque à déposer et à saisir, les commandes livrées à facturer, la DRM)
+  get aFaireAuPC() {
+    const r = this.retardataire.statut, l = [];
+    if (r === 'recupere' || r === 'depose') l.push('le règlement');
+    if (this.clients.some(c => c.statut === 'livree' || c.statut === 'facturee')) l.push('les factures');
+    if (this.drm === 'a_faire') l.push('la DRM');
+    return l;
+  }
+  // La nuit de la tournée (fermes) : ce qu'on propose, dans l'ordre : charger au chai, le bureau (une tâche possible, des
+  // signatures qui arrivent), Vitisoft au bureau du chai ; sinon rentrer dormir
+  get nuit() {
+    if (!this.fermes) return null;
+    if (this.aCharger.length) return 'chai';
+    if (this.tachesPossibles) return 'bureau';
+    if (this.compter('envoyee')) return 'signatures';
+    if (this.aFaireAuPC.length) return 'pc';
+    return 'dormir';
+  }
+  // ce qui reste de la journée, dit par le bureau au réveil (textes.js : NOTIFS.reveil)
+  reste() {
+    const r = this.retardataire.statut, p = this.prospect.statut;
+    return {
+      appels: this.compter('a_traiter') + this.compter('proposee'), commandes: this.compter('commande'),
+      livraisons: this.clients.filter(c => ['envoyee', 'signee', 'chargee'].includes(c.statut)).length,
+      cheque: r === 'a_planifier' || r === 'attendu', prospect: p === 'a_planifier' || p === 'attendu',
+      pc: this.dehorsFini,
+    };
+  }
+  // au réveil (main.js : dormir), la journée d'hier pas finie : le bureau dit ce qui reste (« Chaque matin, il vous dit qui
+  // rappeler, quoi proposer » : page du bureau)
+  reveil() {
+    if (!['journee', 'livraisons', 'retour', 'pc'].includes(this.etape)) return;
+    this.resume = NOTIFS.reveil(this.reste());
+    this.notifier(this.resume);
+    this.tRelance = 0;
+  }
+  // les jours qui passent dans le bureau : le retard de la cave, le silence de La Treille
+  tagDe(c) { return c.tagJ ? c.tagJ(jourDe(this.j.minutes)) : c.tag; }
+  noteDe(c) { return c.noteJ ? c.noteJ(jourDe(this.j.minutes)) : c.note; }
   htClient(c) { return c.cartons * 6 * c.pu; }
   // les piles de la palette du chai : celles de chaque client, 3 cartons au plus (une colonne du véhicule chacune)
   pilesPrevues() {
@@ -118,6 +190,7 @@ export class Mission {
     this.places = {}; for (const g in o.places) this.places[g] = [...o.places[g]];
     this.tour = o.tour.filter(id => this.pret(this.arretDe(id)));
     this.introDite = true;
+    if (jourDe(this.j.minutes) > 0) this.resume = NOTIFS.reveil(this.reste()); // (une partie reprise le lendemain)
     this.aller(o.etape === 'livraisons' && !this.tour.length ? 'journee' : o.etape);
   }
   peutFermer() { return !this.appelEnCours; }
@@ -141,12 +214,18 @@ export class Mission {
     if (e !== 'journee' && e !== 'livraisons') return null;
     // on y est (bon de livraison, chèque, prospect qui attend son verre) : plus de balise
     if (this.attenteBL || this.attenteCheque || p.statut === 'visite' || p.statut === 'deguste') return null;
+    // la nuit : le chai, le bureau du chai, la maison (rentrer dormir) ; rien quand ça se passe sur le téléphone
+    const n = this.nuit;
+    if (n) return n === 'chai' ? L.chai : n === 'pc' ? L.pc : n === 'dormir' ? L.maison : null;
     if (e === 'livraisons' && this.tour.length) return L.arrets[this.tour[0]];
     return this.aCharger.length ? L.chai : null;
   }
   get nomCible() {
     if (this.etape === 'dodo') return 'Maison';
-    if (this.etape === 'livraisons' && this.tour.length) return this.arretDe(this.tour[0]).nom;
+    const n = this.nuit;
+    if (n === 'dormir') return 'Maison';
+    if (n === 'pc') return 'Bureau du chai';
+    if (this.etape === 'livraisons' && this.tour.length && !n) return this.arretDe(this.tour[0]).nom;
     return this.etape === 'retour' || this.etape === 'pc' ? 'Bureau du chai' : 'Chai';
   }
   // l'itinéraire jusqu'à la balise (lieux.reseau, reseau.js) : calculé au départ, refait si l'on s'en écarte ; dans la
@@ -168,7 +247,7 @@ export class Mission {
   get objectif() {
     const j = this.j, e = this.etape, p = this.prospect, r = this.retardataire;
     if (e === 'avant' || e === 'debut') return null;
-    if (e === 'dodo') return OBJECTIFS.dodo;
+    if (e === 'dodo') return this.soir ? OBJECTIFS.dodo : OBJECTIFS.dodoJour;
     if (e === 'fin' || e === 'libre') return OBJECTIFS.libre;
     if (e === 'retour') return r.statut === 'recupere' ? OBJECTIFS.retour : j.dedans === 'bureau' ? OBJECTIFS.pcOuvrir : OBJECTIFS.retourPC;
     if (e === 'pc') return this.toutFait ? OBJECTIFS.pcFini : OBJECTIFS.pc(this.tachesFaites);
@@ -179,13 +258,21 @@ export class Mission {
     // pendant la saisie d'une commande (téléphone, ou le bureau sur le portable) : la quantité dite au téléphone
     const tel = j.tel, vu = tel.ouvert || (j.pc.ouvert && j.pc.fenetre === 'bureau'), c = vu && tel.app === 'commande' && this.client(tel.client);
     if (c && c.statut === 'commande') return OBJECTIFS.saisie(c);
-    if (e === 'livraisons' && this.tour.length) {
+    // la nuit, les clients fermés : ce qui se fait seul d'abord, sinon rentrer dormir
+    const nuit = this.nuit;
+    if (nuit === 'chai') return OBJECTIFS.nuit.chai;
+    if (nuit === 'pc') return OBJECTIFS.nuit.pc(this.aFaireAuPC);
+    if (nuit === 'dormir') return OBJECTIFS.nuit.dormir;
+    if (nuit === 'signatures') return OBJECTIFS.signatures;
+    if (e === 'livraisons' && this.tour.length && !nuit) {
       const a = this.arretDe(this.tour[0]), g = this.genre(a);
       return g === 'cheque' ? OBJECTIFS.cheque(a.du) : g === 'prospect' ? OBJECTIFS.prospect(a.du) : OBJECTIFS.livrer(a.du);
     }
     if (this.aCharger.length) return OBJECTIFS.chai;
-    if (this.arretsPrets.length) return OBJECTIFS.tournee;
+    if (this.arretsPrets.length && !nuit) return OBJECTIFS.tournee;
     const n = this.nbTaches;
+    // le matin, avant 8 h : il ne reste que des appels, le bureau ne les passe pas encore
+    if (!this.tachesPossibles && this.compter('a_traiter') && !appelPossible(j.minutes)) return OBJECTIFS.tot;
     if (n < 5) return n === 0 && this.compter('a_traiter') === this.clients.length ? OBJECTIFS.tel : OBJECTIFS.rappels(n);
     return OBJECTIFS.signatures;
   }
@@ -196,7 +283,8 @@ export class Mission {
     this.tRappel = Math.max(0, this.tRappel - dt);
     // les clients répondent et signent pendant qu'on joue ; signée, la commande attend sur la palette du chai
     for (const c of this.clients) {
-      if (c.statut === 'proposee' && (c.tRep -= dt) <= 0) {
+      // (le bar répond à son message de 8 h à 20 h : un message du soir, le lendemain matin)
+      if (c.statut === 'proposee' && appelPossible(j.minutes) && (c.tRep -= dt) <= 0) {
         c.statut = 'commande';
         this.notifier(NOTIFS.reponse(c));
         hud.dire(DIALOGUES.reponseBar);
@@ -231,8 +319,8 @@ export class Mission {
         break;
     }
     this.relancer(dt);
-    // étoiles de retard : des clients ont signé et attendent leurs cartons
-    if (['journee', 'livraisons', 'chargement'].includes(this.etape) && this.clients.some(c => c.statut === 'signee' || c.statut === 'chargee') && !j.tel.ouvert && !j.gestes.actif) {
+    // étoiles de retard : des clients ont signé et attendent leurs cartons (boutique ouverte : la nuit, personne n'attend)
+    if (['journee', 'livraisons', 'chargement'].includes(this.etape) && this.clients.some(c => (c.statut === 'signee' || c.statut === 'chargee') && this.ouvertA(c.id)) && !j.tel.ouvert && !j.gestes.actif) {
       this.retard += dt;
       if (this.retard > RETARD_ETOILE && this.etoiles < 5) { this.retard = 0; this.etoiles++; hud.etoiles(this.etoiles); son.jouer('etoile'); }
     }
@@ -241,15 +329,15 @@ export class Mission {
   }
 
   // Le bureau relance (la pastille du téléphone et son aperçu) un moment après qu'on l'a refermé, tant qu'il reste quelque
-  // chose à y faire : une commande à préparer, des tâches du jour, une tournée à lancer
+  // chose à y faire : une commande à préparer, des tâches du jour, une tournée à lancer. Pas la nuit : de 8 h à 20 h.
   relancer(dt) {
     const j = this.j, tel = j.tel;
-    if (tel.ouvert || tel.notif || j.pc.ouvert || j.gestes.actif || !['journee', 'livraisons'].includes(this.etape)) { this.tRelance = 0; return; }
+    if (tel.ouvert || tel.notif || j.pc.ouvert || j.gestes.actif || !['journee', 'livraisons'].includes(this.etape) || !appelPossible(j.minutes)) { this.tRelance = 0; return; }
     if ((this.tRelance += dt) < RELANCE) return;
     this.tRelance = 0;
     const c = this.clients.find(x => x.statut === 'commande');
     const taches = this.compter('a_traiter') + (this.retardataire.statut === 'a_planifier' ? 1 : 0) + (this.prospect.statut === 'a_planifier' ? 1 : 0);
-    const prets = this.etape === 'journee' && !this.aCharger.length ? this.arretsPrets.length : 0;
+    const prets = this.etape === 'journee' && !this.aCharger.length && !this.fermes ? this.arretsPrets.length : 0;
     const msg = c ? NOTIFS.commande(c) : taches ? NOTIFS.taches(taches) : prets ? NOTIFS.prets(prets) : null;
     if (msg) { this.message = msg; tel.notifier('bureau'); }
   }
@@ -293,6 +381,11 @@ export class Mission {
       if (this.fait(c)) continue;
       // d : à l'arrêt (où le véhicule se gare) ; dF : au client, devant chez lui
       const f = L.figurants[id], d = j.distance(L.arrets[id]), dF = j.distance(f);
+      // fermé à cette heure-ci (la nuit) : on le dit, rien ne commence ; on repassera demain matin (avant 7 h : à l'ouverture)
+      if (!this.ouvertA(id)) {
+        if (arrete && (j.auVolant ? d < 6.5 : d < 4.5 || dF < 3.5)) this.aider(DIALOGUES.ferme(c, heureDe(j.minutes) < 7 * 60), id);
+        continue;
+      }
       if (!this.pret(c)) {
         // arrêté devant un client qui n'est pas prêt : ce qui manque, et où le faire
         if (arrete && (j.auVolant ? d < 6.5 : d < 4.5 || dF < 3.5)) this.aider(this.pasPret(c), id);
@@ -304,7 +397,7 @@ export class Mission {
         if ((lent && (d < 7 || dF < 9)) || (!j.auVolant && (d < 5 || dF < 4))) {
           c.statut = 'visite';
           hud.vider();
-          this.vehProspect = j.aborder(f, DIALOGUES.arrivee[id]);
+          this.vehProspect = j.aborder(f, this.arrivee(id));
           j.prospectServable(true);
           return;
         }
@@ -313,7 +406,7 @@ export class Mission {
         if ((lent && d < 6.5) || (!j.auVolant && (d < 4.5 || dF < 3.5))) {
           this.attenteCheque = true;
           hud.vider();
-          j.chercherCheque(f, DIALOGUES.arrivee[id], () => this.recupererCheque());
+          j.chercherCheque(f, this.arrivee(id), () => this.recupererCheque());
           return;
         }
       } else {
@@ -323,7 +416,7 @@ export class Mission {
         if (bon && lent && d < 6.5) {
           this.attenteBL = c.id; this.blPret = false;
           hud.vider();
-          hud.dire(DIALOGUES.arrivee[id]);
+          hud.dire(this.arrivee(id));
           j.decharger(f, this.colonnesDe(c.id), x => { x.userData.client = c.id; this.deposes.push(x); }, () => {
             this.blPret = true;
             if (this.attenteBL === c.id && !j.tel.ouvert) j.tel.ouvrir('bl');
@@ -363,6 +456,8 @@ export class Mission {
   rappel(id) {
     const c = this.client(id), j = this.j;
     if (c.statut !== 'a_traiter' || this.appelEnCours) return;
+    // le bureau appelle les clients de 8 h à 20 h (le bouton le dit : telephone.js)
+    if (!appelPossible(j.minutes)) { son.jouer('erreur'); j.tel.toast(DIALOGUES.appelNuit(heureDe(j.minutes) < 12 * 60)); return; }
     if (this.etape === 'debut') this.aller('journee');
     if (c.mode === 'message') { j.tel.client = id; j.tel.app = 'message'; j.tel.afficher(); return; }
     this.appelEnCours = id;
@@ -377,6 +472,7 @@ export class Mission {
   envoyerMessage(id) {
     const c = this.client(id);
     if (c.statut !== 'a_traiter') return;
+    if (!appelPossible(this.j.minutes)) { son.jouer('erreur'); this.j.tel.toast(DIALOGUES.appelNuit(heureDe(this.j.minutes) < 12 * 60)); return; }
     c.statut = 'proposee'; c.tRep = 5;
     son.jouer('envoi');
   }
@@ -422,9 +518,9 @@ export class Mission {
   // ou un seul arrêt (id). Lancée pendant une autre, elle la remplace.
   demarrerTournee(id) {
     if (!['journee', 'livraisons'].includes(this.etape) || this.attenteBL || this.attenteCheque) return;
-    const ids = id ? [id].filter(x => this.pret(this.arretDe(x))) : this.arretsPrets;
-    if (!ids.length) return;
-    const j = this.j;
+    const j = this.j, prets = id ? [id].filter(x => this.pret(this.arretDe(x))) : this.arretsPrets;
+    const ids = prets.filter(x => this.ouvertA(x)); // (la nuit, les clients sont fermés : la tournée attend le matin)
+    if (!ids.length) { if (prets.length) { son.jouer('erreur'); j.hud.dire(DIALOGUES.tourneeNuit); } return; }
     this.tour = ids; this.aller('livraisons');
     j.tel.notifier(null); j.tel.fermer();
     j.hud.dire(id ? DIALOGUES.versArret(this.arretDe(id).nom) : DIALOGUES.tournee);
@@ -465,7 +561,7 @@ export class Mission {
     for (let i = 0; i < P.length; i++) if (P[i] === id) { c.veh.m.cartons[i].visible = false; P[i] = null; }
     c.veh.p.charge = Math.max(0, c.veh.p.charge - c.cartons);
     son.jouer('carton');
-    j.hud.dire(DIALOGUES.livre(c));
+    j.hud.dire(DIALOGUES.livre(c, this.soir));
     this.arretFait(id);
     j.remonter(c.veh); // on retourne au volant
   }
@@ -483,7 +579,8 @@ export class Mission {
   // quelque chose à y faire, sinon le bureau
   ouvrirPC() {
     if (this.etape === 'retour') this.aller('pc');
-    const aFaire = this.pcDispo || this.retardataire.statut === 'depose' || this.clients.some(c => c.statut === 'livree' || c.statut === 'facturee');
+    const aFaire = this.pcDispo || this.retardataire.statut === 'depose' || this.clients.some(c => c.statut === 'livree' || c.statut === 'facturee')
+      || (this.nuit === 'pc' && this.drm === 'a_faire'); // (la nuit, la DRM du mois dernier, en attendant demain)
     return aFaire ? 'vitisoft' : 'bureau';
   }
   get tachesFaites() { return (this.retardataire.statut === 'saisi' ? 1 : 0) + (this.toutTransmis ? 1 : 0) + (this.drm === 'faite' ? 1 : 0); }
@@ -511,6 +608,6 @@ export class Mission {
     j.gagner('tournee'); // la mission 1 est gagnée (sauvegarde.js : on pourra la rejouer)
     this.aller('fin'); this.dec = 0;
     j.hud.banniere(...BANNIERES.fin(this.ht), 4.5);
-    setTimeout(() => j.hud.dire(DIALOGUES.merci), 900);
+    setTimeout(() => j.hud.dire(DIALOGUES.merci(this.soir)), 900);
   }
 }

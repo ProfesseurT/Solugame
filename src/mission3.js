@@ -18,15 +18,22 @@
 // 6. On va la chercher en tracteur : Julien aide à atteler ; on la ramène au chai, on la dételle : c'est fini.
 // Pour finir toujours : l'objectif est recalculé d'après l'état ; arrivé quelque part trop tôt, on entend ce qui manque ;
 // la fiche ne se publie que si elle correspond au bulletin, et le téléphone dit pourquoi.
+// La nuit (Teddy, 26/11/2026 : les professionnels ne travaillent pas la nuit ; outils.js, HORAIRES) : le labo ferme à
+// 18 h 30, Marc et l'imprimerie à 19 h 30, tous rouvrent à 7 h. Fermés, ils rentrent chez eux (clients.js) ; arrivé chez
+// eux, on entend pourquoi ; le bulletin et le BAT attendent l'ouverture ; la ligne d'habillage ne tourne qu'aux heures
+// d'ouverture (six heures de travail, ou une nuit dormie) ; ce qui se fait seul (l'échantillon, la fiche Viticode, le BAT
+// à valider) se fait encore, sinon l'objectif dit de rentrer dormir (nuit), et la mission reprend le matin.
 // La remorque, le chariot, le carton ouvert du chai passent par main.js (jeu.remorque, jeu.chariot, jeu.carton).
 import { HABILLAGE as HX, energie } from './textes.js';
 import { son } from './audio.js';
 import { ecart } from './reseau.js';
+import { ouvert, minutesOuvertes, heureDe, dateJeu, jourDe, HORAIRES } from './outils.js';
 
 const RAPPEL = 8;        // secondes au moins entre deux aides dites en route
 const BULLETIN = 25;     // secondes entre l'échantillon donné et le bulletin du labo
 const BAT = 5;           // secondes entre l'envoi du fichier et le BAT de l'imprimerie
-const HABILLER = 360;    // minutes de jeu entre le dernier palox rentré et le message de l'imprimerie (sans dormir)
+const HABILLER = 360;    // minutes de travail de la ligne (aux heures d'ouverture) entre le dernier palox rentré et le message de l'imprimerie (sans dormir)
+const METIER = { labo: 'labo', entrepot: 'imprimerie', salarie: 'domaine' }; // Hélène, Julien, Marc (clients.js : horaire)
 const prec = (a, b) => Math.abs(a - b) < 1e-6;
 export const nouvelleFiche = () => ({
   nom: '', millesime: '', appellation: '', lot: '', degre: null, couleur: null, ingr: new Set(), bio: false,
@@ -65,12 +72,36 @@ export class Habillage {
   get attendNuit() { return this.decharge && !this.sms; } // l'habillage en cours : on rentre dormir (main.js : dormir)
   // l'œnologue a fait son affaire (clients.js : elle rentre) ; l'étiqueteur et le salarié, eux, restent dehors
   fait(id) { return id === 'labo' ? this.echantillon === 'depose' : false; }
+  // Leurs heures d'ouverture (clients.js) : leur métier ; une affaire en cours avec eux (on ne rentre pas au milieu : un
+  // geste de la mission, le déchargement au chariot, les palox que Marc rentre au chai) ; le matin, ressortent-ils ?
+  // (Hélène, tant qu'elle n'a pas l'échantillon ; Julien, toujours ; Marc, la remorque prête et pas encore attelée)
+  horaire(id) { return METIER[id]; }
+  ouvertA(id) { return ouvert(this.j.minutes, METIER[id]); }
+  occupeAvec(id) { return this.occupe || (id === 'entrepot' && this.livre && !this.decharge) || (id === 'salarie' && this.marc); }
+  veut(id) { return id === 'labo' ? !this.fait('labo') : id === 'salarie' ? this.actif && this.prete && !this.attelee && !this.livre && !this.sms : true; }
+  get date() { return dateJeu(jourDe(this.j.minutes)); }
+  get tot() { return heureDe(this.j.minutes) < HORAIRES.labo[0]; }
+  // La nuit : ce qui attend un professionnel fermé, quand rien ne reste à faire seul (l'échantillon au chai, la fiche
+  // Viticode, le BAT à valider) : la clé de l'objectif (HX.objectifs.nuit), la balise sur la maison ; sinon null
+  get nuit() {
+    if (this.etape !== 'jour' || this.occupe || this.marc || this.rentree || (this.livre && !this.sms)) return null;
+    const labo = this.ouvertA('labo'), imp = this.ouvertA('entrepot'), dom = this.ouvertA('salarie');
+    if (this.sms) return this.attelee ? (dom ? null : 'chai') : (imp ? null : 'reprendre');
+    if (this.echantillon === 'aucun') return null;
+    if (this.echantillon === 'pris') return labo ? null : 'labo';
+    // le bulletin arrivé : la fiche, le QR code, l'envoi, le BAT à valider se font seuls (le BAT, lui, attend l'imprimerie)
+    if (this.bulletin && this.bat !== 'ok' && (!this.envoye || this.bat === 'recu' || imp)) return null;
+    if (!this.attelee) return dom ? null : 'marc';
+    if (!this.bulletin) return labo ? null : 'bulletin';
+    if (this.bat !== 'ok') return imp ? null : 'bat';
+    return imp ? null : 'imprimerie';
+  }
 
   /* ------------------------------------------------------------ déroulé */
   // au réveil (main.js : dormir), ou lancée depuis l'accueil
   demarrer() {
     this.etape = 'debut'; this.t = 0;
-    this.j.hud.banniere(...HX.bannieres.titre, 4.5);
+    this.j.hud.banniere(...HX.bannieres.titre(this.date), 4.5);
   }
   aller(e) { this.etape = e; this.t = 0; this.itin = null; }
   // La sauvegarde : où en est la journée, prise hors des gestes ; à la reprise, on est au domaine, à pied, la remorque
@@ -119,6 +150,7 @@ export class Habillage {
   get prochain() {
     const L = this.j.lieux, R = this.R;
     if (this.rentree || this.marc) return null;
+    if (this.nuit) return { lieu: L.maison, nom: 'Maison' }; // (la nuit, plus rien à faire seul : rentrer dormir)
     if (this.sms) return this.attelee ? { lieu: L.remorque.chai.arret, nom: 'Le chai' } : { lieu: L.entrepot.arrivee, nom: 'Imprimerie Saint-Vincent' };
     if (this.livre) return this.decharge ? { lieu: L.maison, nom: 'Maison' } : null;
     if (this.echantillon === 'aucun') return { lieu: this.j.carton, nom: 'Le chai' };
@@ -151,6 +183,8 @@ export class Habillage {
     if (e === 'debut' || e === 'message') return O.message;
     if (e === 'fin' || e === 'libre') return O.fin;
     if (this.marc) return O.marc;
+    const nuit = this.nuit;
+    if (nuit) return O.nuit[nuit];
     if (this.sms) return this.attelee ? O.chai : this.enTracteur ? O.reprendre : O.reprendreTracteur;
     if (this.livre) return this.decharge ? O.attente : O.dechargement;
     if (this.echantillon === 'aucun') return O.echantillon;
@@ -179,14 +213,15 @@ export class Habillage {
       const o = j.auVolant ? j.tr.pos : j.joueur.pos;
       if (ecart(this.itin.pts, o) > 25) this.itin = null;
     }
-    // le bulletin du labo, le BAT de l'imprimerie : ils arrivent pendant qu'on joue
-    if (this.echantillon === 'depose' && !this.bulletin && (this.tBulletin -= dt) <= 0) {
+    // le bulletin du labo, le BAT de l'imprimerie : ils arrivent pendant qu'on joue, aux heures d'ouverture (la nuit, ils
+    // attendent le matin)
+    if (this.echantillon === 'depose' && !this.bulletin && (this.tBulletin -= dt) <= 0 && this.ouvertA('labo')) {
       this.bulletin = true;
       this.notifier('messages', HX.messages.labo.apercu, 'labo');
       hud.banniere(...HX.bannieres.bulletin, 3.2); hud.dire(HX.dialogues.bulletin);
       j.tel.rafraichir('v'); j.tel.rafraichir('messages');
     }
-    if (this.envoye && this.bat === 'aucun' && (this.tBat -= dt) <= 0) {
+    if (this.envoye && this.bat === 'aucun' && (this.tBat -= dt) <= 0 && this.ouvertA('entrepot')) {
       this.bat = 'recu';
       this.notifier('messages', HX.messages.imprimerie.recu, 'imprimerie');
       hud.dire(HX.dialogues.bat);
@@ -198,8 +233,9 @@ export class Habillage {
       this.decharge = true; this.minDecharge = j.minutes;
       hud.banniere(...HX.bannieres.decharge, 3); hud.dire(HX.dialogues.decharge);
     }
-    // sans dormir : six heures plus tard, quand on est loin de l'imprimerie (la remorque y est rechargée, sans qu'on le voie)
-    if (this.attendNuit && j.minutes - this.minDecharge >= HABILLER && j.distance(j.lieux.entrepot.depot) > 90) this.habille(false);
+    // sans dormir : six heures de travail plus tard (la ligne ne tourne qu'aux heures d'ouverture), quand on est loin de
+    // l'imprimerie (la remorque y est rechargée, sans qu'on le voie)
+    if (this.attendNuit && this.ouvertA('entrepot') && minutesOuvertes(this.minDecharge, j.minutes, 'imprimerie') >= HABILLER && j.distance(j.lieux.entrepot.depot) > 90) this.habille(false);
     // le message de l'imprimerie, un peu après (au réveil : le temps de sortir dans la cour)
     if (this.tSms > 0 && (this.tSms -= dt) <= 0) {
       this.notifier('messages', HX.messages.imprimerie.termine, 'imprimerie');
@@ -208,7 +244,7 @@ export class Habillage {
     }
     switch (this.etape) {
       case 'debut':
-        if (this.t > 1.2 && !this.dit) { this.dit = true; hud.dire(HX.dialogues.reveil); this.notifier('messages', HX.messages.imprimerie.apercu, 'imprimerie'); }
+        if (this.t > 1.2 && !this.dit) { this.dit = true; hud.dire(HX.dialogues.reveil(this.date)); this.notifier('messages', HX.messages.imprimerie.apercu, 'imprimerie'); }
         if (this.t > 4) this.aller(this.lu ? 'jour' : 'message');
         break;
       case 'message':
@@ -234,8 +270,8 @@ export class Habillage {
     const j = this.j, L = j.lieux, R = this.R;
     if (this.occupe || j.gestes.actif || j.tel.ouvert || j.pc.ouvert) return;
     const v = j.auVolant ? Math.abs(j.tr.v) : 0, lent = j.auVolant && v < 2.5, arrete = !j.auVolant || v < 0.6;
-    // la remorque préparée : Marc le dit quand on revient au domaine
-    if (this.prete && !this.annonce && !this.livre && j.distance(R.ici) < 34) {
+    // la remorque préparée : Marc le dit quand on revient au domaine (s'il est là : la nuit, il est rentré chez lui)
+    if (this.prete && !this.annonce && !this.livre && this.c.salarie.etat === 'dehors' && j.distance(R.ici) < 34) {
       this.annonce = true; this.itin = null;
       this.c.salarie.p.saluer?.();
       j.hud.dire(this.enTracteur ? HX.dialogues.preteTracteur : HX.dialogues.prete);
@@ -245,6 +281,7 @@ export class Habillage {
     // on le dit
     if (this.prete && !this.attelee && !this.livre && j.auVolant && arrete && (j.distance(R.ici) < 14 || j.distance(R.approche) < 6)) {
       if (j.veh.genre !== 'tracteur') this.aider(HX.dialogues.pasTracteur, 'remorque');
+      else if (!this.ouvertA('salarie')) this.aider(HX.dialogues.marcRentre, 'remorque'); // (la nuit : Marc est rentré)
       else if (R.peutAtteler()) { this.atteler(); return; }
       else this.aider(HX.dialogues.timon, 'remorque');
     }
@@ -252,26 +289,32 @@ export class Habillage {
     {
       const f = L.figurants.labo, d = j.distance(L.arrets.labo), dF = j.distance(f);
       if (this.echantillon !== 'depose' && ((lent && d < 6.5) || (!j.auVolant && (d < 4.5 || dF < 3)))) {
-        if (this.echantillon === 'pris') { this.donnerEchantillon(); return; }
-        if (arrete) this.aider(HX.dialogues.sansEchantillon, 'labo');
+        if (!this.ouvertA('labo')) { if (arrete) this.aider(HX.dialogues.laboFerme(this.tot), 'labo'); }
+        else if (this.echantillon === 'pris') { this.donnerEchantillon(); return; }
+        else if (arrete) this.aider(HX.dialogues.sansEchantillon, 'labo');
       }
     }
     // dans la cour de l'imprimerie : la livrer ; le lendemain, la reprendre
     {
       const E = L.entrepot, d = j.distance(E.depot), dF = j.distance(E.figurant);
       if (!this.livre && ((lent && d < 8) || (!j.auVolant && dF < 4))) {
-        if (this.bat !== 'ok') { if (arrete) this.aider(HX.dialogues.pasFichier, 'entrepot'); }
+        if (!this.ouvertA('entrepot')) { if (arrete) this.aider(HX.dialogues.imprimerieFermee(this.tot), 'entrepot'); }
+        else if (this.bat !== 'ok') { if (arrete) this.aider(HX.dialogues.pasFichier, 'entrepot'); }
         else if (!this.attelee) { if (arrete) this.aider(HX.dialogues.pasRemorque, 'entrepot'); }
         else if (arrete && this.enTracteur) { this.deteler(); return; }
       }
       if (this.sms && !this.attelee && arrete && j.auVolant && j.distance(E.arrivee) < 9) {
-        if (j.veh.genre !== 'tracteur') this.aider(HX.dialogues.pasTracteurRetour, 'retour');
+        if (!this.ouvertA('entrepot')) this.aider(HX.dialogues.imprimerieFermee(this.tot), 'retour');
+        else if (j.veh.genre !== 'tracteur') this.aider(HX.dialogues.pasTracteurRetour, 'retour');
         else { this.reprendreRemorque(); return; }
       }
       if (this.attendNuit && arrete && (j.distance(E.depot) < 12 || dF < 4)) this.aider(HX.dialogues.patience, 'patience');
     }
-    // au chai : la poser
-    if (this.sms && this.attelee && this.enTracteur && lent && j.distance(L.remorque.chai) < 12) { this.deposer(); return; }
+    // au chai : la poser (Marc rentre les palox ; la nuit, il est rentré chez lui : demain matin)
+    if (this.sms && this.attelee && this.enTracteur && lent && j.distance(L.remorque.chai) < 12) {
+      if (this.ouvertA('salarie')) { this.deposer(); return; }
+      if (arrete) this.aider(HX.dialogues.marcRentreChai, 'chai');
+    }
   }
 
   // L'échantillon : à pied, au carton ouvert du chai (main.js : l'étiquette « Prendre un échantillon », agir)
@@ -330,7 +373,9 @@ export class Habillage {
       son.jouer('succes');
       j.hud.banniere(...HX.bannieres.livre, 3);
       j.chariot.lancer();
-      setTimeout(() => j.hud.dire(HX.dialogues.chariot), 1200);
+      // (six heures de ligne : finies avant la fermeture, ou demain matin)
+      const aujourdhui = heureDe(j.minutes) + HABILLER <= HORAIRES.imprimerie[1];
+      setTimeout(() => j.hud.dire(HX.dialogues.chariot(aujourdhui)), 1200);
     });
   }
   // L'habillage fini (au réveil, ou six heures plus tard) : la remorque rechargée et tournée vers la sortie (main.js :
@@ -339,7 +384,7 @@ export class Habillage {
     if (!this.attendNuit) return;
     this.sms = true; this.tSms = reveil ? 3.5 : 0.5; this.itin = null;
     this.R.habillee();
-    if (reveil) setTimeout(() => this.j.hud.dire(HX.dialogues.reveilHabille), 1200);
+    if (reveil) setTimeout(() => this.j.hud.dire(HX.dialogues.reveilHabille(this.date)), 1200);
   }
   // au réveil (main.js : dormir)
   reveil() { this.habille(true); }
