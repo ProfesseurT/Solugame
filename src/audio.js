@@ -414,6 +414,52 @@ export const son = {
     const t = ctx.currentTime;
     bruit(t, 0.03, 1500, 0.12 * k, 'bandpass'); note(620, t, 0.06, 'triangle', 0.04 * k, sfx, 0, true);
   },
+  // La cour de récréation (ecole.js) : n enfants qui jouent, k de 0 à 1 selon la distance. Rejoué toutes les trois
+  // dixièmes de seconde : une à trois voix d'enfants à la fois, de-ci de-là (des syllabes qui papotent, un rire, un cri de
+  // joie qui monte), à travers le mur et la grille (sans les aigus).
+  recre(k, n) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime, nb = Math.min(3, 1 + Math.floor(n / 9 + Math.random() * 1.4));
+    for (let i = 0; i < nb; i++) {
+      const t0 = t + Math.random() * 0.25, sorte = Math.random(), v = 0.03 * k * hasard(0.5, 1);
+      let dest = amb;
+      if (ctx.createStereoPanner) { const pan = ctx.createStereoPanner(); pan.pan.value = hasard(-0.7, 0.7); pan.connect(amb); dest = pan; }
+      const fl = filtre('lowpass', 2600); fl.connect(dest);
+      if (sorte < 0.55) { // des syllabes : une voix d'enfant (fondamentale aiguë) qui monte et retombe, par un formant
+        const f0 = hasard(300, 480), ns = 1 + Math.floor(Math.random() * 3), bp = filtre('bandpass', hasard(900, 1500), 2.2); bp.connect(fl);
+        for (let s = 0; s < ns; s++) {
+          const ts = t0 + s * hasard(0.13, 0.2), d = hasard(0.08, 0.16), o = note(f0, ts, d, 'sawtooth', v * 0.8, bp, 0, false);
+          o.frequency.setValueAtTime(f0 * hasard(0.95, 1.1), ts); o.frequency.linearRampToValueAtTime(f0 * hasard(1.05, 1.3), ts + d * 0.4); o.frequency.linearRampToValueAtTime(f0 * hasard(0.85, 1.0), ts + d);
+        }
+      } else if (sorte < 0.8) { // un rire : des « ha » qui descendent
+        const f0 = hasard(480, 620), bp = filtre('bandpass', 1300, 1.8); bp.connect(fl);
+        for (let s = 0, ns = 3 + Math.floor(Math.random() * 3); s < ns; s++) { const o = note(f0 * (1 - s * 0.05), t0 + s * 0.11, 0.07, 'sawtooth', v, bp, 0, true); o.frequency.exponentialRampToValueAtTime(f0 * (0.9 - s * 0.05), t0 + s * 0.11 + 0.07); }
+      } else { // un cri de joie qui monte (« ouais ! »)
+        const o = note(hasard(520, 650), t0, 0.38, 'triangle', v * 1.1, fl, 0, false);
+        o.frequency.exponentialRampToValueAtTime(hasard(950, 1250), t0 + 0.3);
+      }
+    }
+  },
+  // La cloche de l'école (ecole.js : la classe, les récréations, la sortie) : une dizaine de coups, chacun des partiels
+  // inharmoniques d'une cloche qui s'éteignent ; k selon la distance
+  cloche(k) {
+    if (!ctx || !actif || k < 0.02) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 11; i++) {
+      const ti = t + i * 0.38 + (i % 2) * 0.04, f0 = i % 2 ? 840 : 880;
+      for (const [r, v, d] of [[1, 0.06, 1.3], [2.0, 0.03, 0.9], [2.4, 0.025, 0.7], [3.02, 0.016, 0.5], [4.2, 0.01, 0.35]]) note(f0 * r, ti, d, 'sine', v * k, sfx, 0, true);
+    }
+  },
+  // un coup de pied dans le ballon ; la corde à sauter qui claque par terre (ecole.js)
+  ballon(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime;
+    bruit(t, 0.06, 420, 0.16 * k); const o = note(160, t, 0.08, 'sine', 0.08 * k, sfx, 0, true); o.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+  },
+  corde(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    bruit(ctx.currentTime, 0.035, 2600, 0.07 * k, 'bandpass');
+  },
   feu(k) {
     if (!ctx || !actif || k < 0.02) return;
     const t = ctx.currentTime;

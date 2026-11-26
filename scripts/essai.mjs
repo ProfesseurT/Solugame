@@ -21,6 +21,8 @@
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
+//   ecole     l'école des Tilleuls : on n'y entre jamais (à pied, en tracteur, mode WTF), la récréation, la classe, la nuit,
+//             le mercredi, la sortie de 16 h 30 (portail, parents), aucune étiquette, des enfants divers, ce qu'elle coûte
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
 // Sortie : texte sur la console ; captures dans essais/<dossier>/ ; code 1 si une erreur JS est apparue.
@@ -1099,6 +1101,135 @@ if (scenario === 'poids') {
   const r = await ev(() => { CL.profil(20); return CL.profil(120); });
   console.log(`conduite total ${Object.values(r).reduce((a, b) => a + b, 0).toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
+}
+
+if (scenario === 'ecole') {
+  // L'école des Tilleuls et ses enfants (ecole.js) : l'école existe ; on n'y entre jamais (à pied, en tracteur, en mode
+  // WTF) ; la récréation (des enfants qui jouent, qui bougent : balançoires, toboggan, corde, ronde, ballon) ; personne dans
+  // la cour pendant la classe (les élèves aux fenêtres), la nuit, après la garderie, le samedi ; moins d'enfants le mercredi ;
+  // la sortie de 16 h 30 (le portail s'ouvre, ils le passent, rejoignent leurs parents et disparaissent chez eux) ; des
+  // enfants divers ; aucune étiquette près d'eux ; un véhicule ne leur roule jamais dessus ; ce que coûte l'école
+  const r = await ev(async () => {
+    const log = [], E = CL.ecole, J = CL.jeu, Z = CL.monde.lieux.ecole.zone, loin = () => CL.photo(60, 40, 120, 60, 0, 200);
+    const dansZ = (x, z, m = 0) => x > Z.x0 - m && x < Z.x1 + m && z > Z.z0 - m && z < Z.z1 + m;
+    const aller = (j, h, m) => { loin(); J.minutes = j * 1440 + h * 60 + m; CL.step(40); CL.photo(112, 6, -26, 124, 0.5, -24); CL.step(6); };
+    const visibles = () => E.gens.filter(e => e.m.groupe.visible);
+    const dansCour = () => E.enfants.filter(e => e.m.groupe.visible && dansZ(e.p.pos.x, e.p.pos.z));
+    CL.jouer(); CL.step(30);
+    CL.teleporter(108, -20, Math.PI / 2); J.minutes = 10 * 60 + 2; CL.photo(112, 6, -26, 124, 0.5, -24); CL.step(150);
+    log.push(['l\'école existe : son bâtiment (il arrête la caméra), son enceinte, ' + E.chemins.length + ' chemins jusqu\'aux maisons, ' + E.gens.length + ' personnes créées en approchant', CL.col.dedans(137.5, -24.8) && E.chemins.length >= 12 && E.enfants.length === 24 && E.adultes.length === 3 && E.parents.length >= 8]);
+    // on n'y entre jamais : un point de l'enceinte est toujours repoussé dehors ; à pied, on bute dessus tout autour
+    {
+      let dedans = 0;
+      for (let x = Z.x0 + 0.4; x < Z.x1; x += 1.3) for (let z = Z.z0 + 0.4; z < Z.z1; z += 1.3) { const p = { x, z }; CL.col.resoudre(p, 0.34); if (dansZ(p.x, p.z, -0.3)) dedans++; }
+      log.push(['aucun point de l\'enceinte où l\'on puisse se tenir (portail compris)', dedans === 0]);
+      const j = CL.joueur; let entre = 0;
+      for (const [x, z, h] of [[112.6, -33, Math.PI / 2], [112.6, -20, Math.PI / 2], [112.6, -12, Math.PI / 2], [112.6, -37.5, Math.PI / 2 + 0.4], [130, -7.2, Math.PI], [144.4, -24, -Math.PI / 2], [128, -40.0, 0]]) {
+        j.placer(x, z, h);
+        for (let i = 0; i < 240; i++) { j.update(1 / 60, Math.sin(h), Math.cos(h), 1, true, CL.col, i / 60); if (dansZ(j.pos.x, j.pos.z, -0.2)) entre++; }
+      }
+      log.push(['à pied, en courant vers l\'école de sept côtés (le portail, la grille, les murs) : on reste dehors', entre === 0]);
+      CL.teleporter(108, -20, Math.PI / 2); CL.step(2);
+    }
+    // la récréation de 10 h : la cour pleine, des enfants qui bougent et qui jouent
+    {
+      CL.photo(112, 6, -26, 124, 0.5, -24); CL.step(600);
+      // qui bouge : il se déplace, ou sa pose change (il saute, se balance, pousse sa bille, balance les jambes...)
+      // (des mouvements qui reviennent : la corde, la balançoire ; on regarde tous les quarts de seconde)
+      const n = dansCour().length, sw = [], pose = e => [e.m.groupe.position.x, e.m.groupe.position.y, e.m.groupe.position.z, ...[0, 2, 3, 4, 7, 10, 11, 13, 14].flatMap(k => e.m.os[k].quaternion.toArray())];
+      let avant = E.enfants.map(pose); const bouge = new Set();
+      for (let i = 0; i < 90; i++) {
+        CL.step(1); sw.push(E.balancoires[0].rotation.z, E.balancoires[1].rotation.z);
+        if (i % 15 === 14) { const P = E.enfants.map(pose); E.enfants.forEach((e, k) => { if (e.m.groupe.visible && P[k].some((v, q) => Math.abs(v - avant[k][q]) > 0.04)) bouge.add(e); }); avant = P; }
+      }
+      const bougent = bouge.size;
+      const jeux = Object.entries(E.jeux).filter(([k, j]) => j.membres.length).map(([k, j]) => k + ' ' + j.membres.length).join(', ');
+      const nJeux = Object.values(E.jeux).filter(j => j.membres.length && j.nom !== 'balade').length;
+      log.push([`10 h 05, la récréation : ${n} enfants dans la cour, ${bougent} bougent ou jouent en 1,5 s ; les jeux : ${jeux}`, n >= 18 && bougent >= n * 0.6 && nJeux >= 6]);
+      log.push(['une balançoire se balance (le siège avec l\'enfant)', Math.max(...sw) - Math.min(...sw) > 0.3]);
+      // l'après-midi, d'autres jeux : la corde à sauter tourne (un enfant saute), la ronde tourne en se tenant la main
+      const jeuxMatin = jeux;
+      J.minutes = 15 * 60 + 2; CL.step(700);
+      const C = E.jeux.corde, R = E.jeux.ronde, jeuxAprem = Object.entries(E.jeux).filter(([k, j]) => j.membres.length).map(([k, j]) => k + ' ' + j.membres.length).join(', ');
+      log.push(['15 h, d\'autres jeux qu\'à 10 h (' + jeuxAprem + ') ; la corde tourne, un enfant saute ; la ronde se tient la main', jeuxAprem !== jeuxMatin
+        && (!C.membres.length || (E.cordeM.visible && C.membres.length >= 3)) && (!R.membres.length || R.membres.filter(e => e.pret).every(e => e.J.mg && e.J.md)) && (C.membres.length + R.membres.length > 0)]);
+      log.push(['adultes qui surveillent : ' + E.adultes.filter(a => a.m.groupe.visible && dansZ(a.p.pos.x, a.p.pos.z)).length, E.adultes.filter(a => a.m.groupe.visible && dansZ(a.p.pos.x, a.p.pos.z)).length >= 2]);
+      // aucune étiquette près d'eux (ni « Servir un verre », ni rien) ; ce ne sont pas des passants (le mode WTF ne les voit pas)
+      const nPassants = CL.passants().filter(p => E.gens.some(e => e.p === p)).length;
+      log.push(['ce ne sont pas des passants (ni verre, ni mode WTF)', nPassants === 0]);
+      // ce que coûte l'école, devant la grille, en pleine récréation
+      CL.photo(); CL.teleporter(110.5, -24, Math.PI / 2); CL.step(30);
+      E.coupe = true; CL.step(5); CL.bench(30); const sans = CL.bench(120);
+      E.coupe = false; CL.step(60); CL.bench(30); const avec = CL.bench(120);
+      log.push(['récréation, devant la grille : sans les enfants ' + sans + ' ; avec : ' + avec, true]);
+    }
+    // la classe : la cour vide (les élèves aux fenêtres) ; la nuit, après la garderie, le samedi : personne ; le mercredi,
+    // le centre de loisirs, moins d'enfants
+    aller(0, 9, 10); log.push(['9 h 10, la classe : personne dans la cour, les élèves aux fenêtres', dansCour().length === 0 && E.classes.userData.tex.offset.y === 0.5]);
+    aller(0, 12, 30); const midi = dansCour().length; log.push(['12 h 30, après la cantine : ' + midi + ' enfants dans la cour', midi >= 18]);
+    aller(0, 17, 45); const garderie = dansCour().length; log.push(['17 h 45, la garderie : ' + garderie + ' enfants (le début de la mission 1)', garderie > 0 && garderie < 12]);
+    aller(0, 18, 45); log.push(['18 h 45, la garderie finie : personne', visibles().filter(e => e.genre !== 'parent').length === 0]);
+    aller(0, 21, 0); log.push(['21 h, la nuit : personne, ni dans la cour, ni dans la rue', visibles().length === 0]);
+    aller(1, 10, 0); const mercredi = dansCour().length; log.push(['mercredi 10 h, le centre de loisirs : ' + mercredi + ' enfants', mercredi > 3 && mercredi < midi]);
+    aller(4, 10, 30); log.push(['samedi : personne', visibles().length === 0]);
+    // les arrivées du matin : la garderie à 7 h 45, des enfants sur les chemins ; 8 h 25 : presque tous là
+    aller(2, 7, 45); const garderieMatin = dansCour().length, rue = E.enfants.filter(e => e.phase === 'aller').length;
+    aller(2, 8, 26); const presque = dansCour().length;
+    log.push([`jeudi 7 h 45, la garderie : ${garderieMatin} enfants dans la cour, ${rue} en chemin ; 8 h 26 : ${presque} dans la cour`, garderieMatin > 0 && garderieMatin < 8 && rue > 0 && presque >= 18]);
+    // la sortie de 16 h 30 : les parents attendent devant le portail ; il s'ouvre, les enfants le passent, rejoignent leur
+    // parent (les petits lui donnent la main) et rentrent chez eux par les trottoirs
+    {
+      loin(); J.minutes = 2 * 1440 + 16 * 60 + 26; CL.step(40);
+      CL.photo(104, 3.2, -38, 113, 1.0, -31.5); CL.step(10);
+      let ouv = 0, main = 0, parents = 0;
+      for (let i = 0; i < 60 * 40; i++) { CL.step(1); ouv = Math.max(ouv, E.ouverture); if (i % 30 === 0) { main = Math.max(main, E.enfants.filter(e => e.phase === 'retour' && e.p.jeu && (e.J.md || e.J.mg)).length); parents = Math.max(parents, E.parents.filter(p => p.phase === 'attente' && p.m.groupe.visible).length); } }
+      const partis = E.enfants.filter(e => e.phase === 'retour' || e.phase === 'maison').length;
+      log.push([`16 h 30 : ${parents} parents attendent devant le portail, il s'ouvre (${ouv.toFixed(2)}), ${partis} enfants l'ont passé, ${main} tenant la main de leur parent`, parents >= 3 && ouv > 0.9 && partis >= 8 && main >= 1]);
+      // pas d'étiquette : à pied, au milieu des enfants qui sortent
+      CL.photo(); CL.teleporter(111.6, -33.8, Math.PI / 2); CL.step(60);
+      const etq = [...document.querySelectorAll('.etiquette.action')].filter(e => !e.hidden).map(e => e.textContent);
+      log.push(['à pied au milieu des enfants qui sortent : aucune étiquette' + (etq.length ? ' (' + etq.join(', ') + ')' : ''), etq.length === 0]);
+      loin(); J.minutes = 2 * 1440 + 17 * 60 + 52; CL.step(40); CL.photo(112, 6, -26, 124, 0.5, -24); CL.step(6);
+      const restes = E.enfants.filter(e => e.m.groupe.visible && !e.def.garderieSoir).length;
+      log.push(['17 h 52 : ceux qui sont rentrés ont disparu (chez eux) ; restent ceux de la garderie (' + E.enfants.filter(e => e.m.groupe.visible).length + ')', restes === 0 && E.enfants.filter(e => e.phase === 'maison').length >= 14]);
+    }
+    // un véhicule ne leur roule jamais dessus (mode WTF compris) : on fonce en tracteur sur un enfant qui rentre chez lui
+    {
+      J.wtf = true;
+      loin(); J.minutes = 2 * 1440 + 16 * 60 + 38; CL.step(40);
+      CL.photo(); const t = CL.vehicule('tracteur').p.pos; CL.teleporter(t.x + 2.2, t.z, 0); CL.step(3); CL.agir(); CL.finirGeste();
+      // en tracteur, à fond sur la grille et le portail, de quatre endroits du parvis et de la place : il bute dehors
+      let dedansV = 0;
+      for (const [x, z, h] of [[105, -14, Math.PI / 2], [105, -24, Math.PI / 2], [104, -33, Math.PI / 2], [107, -38.4, Math.PI / 2 + 0.3]]) {
+        CL.teleporter(x, z, h); CL.step(2); CL.ctrl.ky = -1;
+        for (let i = 0; i < 240; i++) { CL.step(1); if (dansZ(CL.tr.pos.x, CL.tr.pos.z, 0.3)) dedansV++; }
+        CL.ctrl.ky = 0; CL.step(20);
+      }
+      log.push(['en tracteur (mode WTF), à fond sur la grille et le portail : on bute dehors', dedansV === 0 && J.auVolant]);
+      let k = null;
+      for (let i = 0; i < 40 && !k; i++) { CL.step(30); k = E.enfants.find(e => e.phase === 'retour' && e.m.groupe.visible && !dansZ(e.p.pos.x, e.p.pos.z, 2)); }
+      let dmin = 1e9, aplati = false;
+      if (k) {
+        const P = E.surChemin(k.ch, k.ch.L - k.s - 0.5, 0, -1, { x: 0, z: 0, h: 0 }), h = P.h, x = k.p.pos.x - Math.sin(h) * 7, z = k.p.pos.z - Math.cos(h) * 7;
+        CL.teleporter(x, z, h); CL.step(2); CL.ctrl.ky = -1;
+        for (let i = 0; i < 240; i++) { CL.step(1); const tr = CL.tr; dmin = Math.min(dmin, Math.hypot(tr.pos.x - k.p.pos.x, tr.pos.z - k.p.pos.z)); if (Math.abs(k.m.groupe.scale.y - k.m.echelle) > 1e-6) aplati = true; }
+        CL.ctrl.ky = 0;
+      }
+      log.push([`mode WTF, en tracteur droit sur un enfant qui rentre : il reste à ${dmin.toFixed(2)} m, jamais aplati`, !!k && dmin > 1.0 && !aplati]);
+      J.wtf = false;
+    }
+    // des enfants divers : tous les âges, filles et garçons, tous les teints, des coiffures de toutes sortes
+    {
+      const D = E.enfants.map(e => e.def), peaux = new Set(D.map(d => d.peau)), coif = new Set(D.map(d => d.coiffure));
+      const h = D.map(d => d.hauteur), f = D.filter(d => d.femme).length;
+      log.push([`des enfants divers : ${D.length} de ${Math.min(...D.map(d => d.age))} à ${Math.max(...D.map(d => d.age))} ans (${Math.min(...h).toFixed(2)} à ${Math.max(...h).toFixed(2)} m), ${f} filles et ${D.length - f} garçons, ${peaux.size} teints, coiffures : ${[...coif].join(', ')}`,
+        peaux.size >= 9 && f >= 10 && D.length - f >= 10 && Math.min(...h) < 1.0 && Math.max(...h) > 1.4 && ['afro', 'tresses', 'couettes', 'nattes', 'boucles'].every(c => coif.has(c))]);
+    }
+    return log;
+  });
+  for (const [m, okk] of r) ok(okk, m);
+  await ev(() => { CL.photo(124, 26, -12, 124, 0, -24); CL.jeu.minutes = 10 * 60 + 5; CL.step(300); });
+  await capture('ecole-recreation');
 }
 
 if (scenario === 'photo') {

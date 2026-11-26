@@ -33,6 +33,7 @@ import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
 import { Tonnellerie } from './tonnellerie.js';
 import { Village } from './village.js';
+import { Ecole } from './ecole.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
@@ -595,6 +596,11 @@ const village = new Village({
 });
 village.garees = GAREES.filter(g => g.m.position.y > 20).map(g => g.m); // (les voitures garées du château : cachées de loin, comme ses gens)
 const AUTOS = [];
+// l'école des Tilleuls (ecole.js) : ses enfants, ses adultes, les parents ; créés quand on approche. Dans la rue, chacun
+// est un obstacle pour les voitures de la départementale (OBSTACLES) et pour le véhicule qu'on conduit et sa conduite
+// assistée (AUTOS : une voiture immobile, sans emprise) : on ne leur roule jamais dessus, même en mode WTF
+const ecole = new Ecole({ scene, camera, lieux: L });
+OBSTACLES.push(...ecole.obstacles);
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
 $('radio').addEventListener('click', e => { e.stopPropagation(); if (jeu.auVolant) { son.jouer('tap'); jeu.basculerRadio(); } });
@@ -924,6 +930,7 @@ function esquiver(f, dt) {
 }
 const PARVIS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 const VILLAGE_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, ecraseur: false, obstacles: OBSTACLES };
+const ECOLE_C = { t: 0, minutes: 0, ego: null, danger: null, voitures }; // (l'école : ils attendent aux passages piétons qu'aucune voiture n'arrive)
 // un passant (du bourg, ou un touriste du château) : il s'écarte du véhicule qui arrive (il crie) ; en mode WTF, le
 // véhicule lancé lui passe dessus, il s'aplatit (il se relève quelques secondes plus tard)
 function passantVit(p, dtm, danger, ecraseur) {
@@ -958,7 +965,10 @@ function bourg(dtm, ego) {
   tonnellerie.maj(dtm, PARVIS_C);
   VILLAGE_C.t = temps; VILLAGE_C.minutes = jeu.minutes; VILLAGE_C.ego = ego; VILLAGE_C.aPied = !jeu.auVolant; VILLAGE_C.danger = danger; VILLAGE_C.ecraseur = ecraseur;
   village.maj(dtm, VILLAGE_C, klaxonVillage);
+  ECOLE_C.t = temps; ECOLE_C.minutes = jeu.minutes; ECOLE_C.ego = ego; ECOLE_C.danger = danger;
+  ecole.maj(dtm, ECOLE_C);
   AUTOS.length = 0; for (const v of voitures) AUTOS.push(v); for (const v of village.voitures) AUTOS.push(v);
+  for (const o of ecole.obstacles) if (o.x < 1e5) AUTOS.push(o);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
@@ -1227,6 +1237,7 @@ function majTaches() {
   parvis.taches(t, ombrePerso);
   tonnellerie.taches(t, ombrePerso);
   village.taches(t, ombrePerso);
+  ecole.taches(t, ombrePerso);
   t.fin();
 }
 // Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
@@ -1456,7 +1467,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, ecole, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },

@@ -28,6 +28,8 @@ const POSTE_TRACTEUR = { assise: 1.5, plancher: 1.24, volant: new THREE.Vector3(
 const BRAS = [OS.brasG, OS.coudeG, OS.mainG, OS.brasD, OS.coudeD, OS.mainD];
 // pose debout gardée le temps de la mélanger à la pose au volant (monter, descendre)
 const MEMO = Array.from({ length: 32 }, () => new THREE.Quaternion()), vMemo = new THREE.Vector3();
+// la pose de l'image d'avant, le temps qu'un enfant passe d'un jeu à l'autre (poser : lisse)
+const PREC = Array.from({ length: 18 }, () => new THREE.Quaternion()), vPrec = new THREE.Vector3();
 
 /* ---------------------------------------------------------------- la foulée
    Repère du personnage : origine au sol sous le bassin, z vers l'avant. La chaussure (perso.js) : du talon à la
@@ -75,7 +77,10 @@ function foulee(k) {
 
 // Cinématique inverse à deux os. a : os haut, b : os bas (articulation en charnière sur son axe x).
 // cible et pole dans le repère du parent de a. sens +1 : bras (l'avant-bras plie vers l'avant) ; -1 : jambe.
-function ik(a, b, l1, l2, cible, pole, sens) {
+// (les longueurs des deux os : T[k] et T[k + 1], lues dans le tableau du personnage, Anim.long : des nombres passés en
+// arguments seraient mis en boîte par V8 à chaque appel)
+function ik(a, b, T, k, cible, pole, sens) {
+  const l1 = T[k], l2 = T[k + 1];
   _t.subVectors(cible, a.position);
   let d = _t.length();
   if (d < 1e-5) { _t.set(0, -1, 0); d = 1e-5; } else _t.multiplyScalar(1 / d);
@@ -96,6 +101,9 @@ function ik(a, b, l1, l2, cible, pole, sens) {
 export class Anim {
   constructor(m) {
     this.m = m; this.o = m.os;
+    // cuisse, tibia, bras, avant-bras, hauteur du bassin debout (perso.js : m.dim ; un enfant les a plus courts)
+    const d = m.dim;
+    this.long = new Float64Array([d.L1 || DIM.cuisse, d.L2 || DIM.tibia, d.bras || DIM.bras, d.avantBras || DIM.avantBras, d.yB || DIM.yBassin]);
     for (const i of [OS.bassin, OS.ventre, OS.poitrine, OS.tete]) this.o[i].rotation.order = 'YXZ';
     const r = Math.random;
     this.ph = r(); this.va = 0; this.wPas = 0; this.bank = 0; this.pench = 0; this.resp = r() * 10;
@@ -131,7 +139,7 @@ export class Anim {
       if (r() < 0.35) { this.cy = 0; this.cp = 0; } else { this.cy = (r() * 2 - 1) * 0.95 * a; this.cp = (r() - 0.6) * 0.25 * a; }
     }
     // de temps en temps, un regard au téléphone quand on attend
-    if (immobile && this.repos > 4 && this.envie <= 0 && (this.tEnvie -= dt) <= 0) { this.envie = 2.5 + r() * 3.5; this.tEnvie = 14 + r() * 24; }
+    if (immobile && !m.enfant && this.repos > 4 && this.envie <= 0 && (this.tEnvie -= dt) <= 0) { this.envie = 2.5 + r() * 3.5; this.tEnvie = 14 + r() * 24; }
     if (!immobile) this.envie = 0;
     this.envie = Math.max(0, this.envie - dt);
     // porter une pile de cartons (gestes.js) : p.porte est la pile, un groupe enfant du personnage (repère du personnage) ;
@@ -162,12 +170,16 @@ export class Anim {
     this.ry += (cy - this.ry) * kl(dt, 4.5); this.rp += (cp - this.rp) * kl(dt, 4.5);
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
-    if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
+    // (un enfant qui joue : ecole.js ; quand il passe d'un jeu à l'autre, sa pose glisse de l'ancienne à la nouvelle)
+    const lisse = m.enfant && this.changeJeu(p, dt);
+    if (p.jeu) this.poseJeu(dt, p, t, va, sens, br);
+    else if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
     else if (conduite) this.poseConduite(dt, p, t, br);
     else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
     if (p.appuis) this.poseAppuis(p.appuis);
+    if (lisse) this.lisserJeu(dt);
 
     /* ------------------------------------------------ la pile de cartons, tenue des deux mains par le carton du bas */
     if (this.wPorte > 0.01) {
@@ -240,7 +252,7 @@ export class Anim {
     if (w < 0.999) { FK[c].copy(a.quaternion); FK[c + 1].copy(b.quaternion); }
     v1.set(x, y, z).applyMatrix4(mPi);
     v2.set(px, py, pz).applyQuaternion(qPi);
-    ik(a, b, DIM.bras, DIM.avantBras, v1, v2, 1);
+    ik(a, b, this.long, 2, v1, v2, 1);
     if (w < 0.999) {
       q1.copy(a.quaternion); a.quaternion.copy(FK[c]).slerp(q1, w);
       q1.copy(b.quaternion); b.quaternion.copy(FK[c + 1]).slerp(q1, w);
@@ -252,7 +264,7 @@ export class Anim {
     const o = this.o, cuisse = o[i], genou = o[i + 1], pied = o[i + 2];
     v1.set(x, y, z).applyMatrix4(mBi);
     v2.set(sg * 0.12, poleY, 1);
-    ik(cuisse, genou, DIM.cuisse, DIM.tibia, v1, v2, -1);
+    ik(cuisse, genou, this.long, 0, v1, v2, -1);
     q1.copy(qB).multiply(cuisse.quaternion).multiply(genou.quaternion).invert();
     q2.setFromEuler(eul.set(tangage, lacet, 0));
     pied.quaternion.multiplyQuaternions(q1, q2);
@@ -270,19 +282,22 @@ export class Anim {
   /* ---------------------------------------------------------------- debout : repos, marche, course */
   poseDebout(dt, p, va, sens, br) {
     const o = this.o, dm = this.m.dim, E = this.m.echelle;
+    // (un enfant : ses jambes, plus courtes ; il court plus tôt, à vitesse égale, et à plus petits pas : kv, sa vitesse
+    // ramenée à des jambes d'adulte, comme le nombre de Froude)
+    const LG = this.long, L1 = LG[0], L2 = LG[1], enf = this.m.enfant, kv = enf ? Math.sqrt(0.806 / ((L1 + L2) * E)) : 1, vk = va * kv;
     const tourne = borne(Math.abs(p.om) / 2.2, 0, 1) * (1 - entre(0.4, 1.2, va));
     this.wPas += ((tourne > 0.2 ? 1 : 0) - this.wPas) * kl(dt, 8);
-    const wg = entre(0.03, 0.5, va), w = entre(2.4, 4.6, va);
+    const wg = entre(0.03, 0.5, va), w = entre(2.4, 4.6, vk);
     // Cadence (cycles de deux pas par seconde). En marchant, la foulée suit la longueur des jambes (relation d'Alexander :
     // foulée / jambe = 2,3 x (v² / g x jambe)^0,3, ici un peu allongée) : des jambes courtes font des pas plus courts et
     // plus vifs ; en courant, la cadence monte doucement avec la vitesse. Foulée (S, repère du personnage : à son échelle,
     // sinon les pieds glisseraient) ; part du cycle où le pied est au sol (beta), chemin qu'il y fait (pas).
     const jw = (L1 + L2) * E, vw = Math.max(va, 0.03);
-    const cad = mix(vw / (2.45 * jw * Math.pow(vw * vw / (9.81 * jw), 0.3)), 1.3 + 0.1 * va, w);
+    const cad = mix(vw / (2.45 * jw * Math.pow(vw * vw / (9.81 * jw), 0.3)), (1.3 + 0.1 * va) * (enf ? Math.sqrt(kv) : 1), w);
     this.ph += dt * Math.max(va > 0.03 ? cad : 0, this.wPas * 1.7) * sens;
     this.ph -= Math.floor(this.ph);
-    const ph = this.ph, beta = 0.6 - 0.3 * w, S = va > 0.03 ? va / (cad * E) : 0, pas = Math.min(beta * S, 1.05);
-    const lever = ((0.03 + 0.06 * Math.min(1, va / 1.4)) * (1 - w) + 0.26 * w) * wg + 0.07 * this.wPas * (1 - wg);
+    const ph = this.ph, beta = 0.6 - 0.3 * w, S = va > 0.03 ? va / (cad * E) : 0, pas = Math.min(beta * S, 1.05 * (L1 + L2) / 0.84);
+    const lever = ((0.03 + 0.06 * Math.min(1, vk / 1.4)) * (1 - w) + 0.26 * w * (L1 + L2) / 0.84) * wg + 0.07 * this.wPas * (1 - wg);
     const c1 = Math.cos(TAU * ph), s1 = Math.sin(TAU * ph);
     const choc = p.choc * p.choc, sj = p.saut > 0 ? Math.sin(PI * p.saut) : 0, att = p.atterri / 0.28;
     this.bank += (-borne(p.om * va * 0.035, -0.22, 0.22) - this.bank) * kl(dt, 6);
@@ -310,7 +325,7 @@ export class Anim {
     const lacetB = -0.13 * wg * (1 - 0.5 * w) * c1;
     const roulisB = 0.07 * wg * (1 - w) * s1 + 0.045 * this.poids * (1 - wg);
     const bx = 0.03 * this.poids * (1 - wg) + 0.032 * s1 * wg * (1 - w) - this.bank * 0.35, bz = -0.06 * choc - 0.12 * cr;
-    let yb = DIM.yBassin - 0.014 + wg * (0.011 * (1 - w) - 0.062 * w) - 0.04 * w * wg * Math.cos(2 * TAU * (ph - beta / 2));
+    let yb = LG[4] - 0.014 + wg * (0.011 * (1 - w) - 0.062 * w) - 0.04 * w * wg * Math.cos(2 * TAU * (ph - beta / 2));
     if (wg > 0.001) {
       for (let j = 0; j < 2; j++) {
         // la hanche au plus haut pour que la jambe atteigne sa cheville, le genou plié de f (longueur de la jambe : Le²)
@@ -337,7 +352,7 @@ export class Anim {
     // bras : balancier opposé aux jambes, un peu plus devant que derrière, la main vient vers le milieu en avançant ; coudes
     // pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un peu écartés du corps, coudes légèrement
     // pliés (des bras tout droits collés au corps font mannequin)
-    const A = mix(0.56 * Math.min(1, va / 1.3), 0.75, w) * wg * sens, retard = 0.06 * (1 - w);
+    const A = mix(0.56 * Math.min(1, vk / 1.3), 0.75, w) * wg * sens, retard = 0.06 * (1 - w);
     const cG = Math.cos(TAU * (ph - 0.5 - retard)), cD = Math.cos(TAU * (ph - retard)), flot = Math.sin(this.resp * 0.9) * 0.02, devant = 0.1 * marche;
     const eG = Math.cos(TAU * (ph - 0.5 - 2 * retard)), eD = Math.cos(TAU * (ph - 2 * retard)); // le coude, encore un peu plus en retard
     const dedansG = 0.07 * marche * Math.max(0, cG), dedansD = 0.07 * marche * Math.max(0, cD), ecart = 0.115 + 0.05 * marche + 0.1 * w;
@@ -350,11 +365,153 @@ export class Anim {
     o[OS.mainD].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eD, -0.1, -0.08);
   }
 
+  // Un enfant change de jeu (s'asseoir, se relever, s'accroupir, sauter) : on garde la pose de l'image d'avant ; rend vrai
+  // tant qu'il faut glisser de l'une à l'autre (lisserJeu, après la nouvelle pose)
+  changeJeu(p, dt) {
+    const jeu = p.jeu ? p.jeu.g : null;
+    if (jeu !== this.jeuPrec) { if (this.jeuPrec !== undefined && dt > 0) this.tLisse = 0.4; this.jeuPrec = jeu; }
+    if (!(this.tLisse > 0 && dt > 0)) return false;
+    const o = this.o;
+    for (let i = 0; i < o.length; i++) PREC[i].copy(o[i].quaternion);
+    vPrec.copy(o[OS.bassin].position);
+    return true;
+  }
+  lisserJeu(dt) {
+    const o = this.o, k = 1 - Math.exp(-dt * 10);
+    this.tLisse -= dt;
+    for (let i = 0; i < o.length; i++) { q1.copy(o[i].quaternion); o[i].quaternion.copy(PREC[i]).slerp(q1, k); }
+    v1.copy(o[OS.bassin].position); o[OS.bassin].position.copy(vPrec).lerp(v1, k);
+  }
+
+  /* ---------------------------------------------------------------- les jeux des enfants (ecole.js)
+     p.jeu = { g, u, ... } : g le jeu, u sa phase (de 0 à 1) ; mg, md : où vont la main gauche et la main droite (repère du
+     personnage, unités du modèle), ou null (ecole.js les calcule : tenir la main d'un autre dans la ronde, tourner la
+     corde, la main dans celle de son parent). Longueurs à l'échelle des jambes de l'enfant (L : cuisse et tibia).
+     - debout : marcher, courir (poseDebout), les mains où l'on veut ;
+     - saut : sauter à pieds joints (la corde : J.corde, celle qu'on tourne soi-même) ; cloche : à cloche-pied (J.pied :
+       1 le pied gauche, -1 le droit ; J.deux : on se reçoit sur les deux pieds, écartés, dans les cases doubles) ;
+     - accroupi : J.v 'billes' (une main pousse la bille : J.k), 'sable' (les deux mains creusent), sinon les mains libres ;
+     - balancoire : assis sur le siège (l'origine du groupe), les mains aux chaînes (J.cx : leur écart), J.p : de 0 les
+       jambes repliées sous le siège à 1 tendues devant (on « pompe ») ; ressort : à califourchon sur le jeu à ressort,
+       les pieds sur les repose-pieds, les mains aux poignées ; glisse : assis sur le toboggan, les jambes tendues, les
+       bras en l'air (J.bras) ou aux bords ;
+     - banc : assis (poseAssise), les jambes qui pendent se balancent, une main parle (J.parle, de 0 à 1) ;
+     - tir : un coup de pied dans le ballon (J.u : l'élan, la frappe, l'accompagnement) ;
+     - croise, dos : un adulte qui surveille, les bras croisés ou les mains dans le dos. */
+  poseJeu(dt, p, t, va, sens, br) {
+    const J = p.jeu, o = this.o, dm = this.m.dim, b = o[OS.bassin], g = J.g;
+    const L = this.long[0] + this.long[1], yB0 = this.long[4], xh = dm.xh, k = L / 0.84;
+    switch (g) {
+      case 'saut': case 'cloche': {
+        // en l'air pendant la part « air » du saut (une parabole), puis l'amorti à la réception, genoux pliés
+        const u = J.u, air = J.air ?? 0.55, h = (J.h ?? 0.13) * k, enAir = u < air;
+        const lift = enAir ? h * Math.sin(PI * u / air) : 0, c = enAir ? 0 : 0.07 * L * Math.sin(PI * (u - air) / (1 - air));
+        b.position.set(0, yB0 - 0.02 * L - c + lift, 0);
+        this.dos(0.06 + c * 1.5, 0.05 + c, 0.04 + c * 0.5, -0.08 - c, br);
+        const pointe = enAir ? 0.4 * Math.sin(PI * u / air) : 0;
+        if (g === 'saut' || J.deux) for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (xh + (J.deux ? 0.08 : 0.015)), CH + lift, 0.02, pointe, sg * 0.1); }
+        else for (let j = 0; j < 2; j++) {
+          // à cloche-pied : la jambe d'appui sous le corps, l'autre repliée derrière
+          const sg = JAMBES[j][1];
+          if (sg === (J.pied || 1)) this.jambe(JAMBES[j][0], sg, sg * (xh - 0.01), CH + lift, 0.03, pointe, sg * 0.08);
+          else this.jambe(JAMBES[j][0], sg, sg * (xh + 0.01), CH + lift + 0.34 * L, -0.24 * L, 0.7, sg * 0.1);
+        }
+        const yb = b.position.y;
+        if (g === 'cloche') { const d = 0.03 * Math.sin(TAU * u); for (let c0 = 0; c0 <= 3; c0 += 3) { const s = c0 ? -1 : 1; this.brasIK(c0, s * 0.4, yb + 0.24 + d, 0.08, s * 0.8, -0.6, -0.3, 1); } }
+        else if (J.corde) {
+          // sa corde à sauter : les mains tournent les poignées, un tour par saut
+          const f = TAU * u + (J.dphi || 0);
+          for (let c0 = 0; c0 <= 3; c0 += 3) { const s = c0 ? -1 : 1; this.brasIK(c0, s * 0.27, yb + 0.02 + 0.05 * Math.cos(f), 0.12 + 0.05 * Math.sin(f), s * 0.8, -0.6, -0.3, 1); }
+        } else for (let c0 = 0; c0 <= 3; c0 += 3) { const s = c0 ? -1 : 1; this.brasIK(c0, s * 0.25, yb + 0.03, 0.12, s * 0.8, -0.6, -0.3, 1); }
+        break;
+      }
+      case 'accroupi': {
+        // accroupi, les cuisses presque à plat, penché en avant, les pieds écartés, les genoux devant
+        const yS = CH + 0.42 * L + 0.02 + (J.dy || 0);
+        b.position.set(0, yS, -0.08 * k);
+        this.dos(0.35, 0.25, 0.15, -0.35 + (J.baisse || 0), br);
+        for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (xh + 0.07), CH, 0.06, 0, sg * 0.25, 0); }
+        if (J.v === 'billes') {
+          const f = J.k || 0;
+          this.brasIK(3, -0.05, 0.03 + 0.03 * (1 - f), 0.34 * k + 0.07 * f, -0.7, -0.3, -0.5, 1);
+          this.brasIK(0, xh + 0.05, yS + 0.05, 0.28 * k, 0.8, -0.4, -0.5, 1);
+        } else if (J.v === 'sable') {
+          const s1 = Math.sin(t * 5.2 + (J.dphi || 0));
+          this.brasIK(3, -0.08, 0.04 + 0.1 * Math.max(0, s1), 0.33 * k, -0.7, -0.3, -0.5, 1);
+          this.brasIK(0, 0.09, 0.04 + 0.1 * Math.max(0, -s1), 0.3 * k, 0.7, -0.3, -0.5, 1);
+        }
+        break;
+      }
+      case 'balancoire': case 'ressort': case 'glisse': {
+        // assis sur le jeu, dont le siège est l'origine du groupe (ecole.js le pose et le fait bouger)
+        const pp = g === 'balancoire' ? J.p : 0;
+        b.position.set(0, 0.1, -0.02);
+        if (g === 'balancoire') this.dos(-0.12 - 0.25 * pp, 0.06 - 0.06 * pp, 0.05 - 0.05 * pp, 0.05 + 0.18 * pp, br);
+        else if (g === 'ressort') this.dos(0.02 + (J.k || 0) * 0.12, 0.05, 0.04, -0.05, br);
+        else this.dos(-0.3, 0.12, 0.1, 0.12, br);
+        for (let j = 0; j < 2; j++) {
+          const sg = JAMBES[j][1];
+          if (g === 'balancoire') this.jambe(JAMBES[j][0], sg, sg * (xh + 0.02), mix(0.05 - 0.8 * L, 0.0 - 0.1 * L, pp), mix(0.04, 0.92 * L, pp), mix(0.25, -0.25, pp), sg * 0.06, 0.7);
+          else if (g === 'ressort') this.jambe(JAMBES[j][0], sg, sg * (xh + 0.1), 0.06 - 0.55 * L, 0.24 * k, 0, sg * 0.15, 0.3);
+          else this.jambe(JAMBES[j][0], sg, sg * (xh + 0.03), 0.07, 0.93 * L, -0.35, sg * 0.1, 0.5);
+        }
+        for (let c0 = 0; c0 <= 3; c0 += 3) {
+          const s = c0 ? -1 : 1;
+          if (g === 'balancoire') this.brasIK(c0, s * J.cx, 0.62, 0.01, s * 0.8, -0.2, -0.6, 1);
+          else if (g === 'ressort') this.brasIK(c0, s * 0.09, 0.42, 0.25 * k, s * 0.8, -0.5, -0.3, 1);
+          else if (J.bras) this.brasIK(c0, s * 0.26, 0.98, 0.12, s * 0.8, 0.2, -0.4, 1);
+          else this.brasIK(c0, s * 0.25, 0.08, 0.06, s * 0.8, -0.5, -0.4, 1);
+        }
+        break;
+      }
+      case 'banc': {
+        // assis : les jambes qui pendent se balancent l'une après l'autre ; une main accompagne ce qu'on raconte
+        this.poseAssise(br, p);
+        const s = this.m.echelle, gr = this.m.groupe, yP = (((p.y0) || 0) - gr.position.y) / s + CH, yb = b.position.y;
+        for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (xh + 0.04), yP, 0.3 + 0.14 * Math.sin(t * 2.6 + sg * 1.3 + (J.dphi || 0)), 0.2, sg * 0.12, 0.6); }
+        if (J.parle > 0.01) this.brasIK(3, -0.1 + 0.04 * Math.sin(t * 4.3), yb + 0.3 + 0.05 * Math.sin(t * 6.1), 0.27, -0.7, -0.5, -0.4, J.parle);
+        break;
+      }
+      case 'tir': {
+        // l'élan (la jambe droite part en arrière), la frappe, l'accompagnement (le pied monte devant), le retour
+        this.poseDebout(dt, p, va, sens, br);
+        const u = J.u, e = entre(0, 0.35, u) * (1 - entre(0.35, 0.5, u)), f = entre(0.35, 0.55, u) * (1 - entre(0.75, 1, u));
+        const z = mix(mix(0.02, -0.28 * k, e), 0.5 * k, f), y = CH + mix(0.18 * L * e, 0.3 * L, f);
+        b.rotation.x -= 0.15 * f; this.reperes();
+        this.jambe(OS.cuisseG, 1, xh + 0.02, CH, 0.04, 0, 0.1);
+        this.jambe(OS.cuisseD, -1, -xh, y, z, mix(0.3 * e, -0.2, f), -0.05);
+        o[OS.brasG].rotation.set(-0.5 * f, 0, 0.6 + 0.4 * f);
+        break;
+      }
+      case 'croise': case 'dos': {
+        this.poseDebout(dt, p, va, sens, br);
+        const yb = b.position.y;
+        if (g === 'croise') { this.brasIK(0, -0.11, yb + 0.37, 0.16, 1, -0.4, 0.2, 1); this.brasIK(3, 0.11, yb + 0.35, 0.19, -1, -0.4, 0.2, 1); }
+        else { this.brasIK(0, 0.05, yb + 0.03, -0.17, 1, -0.2, -0.6, 1); this.brasIK(3, -0.05, yb + 0.05, -0.18, -1, -0.2, -0.6, 1); }
+        break;
+      }
+      default: this.poseDebout(dt, p, va, sens, br); // debout
+    }
+    // les mains où ecole.js les veut (la ronde, la corde qu'on tourne, la main dans celle d'un autre)
+    if (J.mg) this.brasIK(0, J.mg[0], J.mg[1], J.mg[2], 0.8, -0.5, -0.3, J.wg ?? 1);
+    if (J.md) this.brasIK(3, J.md[0], J.md[1], J.md[2], -0.8, -0.5, -0.3, J.wd ?? 1);
+  }
+
+  // le dos d'un enfant qui joue : bassin, ventre, poitrine, tête penchés (en avant : positif), le regard en plus
+  dos(pb, pv, pp, pt, br) {
+    const o = this.o;
+    o[OS.bassin].rotation.set(pb, 0, 0.02 * this.poids);
+    o[OS.ventre].rotation.set(pv + br * 0.3, this.ry * 0.12, 0);
+    o[OS.poitrine].rotation.set(pp - br + this.rp * 0.12, this.ry * 0.22, 0);
+    o[OS.tete].rotation.set(pt + this.rp * 0.85, this.ry * 0.66, 0);
+    this.reperes();
+  }
+
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */
   poseAssise(br, p) {
     // (p.y0 : la hauteur du sol sous la chaise ; les terrasses et les bancs du village du château sont sur son plateau)
     const o = this.o, g = this.m.groupe, s = this.m.echelle, dm = this.m.dim, y0 = (p && p.y0) || 0;
-    const yB = (y0 + 0.56 - g.position.y) / s + 0.1, yP = (y0 - g.position.y) / s + DIM.cheville;
+    const yB = (y0 + ((p && p.siege) || 0.46) + 0.1 - g.position.y) / s + 0.1, yP = (y0 - g.position.y) / s + DIM.cheville;
     o[OS.bassin].position.set(0, yB, -0.02);
     o[OS.bassin].rotation.set(-0.14, 0, 0.02 * this.poids);
     o[OS.ventre].rotation.set(0.1 + br * 0.3, this.ry * 0.12, 0);
@@ -435,7 +592,7 @@ export class Anim {
      puis chaque pied (x, y de la semelle, z, tangage, lacet ; gauche à 3, droit à 8) et chaque main (x, y, z du poignet,
      poids ; gauche à 13, droite à 17). */
   poseAppuis(A) {
-    const o = this.o, dm = this.m.dim, wj = A[0], pen = A[1];
+    const o = this.o, dm = this.m.dim, wj = A[0], pen = A[1], L1 = this.long[0], L2 = this.long[1];
     if (pen) { o[OS.ventre].rotation.x += pen * 0.55; o[OS.poitrine].rotation.x += pen * 0.45; o[OS.tete].rotation.x -= pen * 0.55; }
     if (wj > 0.001 && A[2] > 0.001) {
       const bp = o[OS.bassin].position, Lm = (L1 + L2) * 0.975;
