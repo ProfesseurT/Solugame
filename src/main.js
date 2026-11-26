@@ -33,6 +33,7 @@ import { Clients } from './clients.js';
 import { Parvis } from './parvis.js';
 import { Tonnellerie } from './tonnellerie.js';
 import { Village } from './village.js';
+import { Restaurateurs } from './restaurateurs.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
@@ -575,13 +576,14 @@ jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 // étiquettes posées dans le monde
 const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
 const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le carton ouvert du chai
+const etqPresenter = hud.action(''); // les restaurateurs du coin : « Présenter nos vins » (restaurateurs.js)
 const etqCible = hud.etiquette('', 'cible');
 // le bureau du chai (bureau.js) : ses étiquettes, le chèque posé sur le bureau en bois
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
 // les bureaux de Solumatic, dans la zone d'activités (solumatic.js) : la porte d'entrée, ceux qui y travaillent
 for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
 const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, garder: o => GARDES.add(o) });
-const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
+const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 for (const v of voitures) v.cri = hud.etiquette('Tût tût !', 'bulle');
 // le village du château qui vit (village.js) : ses terrasses, ses touristes, ses deux voitures qui montent et
 // redescendent (comme celles de la départementale : un conducteur, des phares, on les emprunte) ; AUTOS : toutes les
@@ -594,6 +596,10 @@ const village = new Village({
   passantVit: (p, dt, danger, ecraseur) => passantVit(p, dt, danger, ecraseur),
 });
 village.garees = GAREES.filter(g => g.m.position.y > 20).map(g => g.m); // (les voitures garées du château : cachées de loin, comme ses gens)
+// les restaurateurs du coin (restaurateurs.js) : huit tenanciers devant leur restaurant, à découvrir à pied ; le bureau les
+// relance, ils commandent (ou pas) ; des missions cachées, hors des trois missions
+const restos = new Restaurateurs({ jeu, scene, hud, camera, col });
+jeu.restos = restos;
 const AUTOS = [];
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -744,6 +750,7 @@ function agir() {
   if (habillage.echantillonProche) { habillage.prendreEchantillon(); return; } // mission 3 : le carton ouvert du chai
   if (jeu.auVolant) { if (Math.abs(tr.v) < 1.5) descendre(); return; }
   if (verres.servable) { verres.servir(verres.servable); return; }
+  if (restos.presentable) { restos.presenter(restos.presentable); return; } // un restaurateur du coin
   if (presMaison()) { dormir(); return; }
   const v = vehiculeProche();
   if (v) { monter(v); return; }
@@ -808,7 +815,7 @@ function horsDesVoitures() {
 /* ------------------------------------------------------------------ servir un verre de vin (verres.js)
    les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js) */
 const verres = new Verres({ jeu, hud, mission, hasard: rnd,
-  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of clients.liste) if (x.p.servable) f(x.p, 2.4); } });
+  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of clients.liste) if (x.p.servable) f(x.p, 2.4); restos.candidats(f); } });
 jeu.prospectServable = on => { for (const x of clients.liste) if (x.id === 'auberge') x.p.servable = on; };
 
 // les actions (touche E, téléphone, son, radio, échap) et les touchers courts sur l'écran
@@ -924,6 +931,7 @@ function esquiver(f, dt) {
 }
 const PARVIS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 const VILLAGE_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, ecraseur: false, obstacles: OBSTACLES };
+const RESTOS_C = { t: 0, minutes: 0, ego: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 // un passant (du bourg, ou un touriste du château) : il s'écarte du véhicule qui arrive (il crie) ; en mode WTF, le
 // véhicule lancé lui passe dessus, il s'aplatit (il se relève quelques secondes plus tard)
 function passantVit(p, dtm, danger, ecraseur) {
@@ -958,6 +966,8 @@ function bourg(dtm, ego) {
   tonnellerie.maj(dtm, PARVIS_C);
   VILLAGE_C.t = temps; VILLAGE_C.minutes = jeu.minutes; VILLAGE_C.ego = ego; VILLAGE_C.aPied = !jeu.auVolant; VILLAGE_C.danger = danger; VILLAGE_C.ecraseur = ecraseur;
   village.maj(dtm, VILLAGE_C, klaxonVillage);
+  RESTOS_C.t = temps; RESTOS_C.minutes = jeu.minutes; RESTOS_C.ego = ego; RESTOS_C.aPied = !jeu.auVolant; RESTOS_C.danger = danger;
+  restos.maj(dtm, RESTOS_C); // les restaurateurs du coin, devant leur restaurant
   AUTOS.length = 0; for (const v of voitures) AUTOS.push(v); for (const v of village.voitures) AUTOS.push(v);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
@@ -1110,11 +1120,16 @@ function reperes(dt, ego, cible) {
   const pcPres = bureau.maj() || solu.maj(dt, temps);
   verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
   const servable = verres.servable;
+  // un restaurateur du coin, tout près, à pied : « Présenter nos vins » (ou lui parler, déjà rencontré)
+  restos.chercher(!jeu.auVolant && !jeu.dedans && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif && !servable && !pcPres);
+  const pr = restos.presentable;
+  if (pr) hud.libeller(etqPresenter, restos.libelle(pr));
+  hud.placer(etqPresenter, pr ? pr.p.pos.x : 0, pr ? pr.p.pos.y + 2.5 : 0, pr ? pr.p.pos.z : 0, !!pr);
   // devant la porte de la maison du domaine : rentrer dormir
-  const dodo = !pcPres && !servable && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
+  const dodo = !pcPres && !servable && !pr && !tel.ouvert && !joueur.service && !gestes.actif && presMaison();
   hud.placer(etqDormir, L.maison.x, 2.6, L.maison.z - 0.4, dodo);
   hud.placer(etqEchantillon, CARTON3.x, CARTON3.y + 0.8, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
-  const vp = !dodo && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
+  const vp = !dodo && !pcPres && !pr && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
   if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
@@ -1153,6 +1168,7 @@ function miseAJour(dt) {
   phares();
   if (!isoles) particules.fontaine(dtm, L.fontaine);
   enCours().update(dt);
+  restos.update(dt); // les restaurateurs du coin : relances, signatures, notifications (jamais par-dessus une mission)
   // la ligne d'habillage tourne dès que les premiers palox sont rentrés (mission 3) ; le chariot, dessiné de près
   if (monde.ligne && !isoles) monde.ligne.maj(dtm, habillage.decharge || (!!dech && dech.avancement > 0.15), camera.position.x, camera.position.z);
   voirChariot(mChariot, camera.position.x, camera.position.z);
@@ -1227,6 +1243,7 @@ function majTaches() {
   parvis.taches(t, ombrePerso);
   tonnellerie.taches(t, ombrePerso);
   village.taches(t, ombrePerso);
+  restos.taches(t, ombrePerso);
   t.fin();
 }
 // Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
@@ -1368,6 +1385,7 @@ function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la
    (mission.js, mission2.js : stable, instantane). À l'accueil, « Continuer » la reprend, au domaine. */
 let tSauve = 0;
 function sauver() {
+  if (etat === 'jeu' && restos.rencontres.length) restos.sauver(); // (les restaurateurs du coin, à part : toujours dans un état sûr)
   if (etat !== 'jeu' || gestes.actif || chai.auChai || chai.dansChai) return;
   const M = enCours();
   if (!M.stable) return;
@@ -1457,7 +1475,7 @@ mesures.script = Math.round(performance.now() - T0);
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
   jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
-  habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col,
+  habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col, restos,
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil
   versMission2() { mission.aller('dodo'); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil

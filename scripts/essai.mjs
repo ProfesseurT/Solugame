@@ -21,6 +21,8 @@
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
+//   restaurateurs les restaurateurs du coin : rien avant d'aller les voir, « Présenter nos vins », la dégustation, le bureau,
+//             la relance (jamais pendant un appel de mission), l'appel, une commande signée, une autre pas, la sauvegarde
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
 // Sortie : texte sur la console ; captures dans essais/<dossier>/ ; code 1 si une erreur JS est apparue.
@@ -1099,6 +1101,174 @@ if (scenario === 'poids') {
   const r = await ev(() => { CL.profil(20); return CL.profil(120); });
   console.log(`conduite total ${Object.values(r).reduce((a, b) => a + b, 0).toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
+}
+
+if (scenario === 'restaurateurs') {
+  // Les restaurateurs du coin (restaurateurs.js) : rien dans le bureau avant d'aller les voir ; « Présenter nos vins » près
+  // d'un tenancier ; pas le temps pendant son coup de feu ; la dégustation (le verre servi), sa note dans le bureau, la
+  // ligne « Hors mission » ; une relance plus tard, jamais pendant un appel de mission ; l'appel, la commande (mauvaise
+  // quantité refusée), signée en ligne, dans Vitisoft ; une autre pas signée, relancée, refusée ; « la semaine prochaine » ;
+  // l'état sauvegardé puis repris (la page rechargée) ; la mission 1 se joue toujours
+  const visiter = id => ev(id => {
+    const R = CL.restos, r = R.get(id), J = CL.jeu;
+    J.minutes = Math.floor(J.minutes / 1440) * 1440 + 15 * 60; CL.step(2); // (l'après-midi : ils sont là, et pas dans leur coup de feu)
+    CL.teleporter(r.L.x + Math.sin(r.L.h) * 1.8, r.L.z + Math.cos(r.L.h) * 1.8, r.L.h + Math.PI); CL.step(90);
+    const etq = [...document.querySelectorAll('.etiquette.action')].find(e => !e.hidden && e.textContent.startsWith('Présenter nos vins'));
+    const avant = { presentable: R.presentable === r, etiquette: !!etq };
+    CL.agir(); for (let i = 0; i < 2400 && r.visite === 'parle'; i++) CL.step(1);
+    CL.step(2); const servable = r.p.servable && CL.jeu.joueur && !!document.querySelector('.etiquette.action:not([hidden])');
+    CL.agir(); for (let i = 0; i < 3000 && r.statut === 'inconnu'; i++) CL.step(1);
+    return { ...avant, servable, statut: r.statut, gout: r.gout, note: r.gout ? r.F.notes[r.gout] : '', reste: Math.round(r.tRel - J.minutes) };
+  }, id);
+  // l'appel d'un restaurateur (la relance arrivée) : jusqu'au bout de la conversation
+  const appeler = id => ev(id => {
+    const R = CL.restos, r = R.get(id), T = CL.jeu.tel;
+    T.ouvrir('bureau'); T.action('r-appel:' + id); CL.step(5);
+    const ecran = T.app, ligne = CL.mission.appelEnCours;
+    for (let i = 0; i < 4000 && r.statut === 'appel'; i++) CL.step(1);
+    return { ecran, ligne, statut: r.statut, app: T.app, demande: r.demande, numero: r.numero };
+  }, id);
+  const relance = id => ev(id => {
+    const R = CL.restos, r = R.get(id), T = CL.jeu.tel;
+    // (l'heure de la relance, ou le lendemain à 9 h si elle tombe le soir : le bureau ne relance que pendant leurs heures)
+    let t = Math.max(CL.jeu.minutes, r.tRel) + 1; const h = t % 1440;
+    if (h < 540 || h >= 1170) t = (Math.floor(t / 1440) + (h >= 1170 ? 1 : 0)) * 1440 + 541;
+    T.fermer(); T.notifier(null); CL.jeu.minutes = t; CL.step(20);
+    const st = r.statut; CL.step(60 * 4);
+    return { st, notif: T.notif, resto: !!T.notifResto, msg: R.message };
+  }, id);
+  const r1 = await ev(() => {
+    const q = s => document.querySelector(s), R = CL.restos, T = CL.jeu.tel, log = [];
+    CL.jouer(); CL.step(260);
+    log.push(['huit restaurateurs, chacun sa place (quatre devantures au bourg, le relais, trois au château)', R.liste.length === 8 && R.liste.every(r => r.L && Number.isFinite(r.L.x)) && ['mariniers', 'bellavigna', 'paulette', 'clemence', 'croisee'].every(id => CL.jeu.lieux.portes[id])]);
+    T.ouvrir('bureau');
+    log.push(['avant d\'aller les voir : rien dans le bureau, ni dans l\'app Missions, ni balise', !q('#app').textContent.includes('Restaurateurs rencontrés') && !T.missions().includes('Hors mission') && R.liste.every(r => r.statut === 'inconnu') && !R.file.length]);
+    T.fermer();
+    // le coup de feu de midi : Bernard n'a pas le temps (repassez)
+    CL.jeu.minutes = 12 * 60 + 30; CL.step(2);
+    const r = R.get('mariniers');
+    CL.teleporter(r.L.x, r.L.z + 1.8, Math.PI); CL.step(120);
+    CL.agir(); CL.step(30);
+    log.push(['à midi et demi, Bernard est dans son coup de feu : « repassez », rien dans le bureau', r.statut === 'inconnu' && r.visite === null && CL.jeu.hud.ligne && /Repassez/.test(CL.jeu.hud.ligne.txt)]);
+    for (let i = 0; i < 600 && CL.jeu.hud.parle; i++) CL.step(1);
+    CL.jeu.minutes = 15 * 60; CL.step(2);
+    return log;
+  });
+  for (const [msg, c] of r1) ok(c, msg);
+  {
+    const v = await visiter('mariniers');
+    ok(v.presentable && v.etiquette, '« Présenter nos vins » sur Bernard, à pied, tout près');
+    ok(v.servable && v.statut === 'rencontre' && v.reste >= 60 && v.reste <= 150, `il demande à goûter, on lui sert un verre ; noté dans le bureau (${v.gout} : « ${v.note} »), relance dans ${v.reste} min de jeu`);
+  }
+  await capture('resto-visite');
+  const r2 = await ev(() => {
+    const q = s => document.querySelector(s), R = CL.restos, T = CL.jeu.tel, log = [];
+    T.ouvrir('bureau');
+    log.push(['le bureau : la rubrique des restaurateurs rencontrés, sa note ; l\'app Missions : « Hors mission », 1 sur 8', q('#app').textContent.includes('Restaurateurs rencontrés') && q('#app').textContent.includes('Brasserie des Mariniers') && T.missions().includes('Hors mission') && T.missions().includes('1 sur 8')]);
+    T.fermer();
+    return log;
+  });
+  for (const [msg, c] of r2) ok(c, msg);
+  // pas de relance pendant un appel de la tournée : l'appel de la Cave du Pressoir ; la relance arrive après
+  {
+    const a = await ev(() => {
+      const R = CL.restos, r = R.get('mariniers'), T = CL.jeu.tel, m = CL.mission;
+      T.ouvrir('bureau'); document.querySelector('[data-a="rappel:cave"]').click(); CL.step(5);
+      CL.jeu.minutes = r.tRel + 1; CL.step(60 * 5);
+      const pendant = { appel: m.appelEnCours, statut: r.statut, resto: !!T.notifResto, msg: R.message };
+      for (let i = 0; i < 2000 && m.appelEnCours; i++) CL.step(1);
+      // la commande de la cave, préparée (la mission continue) ; le téléphone refermé : la relance arrive
+      for (let k = 0; k < 6; k++) document.querySelector('[data-a="qte:1"]').click();
+      document.querySelector('[data-a="signer"]').click();
+      T.fermer(); CL.step(60 * 4);
+      return { pendant, cave: m.client('cave').statut, notif: T.notif, resto: !!T.notifResto, msg: R.message };
+    });
+    ok(a.pendant.appel === 'cave' && a.pendant.statut === 'a_rappeler' && !a.pendant.resto && !a.pendant.msg, 'pendant l\'appel de la Cave du Pressoir, la relance est due mais rien ne la notifie');
+    ok(a.cave === 'envoyee' && a.notif === 'bureau' && a.resto && /Brasserie des Mariniers : à rappeler/.test(a.msg), `la mission 1 continue (commande de la cave envoyée) ; l'appel fini, la relance arrive : « ${a.msg} »`);
+  }
+  await ev(() => { CL.jeu.tel.ouvrir('accueil'); });
+  await capture('resto-relance');
+  {
+    const c = await appeler('mariniers');
+    ok(c.ecran === 'appel' && c.ligne === 'resto:mariniers' && c.statut === 'rencontre' && c.app === 'bureau', 'l\'appel de Bernard (l\'écran d\'appel) : « rappelez-moi la semaine prochaine », une nouvelle relance plus tard');
+    const t = await ev(() => { const r = CL.restos.get('mariniers'); return { motif: r.motif, lendemain: Math.floor(r.tRel / 1440) > Math.floor(CL.jeu.minutes / 1440) }; });
+    ok(t.motif === 'plusTard' && t.lendemain, 'la relance d\'après : le lendemain, dans la matinée');
+  }
+  // la pizzeria : commande signée
+  await ev(() => { CL.jeu.tel.fermer(); CL.jeu.tel.notifier(null); });
+  {
+    const v = await visiter('bellavigna');
+    ok(v.statut === 'rencontre', `Enzo, à la pizzeria : la dégustation, noté (${v.gout})`);
+    const n = await relance('bellavigna');
+    ok(n.st === 'a_rappeler' && n.notif === 'bureau' && n.resto, 'sa relance : « ' + n.msg + ' »');
+    const c = await appeler('bellavigna');
+    ok(c.statut === 'commande' && c.app === 'restoCmd' && c.numero === 'C-1197', `l'appel finit par une commande (${c.demande} cartons), préparée pendant l'appel : ${c.numero}`);
+  }
+  await capture('resto-commande');
+  {
+    const s = await ev(() => {
+      const q = s => document.querySelector(s), R = CL.restos, r = R.get('bellavigna'), T = CL.jeu.tel;
+      const zero = r.cartons === 0 && q('[data-a="r-signer"]').disabled && q('.consigne').textContent.includes(`a demandé ${r.demande} carton`);
+      q('[data-a="r-qte:1"]').click(); q('[data-a="r-signer"]').click();
+      const refus = r.statut === 'commande';
+      for (let k = 1; k < r.demande; k++) q('[data-a="r-qte:1"]').click();
+      q('[data-a="r-signer"]').click();
+      const envoyee = r.statut === 'envoyee' && q('#app').textContent.includes('sans créer de compte');
+      T.fermer(); for (let i = 0; i < 4000 && r.statut === 'envoyee'; i++) CL.step(1);
+      const P = CL.jeu.pc; P.lancer('vitisoft'); P.vue = 'commandes'; P.afficher();
+      const vs = q('#pc-ecran .vs').textContent; P.ouvertes = []; P.fenetre = null;
+      T.ouvrir('bureau');
+      return { zero, refus, envoyee, statut: r.statut, vitisoft: vs.includes('C-1197') && vs.includes('Pizzeria Bella Vigna'), note: q('#app').textContent.includes('Elle part dans Vitisoft sans ressaisie') };
+    });
+    ok(s.zero && s.refus, 'la quantité part de zéro (la consigne rappelle ce qu\'il a dit) ; une mauvaise quantité est refusée');
+    ok(s.envoyee && s.statut === 'signee', 'envoyée pour signature (un lien personnel, sans compte), signée en ligne un moment après');
+    ok(s.vitisoft && s.note, 'signée, elle est dans Vitisoft (Liste des commandes / BL) sans ressaisie ; le bureau le dit');
+  }
+  await capture('resto-signee');
+  // le relais routier : la commande pas signée, relancée, refusée au téléphone
+  await ev(() => { CL.jeu.tel.fermer(); CL.jeu.tel.notifier(null); });
+  {
+    const v = await visiter('croisee');
+    ok(v.statut === 'rencontre', `Gégé, au Relais de la Croisée : la dégustation, noté (${v.gout})`);
+    await relance('croisee');
+    const c = await appeler('croisee');
+    ok(c.statut === 'commande', 'il commande au téléphone (' + c.demande + ' cartons, ' + c.numero + ')');
+    const s = await ev(() => {
+      const q = s => document.querySelector(s), R = CL.restos, r = R.get('croisee'), T = CL.jeu.tel;
+      for (let k = 0; k < r.demande; k++) q('[data-a="r-qte:1"]').click();
+      q('[data-a="r-signer"]').click(); T.fermer();
+      let attente = 0; for (let i = 0; i < 6000 && r.statut === 'envoyee'; i++) { CL.step(1); attente++; }
+      return { statut: r.statut, attente: Math.round(attente / 60) };
+    });
+    ok(s.statut === 'nonSignee' && s.attente >= 45, `pas signée : restée en attente ${s.attente} s, puis « Pas signée » dans le bureau`);
+    const n = await relance('croisee');
+    ok(n.st === 'a_rappeler' && /n'a pas signé la commande/.test(n.msg), 'le bureau propose de le relancer : « ' + n.msg + ' »');
+    const c2 = await appeler('croisee');
+    ok(c2.statut === 'refusee', 'au téléphone, il refuse poliment : « Pas cette fois »');
+  }
+  // la sauvegarde : la page rechargée, tout est repris (même sans « Continuer »)
+  const avant = await ev(() => { CL.sauver(); return CL.restos.liste.map(r => r.id + ':' + r.statut).join(','); });
+  await page.reload({ waitUntil: 'load', timeout: 120000 });
+  await page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 60000 });
+  {
+    const r = await ev(() => {
+      CL.jouer(); CL.step(60);
+      const R = CL.restos, T = CL.jeu.tel; T.ouvrir('bureau');
+      const txt = document.querySelector('#app').textContent;
+      return { apres: R.liste.map(r => r.id + ':' + r.statut).join(','), bureau: txt.includes('Restaurateurs rencontrés') && txt.includes('Relais de la Croisée'), missions: T.missions().includes('3 sur 8'), mariniers: Math.round(R.get('mariniers').tRel - CL.jeu.minutes) };
+    });
+    ok(r.apres === avant && r.bureau && r.missions && r.mariniers > 0, `la page rechargée : les restaurateurs repris tels quels (${r.apres}), la relance de Bernard dans ${r.mariniers} min`);
+  }
+  // la mission 1 se joue toujours : ses rappels, une commande envoyée
+  {
+    const m = await ev(() => {
+      const q = s => document.querySelector(s), m = CL.mission, T = CL.jeu.tel;
+      T.ouvrir('bureau'); q('[data-a="rappel:treille"]').click(); for (let i = 0; i < 2000 && m.appelEnCours; i++) CL.step(1);
+      for (let k = 0; k < 3; k++) q('[data-a="qte:1"]').click(); q('[data-a="signer"]').click();
+      return m.client('treille').statut;
+    });
+    ok(m === 'envoyee', 'la mission 1 se joue toujours : La Treille appelée, sa commande envoyée');
+  }
 }
 
 if (scenario === 'photo') {

@@ -47,7 +47,8 @@ export class Verres {
       const p = S.cible;
       p.h = versAngle(p.h, Math.atan2(j.pos.x - p.pos.x, j.pos.z - p.pos.z), dt * 6);
       if (S.t > SERVICE * 0.2 && !S.verse) { S.verse = true; son.jouer('verser'); }
-      if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; this.n++; if (p.servable) this.c.mission.degustee(); }
+      // (celui qui l'a demandé : le prospect de la tournée, ou un restaurateur du coin, restaurateurs.js : surServi)
+      if (S.t > SERVICE * 0.8 && !S.donne) { S.donne = true; p.verre = 5; p.tVerre = 0; p.aServir = false; this.n++; if (p.servable) { if (p.surServi) p.surServi(); else this.c.mission.degustee(); } }
       if (S.t >= SERVICE) j.service = null;
     }
     this.c.candidats(this.boire);

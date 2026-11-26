@@ -58,6 +58,7 @@ export class PC {
         // un appel part du téléphone, le bon de livraison s'y signe (on revient ensuite au portable, bureau.js) ; le reste se
         // fait ici, comme sur le téléphone
         if (nom === 'rappel' && m.client(arg)?.mode === 'appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); m.rappel(arg); return; }
+        if (nom === 'r-appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); tel.action(b.dataset.a); return; } // (un restaurateur du coin)
         if (nom === 'bl') { if (m.blPret) { this.fermer(); tel.ouvrir('bl'); } return; }
         tel.action(b.dataset.a);
         this.afficher();
@@ -169,8 +170,9 @@ export class PC {
   // Liste des commandes / BL : les commandes arrivées du bureau, seulement celles que le client a signées en ligne
   commandes(m) {
     const arrivees = m.clients.filter(c => !['a_traiter', 'proposee', 'commande', 'envoyee'].includes(c.statut));
-    if (!arrivees.length) return `<h2>Liste des commandes / BL</h2><p class="vs-texte">${esc(V.aucuneCommande)}</p>`;
-    const total = arrivees.reduce((s, c) => s + m.htClient(c), 0), transmises = arrivees.filter(c => c.statut === 'transmise').length;
+    const restos = this.jeu.restos ? this.jeu.restos.pourVitisoft() : []; // les commandes signées des restaurateurs du coin
+    if (!arrivees.length && !restos.length) return `<h2>Liste des commandes / BL</h2><p class="vs-texte">${esc(V.aucuneCommande)}</p>`;
+    const total = arrivees.reduce((s, c) => s + m.htClient(c), 0) + restos.reduce((s, c) => s + c.ht, 0), transmises = arrivees.filter(c => c.statut === 'transmise').length;
     const lignes = arrivees.map(c => {
       const ht = m.htClient(c);
       let act;
@@ -183,7 +185,9 @@ export class PC {
       return `<tr><td data-l="Commande"><b>${c.numero}</b></td><td data-l="Client">${esc(c.nom)}</td>
         <td data-l="Signée en ligne" class="c">✓</td><td data-l="BL signé" class="c">${['livree', 'facturee', 'transmise'].includes(c.statut) ? '✓ ' + c.bl : '·'}</td>
         <td data-l="Montant HT" class="n">${eur(ht)}</td><td data-l="Facture" class="a">${fac}${act}</td></tr>`;
-    }).join('');
+    }).join('') + restos.map(c => `<tr><td data-l="Commande"><b>${c.numero}</b></td><td data-l="Client">${esc(c.nom)}</td>
+        <td data-l="Signée en ligne" class="c">✓</td><td data-l="BL signé" class="c">·</td>
+        <td data-l="Montant HT" class="n">${eur(c.ht)}</td><td data-l="Facture" class="a"><span class="vs-gris">Pas encore livrée</span></td></tr>`).join('');
     return `<table class="vs-grille"><caption>Liste des commandes / BL</caption>
       <thead><tr><th>Commande</th><th>Client</th><th class="c">Signée en ligne</th><th class="c">BL signé</th><th class="n">Montant HT</th><th>Facture</th></tr></thead><tbody>${lignes}</tbody>
       <tfoot><tr><td colspan="4">Total</td><td class="n">${eur(total)}</td><td></td></tr></tfoot></table>
