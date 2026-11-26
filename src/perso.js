@@ -24,6 +24,10 @@ export const HEROS = {
     bas: '#5d6248', chaussures: '#4a3424', bottes: true, chapeau: 'casquette', chapeauC: '#8e2a3b', iris: '#3d6b4a',
     taille: 0.95, corpulence: 0.94, epaules: 0.92, hanches: 1.08, secateur: true, tissuBas: 'toile' },
 };
+// Les mêmes, d'une autre apparence (Réglages du téléphone : « Apparence ») : même tenue de travail ; une peau foncée, un
+// dégradé et une barbe courte ; une peau brune, des tresses nouées en queue sous la casquette
+HEROS.vigneron2 = { ...HEROS.vigneron, peau: '#613e2d', cheveux: '#17120f', nature: 'crepu', coiffure: 'degrade', barbe: 'courte', iris: '#2a1d16' };
+HEROS.vigneronne2 = { ...HEROS.vigneronne, peau: '#a87757', cheveux: '#22170f', nature: 'crepu', coiffure: 'tresses', attache: true, iris: '#3b2a1e' };
 
 /* ---------------------------------------------------------------- squelette */
 
@@ -58,6 +62,24 @@ const GLSL_TEXEL = `{
 // Une instance à part de la matière du décor : three.js range les objets d'une même matière par distance ; mêler
 // maillages animés et décor ferait changer de programme à chaque alternance. Idem pour l'ombre.
 const MAT_PERSO = new THREE.MeshLambertMaterial({ vertexColors: true });
+// Le lustre de la peau : un reflet doux du soleil (ombre comprise) sur le visage et les mains, ajouté à la couleur, pas
+// multiplié par elle. Presque rien sur une peau claire ; sur une peau foncée, il dessine le front, l'arête du nez, les
+// pommettes, le menton : un visage foncé n'est ni gris ni plat. Un reflet plus large et plus faible sur les cheveux (des
+// cheveux noirs restent des cheveux, pas un casque). (directLight : le soleil, tel que l'a laissé la boucle des lumières
+// de three.js, ombre et intérieurs compris.)
+const zones = l => l.map(n => `iz2 == ${Z[n]}`).join(' || ');
+const GLSL_LUSTRE = `#include <lights_fragment_end>
+#if NUM_DIR_LIGHTS > 0
+{
+  int iz2 = int(vZone + 0.5);
+  float ks = (${zones(['peau', 'visageH', 'visageB', 'visageF', 'main', 'pouce'])}) ? 0.035 : (${zones(['cheveux', 'crepu', 'tresses', 'locks', 'barbe'])}) ? 0.016 : 0.0;
+  if (ks > 0.0) {
+    vec3 lh = normalize(directLight.direction + geometryViewDir);
+    float nl = max(dot(geometryNormal, directLight.direction), 0.0), nh = max(dot(geometryNormal, lh), 0.0);
+    reflectedLight.directDiffuse += directLight.color * (ks * pow(nh, ks > 0.02 ? 18.0 : 7.0) * nl);
+  }
+}
+#endif`;
 MAT_PERSO.onBeforeCompile = sh => {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aMat;\nflat varying float vZone;')
@@ -65,7 +87,8 @@ MAT_PERSO.onBeforeCompile = sh => {
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', '#include <common>\nflat varying float vZone;\n' + GLSL_ZONES)
     .replace('#include <map_fragment>', GLSL_TEXEL)
-    .replace('#include <color_fragment>', '');
+    .replace('#include <color_fragment>', '')
+    .replace('#include <lights_fragment_end>', GLSL_LUSTRE);
 };
 MAT_PERSO.customProgramCacheKey = () => 'perso';
 const OMBRE_PERSO = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -73,6 +96,9 @@ const OMBRE_PERSO = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthP
 /* ---------------------------------------------------------------- pièces : forme, zone, coordonnées de texture */
 
 const fonce = (c, k = 0.78) => assombrir(c, k);
+// mélange de deux couleurs (t de 0 à 1 : la peau qui se devine sous des cheveux rasés) ; le dedans des mains foncées
+const melange = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
+const PAUME = new THREE.Color('#b47a66');
 
 // Finit une pièce : couleur, zone de l'atlas, coordonnées de texture. Normales : celles de la pièce (boîtes, cylindres et
 // boules de modeles.js, volumes par anneaux, crâne et cheveux), sinon lissées ici (petites pièces faites à la main).
@@ -101,9 +127,9 @@ function uvBoite(g, zone) {
   return uv;
 }
 // Projection sphérique autour de (cx, cy, cz) : u autour (tours entiers du motif), v du sommet vers le bas (cheveux, barbe)
-function uvSphere(g, zone, cx, cy, cz, R) {
+function uvSphere(g, zone, cx, cy, cz, R, ech = 1) { // (ech : motif agrandi, des boucles plus grosses que le crépu)
   const p = g.attributes.position.array, n = p.length / 3, uv = new Float32Array(n * 2), z = ZONE[zone];
-  const tours = Math.max(1, Math.round(2 * Math.PI * R / z.tu)), kv = R / z.tv;
+  const tours = Math.max(1, Math.round(2 * Math.PI * R / (z.tu * ech))), kv = R / (z.tv * ech);
   const th = new Float32Array(n), axe = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const x = p[i * 3] - cx, y = p[i * 3 + 1] - cy, w = p[i * 3 + 2] - cz, h = Math.hypot(x, w);
@@ -158,7 +184,8 @@ const boulette = (r, c, zone, x, y, z, sx = 1, sy = 1, sz = 1, detail = 0) => ha
 
 // Volume par anneaux [y, rx, rz, dz, dx], du bas vers le haut, n côtés (une face vers l'avant).
 // Coordonnées de texture : u autour (des tours entiers de motif pour une zone pavée, 0 à 1 pour une zone entière ;
-// miroir : main droite), v le long de l'axe ((y - v0) x kv, par défaut en motifs). Les couvercles prolongent le flanc.
+// miroir : main droite), v le long de l'axe ((y - v0) x kv, par défaut en motifs ; ech : motif agrandi). Les couvercles
+// prolongent le flanc.
 function loft(an, n, c, zone, capBas = true, capHaut = true, o = {}) {
   const z = ZONE[zone], na = an.length, nv = ((na - 1) * 6 + ((capBas ? 1 : 0) + (capHaut ? 1 : 0)) * 3) * n;
   const P = new Float32Array(nv * 3), UV = new Float32Array(nv * 2), sn = new Float32Array(n + 1), cs = new Float32Array(n + 1), U = new Float32Array(n + 1);
@@ -166,9 +193,9 @@ function loft(an, n, c, zone, capBas = true, capHaut = true, o = {}) {
   if (tours === undefined) {
     let per = 0;
     for (const r of an) per += 2 * Math.PI * Math.sqrt((r[1] * r[1] + r[2] * r[2]) / 2);
-    tours = z.pave ? Math.max(1, Math.round(per / na / z.tu)) : 1;
+    tours = z.pave ? Math.max(1, Math.round(per / na / (z.tu * (o.ech || 1)))) : 1;
   }
-  const kv = o.kv ?? (z.pave ? 1 / z.tv : 1), v0 = o.v0 ?? 0;
+  const kv = o.kv ?? (z.pave ? 1 / (z.tv * (o.ech || 1)) : 1), v0 = o.v0 ?? 0;
   for (let j = 0; j <= n; j++) { const a = Math.PI / n + j * 2 * Math.PI / n; sn[j] = Math.sin(a); cs[j] = Math.cos(a); U[j] = (o.miroir ? 1 - j / n - 1 / n : j / n) * tours; }
   // normales lisses de la grille : différences entre voisins (autour et le long), tournées vers l'extérieur
   const NG = new Float32Array(na * n * 3), X = (r, j) => (r[4] || 0) + sn[j] * r[1], Zc = (r, j) => (r[3] || 0) + cs[j] * r[2];
@@ -258,6 +285,21 @@ function coucher(g) {
   for (const nom of ['position', 'normal', 'color', 'aMat', 'uv']) {
     const a = g.attributes[nom].array, k = g.attributes[nom].itemSize;
     for (let f = 0; f < a.length; f += 3 * k) for (let j = 0; j < k; j++) { const t = a[f + k + j]; a[f + k + j] = a[f + 2 * k + j]; a[f + 2 * k + j] = t; }
+  }
+  return g;
+}
+
+// Gonfle des pièces autour de l'axe de leur os (x et z multipliés par f) : un vêtement épais par-dessus (doudoune, manteau)
+function gonfler(liste, f) {
+  for (const g of liste) { const p = g.attributes.position.array; for (let i = 0; i < p.length; i += 3) { p[i] *= f; p[i + 2] *= f; } }
+}
+// Éclaircit le dedans des mains des peaux foncées (la paume, l'intérieur des doigts et du pouce, plus clairs) : la couleur
+// des sommets dont la normale regarde vers la paume (-s x) va vers c, de k au plus
+function paume(g, s, c, k) {
+  const n = g.attributes.normal.array, a = g.attributes.color.array;
+  for (let i = 0; i < n.length; i += 3) {
+    const w = k * Math.max(0, Math.min(1, (-s * n[i] - 0.35) * 2));
+    a[i] += (c.r - a[i]) * w; a[i + 1] += (c.g - a[i + 1]) * w; a[i + 2] += (c.b - a[i + 2]) * w;
   }
   return g;
 }
@@ -385,8 +427,9 @@ function completer(o) {
   const r = hasard(h), pick = a => a[Math.floor(r() * a.length)];
   const femme = o.femme ?? !!(o.fine || (!o.barbe && (['queue', 'chignon', 'long', 'carre'].includes(o.coiffure) || r() < 0.12)));
   const q = { ...o, femme };
-  if (femme && o.coiffure !== 'chauve' && r() < 0.4) q.coiffure = pick(['long', 'carre', 'queue', 'chignon']);
-  if (femme && o.coiffure === 'chauve') q.coiffure = 'carre';
+  // (une apparence tirée par tirerApparence est complète : on n'y touche pas)
+  if (femme && !o.apparence && o.coiffure !== 'chauve' && r() < 0.4) q.coiffure = pick(['long', 'carre', 'queue', 'chignon']);
+  if (femme && !o.apparence && o.coiffure === 'chauve') q.coiffure = 'carre';
   q.taille = o.taille ?? (femme ? 0.9 + r() * 0.1 : 0.94 + r() * 0.12);
   q.corpulence = o.corpulence ?? 0.86 + r() * r() * 0.42;
   q.epaules = o.epaules ?? (femme ? 0.9 : 1 + r() * 0.08);
@@ -398,7 +441,7 @@ function completer(o) {
   if (q.bottes && !o.chaussures) q.chaussures = pick(['#2f4a32', '#3a3a3a', '#4a3424']);
   q.collant = o.collant ?? pick(['#2e2a2c', '#4a3c3a', '#3b4150', fonce(o.peau, 0.9)]);
   q.iris = o.iris ?? pick(['#3b2a1e', '#4a3322', '#3d5a7a', '#4c6b3f', '#2a2a2a']);
-  if (!o.chapeau && r() < 0.16) { q.chapeau = pick(['bonnet', 'paille', 'bonnet']); q.chapeauC = pick(['#7a2233', '#2f4a6b', '#c8553d', '#3b3b3b']); }
+  if (!o.chapeau && !o.apparence && r() < 0.16) { q.chapeau = pick(['bonnet', 'beret', 'bonnet']); q.chapeauC = pick(['#7a2233', '#2f4a6b', '#c8553d', '#3b3b3b']); } // (décembre : plus de chapeau de paille)
   if (q.tenue === 'veste' && o.col === undefined && r() < 0.5) q.col = fonce(o.haut, 0.7);
   q.matelasse = o.matelasse ?? ((q.tenue === 'veste' || q.tenue === 'gilet') && r() < 0.5);
   // tirés après les autres : les tenues déjà vues restent les mêmes
@@ -408,6 +451,165 @@ function completer(o) {
   q.imprime = o.imprime ?? r() < 0.5;
   q.malRase = o.malRase ?? (!femme && clarte(o.cheveux || '#2b1d0e') < 0.3 && r() < 0.5);
   return q;
+}
+
+/* ---------------------------------------------------------------- apparences : teints, cheveux, âges, silhouettes
+   Teddy, 26/11/2026 : « les adultes aussi, une diversité demandée ». Une vraie palette de teints, des cheveux de toutes
+   natures et de toutes couleurs, des âges (jeunes, adultes, aînés), des tailles et des corpulences, des barbes, des
+   lunettes, des couvre-chefs (foulard, bonnet, béret, chapeau, casquette) et, en décembre, manteaux, doudounes et
+   écharpes. tirerApparence(r, o) tire tout cela d'un coup avec le tirage au sort r ; les couleurs du haut et du bas, un
+   tablier, une tenue de travail viennent de celui qui appelle. Des ensembles plausibles (teint, nature et couleur des
+   cheveux, yeux), mêlés, sans caricature : un seul visage pour tous, ce sont la peau, les cheveux, l'âge et la tenue qui
+   changent. */
+
+// Les teints, du plus clair au plus foncé (sous-tons rosés, neutres, dorés). Les foncés restent chauds et assez saturés :
+// l'atlas multiplie cette couleur (ombres, lèvres, sourcils, relief du visage restent lisibles, ni gris ni plats).
+export const TEINTS = ['#f6dccd', '#f3d1b8', '#efc7a4', '#eabd96', '#e4b38a', '#dca97e', '#d29f78', '#c5926c', '#b78562',
+  '#a87757', '#96694b', '#835a40', '#724b36', '#613e2d', '#523326', '#43291e', '#372119'];
+// Les couleurs naturelles des cheveux, et celles des aînés
+export const CHEVEUX = {
+  noir: '#17120f', brunNoir: '#22170f', brun: '#2b1d0e', chatainFonce: '#3f2a1c', chatain: '#5e3d24', chatainClair: '#7f5a36',
+  blondFonce: '#9c7a4a', blond: '#c4a26a', blondClair: '#dcc28e', roux: '#a3462a', cuivre: '#b55a32', auburn: '#6b2f1e',
+  poivreSel: '#6e6a66', gris: '#9a9894', grisClair: '#b9b6b0', blanc: '#dedbd4',
+};
+const YEUX = { bleu: '#3d5a7a', vert: '#4c6b3f', gris: '#5e6a72', noisette: '#6b4a2a', brun: '#3b2a1e', noir: '#1f1612' };
+// Ensembles plausibles : poids, teints (indices de TEINTS), nature des cheveux, leurs couleurs, les yeux, la part des
+// femmes qui portent le foulard. Mêlés au hasard, sans exclusive (un foulard, des boucles, des yeux clairs partout).
+const PROFILS = [
+  { p: 44, t: [0, 7], nat: { lisse: 7, boucle: 2 }, ch: { chatainFonce: 3, chatain: 3, chatainClair: 2, brun: 2, blondFonce: 1.5, blond: 1.2, blondClair: 0.6, roux: 0.5, cuivre: 0.3, auburn: 0.4 },
+    yeux: { bleu: 3, vert: 1.5, gris: 1, noisette: 2, brun: 3 }, foulard: 0.03 },
+  { p: 16, t: [4, 11], nat: { lisse: 3, boucle: 4, crepu: 0.6 }, ch: { noir: 2, brunNoir: 3, brun: 2, chatainFonce: 1 }, yeux: { brun: 4, noisette: 2, noir: 2, vert: 0.5 }, foulard: 0.3 },
+  { p: 20, t: [10, 16], nat: { crepu: 9, boucle: 1 }, ch: { noir: 3, brunNoir: 3, brun: 1 }, yeux: { brun: 3, noir: 3 }, foulard: 0.15 },
+  { p: 8, t: [2, 8], nat: { lisse: 1 }, ch: { noir: 3, brunNoir: 2, brun: 0.5 }, yeux: { brun: 2, noir: 3 }, foulard: 0.02 },
+  { p: 6, t: [7, 13], nat: { lisse: 3, boucle: 2 }, ch: { noir: 3, brunNoir: 2, brun: 1 }, yeux: { brun: 3, noir: 2 }, foulard: 0.15 },
+  { p: 6, t: [6, 12], nat: { boucle: 3, crepu: 2 }, ch: { brunNoir: 2, brun: 2, chatainFonce: 1.5, chatain: 1 }, yeux: { brun: 3, noisette: 2, vert: 1 }, foulard: 0.06 },
+];
+// Les coiffures (poids) selon la nature des cheveux et l'âge ; les styles communs (court, carré, chignon, queue...)
+// prennent la texture de la nature des cheveux (perso : o.nature)
+const COIFFURES = {
+  femme: {
+    lisse: { long: 3, carre: 3, queue: 3, chignon: 2, court: 1, degrade: 0.2 },
+    boucle: { boucles: 5, queue: 2, chignon: 2, carre: 1, long: 0.6 },
+    crepu: { afro: 3, tresses: 4, locks: 2, crepu: 2, chignon: 2, rase: 0.3 },
+  },
+  homme: {
+    lisse: { court: 5, degrade: 3, rase: 1, long: 0.35 },
+    boucle: { court: 3, boucles: 1.5, degrade: 2 },
+    crepu: { crepu: 3, degrade: 4, rase: 2, locks: 1.2, afro: 0.6, tresses: 0.5 },
+  },
+  aineF: { carre: 3, court: 4, chignon: 3 },
+  aineH: { chauve: 4, court: 4, rase: 1.2, degrade: 0.4 },
+  fille: {
+    lisse: { queue: 4, long: 3, carre: 2, chignon: 1 },
+    boucle: { boucles: 3, queue: 3, carre: 1 },
+    crepu: { tresses: 4, chignon: 3, afro: 2, crepu: 1 },
+  },
+  garcon: {
+    lisse: { court: 5, degrade: 2 },
+    boucle: { court: 3, boucles: 2, degrade: 1 },
+    crepu: { crepu: 4, degrade: 3, rase: 1 },
+  },
+};
+// Ce qu'on met par-dessus en décembre, et les couvre-chefs, selon l'âge (poids)
+const DEHORS = {
+  jeune: { doudoune: 9, manteau: 3, veste: 4, pull: 3, gilet: 1 },
+  adulte: { manteau: 7, doudoune: 5, veste: 4, pull: 2.4, gilet: 1.6 },
+  aine: { manteau: 10, doudoune: 2.4, veste: 4, gilet: 2, pull: 1.6 },
+  enfant: { doudoune: 6, manteau: 1.5, veste: 1.5, pull: 1 },
+};
+const COUVRE = {
+  homme: { jeune: { bonnet: 0.2, casquette: 0.12 }, adulte: { bonnet: 0.12, casquette: 0.08, beret: 0.03, feutre: 0.03 }, aine: { beret: 0.18, feutre: 0.12, casquette: 0.08, bonnet: 0.06 }, enfant: { bonnet: 0.2, pompon: 0.06, casquette: 0.06 } },
+  femme: { jeune: { bonnet: 0.12, pompon: 0.12 }, adulte: { bonnet: 0.1, pompon: 0.04, beret: 0.05, feutre: 0.03 }, aine: { bonnet: 0.06, beret: 0.08, feutre: 0.06 }, enfant: { pompon: 0.2, bonnet: 0.1 } },
+};
+const C_COUVRE = { bonnet: ['#7a2233', '#2f4a6b', '#c8553d', '#3b3b3b', '#e0b13a', '#d9d2c0', '#2f4a32'], pompon: ['#c8553d', '#e9e1cf', '#7a2233', '#2f4a6b', '#8a6a8a'],
+  beret: ['#1f2a44', '#2b2b30', '#5e2530', '#3a4a3a'], feutre: ['#3a3330', '#5a4a3a', '#2b2b30', '#6b5a44'], casquette: ['#1f2a44', '#3b3b3b', '#7a2233', '#2f4a32', '#c8553d'] };
+const C_MANTEAU = ['#b08850', '#26324a', '#3a3d42', '#1e1e22', '#5e2530', '#2f4a3a', '#7d7f84', '#c8b89a', '#6b4a35', '#8a2f2f'];
+const C_DOUDOUNE = ['#1f2a44', '#2e3b2c', '#8e2a3b', '#e0b13a', '#c8553d', '#3c6e8f', '#111215', '#d8d4cc', '#5a6b2f', '#6a4a7a'];
+const C_ECHARPE = ['#c8553d', '#7a2233', '#e0b13a', '#2f4a6b', '#d9d2c0', '#3f6b4f', '#8a6a8a', '#b5502f', '#5a5f66'];
+const C_FOULARD = ['#2f3a4a', '#6b2d3a', '#d9c8b4', '#1d1d22', '#4a5a3a', '#8a6a8a', '#c26a4a', '#e8e2d8', '#3c5a7a', '#a8806a'];
+const C_LUNETTES = ['#222222', '#222222', '#5a3a22', '#b89a5a', '#3a4a6a', '#7a2233', '#8a8f96'];
+// un nom tiré d'après ses poids ({ nom: poids })
+function selon(r, poids) {
+  let s = 0, d = null;
+  for (const k in poids) s += poids[k];
+  let x = r() * s;
+  for (const k in poids) { d = k; x -= poids[k]; if (x < 0) return k; }
+  return d;
+}
+// Une apparence complète pour perso(), tirée avec r (une fonction qui rend un nombre de 0 à 1). o (tout est facultatif) :
+//  femme (sinon tiré, une fois sur deux), age ('jeune', 'adulte', 'aine' ; sinon tiré), enfant (des coiffures d'enfant,
+//  ni barbe, ni foulard, ni canne, ni cheveux gris ; taille et corpulence laissées à celui qui appelle), profil (l'indice
+//  rendu pour un parent : l'enfant lui ressemble) et teint (indice dans TEINTS), hiver (dehors en décembre : manteau,
+//  doudoune, écharpe, bonnet ; une doudoune et un bonnet à pompon pour beaucoup d'enfants), actif (au travail : jeune ou
+//  adulte), assis (pas de manteau long), canne (permise aux aînés qui marchent), couvreChef (false : aucun), chapeau (un
+//  couvre-chef voulu, s'il va avec la coiffure ; null : aucun), foulard (false : jamais ; true : toujours, pour une
+//  femme).
+// Rend les options de perso() (seulement celles qui sont tirées), plus age, profil et teint (indices) ; apparence: true.
+export function tirerApparence(r, o = {}) {
+  const pk = a => a[Math.floor(r() * a.length)], enfant = !!o.enfant;
+  const femme = o.femme ?? r() < 0.5;
+  const age = enfant ? 'enfant' : o.age ?? selon(r, o.actif ? { jeune: 0.4, adulte: 0.6 } : { jeune: 0.26, adulte: 0.44, aine: 0.3 });
+  const aine = age === 'aine', jeune = age === 'jeune';
+  let profil = o.profil;
+  if (profil === undefined) { let x = r() * PROFILS.reduce((s, p) => s + p.p, 0); profil = 0; while (profil < PROFILS.length - 1 && (x -= PROFILS[profil].p) >= 0) profil++; }
+  const P = PROFILS[profil];
+  const teint = Math.max(0, Math.min(TEINTS.length - 1, o.teint ?? P.t[0] + Math.floor(r() * (P.t[1] - P.t[0] + 1))));
+  const a = { apparence: true, femme, age, profil, teint, peau: TEINTS[teint] };
+  // cheveux : nature, couleur (gris et blancs avec l'âge), coiffure
+  let nature = selon(r, P.nat);
+  if (aine && femme && nature === 'lisse' && r() < 0.35) nature = 'boucle'; // la mise en plis
+  a.nature = nature;
+  const gris = aine ? r() < 0.88 : age === 'adulte' && r() < (femme ? 0.06 : 0.16);
+  a.cheveux = CHEVEUX[gris ? (aine ? selon(r, { poivreSel: 1, gris: 2, grisClair: 2, blanc: 2 }) : 'poivreSel') : selon(r, P.ch)];
+  const table = enfant ? COIFFURES[femme ? 'fille' : 'garcon'][nature] : aine ? COIFFURES[femme ? 'aineF' : 'aineH'] : COIFFURES[femme ? 'femme' : 'homme'][nature];
+  a.coiffure = selon(r, table);
+  if ((a.coiffure === 'tresses' || a.coiffure === 'locks') && r() < (femme ? 0.45 : 0.6)) a.attache = true; // en queue, dans le dos
+  a.iris = YEUX[selon(r, P.yeux)];
+  a.nez = 0.92 + r() * 0.24;
+  // le foulard (hijab) : les cheveux dessous ne se voient pas
+  if (femme && !enfant && o.foulard !== false && (o.foulard || r() < P.foulard)) a.foulard = pk(C_FOULARD);
+  // barbe, ou rasé de près, ou de quelques jours
+  if (!femme && !enfant) {
+    if (r() < (aine ? 0.4 : jeune ? 0.36 : 0.42)) a.barbe = selon(r, aine ? { courte: 2, pleine: 3, moustache: 2.5, bouc: 0.6 } : jeune ? { courte: 4, bouc: 3, pleine: 1.5, moustache: 0.6 } : { courte: 4, pleine: 2, bouc: 2, moustache: 1.2 });
+    else a.barbe = false;
+    a.malRase = !a.barbe && !aine && r() < 0.3;
+  } else { a.barbe = false; a.malRase = false; }
+  // lunettes
+  a.lunettes = r() < (enfant ? 0.08 : aine ? 0.62 : jeune ? 0.12 : 0.28);
+  if (a.lunettes) a.lunettesC = pk(C_LUNETTES);
+  // silhouette : taille, corpulence (de mince à forte), épaules, hanches, ventre ; le dos un peu voûté de certains aînés
+  if (!enfant) {
+    const t2 = r() + r();
+    a.taille = (femme ? 0.88 + t2 * 0.07 : 0.92 + t2 * 0.085) * (aine ? 0.975 : 1);
+    a.corpulence = Math.min(1.34, 0.82 + Math.pow(r(), 1.5) * 0.5 + (aine ? 0.04 : jeune ? -0.03 : 0));
+    a.epaules = femme ? 0.86 + r() * 0.1 : 0.96 + r() * 0.14;
+    a.hanches = femme ? 1.0 + r() * 0.16 : 0.96 + r() * 0.06;
+    if (!femme && !jeune && a.corpulence > 1.05 && r() < 0.45) a.ventre = 0.01 + r() * 0.03;
+    if (aine && r() < 0.65) a.voute = 0.4 + r() * 0.6;
+    if (aine && o.canne && r() < 0.45) a.canne = pk(['#4a3424', '#2a2420', '#6b4a30', '#8a8f96']);
+  }
+  // chaussures : baskets blanches de certains jeunes, cuir des aînés
+  if (jeune && r() < 0.28) a.chaussures = pk(['#e8e6e0', '#d9d6cf']);
+  else if (aine && r() < 0.6) a.chaussures = pk(['#4a3424', '#2a2420', '#3b2a20']);
+  // dehors en décembre : ce qu'on met par-dessus, l'écharpe, le bonnet
+  if (o.hiver) {
+    let t = selon(r, DEHORS[age]);
+    if (o.assis && t === 'manteau') t = r() < 0.5 ? 'doudoune' : 'veste';
+    if (t === 'manteau') a.haut = pk(C_MANTEAU);
+    if (t === 'doudoune') { a.haut = pk(C_DOUDOUNE); a.matelasse = true; }
+    a.tenue = t;
+    if (!a.foulard && r() < (t === 'manteau' ? 0.6 : t === 'doudoune' ? 0.35 : 0.4)) { a.echarpe = pk(C_ECHARPE); a.echarpeZ = pk([Z.maille, Z.cotes, Z.carreaux]); }
+  }
+  // couvre-chef : dehors seulement, et pas sur une coiffure qui dépasserait (afro, boucles, chignon, tresses attachées)
+  const libre = !a.foulard && !['afro', 'boucles', 'chignon'].includes(a.coiffure) && !(a.attache && a.coiffure === 'tresses');
+  if (o.chapeau !== undefined) { if (o.chapeau && libre) { a.chapeau = o.chapeau; a.chapeauC = pk(C_COUVRE[o.chapeau] || C_COUVRE.casquette); } } // imposé (null : aucun)
+  else if (o.hiver && o.couvreChef !== false && libre) {
+    const c = COUVRE[femme ? 'femme' : 'homme'][age];
+    let x = r();
+    for (const k in c) { x -= c[k]; if (x < 0) { a.chapeau = k; a.chapeauC = pk(C_COUVRE[k]); break; } }
+  }
+  for (const k in a) if (a[k] === undefined) delete a[k];
+  return a;
 }
 
 /* ---------------------------------------------------------------- accessoires : la bouteille et le verre
@@ -499,10 +701,11 @@ function reliefVisage(femme) {
 export function perso(o0) {
   if (!MAT_PERSO.map) { MAT_PERSO.map = texturePersos(); MAT_PERSO.map.repeat.set(UVK, UVK); }
   const o = completer(o0);
-  const peau = o.peau, ch = o.cheveux || '#2b1d0e', haut = o.haut, bas = o.bas, chau = o.chaussures || '#2a2420';
+  const peau = o.peau || TEINTS[5], ch = o.cheveux || '#2b1d0e', haut = o.haut || '#5a6b7a', bas = o.bas || '#2c3e50', chau = o.chaussures || '#2a2420';
   const femme = !!(o.femme || o.fine);
   const K = o.corpulence ?? 1, E = (o.epaules ?? 1) * (0.93 + 0.07 * K), H = (o.hanches ?? 1) * (0.95 + 0.05 * K);
-  const tenue = o.tenue || 'veste';
+  // (manteau, doudoune : une veste, longue en laine ou gonflée ; tenue0 garde ce qu'elle est)
+  const tenue0 = o.tenue || 'veste', tenue = tenue0 === 'manteau' || tenue0 === 'doudoune' ? 'veste' : tenue0;
   const jupe = tenue === 'robe' || tenue === 'jupe';
   const manche = tenue === 'gilet' ? (o.manches || '#e9e1cf') : haut;
   const avantBras = tenue === 'chemise' || tenue === 'robe' ? peau : manche;
@@ -511,7 +714,7 @@ export function perso(o0) {
   const cou = femme ? 0.053 : 0.061 * (0.8 + 0.2 * K), kCol = 0.4 + 0.6 * cou / 0.061; // rayon du cou ; taille des cols
   // matières (zones de l'atlas)
   const zChemise = o.carreaux && !o.tablier ? Z.carreaux : Z.chemise;
-  const zHaut = { veste: o.matelasse ? Z.matelasse : Z.toile, gilet: o.matelasse ? Z.matelasse : Z.toile, pull: Z.maille, chemise: zChemise, salopette: zChemise, jupe: zChemise, robe: o.imprime ? Z.imprime : Z.chemise }[tenue] ?? Z.toile;
+  const zHaut = tenue0 === 'manteau' ? Z.feutre : tenue0 === 'doudoune' ? Z.matelasse : { veste: o.matelasse ? Z.matelasse : Z.toile, gilet: o.matelasse ? Z.matelasse : Z.toile, pull: Z.maille, chemise: zChemise, salopette: zChemise, jupe: zChemise, robe: o.imprime ? Z.imprime : Z.chemise }[tenue] ?? Z.toile;
   const zManche = tenue === 'gilet' ? (o.heros ? Z.maille : Z.chemise) : zHaut;
   const zBas = { jean: Z.jean, velours: Z.velours }[o.tissuBas] ?? Z.toile;
   const zJupe = tenue === 'robe' ? zHaut : (o.imprime ? Z.imprime : Z.toile);
@@ -560,9 +763,10 @@ export function perso(o0) {
   const ourlet = fonce(haut, 0.72);
   if (tenue === 'veste' || tenue === 'gilet') {
     // fermeture, poches plaquées, col montant, ourlet
-    add(1, boite(0.012, 0.31, 0.01, '#1d1d22', Z.fermeture, 0, 0.055, avant(anV, 0.055) + 0.003),
+    if (tenue0 !== 'manteau') add(1, boite(0.012, 0.31, 0.01, '#1d1d22', Z.fermeture, 0, 0.055, avant(anV, 0.055) + 0.003)); // (le manteau se boutonne)
+    add(1,
       boite(0.085, 0.07, 0.012, ourlet, Z.poche, 0.085 * K, 0.0, avant(anV, 0.0) - 0.012, 0, 0.32), boite(0.085, 0.07, 0.012, ourlet, Z.poche, -0.085 * K, 0.0, avant(anV, 0.0) - 0.012, 0, -0.32));
-    add(2, boite(0.012, 0.25, 0.01, '#1d1d22', Z.fermeture, 0, 0.1, avant(anP, 0.1) + 0.003), boite(0.07, 0.06, 0.012, ourlet, Z.poche, 0.075, 0.14, avant(anP, 0.14) - 0.006, 0, 0.3));
+    if (tenue0 !== 'manteau') add(2, boite(0.012, 0.25, 0.01, '#1d1d22', Z.fermeture, 0, 0.1, avant(anP, 0.1) + 0.003), boite(0.07, 0.06, 0.012, ourlet, Z.poche, 0.075, 0.14, avant(anP, 0.14) - 0.006, 0, 0.3));
     add(2, col([[-0.025, 0.096, 0.092, 0.004], [0, 0.09, 0.084, 0], [0.058, 0.082, 0.077, -0.016]], o.col || ourlet, Z.toile, kCol)); // col montant
     add(1, bande(anV, -0.1, -0.07, 1.035, ourlet, zOurlet, NT));
   } else if (tenue === 'pull') {
@@ -592,6 +796,22 @@ export function perso(o0) {
     add(2, boite(0.22 * K, 0.16, 0.012, t, Z.toile, 0, 0.06, avant(anP, 0.06) + 0.008));
     for (const s of [1, -1]) add(2, sangle(anP, s * 0.074, [0.13, 0.22, 0.28, 0.31], [0.3], 0.014, 0.006, fonce(t), Z.toile));
   }
+  // Manteau de laine et doudoune, par-dessus (décembre) : le buste et les manches gonflés de f (le drap, le duvet), le
+  // manteau qui descend au-dessus du genou (comme une jupe, il suit un peu les jambes), boutonné, ses revers ; la
+  // doudoune et sa capuche roulée dans le dos
+  const f = tenue0 === 'doudoune' ? 1.085 : tenue0 === 'manteau' ? 1.03 : 1;
+  if (f > 1) for (const i of [1, 2]) gonfler(G[i], f);
+  if (tenue0 === 'manteau') {
+    const hb = -0.42;
+    add(0, loft([[hb, 0.215 * H * K, 0.19 * K, 0.014], [-0.2, 0.2 * H * K, 0.155 * K, 0.006], [0.0, 0.18 * H * K, 0.13 * K + ventre * 0.3], [0.08, 0.172 * K, 0.124 * K + ventre * 0.3]], 14, haut, Z.feutre, false, true),
+      loft([[hb - 0.002, 0.219 * H * K, 0.194 * K, 0.014], [hb + 0.022, 0.216 * H * K, 0.191 * K, 0.014]], 14, fonce(haut, 0.82), Z.feutre, false, false),
+      barre([0.012, hb + 0.024, 0.014 + 0.19 * K + 0.004], [0.012, -0.03, 0.135 * K + 0.004], 0.012, 0.006, fonce(haut, 0.7), Z.feutre)); // le bord du pan de devant
+    for (const y of [0.0, 0.1]) add(1, boite(0.018, 0.018, 0.008, '#2a2420', Z.uni, 0.03, y, avant(anV, y) * f + 0.004));
+    for (const y of [0.05, 0.15]) add(2, boite(0.018, 0.018, 0.008, '#2a2420', Z.uni, 0.03, y, avant(anP, y) * f + 0.004));
+    const anCol = [[-0.025, 0.096, 0.092, 0.004], [0, 0.09, 0.084, 0], [0.058, 0.082, 0.077, -0.016]];
+    if (!o.foulard) for (const s of [1, -1]) add(2, barre(surCol(anCol, kCol * f, s * 0.03, 0.02, 0.004), surLoft(anP, s * 0.07, 0.17, 1, 0.006 + avant(anP, 0.17) * (f - 1)), 0.05, 0.007, fonce(haut, 0.9), Z.feutre));
+  }
+  if (tenue0 === 'doudoune') add(2, loft([[0.25, 0.085, 0.045, -0.115 * f], [0.31, 0.096, 0.06, -0.106 * f], [0.36, 0.074, 0.048, -0.09 * f]], 10, haut, Z.matelasse));
 
   /* tête : cou, crâne, visage (projeté de face), yeux, sourcils, nez, oreilles, cheveux, couvre-chef */
   const T = 3, yc = YC, zc = ZC, rx = RX, ry = RY, rz = RZ, jaw = femme ? 0.36 : 0.24;
@@ -605,7 +825,7 @@ export function perso(o0) {
   // cou : une colonne épaisse, un peu penchée vers l'avant, qui sort des trapèzes ; la nuque remonte jusqu'à l'occiput
   // (elle cache le bas du crâne), la gorge rejoint le dessous de la mâchoire
   add(T, loft([[-0.07, cou * 1.3, cou * 1.12, -0.03], [-0.01, cou * 1.08, cou * 1.0, -0.02], [0.05, cou * 1.0, cou * 1.0, -0.01], [0.11, cou * 0.98, cou * 1.06, -0.002], [0.155, cou * 0.92, cou * 0.95, -0.01]], 12, peau, Z.peau));
-  const zVisage = femme ? Z.visageF : (o.barbe || o.malRase) ? Z.visageB : Z.visageH;
+  const zVisage = femme ? Z.visageF : (o.malRase || (o.barbe && o.barbe !== 'moustache' && o.barbe !== 'bouc')) ? Z.visageB : Z.visageH;
   {
     const [face, crane] = separer(boule(rx, ry, rz, 0, yc, zc, 3, null, jaw, 0.999, relief), (x, y, z) => z > zc - 0.012);
     add(T, finir(face, peau, zVisage, uvVisage(face, yc)), finir(crane, peau, Z.peau, uvBoite(crane, Z.peau)));
@@ -633,6 +853,7 @@ export function perso(o0) {
   // Rangées du haut vers le bas : [y, demi-largeur, saillie au milieu, saillie des bords] ; section arrondie (cinq colonnes).
   {
     const R = [[0.016, 0.007, 0.0015, -0.001], [0.0, 0.0075, 0.006, -0.0008], [-0.016, 0.0085, 0.011, -0.0005], [-0.03, 0.011, 0.0175, 0.002], [-0.04, 0.0155, 0.0115, 0.0015], [-0.0465, 0.011, -0.001, -0.001]];
+    if (o.nez) for (let k = 2; k < R.length; k++) R[k][1] *= o.nez; // un nez plus ou moins large (le bout, les ailes)
     const CO = [-1, -0.5, 0, 0.5, 1], Pt = [];
     const q = (k, c) => { const [y, l, dm, db] = R[k], x = c * l; Pt.push(x, yc + y, surface(x, y) + db + (dm - db) * (1 - c * c)); };
     for (let k = 0; k < R.length - 1; k++) for (let i = 0; i < 4; i++) { const a = CO[i], b = CO[i + 1]; q(k, a); q(k, b); q(k + 1, b); q(k, a); q(k + 1, b); q(k + 1, a); }
@@ -645,45 +866,89 @@ export function perso(o0) {
   // l'épaisseur monte de zéro à k sur une bande de largeur w, et rentre sous la peau au-dehors. La lisière (épaisseur
   // nulle) suit ainsi une courbe douce au lieu des arêtes des facettes ; les facettes enfouies sont retirées. Même boule
   // que le crâne, agrandie depuis le même centre : la lisière est la courbe où l'épaisseur s'annule, sans festons.
-  const coif = o.coiffure;
+  const coif = o.coiffure, voile = !!o.foulard;
+  // la nature des cheveux donne leur texture et leur volume : lisses (mèches), bouclés (le motif crépu agrandi), crépus
+  const zCh = o.nature === 'crepu' || o.nature === 'boucle' ? Z.crepu : Z.cheveux, eCh = o.nature === 'boucle' ? 2.3 : 1, kN = zCh === Z.crepu ? 0.035 : 0;
   const rampe = (k, d, w) => 1 + (k - 1) * Math.max(-1.6, Math.min(1, d / w));
-  const cheveux = (k, champ, sx = 1, sy = 1, sz = 1, dy = 0, c = ch, zone = Z.cheveux) => {
-    const g = boule(rx * k * sx, ry * k * sy, rz * k * sz, 0, yc + dy, zc, 3, (x, y, z) => rampe(k, champ(x, y, z), 0.09) / k, jaw, 0.975 / k, relief);
-    return finir(g, c, zone, uvSphere(g, zone, 0, yc + dy, zc, rx * k));
+  // (w : largeur de la bande où l'épaisseur monte ; detail : finesse de la boule ; ech : motif agrandi)
+  const cheveux = (k, champ, sx = 1, sy = 1, sz = 1, dy = 0, c = ch, zone = zCh, w = 0.09, detail = 3, ech = zone === zCh ? eCh : 1) => {
+    const g = boule(rx * k * sx, ry * k * sy, rz * k * sz, 0, yc + dy, zc, detail, (x, y, z) => rampe(k, champ(x, y, z), w) / k, jaw, 0.975 / k, relief);
+    return finir(g, c, zone, uvSphere(g, zone, 0, yc + dy, zc, rx * k, ech));
   };
   const nuque = z => 0.2 * Math.min(1, Math.max(0, -z * 2.5)); // les cheveux descendent plus bas derrière, jusqu'à la nuque
   const court = (x, y, z) => Math.max(y - 0.5, Math.min(0.25 - z, y + 0.42 + nuque(z)), Math.min(Math.abs(x) - 0.82, y + 0.1, 0.5 - z));
-  if (coif === 'chauve') add(T, cheveux(1.045, (x, y, z) => Math.min(0.25 - y, y + 0.5 + nuque(z) * 0.6, 0.3 - z)));
-  else if (coif === 'carre') add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.62))), cheveux(1.1, (x, y, z) => Math.min(-0.08 - z, y + 0.62, 0.6 - y), 1, 1, 1, -0.012));
+  // ce qui tombe dans le dos (tresses, locks, boucles), derrière la nuque, jusqu'à « bas » sous le centre du crâne ; l : sa
+  // largeur
+  const dos = (bas, zone, ech, l = 1) => loft([[yc - bas, 0.086 * l, 0.03, zc - 0.135], [yc - 0.17, 0.095 * l, 0.04, zc - 0.112], [yc - 0.05, 0.092 * l, 0.054, zc - 0.07],
+    [yc + 0.03, 0.074, 0.05, zc - 0.05]], 8, ch, zone, true, false, { ech });
+  // en queue (os de la mèche, qui balance) : l'attache, puis la queue (e : plus épaisse, L : plus longue)
+  const queue = (zone, ech, e = 1, L = 0.27) => add(17, loft([[-0.025, 0.034 * e, 0.034 * e, -0.012], [0.005, 0.034 * e, 0.034 * e, -0.012]], 8, '#8e2a3b', Z.toile),
+    loft([[-L, 0.012 * e, 0.012 * e, -0.05], [-L * 0.66, 0.034 * e, 0.03 * e, -0.035], [-0.06, 0.044 * e, 0.04 * e, -0.02], [0.0, 0.036 * e, 0.034 * e, -0.01]], 7, ch, zone, true, true, { ech }));
+  if (voile) {
+    // Le foulard (hijab) : il couvre la tête, les oreilles et le cou, et encadre le visage (un ovale du front au menton) ;
+    // drapé sur la poitrine et le haut du dos (sur l'os de la poitrine : la tête tourne dedans). Les cheveux sont dessous.
+    const fc = o.foulard, zf = Z.chemise;
+    add(T, cheveux(1.11, (x, y, z) => Math.max(Math.hypot(x / 0.6, (y + 0.2) / 0.74) - 1, 0.28 - z) * 0.7, 1.02, 1.03, 1.02, 0.006, fc, zf, 0.08));
+    // (le pan tombe sur les épaules et le haut de la poitrine, plus bas devant que derrière)
+    add(2, loft([[0.13, 0.198 * E * K, 0.13 * K + buste * 0.9, 0.012], [0.2, 0.2 * E * K, 0.126 * K + buste * 0.5, 0.004], [0.255, 0.188 * E, 0.112, -0.006], [0.3, 0.15 * E, 0.096, -0.014],
+      [0.345, 0.088, 0.078, -0.02], [0.4, 0.07, 0.07, -0.016]].map(([y, a, b, d]) => [y, a * f, b * f, d * f]), NT, fc, zf, true, false));
+    add(2, loft([[0.07, 0.11 * E * K, 0.05, 0.1 * K + buste * 1.6], [0.14, 0.15 * E * K, 0.05, 0.095 * K + buste]].map(([y, a, b, d]) => [y, a * f, b, d * f]), NT, fc, zf, true, false));
+  } else if (coif === 'chauve') add(T, cheveux(1.045, (x, y, z) => Math.min(0.25 - y, y + 0.5 + nuque(z) * 0.6, 0.3 - z)));
+  else if (coif === 'carre') add(T, cheveux(1.06 + kN, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.62))), cheveux(1.1 + kN, (x, y, z) => Math.min(-0.08 - z, y + 0.62, 0.6 - y), 1, 1, 1, -0.012));
   else if (coif === 'long') {
-    add(T, cheveux(1.06, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.6))));
+    add(T, cheveux(1.06 + kN, (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.6))));
     // longueur qui tombe dans le dos, en mèches
-    add(T, loft([[yc - 0.3, 0.085, 0.032, zc - 0.085], [yc - 0.17, 0.092, 0.042, zc - 0.078], [yc - 0.05, 0.088, 0.055, zc - 0.058], [yc + 0.03, 0.07, 0.05, zc - 0.045]], 8, ch, Z.cheveux, true, false));
-  } else add(T, cheveux(coif === 'court' ? 1.05 : 1.06, court));
-  if (coif === 'chignon') { const g = S(0.052, ch, 0, yc + 0.07, zc - 0.105, 1, 0.9, 1, 1); add(T, finir(g, ch, Z.cheveux, uvSphere(g, Z.cheveux, 0, yc + 0.07, zc - 0.105, 0.052))); }
-  if (coif === 'queue') {
-    add(17, loft([[-0.025, 0.034, 0.034, -0.012], [0.005, 0.034, 0.034, -0.012]], 8, '#8e2a3b', Z.toile),
-      loft([[-0.27, 0.012, 0.012, -0.05], [-0.18, 0.034, 0.03, -0.035], [-0.06, 0.044, 0.04, -0.02], [0.0, 0.036, 0.034, -0.01]], 7, ch, Z.cheveux));
-  }
+    add(T, loft([[yc - 0.3, 0.085, 0.032, zc - 0.085], [yc - 0.17, 0.092, 0.042, zc - 0.078], [yc - 0.05, 0.088, 0.055, zc - 0.058], [yc + 0.03, 0.07, 0.05, zc - 0.045]], 8, ch, zCh, true, false, { ech: eCh }));
+  } else if (coif === 'afro') {
+    // l'afro : une boule de cheveux crépus autour de la tête, plus large que haute, le front dégagé (une boule plus fine)
+    add(T, cheveux(1.52, (x, y, z) => Math.max(y - 0.46, Math.min(0.3 - z, y + 0.42 + nuque(z)), Math.min(Math.abs(x) - 0.78, y + 0.12, 0.52 - z)), 1.06, 1.0, 1.02, 0.03, ch, Z.crepu, 0.34, 4, 1));
+  } else if (coif === 'boucles') {
+    // boucles jusqu'à la mâchoire, du volume, et des boucles dans la nuque
+    add(T, cheveux(1.2 + kN * 0.5, (x, y, z) => Math.max(y - 0.44, Math.min(0.18 - z, y + 0.78), Math.min(Math.abs(x) - 0.74, y + 0.5, 0.42 - z)), 1.04, 1, 1.02, 0, ch, zCh, 0.2));
+    add(T, dos(0.22, zCh, eCh, 1.12));
+  } else if (coif === 'degrade') {
+    // coupe à blanc sur les côtés : du volume sur le dessus ; les côtés et la nuque rasés de près (la peau se devine)
+    add(T, cheveux(1.07 + kN, (x, y, z) => Math.min(court(x, y, z), y - 0.2 - 0.36 * Math.max(0, z - 0.2))), cheveux(1.022, court, 1, 1, 1, 0, melange(ch, peau, 0.45), Z.barbe));
+  } else if (coif === 'rase') add(T, cheveux(1.012, court, 1, 1, 1, 0, melange(ch, peau, 0.55), Z.barbe)); // rasé : une ombre
+  else if (coif === 'tresses' || coif === 'locks') {
+    // tresses (box braids) ou locks : du sommet vers la nuque ; en queue dans le dos, ou qui tombent dans le dos (les locks
+    // aussi de chaque côté, derrière les oreilles)
+    const zt = coif === 'tresses' ? Z.tresses : Z.locks, lk = coif === 'locks';
+    add(T, cheveux(lk ? 1.075 : 1.055, court, 1, 1, 1, 0, ch, zt));
+    if (o.attache) queue(zt, 1, lk ? 1.35 : 1.25, lk ? 0.36 : 0.44);
+    else {
+      add(T, dos(lk ? 0.32 : 0.46, zt, 1, lk ? 1.12 : 1.06));
+      if (lk) for (const s of [1, -1]) add(T, loft([[yc - 0.21, 0.024, 0.03, zc - 0.035, s * 0.084], [yc - 0.06, 0.028, 0.04, zc - 0.032, s * 0.09], [yc + 0.0, 0.026, 0.04, zc - 0.03, s * 0.088]], 6, ch, zt, true, false));
+    }
+  } else add(T, cheveux(coif === 'court' ? 1.05 + kN : 1.06 + kN, court)); // court, crépu court, chignon, queue
+  if (!voile && coif === 'chignon') { const g = S(0.052 + kN * 0.4, ch, 0, yc + 0.07, zc - 0.105, 1, 0.9, 1, 1); add(T, finir(g, ch, zCh, uvSphere(g, zCh, 0, yc + 0.07, zc - 0.105, 0.052, eCh))); }
+  if (!voile && coif === 'queue') queue(zCh, eCh);
   // Barbe courte. Du favori, juste devant l'oreille, la ligne des joues descend en courbe jusqu'aux commissures ; la
   // moustache sous le nez ; la bouche dégagée (les lèvres se voient) ; rien derrière l'oreille (avant : une cagoule). Bord irrégulier, comme
   // des poils ; mince sur les joues, du volume au menton. Le visage « B » (barbe de quelques jours) est dessous : le bord
   // se fond dans l'ombre de barbe.
   if (o.barbe) {
+    // (o.barbe : true ou 'courte' ; 'pleine', plus épaisse et plus haut sur les joues ; 'bouc', la moustache et le menton ;
+    // 'moustache' seule)
+    const sb = o.barbe === true ? 'courte' : o.barbe, pleine = sb === 'pleine';
     const haut = ax => (ax >= 0.9 ? -0.04 : ax >= 0.6 ? -0.37 + (ax - 0.6) / 0.3 * 0.33 : ax >= 0.32 ? -0.47 + (ax - 0.32) / 0.28 * 0.1 : -0.425);
     const champ = (x, y, z) => {
       const ax = Math.abs(x), poils = 0.022 * Math.sin(x * 23 + y * 7) + 0.016 * Math.sin(y * 31 - x * 9);
       // devant, sous la ligne, hors de la bouche (une ellipse autour des lèvres, de -0,56 à -0,70)
       // vers l'arrière : jusqu'au plan de l'oreille en haut, jusqu'à l'angle de la mâchoire (sous l'oreille) en bas
-      return Math.min(haut(ax) + poils - y, z + 0.05 + 0.22 * lisse((-0.3 - y) / 0.4), Math.max((Math.hypot(ax / 0.31, (y + 0.635) / 0.1) - 1) * 0.1, 0.3 - z));
+      const bouche = Math.max((Math.hypot(ax / 0.31, (y + 0.635) / 0.1) - 1) * 0.1, 0.3 - z);
+      if (sb === 'moustache') return Math.min(0.3 - ax, y + 0.545 + 0.3 * Math.max(0, ax - 0.2), -0.41 - y, z - 0.3, bouche); // sous le nez, au-dessus de la lèvre
+      const c = Math.min(haut(ax) + poils - (pleine ? 0.05 : 0) - y, z + 0.05 + 0.22 * lisse((-0.3 - y) / 0.4), bouche);
+      return sb === 'bouc' ? Math.min(c, 0.27 - ax + 0.5 * Math.max(0, -0.8 - y)) : c; // le bouc : le milieu seulement
     };
-    const KB = 1.065, epais = (y, z) => 1.016 + 0.045 * lisse((-0.74 - y) / 0.2) * lisse((z - 0.1) / 0.4); // épaisse au menton
+    const KB = pleine ? 1.08 : 1.065, epais = sb === 'moustache' ? () => 1.03 // épaisse au menton
+      : (y, z) => (pleine ? 1.024 : 1.016) + (pleine ? 0.085 : 0.045) * lisse((-0.74 - y) / 0.2) * lisse((z - 0.1) / 0.4);
     const g = boule(rx * KB, ry * KB, rz * KB, 0, yc, zc, 3, (x, y, z) => rampe(epais(y, z), champ(x, y, z), 0.05) / KB, jaw, 0.985 / KB, relief);
     add(T, finir(g, fonce(ch, 1.12), Z.barbe, uvSphere(g, Z.barbe, 0, yc, zc, rx))); // un peu plus claire que les cheveux
   }
   // lunettes : montures seules (les yeux restent visibles)
   if (o.lunettes) {
-    const zl = surface(0.0315, 0) + 0.012, m = '#222';
+    const zl = surface(0.0315, 0) + 0.012, m = o.lunettesC || '#222';
     // la face (cercles, pont), puis la charnière qui rejoint la tempe et la branche qui longe la tête jusqu'à l'oreille
     const ch0 = [0.071, yc + 0.011, surface(0.071, 0.011) + 0.005];
     for (const s of [1, -1]) add(T, boite(0.05, 0.005, 0.005, m, Z.uni, s * 0.0315, yc + 0.013, zl), boite(0.05, 0.004, 0.005, m, Z.uni, s * 0.0315, yc - 0.013, zl),
@@ -710,7 +975,15 @@ export function perso(o0) {
   }
   if (o.chapeau === 'beret') { const g = boule(0.12, 0.048, 0.125, 0.01, yc + 0.096, zc - 0.022, 1, null); add(T, finir(g, cc, Z.feutre, uvSphere(g, Z.feutre, 0.01, yc + 0.096, zc - 0.022, 0.12)), boite(0.01, 0.022, 0.01, cc, Z.feutre, 0.013, yc + 0.145, zc - 0.022)); }
   if (o.chapeau === 'paille') add(T, habiller(C(0.215, 0.215, 0.012, 12, '#d8c07a', 0, yc + 0.068, zc - 0.006), '#d8c07a', Z.paille), habiller(C(0.098, 0.11, 0.1, 10, '#d8c07a', 0, yc + 0.12, zc - 0.006), '#d8c07a', Z.paille), habiller(C(0.112, 0.112, 0.026, 10, cc, 0, yc + 0.086, zc - 0.006), cc, Z.toile));
-  if (o.chapeau === 'bonnet') add(T, cheveux(1.1, (x, y) => y - 0.18, 1, 1.12, 1, 0.012, cc, Z.cotes), loft([[yc, rx * 1.12, rz * 1.1, zc], [yc + 0.045, rx * 1.1, rz * 1.08, zc]], 10, fonce(cc, 0.8), Z.cotes, false, false));
+  if (o.chapeau === 'bonnet' || o.chapeau === 'pompon') add(T, cheveux(1.1, (x, y) => y - 0.18, 1, 1.12, 1, 0.012, cc, Z.cotes), loft([[yc, rx * 1.12, rz * 1.1, zc], [yc + 0.045, rx * 1.1, rz * 1.08, zc]], 10, fonce(cc, 0.8), Z.cotes, false, false));
+  if (o.chapeau === 'pompon') add(T, boulette(0.036, o.pomponC || '#ece6da', Z.crepu, 0, yc + 0.166, zc - 0.004, 1, 0.9, 1, 1)); // le pompon, en laine bouclée
+  if (o.chapeau === 'feutre') {
+    // le chapeau de feutre des aînés : la calotte pincée au sommet, le ruban, le bord
+    const zh = zc - 0.006;
+    add(T, loft([[yc + 0.04, rx * 1.14, rz * 1.1, zh], [yc + 0.1, rx * 1.1, rz * 1.04, zh], [yc + 0.135, rx * 0.98, rz * 0.9, zh - 0.004], [yc + 0.148, rx * 0.7, rz * 0.6, zh - 0.006]], 12, cc, Z.feutre),
+      loft([[yc + 0.046, rx * 1.152, rz * 1.112, zh], [yc + 0.068, rx * 1.15, rz * 1.11, zh]], 12, fonce(cc, 0.5), Z.toile, false, false),
+      loft([[yc + 0.04, 0.152, 0.168, zh], [yc + 0.048, 0.15, 0.166, zh]], 16, cc, Z.feutre));
+  }
 
   /* bras : épaule, coude, main (paume et doigts d'un seul tenant, pouce) */
   for (const [i, s] of [[4, 1], [7, -1]]) {
@@ -728,6 +1001,24 @@ export function perso(o0) {
       loft([[-0.17 * kh, 0.0072 * kh, 0.028 * kh, dz, -s * 0.034 * kh], [-0.155 * kh, 0.0095 * kh, 0.037 * kh, dz, -s * 0.026 * kh], [-0.125 * kh, 0.011 * kh, 0.04 * kh, dz, -s * 0.011 * kh], [-0.085 * kh, 0.0125 * kh, 0.041 * kh, dz, -s * 0.001]], 8, peau, Z.main, true, false, mo),
       loft([[-0.09 * kh, 0.0072 * kh, 0.0082 * kh, 0.057 * kh, -s * 0.022 * kh], [-0.072 * kh, 0.0092 * kh, 0.0102 * kh, 0.055 * kh, -s * 0.018 * kh], [-0.046 * kh, 0.011 * kh, 0.0125 * kh, 0.046 * kh, -s * 0.012 * kh], [-0.018 * kh, 0.0115 * kh, 0.015 * kh, 0.03 * kh, -s * 0.006 * kh]], 6, peau, Z.pouce, true, false, { kv: -1 / (0.072 * kh), v0: -0.018 * kh, miroir: s < 0 }));
   }
+  if (f > 1) for (const i of [4, 5, 7, 8]) gonfler(G[i], tenue0 === 'doudoune' ? 1.13 : 1.05); // les manches du manteau, de la doudoune
+  // le dedans des mains, plus clair sur une peau foncée (la paume, l'intérieur des doigts)
+  { const k = 0.32 * Math.max(0, Math.min(1, (0.3 - clarte(peau)) / 0.27)); if (k > 0) for (const [i, s] of [[6, 1], [9, -1]]) for (const g of G[i]) paume(g, s, PAUME, k); }
+  // La canne de certains aînés, dans la main gauche (la droite tient le téléphone, le verre) : la poignée dans le poing, le
+  // fût jusqu'au sol, l'embout de caoutchouc
+  if (o.canne) {
+    const L = 0.86, cn = o.canne;
+    add(6, habiller(C(0.0105, 0.0105, L, 6, cn, -0.012, -0.075 - L / 2, 0.004, 'y', 0, 2), cn, Z.uni), habiller(C(0.012, 0.012, 0.11, 6, cn, -0.012, -0.075, 0.014, 'z'), cn, Z.uni),
+      habiller(C(0.0135, 0.0135, 0.03, 6, '#1a1714', -0.012, -0.06 - L, 0.004), '#1a1714', Z.uni));
+  }
+  // L'écharpe : un tour épais autour du cou, un pan qui pend devant (sur la poitrine : la tête tourne dedans)
+  if (o.echarpe) {
+    const ec = o.echarpe, ze = o.echarpeZ ?? Z.maille, sur = (x, y, e) => { const q = surLoft(anP, x, y, 1, e); return [q[0] * f, q[1], q[2] * f]; };
+    add(2, loft([[0.266, 0.122 * E * f, 0.106 * f, -0.008], [0.296, 0.114 * f, 0.103 * f, -0.012], [0.33, 0.1 * f, 0.093 * f, -0.016], [0.358, 0.086 * f, 0.083 * f, -0.016]], 12, ec, ze));
+    const pts = [sur(0.045, 0.27, 0.03), sur(0.052, 0.19, 0.016), sur(0.056, 0.1, 0.014), sur(0.058, 0.0, 0.014)];
+    for (let i = 0; i < 3; i++) add(2, barre(pts[i], pts[i + 1], 0.07, 0.016, ec, ze, 0.004));
+    add(2, boite(0.07, 0.012, 0.018, fonce(ec, 0.78), ze, pts[3][0], pts[3][1] - 0.004, pts[3][2])); // la frange
+  }
   // téléphone dans la main droite (paume vers +x), caché tant que l'os « tel » est à l'échelle 0
   add(16, boite(0.012, 0.132, 0.066, '#1c1c22', Z.uni, 0.043, -0.002, 0.004), boite(0.003, 0.114, 0.056, '#9fd8ff', Z.uni, 0.0505, 0.002, 0.004));
 
@@ -744,6 +1035,21 @@ export function perso(o0) {
     const dessus = loft([[-0.078 * kp, 0.036 * kp, 0.03, -0.047], [-0.045 * kp, 0.046 * kp, 0.044, -0.036], [0.06 * kp, 0.048 * kp, 0.034, -0.045], [0.165 * kp, 0.045 * kp, 0.021, -0.054], [0.212 * kp, 0.022 * kp, 0.012, -0.058]], 8, chau, Z.cuir);
     const semelle = loft([[-0.082 * kp, 0.038 * kp, 0.008, -0.073], [-0.045 * kp, 0.051 * kp, 0.009, -0.072], [0.06 * kp, 0.053 * kp, 0.009, -0.072], [0.165 * kp, 0.05 * kp, 0.009, -0.072], [0.218 * kp, 0.026 * kp, 0.008, -0.071]], 6, '#1a1714', Z.semelle);
     add(i + 2, coucher(dessus), coucher(semelle));
+  }
+
+  // Le dos un peu voûté de certains aînés (o.voute, de 0 à 1) : le haut du dos s'arrondit, le buste penche en avant (dans
+  // sa forme : l'animation n'en sait rien), la tête et les épaules suivent ; la tête reste droite, un peu en avant
+  if (o.voute) {
+    const a = 0.16 * o.voute, ca = Math.cos(a), sa = Math.sin(a);
+    for (const g of G[2]) {
+      const p = g.attributes.position.array, n = g.attributes.normal.array;
+      for (let k = 0; k < p.length; k += 3) {
+        const y = p[k + 1], z = p[k + 2] < 0 ? p[k + 2] - 0.028 * o.voute * cloche(y - 0.2, 0.1) : p[k + 2];
+        p[k + 1] = y * ca - z * sa; p[k + 2] = y * sa + z * ca;
+        const ny = n[k + 1], nz = n[k + 2]; n[k + 1] = ny * ca - nz * sa; n[k + 2] = ny * sa + nz * ca;
+      }
+    }
+    for (const i of [OS.tete, OS.brasG, OS.brasD]) { const [x, y, z] = P[i]; P[i] = [x, y * ca - z * sa, y * sa + z * ca]; }
   }
 
   /* assemblage : chaque pièce suit son os ; près d'une jointure, elle suit aussi l'os voisin (peau souple, voir liens) */
@@ -794,5 +1100,6 @@ export function perso(o0) {
   // caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer les matrices de ses 18 os à
   // chaque image : three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai
   Object.defineProperty(groupe, 'matrixWorldAutoUpdate', { get: () => groupe.visible && maillage.visible, set() {}, configurable: true });
-  return { groupe, maillage, os, echelle, femme, queue: coif === 'queue', dim: { xh, xe, H, K } };
+  // (traits : l'apparence complète, pour les bancs ; aine : il marche plus lentement, pieton.js)
+  return { groupe, maillage, os, echelle, femme, queue: coif === 'queue' || (!!o.attache && !voile), dim: { xh, xe, H, K }, traits: o, aine: o.age === 'aine' };
 }

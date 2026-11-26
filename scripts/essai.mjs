@@ -20,6 +20,9 @@
 //             prêt, prospect quitté sans verre, chèque déposé en cours de journée, bon de livraison rouvert
 //   conduite  toute la tournée en conduite assistée au doigt (VEHICULE=van : en van)
 //   perf      mesure le coût d'une image à plusieurs endroits du monde (et le rythme réel sur 3 s)
+//   diversite tout le monde créé, ses traits comptés : teints du très clair au très foncé, toutes les coiffures, foulards,
+//             femmes une fois sur deux, jeunes et aînés (voûtés, cannes), barbes, manteaux, doudounes, écharpes,
+//             couvre-chefs ; triangles par personnage sous un plafond ; une apparence d'enfant ; visages au soleil, la place
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
@@ -1099,6 +1102,61 @@ if (scenario === 'poids') {
   const r = await ev(() => { CL.profil(20); return CL.profil(120); });
   console.log(`conduite total ${Object.values(r).reduce((a, b) => a + b, 0).toFixed(2)} ms  ` + Object.entries(r).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  '));
   console.log('mémoire jeu', JSON.stringify(await ev(() => CL.memoire())), 'qualité', await ev(() => CL.qualite.nom + ' ratio ' + CL.ratio));
+}
+
+if (scenario === 'diversite') {
+  // La diversité des adultes (perso.js : tirerApparence) : tout le monde créé (le bourg, le village du château, les 34 de
+  // Solumatic, les conducteurs, les ouvriers, les clients), puis leurs traits comptés : des teints de très clair à très
+  // foncé, toutes les coiffures, des femmes une fois sur deux, des aînés (voûtés, une canne), des barbes, des manteaux et
+  // des doudounes, des couvre-chefs dont le foulard ; des triangles sous un plafond
+  const r = await ev(() => {
+    CL.jouer(); CL.step(30);
+    if (!CL.village.prepare) CL.village.preparer();
+    while (CL.village.file.length) CL.village.file.shift()();
+    while (CL.solu.n < CL.solu.L.gens.length) CL.solu.creer();
+    CL.step(2);
+    const ms = new Set(), tris = [];
+    const voir = p => { if (p && p.m && p.m.traits && !ms.has(p.m)) { ms.add(p.m); tris.push(p.m.maillage.geometry.index.count / 3); } };
+    for (const p of CL.passants()) voir(p);
+    for (const g of CL.village.gens) voir(g.p);
+    for (const g of CL.solu.gens) voir(g.p);
+    for (const v of CL.voitures()) voir(v.conducteur);
+    for (const w of [...CL.parvis.ouvriers, ...CL.tonnellerie.ouvriers, ...CL.gens3.liste, ...CL.clients.liste]) voir(w.p);
+    const T = [...ms].map(m => m.traits), lum = c => { const x = parseInt(c.slice(1), 16); return (0.3 * (x >> 16) + 0.59 * ((x >> 8) & 255) + 0.11 * (x & 255)) / 255; };
+    const n = f => T.filter(f).length, kinds = f => [...new Set(T.map(f).filter(Boolean))];
+    // une apparence d'enfant (pour l'école) : ni barbe, ni foulard, ni canne, ni cheveux gris
+    let enfantOk = true;
+    const lcg = s => () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; // (outils.js : hasard)
+    for (let s = 1; s < 200; s++) { const a = CL.tirerApparence(lcg(s * 7919), { enfant: true, hiver: true, canne: true }); if (a.barbe || a.foulard || a.canne || a.voute || /#(6e6a66|9a9894|b9b6b0|dedbd4)/.test(a.cheveux)) enfantOk = false; }
+    return { n: T.length, tris, teints: kinds(t => t.peau).length, fonces: n(t => lum(t.peau) < 0.42), tresFonces: n(t => lum(t.peau) < 0.3), clairs: n(t => lum(t.peau) > 0.75),
+      coiffures: kinds(t => !t.foulard && t.coiffure), foulards: n(t => t.foulard), femmes: n(t => t.femme), aines: n(t => t.age === 'aine'), jeunes: n(t => t.age === 'jeune'),
+      voutes: n(t => t.voute), cannes: n(t => t.canne), barbes: kinds(t => t.barbe === true ? 'courte' : t.barbe), tenues: kinds(t => t.tenue), echarpes: n(t => t.echarpe),
+      chapeaux: kinds(t => t.chapeau), gris: n(t => /#(6e6a66|9a9894|b9b6b0|dedbd4)/.test(t.cheveux)), enfantOk };
+  });
+  const moy = r.tris.reduce((a, b) => a + b, 0) / r.tris.length, max = Math.max(...r.tris);
+  console.log(`${r.n} personnes : ${r.femmes} femmes, ${r.jeunes} jeunes, ${r.aines} aînés (${r.voutes} voûtés, ${r.cannes} cannes), ${r.teints} teints (${r.clairs} clairs, ${r.fonces} foncés dont ${r.tresFonces} très foncés)`);
+  console.log(`coiffures : ${r.coiffures.join(', ')} ; ${r.foulards} foulards ; barbes : ${r.barbes.join(', ')} ; tenues : ${r.tenues.join(', ')} ; ${r.echarpes} écharpes ; couvre-chefs : ${r.chapeaux.join(', ')}`);
+  ok(r.n >= 95, 'tout le monde est compté (' + r.n + ' personnes)');
+  ok(r.teints >= 12 && r.clairs >= 5 && r.fonces >= 10 && r.tresFonces >= 4, 'des teints du très clair au très foncé : ' + r.teints + ' teints, ' + r.clairs + ' clairs, ' + r.fonces + ' foncés, ' + r.tresFonces + ' très foncés');
+  const TOUTES = ['court', 'chauve', 'chignon', 'queue', 'long', 'carre', 'afro', 'crepu', 'degrade', 'tresses', 'locks', 'boucles', 'rase'];
+  ok(TOUTES.every(c => r.coiffures.includes(c)) && r.foulards >= 2, 'toutes les coiffures sont dans le monde, et des foulards (' + r.foulards + ') ; manque : ' + (TOUTES.filter(c => !r.coiffures.includes(c)).join(', ') || 'rien'));
+  ok(r.femmes / r.n > 0.4 && r.femmes / r.n < 0.6, 'des femmes une fois sur deux (' + Math.round(100 * r.femmes / r.n) + ' %)');
+  ok(r.aines / r.n > 0.12 && r.jeunes / r.n > 0.12 && r.voutes >= 3 && r.cannes >= 1 && r.gris >= 8, 'des jeunes et des aînés (' + r.gris + ' aux cheveux gris ou blancs, ' + r.voutes + ' voûtés, ' + r.cannes + ' avec une canne)');
+  ok(['courte', 'pleine', 'bouc', 'moustache'].every(b => r.barbes.includes(b)), 'des barbes : courte, pleine, bouc, moustache');
+  ok(['manteau', 'doudoune'].every(t => r.tenues.includes(t)) && r.echarpes >= 4 && r.chapeaux.length >= 4, 'décembre : manteaux, doudounes, ' + r.echarpes + ' écharpes, ' + r.chapeaux.length + ' sortes de couvre-chefs');
+  ok(max <= 4200 && moy <= 3400, 'triangles par personnage : ' + Math.round(moy) + ' en moyenne, ' + max + ' au plus (plafonds 3 400 et 4 200)');
+  ok(r.enfantOk, 'une apparence d\'enfant : ni barbe, ni foulard, ni canne, ni dos voûté, ni cheveux gris');
+  // de près, quelques visages de tous les teints au soleil, et la place
+  await ev(() => {
+    const H = -0.55, fx = Math.sin(H), fz = Math.cos(H), px = Math.cos(H), pz = -Math.sin(H), X = -108, Z = -58;
+    const lcg = s => () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const L = [0, 3, 6, 9, 12, 14, 16].map((t, i) => CL.tirerApparence(lcg(7 + i * 7919), { teint: t, age: 'adulte', hiver: true, couvreChef: false, foulard: i === 4, femme: i === 4 || undefined }));
+    L.forEach((o, i) => { const p = new CL.Pieton(CL.perso(o)); CL.scene.add(p.m.groupe); const k = (i - 3) * 0.6; p.placer(X + px * k, Z + pz * k, H); p.sync(0, 0); for (let j = 0; j < 20; j++) p.sync(1 / 60, j / 60); });
+    CL.photo(X + fx * 2.6, 1.62, Z + fz * 2.6, X, 1.45, Z); CL.step(2);
+  });
+  await capture('visages');
+  await ev(() => { CL.photo(); CL.jeu.minutes = 14 * 60; CL.teleporter(100, -36, Math.PI); CL.step(60 * 4); CL.photo(98, 2.4, -14, 94, 1.2, -30); CL.step(2); });
+  await capture('place');
 }
 
 if (scenario === 'photo') {

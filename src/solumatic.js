@@ -14,7 +14,7 @@
 // des pièces est reprise du plan (ni l'adresse, ni le reste du document).
 import * as THREE from 'three';
 import { B, C, S, fusion, UNI } from './modeles.js';
-import { perso } from './perso.js';
+import { perso, tirerApparence } from './perso.js';
 import { Pieton } from './pieton.js';
 import { logoSolumatic } from './logo.js';
 import { SOLUMATIC as TXT } from './textes.js';
@@ -607,7 +607,8 @@ const TENUES = {
   associe: { tenue: 'chemise', haut: '#e9eef4', bas: '#2f3440', coiffure: 'court', barbe: true },
   commercial: { tenue: 'chemise' }, technicien: { tenue: 'pull', haut: '#ef6c26' }, formateur: { tenue: 'chemise', haut: '#f4f1ea' },
 };
-const PEAUX = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d4a373'], CHEV = ['#2b1d0e', '#6b4423', '#b55239', '#d9c08c', '#151515', '#5a3a22'];
+// (le patron et son associé sont des hommes ; les autres, une personne sur deux : perso.js tirerApparence)
+const HOMMES = { patron: true, associe: true };
 const HAUTS = ['#2e86de', '#3f7d4a', '#8e44ad', '#34495e', '#7f8c8d', '#c0392b', '#16a085', '#f1ece2', '#2b2d31', '#e0b13a'], BAS = ['#2c3e50', '#34495e', '#1e272e', '#455a64', '#2f3440'];
 
 export class Solumatic {
@@ -664,11 +665,13 @@ export class Solumatic {
   // une personne de plus (dans l'ordre du plan) ; rnd : le tirage de sa tenue
   creer() {
     const s = this.L.gens[this.n], r = this.rnd, pk = a => a[Math.floor(r() * a.length)];
-    const femme = r() < 0.45;
-    const p = new Pieton(perso({
-      femme, peau: pk(PEAUX), cheveux: pk(CHEV), coiffure: femme ? pk(['carre', 'queue', 'chignon']) : pk(['court', 'court', 'chauve']), barbe: !femme && r() < 0.3,
-      tenue: pk(['pull', 'chemise', 'veste']), haut: pk(HAUTS), bas: pk(BAS), lunettes: r() < 0.3, chapeau: null, ...TENUES[s.role],
-    }));
+    // autant de tirages qu'avant, dans le même ordre (ce que chacun tire ensuite ne bouge pas) : ils servent de graine à son
+    // apparence, tirée à part (teint, cheveux, âge, silhouette ; ni manteau ni bonnet au bureau, un foulard pour certaines)
+    const g0 = r(), g1 = r(), g2 = r(), g3 = r(); if (g0 >= 0.45) r();
+    const tenue = pk(['pull', 'chemise', 'veste']), haut = pk(HAUTS), bas = pk(BAS), g4 = r();
+    const ra = hasard(Math.floor(g1 * 2147483647) ^ Math.floor((g0 + g2 + g3 + g4) * 1e6));
+    const age = HOMMES[s.role] ? 'adulte' : ra() < 0.38 ? 'jeune' : ra() < 0.92 ? 'adulte' : 'aine';
+    const p = new Pieton(perso({ tenue, haut, bas, ...tirerApparence(ra, { femme: HOMMES[s.role] ? false : undefined, age, couvreChef: false }), ...TENUES[s.role] }));
     if (s.assis) {
       p.assis = true; p.clavier = s.clavier; p.telephone = !!s.telephone;
       p.m.groupe.position.set(s.x, -0.34, s.z); p.m.groupe.rotation.y = s.h; p.h = s.h; p.sync(0, 0); p.pos.copy(p.m.groupe.position);

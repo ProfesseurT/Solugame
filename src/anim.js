@@ -348,6 +348,13 @@ export class Anim {
     // les mains : détendues, le poignet qui suit un peu le balancement
     o[OS.mainG].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eG, 0.1, 0.08);
     o[OS.mainD].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eD, -0.1, -0.08);
+    // La canne de certains aînés (perso.js, main gauche) : le bras qui la tient balance à peine, et le poignet la garde
+    // droite, l'embout près du sol ; elle avance avec le pas
+    if (this.m.traits && this.m.traits.canne) {
+      const bg = o[OS.brasG].rotation, cg = o[OS.coudeG].rotation;
+      bg.x = bg.x * 0.3 - 0.04; cg.x = cg.x * 0.5 - 0.1;
+      o[OS.mainG].rotation.x = -(bg.x + cg.x) - 0.06;
+    }
   }
 
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */

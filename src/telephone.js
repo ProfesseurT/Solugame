@@ -5,6 +5,7 @@
 import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, MESSAGE_MATIN as MESSAGE, TRAITEMENT as TX, HABILLAGE as HX, EN_PREVENTE, MISSIONS } from './textes.js';
 import { son } from './audio.js';
 import { SAUVE } from './sauvegarde.js';
+import { HEROS } from './perso.js';
 import { $, esc, eur } from './outils.js';
 
 export const ICONES = {
@@ -674,14 +675,16 @@ export class Telephone {
     return this.entete('Missions', 'missions') + `<div class="ap-corps">${conf}${lignes}<p class="ap-note">${esc(MISSIONS.note)}</p></div>`;
   }
   reglages() {
-    const h = this.jeu.choixHeros;
+    // le personnage : vigneron ou vigneronne, et son apparence (perso.js : HEROS, vigneron2, vigneronne2)
+    const h = this.jeu.choixHeros, f = h.startsWith('vigneronne'), a2 = h.endsWith('2'), id = (fe, a) => (fe ? 'vigneronne' : 'vigneron') + (a ? '2' : '');
     return this.entete('Réglages', 'reglages') + `<div class="ap-corps">
       <button class="reg" data-a="son"><span>Son</span><b>${son.actif ? 'Activé' : 'Coupé'}</b></button>
       <button class="reg" data-a="radio"><span>Radio des véhicules</span><b>${son.radioAllumee ? 'Allumée' : 'Coupée'}</b></button>
       <button class="reg" data-a="wtf"><span>Mode WTF</span><b>${this.jeu.wtf ? 'Activé' : 'Coupé'}</b></button>
       <p class="ap-note">${this.jeu.wtf ? 'On vole les voitures, même garées, et l\'on aplatit les passants (ils se relèvent en râlant).' : 'On emprunte les voitures à leur conducteur : plantez-vous devant, elle s\'arrête. Le mode WTF permet de les voler et d\'aplatir les passants.'}</p>
       <p class="ap-h">Personnage</p>
-      <div class="reg-choix"><button class="ap-bt${h === 'vigneron' ? ' plein' : ''}" data-a="heros:vigneron">Vigneron</button><button class="ap-bt${h === 'vigneronne' ? ' plein' : ''}" data-a="heros:vigneronne">Vigneronne</button></div>
+      <div class="reg-choix"><button class="ap-bt${!f ? ' plein' : ''}" data-a="heros:${id(false, a2)}">Vigneron</button><button class="ap-bt${f ? ' plein' : ''}" data-a="heros:${id(true, a2)}">Vigneronne</button></div>
+      <div class="reg-choix">${[false, true].map(a => `<button class="ap-bt${a === a2 ? ' plein' : ''}" data-a="heros:${id(f, a)}"><i style="display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:6px;background:${HEROS[id(f, a)].peau}"></i>Apparence ${a ? 2 : 1}</button>`).join('')}</div>
       <p class="ap-note">Tournée générale · ${esc(VERSION)} · un jeu original de l'équipe Solumatic</p></div>`;
   }
 }
