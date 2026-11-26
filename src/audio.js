@@ -414,6 +414,32 @@ export const son = {
     const t = ctx.currentTime;
     bruit(t, 0.03, 1500, 0.12 * k, 'bandpass'); note(620, t, 0.06, 'triangle', 0.04 * k, sfx, 0, true);
   },
+  // la sonnette d'un vélo (velos.js) : « dring dring », deux salves de petits coups rapides du marteau sur le timbre (deux
+  // partiels inharmoniques qui tintent), k de 0 à 1 selon la distance
+  sonnette(k) {
+    if (!ctx || !actif || k < 0.03) return;
+    const t = ctx.currentTime, f0 = hasard(2250, 2450);
+    for (let s = 0; s < 2; s++) for (let i = 0; i < 6; i++) {
+      const ti = t + s * 0.27 + i * 0.032 + Math.random() * 0.004, a = 0.035 * k * (i ? 0.75 : 1);
+      note(f0, ti, 0.16, 'sine', a, sfx, 0, true); note(f0 * 1.51, ti, 0.11, 'sine', a * 0.55, sfx, 0, true); note(f0 * 2.74, ti, 0.06, 'sine', a * 0.3, sfx, 0, true);
+    }
+    note(f0, t + 0.62, 0.5, 'sine', 0.02 * k, sfx, 0, true); // (le timbre qui résonne encore)
+  },
+  // un vélo qui tombe : la ferraille qui claque, la sonnette qui tinte au choc, le guidon qui frotte
+  chuteVelo(k) {
+    if (!ctx || !actif || k < 0.03) return;
+    const t = ctx.currentTime;
+    bruit(t, 0.18, 1800, 0.22 * k, 'bandpass'); bruit(t + 0.06, 0.12, 3200, 0.12 * k, 'bandpass');
+    note(880, t, 0.25, 'triangle', 0.05 * k, sfx, 0, true); note(1310, t + 0.02, 0.2, 'triangle', 0.035 * k, sfx, 0, true);
+    note(2380, t + 0.03, 0.4, 'sine', 0.02 * k, sfx, 0, true);
+    bruit(t + 0.1, 0.35, 700, 0.08 * k, 'bandpass');
+  },
+  // la roue libre qui cliquette (rejoué tous les quarts de seconde) : des cliquets d'autant plus serrés que la roue tourne vite
+  roueLibre(k, v) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime, n = Math.min(14, Math.round(3 + v * 1.3));
+    for (let i = 0; i < n; i++) bruit(t + i * 0.22 / n, 0.008, 4200 + Math.random() * 900, 0.03 * k, 'bandpass');
+  },
   feu(k) {
     if (!ctx || !actif || k < 0.02) return;
     const t = ctx.currentTime;

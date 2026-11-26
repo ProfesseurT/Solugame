@@ -35,6 +35,7 @@ import { Chien } from './chien.js';
 import { Tonnellerie } from './tonnellerie.js';
 import { Village } from './village.js';
 import { Restaurateurs } from './restaurateurs.js';
+import { Velos } from './velos.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur } from './reseau.js';
 
@@ -630,6 +631,13 @@ village.garees = GAREES.filter(g => g.m.position.y > 20).map(g => g.m); // (les 
 const restos = new Restaurateurs({ jeu, scene, hud, camera, col });
 jeu.restos = restos;
 const AUTOS = [];
+// les cyclistes (velos.js) : sur la départementale, dans le bourg, vers le château, sur le chemin des Grands Champs ; les
+// voitures les voient (OBSTACLES : elles ralentissent, les doublent), le véhicule qu'on conduit et la conduite assistée
+// aussi (AUTOS, à chaque image)
+const velos = new Velos({ scene, camera, hud, col, son });
+for (const c of velos.cyclistes) OBSTACLES.push(c);
+const PIETONS = []; // (ceux que les cyclistes évitent : les passants du bourg, les touristes du château)
+const VELOS_C = { t: 0, minutes: 0, ego: null, joueur: null, conduit: null, vehicules: VEHICULES, remorque: att, voitures, autres: village.voitures, passants: PIETONS, pousser: (p, r) => horsDesVehicules(p, r), wtf: false };
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
 $('radio').addEventListener('click', e => { e.stopPropagation(); if (jeu.auVolant) { son.jouer('tap'); jeu.basculerRadio(); } });
@@ -934,6 +942,7 @@ function marcher(dtm) {
   horsDesVehicules(joueur.pos, joueur.r);
   if (att.attelee) att.pousser(joueur.pos, joueur.r);
   horsDesVoitures();
+  velos.pousser(joueur.pos, joueur.r); // (on ne traverse pas un vélo)
   // un pas chaque fois qu'un pied se pose (la foulée, anim.js, fait deux pas par cycle)
   const pp = Math.floor(joueur.anim.ph * 2);
   if (pp !== pasPrec) { pasPrec = pp; if (joueur.v > 0.5) son.pas(jeu.dedans === 'solumatic' ? solu.sol(joueur.pos.x, joueur.pos.z) : natureSol(joueur.pos.x, joueur.pos.z, col), joueur.v); }
@@ -1005,7 +1014,10 @@ function bourg(dtm, ego) {
   village.maj(dtm, VILLAGE_C, klaxonVillage);
   RESTOS_C.t = temps; RESTOS_C.minutes = jeu.minutes; RESTOS_C.ego = ego; RESTOS_C.aPied = !jeu.auVolant; RESTOS_C.danger = danger;
   restos.maj(dtm, RESTOS_C); // les restaurateurs du coin, devant leur restaurant
-  AUTOS.length = 0; for (const v of voitures) AUTOS.push(v); for (const v of village.voitures) AUTOS.push(v);
+  PIETONS.length = 0; for (const p of passants) PIETONS.push(p.p); for (const g of village.gens) if (g.genre === 'touriste') PIETONS.push(g.p);
+  VELOS_C.t = temps; VELOS_C.minutes = jeu.minutes; VELOS_C.ego = ego; VELOS_C.joueur = jeu.auVolant || ego === LOIN ? null : joueur; VELOS_C.conduit = jeu.auVolant ? tr : null; VELOS_C.wtf = jeu.wtf;
+  velos.maj(dtm, VELOS_C);
+  AUTOS.length = 0; for (const v of voitures) AUTOS.push(v); for (const v of village.voitures) AUTOS.push(v); for (const c of velos.cyclistes) if (c.actif) AUTOS.push(c);
   for (const p of assis) { p.sync(dtm, temps); if (p.etq && p.etq.vu) hud.placer(p.etq, p.m.groupe.position.x, 1.9, p.m.groupe.position.z, true); }
   verres.maj(dtm, temps);
   OBSTACLES[0] = ego;
@@ -1284,6 +1296,7 @@ function majTaches() {
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const f of gens3.liste) if (gens3.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
+  velos.taches(t, ombrePerso); // (les vélos et leurs cyclistes)
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y, m.position.y);
   parvis.taches(t, ombrePerso);
   chien.taches(t, ombrePerso);
@@ -1521,7 +1534,7 @@ mesures.script = Math.round(performance.now() - T0);
 
 // banc de test (simulation sans affichage, mesure du coût d'une image)
 window.CL = {
-  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
+  jeu, mission, clients, ctrl, camera, renderer, scene, monde, mesures, GAREES, relief, cam, traitement, pulve, parvis, solu, tonnellerie, village, velos, mTP, get dechChai() { return dechChai; }, get isoles() { return isoles; },
   habillage, gens3, tel, attelage: att, mRem, mChariot, get dech() { return dech; }, col, restos,
   perso, tirerApparence, Pieton, unPassant, // (les personnages : planches de visages, banc diversite)
   // la tournée de Noël faite d'un coup (essais) : on rentre dormir, la mission 2 commence au réveil

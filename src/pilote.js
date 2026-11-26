@@ -30,7 +30,7 @@ function decaler(route) {
 }
 
 export class Pilote {
-  constructor() { this.route = null; this.P = null; this.i = 0; this.actif = false; this.demi = null; }
+  constructor() { this.route = null; this.P = null; this.i = 0; this.actif = false; this.demi = null; this.decal = 0; } // (decal : de combien on se décale à gauche pour doubler un cycliste)
   // nouvel itinéraire (ou aucun) : on repart du segment le plus proche
   prendre(route) {
     if (route === this.route) return;
@@ -75,6 +75,27 @@ export class Pilote {
       if (d >= reste || i >= P.length - 2) { const k = d > 1e-6 ? Math.min(1, reste / d) : 0; x += (B.x - x) * k; z += (B.z - z) * k; break; }
       reste -= d; x = B.x; z = B.z; i++;
     }
+    // un cycliste devant, dans notre file (velos.js) : on le double en se décalant vers la gauche (1,2 m entre lui et nous),
+    // si rien n'arrive en face sur la départementale ; sinon on le suit (plus bas). Le point visé est décalé d'autant.
+    let decalC = 0, besoinMax = 0;
+    const h0 = tr.h, s0 = Math.sin(h0), c0 = Math.cos(h0);
+    if (!serre) {
+      if (tr.demiL === undefined) { tr.demiL = Math.max(...tr.m.dims.emprise.map(e => Math.max(-e[0], e[1]))); tr.nez = Math.max(...tr.d.off) + tr.d.r; }
+      for (let k = 0; k < voitures.length; k++) {
+        const v = voitures[k];
+        if (!v.velo) continue;
+        // (la : de côté, par rapport à la ligne qu'on suivait avant de se décaler)
+        const ex = v.x - pos.x, ez = v.z - pos.z, lo = ex * s0 + ez * c0, la = ex * c0 - ez * s0 + this.decal;
+        if (lo > -6 && lo < 26 && la < 0.6 && la > -(tr.demiL + 2.5)) besoinMax = Math.max(besoinMax, la + tr.demiL + 1.25);
+      }
+      if (besoinMax > 0 && besoinMax < 2.6) {
+        let face = false;
+        if (Math.abs(pos.z - 10) < 4) for (let k = 0; k < voitures.length; k++) { const v = voitures[k]; if (!v.velo && v.sens * s0 < -0.3 && (v.x - pos.x) * s0 > -4 && (v.x - pos.x) * s0 < 75) face = true; }
+        if (!face) decalC = besoinMax;
+      }
+    }
+    this.decal += borne(decalC - this.decal, -1.3 / 60, 1.3 / 60);
+    if (this.decal > 0.01) { const A = P[i], B = P[Math.min(P.length - 1, i + 1)], l = Math.hypot(B.x - A.x, B.z - A.z) || 1; x += (B.z - A.z) / l * this.decal; z -= (B.x - A.x) / l * this.decal; }
     // poursuite : angle des roues qui amène le véhicule sur le point visé (positif : à gauche)
     const h = tr.h, sx = Math.sin(h), cz = Math.cos(h), dx = x - pos.x, dz = z - pos.z;
     const lon = dx * sx + dz * cz, lat = dx * cz - dz * sx, Ld = Math.hypot(dx, dz) || 1;
@@ -82,7 +103,13 @@ export class Pilote {
     // le point visé est derrière : demi-tour en trois temps (en avant braqué à gauche, en arrière braqué à droite,
     // puis on repart), comme dans une rue étroite ; on change de temps au bout de l'angle voulu ou contre un obstacle
     // (jamais avec une remorque attelée : en reculant, elle se mettrait en portefeuille ; on tourne en avant, braqué)
-    if (!serre && !tr.remorque && !this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
+    if (!serre && !tr.remorque && !this.demi && Math.abs(ecartAngle) > 1.9 && av < 3) {
+      // une voiture tout près qui nous double ou qui roule : on la laisse passer avant de manœuvrer
+      let passe = false;
+      for (let k = 0; k < voitures.length; k++) { const v = voitures[k]; if (!v.velo && (v.dep || v.v > 0.5) && Math.hypot(v.x - pos.x, v.z - pos.z) < 14) passe = true; }
+      if (passe) { this.actif = true; return cmd(tr.v > 0.2 ? -1 : tr.v < -0.2 ? 1 : 0, 0); }
+      this.demi = { phase: 0, t: 0, h0: h, x: pos.x, z: pos.z, tp: 0 };
+    }
     if (this.demi) {
       const D = this.demi, tourne = Math.abs(((h - D.h0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
       D.t += 1 / 60; D.tp += 1 / 60;
@@ -143,6 +170,8 @@ export class Pilote {
     }
     for (let k = 0; k < voitures.length; k++) {
       const v = voitures[k], ex = v.x - pos.x, ez = v.z - pos.z, lo = ex * sx + ez * cz, la = ex * cz - ez * sx;
+      // un cycliste : là où il sera une fois qu'on se sera décalé ; on le suit à sa vitesse, on s'arrête à 5 m de lui
+      if (v.velo) { if (lo > 0 && lo < 20 && Math.abs(la - (decalC - this.decal)) < (tr.demiL ?? 1.2) + 0.55) vc = Math.min(vc, lo < 5 + (tr.nez ?? 2) ? 0 : v.v * 0.92); continue; }
       // (en tournant à gauche, la voiture d'en face arrêtée pour nous laisser passer, de côté, n'est pas devant nous : on ne
       // l'attend pas, sinon chacun attend l'autre)
       if (v.sens * sx < 0 && v.v < 0.5 && Math.abs(la) > 1.2) continue;
