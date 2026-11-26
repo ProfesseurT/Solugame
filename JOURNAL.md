@@ -907,3 +907,13 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 - Le banc `chateau` : l'emprunt d'une voiture est vérifié par ce que le jeu propose (`CL.voitureProche`), pas seulement par l'étiquette (un touriste tout près fait passer « Servir un verre » devant) ; trois imports inutilisés retirés.
 
 **Vérifié** : captures avant et après (le camion de trois côtés, le chariot, les fenêtres de la mairie, les tours, le parking, l'imprimerie), tous les bancs.
+
+## 26/11/2026 · Retours de Teddy (30, suite) : deuxième lot, les portes, la mémoire
+
+**Fait** :
+- Les portes des maisons étaient des aplats : deux panneaux moulurés en bas, le haut vitré et son croisillon, le bouton et la fente de la boîte aux lettres en laiton.
+- La mémoire : l'atlas des enseignes et des intérieurs de boutiques faisait 1024 x 3992 pixels (20,7 Mo avec mipmaps, plus de la moitié de toutes les textures, et tout près des 4 096 pixels qu'acceptent bien des téléphones). Ses 58 cases étaient rangées en rangées dans l'ordre d'arrivée, chaque rangée à la hauteur de sa plus haute case. Elles sont maintenant placées à la fin, « en ligne d'horizon », de la plus large à la plus étroite : 1024 x 2412, 12,5 Mo (2 080 au mieux ; simulé hors du jeu avec les vraies cases pour choisir l'ordre). Les enseignes, les intérieurs et les panneaux vérifiés en captures.
+- Un personnage caché (lui, ou son maillage) ne fait plus recalculer les matrices de ses 18 os à chaque image : three.js ne descend dans un enfant que si son `matrixWorldAutoUpdate` est vrai, et il suit désormais sa visibilité (les 34 de Solumatic, créés en approchant, cachés tant qu'on est dehors ; les gens du village au loin).
+- Mesures (bancs `perf` et `poids`) : 2,3 à 2,5 ms par image sur ordinateur, 60 images par seconde ; un processeur quatre fois plus lent : 5 à 7 ms (le rendu de la carte graphique en fait la moitié). Les appels de dessin restants viennent surtout du décor fusionné et des pièces des véhicules garés au domaine : les fondre n'en vaut pas le risque, le jeu tient ses 60 images par seconde.
+
+**Vérifié** : captures (portes, enseignes, intérieurs de boutiques, panneaux, la nuit), tous les bancs.

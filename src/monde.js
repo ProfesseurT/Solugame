@@ -117,27 +117,49 @@ class Contact {
 }
 
 // Panneaux et enseignes : un seul atlas dessiné en code, un seul maillage. Les cases sont réservées au fur et à mesure,
-// le dessin attend la fin : le canevas est alors créé à la hauteur exacte (rien de vide en mémoire graphique).
+// placées et dessinées à la fin : de la plus haute à la plus basse, en rangées (peu de vide), le canevas créé à la hauteur
+// exacte (rien de vide en mémoire graphique ; il reste loin des 4 096 pixels qu'acceptent bien des téléphones).
 class Atlas {
-  constructor() { this.x = 0; this.y = 0; this.ligne = 0; this.geos = []; this.geosL = []; this.cases = []; }
+  constructor() { this.geos = []; this.geosL = []; this.cases = []; }
   // réserve une case w x h (pixels) pour un dessin ; place un rectangle w3 x h3 (mètres) dans le monde. lumineux : sans
   // éclairage ni ombre (l'intérieur allumé d'une boutique)
   poser(w, h, dessin, w3, h3, x, y, z, rot, lumineux = false) {
-    if (this.x + w > 1024) { this.x = 0; this.y += this.ligne + 4; this.ligne = 0; }
-    const px = this.x, py = this.y;
-    this.x += w + 4; this.ligne = Math.max(this.ligne, h);
-    this.cases.push({ px, py, w, h, dessin });
-    const g = new THREE.PlaneGeometry(w3, h3), uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + uv.getX(i) * w) / 1024, py + (1 - uv.getY(i)) * h); // v en pixels, ramené à la fin
+    const g = new THREE.PlaneGeometry(w3, h3);
     g.rotateY(rot); g.translate(x, y, z);
     (lumineux ? this.geosL : this.geos).push(g);
+    this.cases.push({ w, h, dessin, g });
   }
   maillage() {
-    const H = Math.ceil((this.y + this.ligne) / 4) * 4, cv = document.createElement('canvas');
+    // le rangement « en ligne d'horizon » : les cases de la plus large à la plus étroite, chacune posée là où son haut monte
+    // le moins (puis le plus à gauche), à 4 pixels de ses voisines ; ciel : le dessus de ce qui est déjà posé, en segments.
+    // (2 410 pixels de haut au lieu de 3 990 en rangées dans l'ordre d'arrivée ; 2 080 au mieux)
+    let ciel = [{ x: 0, y: 0, w: 1024 }], H = 0;
+    for (const k of [...this.cases].sort((a, b) => b.w - a.w || b.h - a.h)) {
+      let mieux = null;
+      for (let i = 0; i < ciel.length && ciel[i].x + k.w <= 1024; i++) {
+        let y = 0;
+        for (let j = i, reste = k.w; reste > 0; j++) { y = Math.max(y, ciel[j].y); reste -= ciel[j].w; }
+        if (!mieux || y < mieux.y) mieux = { x: ciel[i].x, y };
+      }
+      k.px = mieux.x; k.py = mieux.y; H = Math.max(H, mieux.y + k.h);
+      const x0 = mieux.x, x1 = Math.min(1024, x0 + k.w + 4), neuf = [];
+      for (const q of ciel) {
+        if (q.x + q.w <= x0 || q.x >= x1) { neuf.push(q); continue; }
+        if (q.x < x0) neuf.push({ x: q.x, y: q.y, w: x0 - q.x });
+        if (q.x <= x0) neuf.push({ x: x0, y: mieux.y + k.h + 4, w: x1 - x0 });
+        if (q.x + q.w > x1) neuf.push({ x: x1, y: q.y, w: q.x + q.w - x1 });
+      }
+      ciel = neuf.filter((q, i) => q.w > 0).reduce((l, q) => { const d = l[l.length - 1]; if (d && d.y === q.y) d.w += q.w; else l.push({ ...q }); return l; }, []);
+    }
+    H = Math.ceil((H + 1) / 4) * 4;
+    const cv = document.createElement('canvas');
     cv.width = 1024; cv.height = H;
     const c = cv.getContext('2d');
-    for (const { px, py, w, h, dessin } of this.cases) { c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore(); }
-    for (const g of [...this.geos, ...this.geosL]) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i) / H); }
+    for (const { px, py, w, h, dessin, g } of this.cases) {
+      c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore();
+      const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + uv.getX(i) * w) / 1024, 1 - (py + (1 - uv.getY(i)) * h) / H);
+    }
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     const m = new THREE.Mesh(fusion(this.geos), new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5 }));
@@ -918,7 +940,12 @@ void main() {
       if (e === 0 && o.vitrine) { if (o.tirage && i !== porte) rnd(); continue; }
       if (e === 0 && i === porte) {
         if (pierre) plaque(x, 1.24, d / 2 + 0.006, 'z', 1, 1.45, 2.48);
-        L.push(B(1.15, 2.25, 0.12, o.porteC || '#5b3a2a', x, 1.12, d / 2 + 0.04), B(1.5, 0.14, 0.42, '#cbbf9f', x, 0.07, d / 2 + 0.21));
+        const pc = o.porteC || '#5b3a2a', pf = d / 2 + 0.11;
+        L.push(B(1.15, 2.25, 0.12, pc, x, 1.12, d / 2 + 0.04), B(1.5, 0.14, 0.42, '#cbbf9f', x, 0.07, d / 2 + 0.21));
+        // la porte ancienne : deux panneaux moulurés en bas, le haut vitré et son croisillon, le bouton et la fente de laiton
+        for (const s of [-1, 1]) L.push(B(0.38, 0.95, 0.02, assombrir(pc, 0.8), x + s * 0.24, 0.64, pf));
+        L.push(B(0.84, 0.62, 0.02, '#2f3c4f', x, 1.68, pf), B(0.035, 0.62, 0.03, pc, x, 1.68, pf + 0.006), B(0.84, 0.035, 0.03, pc, x, 1.68, pf + 0.006));
+        L.push(S(0.035, '#c9a55a', x + 0.42, 1.08, pf + 0.03), B(0.24, 0.045, 0.015, '#c9a55a', x, 1.26, pf));
         continue;
       }
       fenetre(L, x, y, d / 2, 1, o.volets, pierre);

@@ -791,5 +791,8 @@ export function perso(o0) {
   const echelle = 0.96 * (o.taille ?? 1);
   groupe.scale.setScalar(echelle);
   groupe.add(maillage);
+  // caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer les matrices de ses 18 os à
+  // chaque image : three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai
+  Object.defineProperty(groupe, 'matrixWorldAutoUpdate', { get: () => groupe.visible && maillage.visible, set() {}, configurable: true });
   return { groupe, maillage, os, echelle, femme, queue: coif === 'queue', dim: { xh, xe, H, K } };
 }
