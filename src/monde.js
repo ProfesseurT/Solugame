@@ -128,8 +128,13 @@ class Atlas {
     const g = new THREE.PlaneGeometry(w3, h3);
     g.rotateY(rot); g.translate(x, y, z);
     (lumineux ? this.geosL : this.geos).push(g);
-    this.cases.push({ w, h, dessin, g });
+    const k = { w, h, dessin, g, copies: [] };
+    this.cases.push(k);
+    return k;
   }
+  // Un autre rectangle du monde (g : une géométrie de plan, déjà posée) qui montre la même case k, ou la bande [u0, u1] de
+  // sa largeur : un panneau répété, le dos d'un drapeau, les chiffres d'une marelle (l'école) ; rien de plus dans l'atlas
+  copie(k, g, u0 = 0, u1 = 1) { this.geos.push(g); k.copies.push({ g, u0, u1 }); }
   maillage() {
     // le rangement « en ligne d'horizon » : les cases de la plus large à la plus étroite, chacune posée là où son haut monte
     // le moins (puis le plus à gauche), à 4 pixels de ses voisines ; ciel : le dessus de ce qui est déjà posé, en segments.
@@ -156,10 +161,12 @@ class Atlas {
     const cv = document.createElement('canvas');
     cv.width = 1024; cv.height = H;
     const c = cv.getContext('2d');
-    for (const { px, py, w, h, dessin, g } of this.cases) {
+    for (const { px, py, w, h, dessin, g, copies } of this.cases) {
       c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore();
-      const uv = g.attributes.uv;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + uv.getX(i) * w) / 1024, 1 - (py + (1 - uv.getY(i)) * h) / H);
+      for (const { g: gc, u0, u1 } of [{ g, u0: 0, u1: 1 }, ...copies]) {
+        const uv = gc.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + (u0 + uv.getX(i) * (u1 - u0)) * w) / 1024, 1 - (py + (1 - uv.getY(i)) * h) / H);
+      }
     }
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
@@ -2207,6 +2214,489 @@ void main() {
   bati.push(teinter(new THREE.PlaneGeometry(2.1, 0.58).rotateY(Math.PI / 2).translate(23.98, 2.55, 4.2), '#8d9196'));
   col.boiteC(24, 4.2, 0.2, 0.2);
 
+  /* ------------------------------------------------------------ l'école
+     Teddy, 26/11/2026 : « il manque une école dans ce village et des enfants ; ils sont à l'école, dans une enceinte
+     fermée, avec des jeux d'enfants dans la cour ; l'école sera belle ». L'École des Tilleuls, à l'est de la place, entre
+     les jardins de la rangée nord de la départementale et l'église : une école communale de la Loire, en tuffeau et
+     ardoise, tournée vers sa cour (à l'ouest). Au milieu, le pavillon : la porte et ses marches, la devise gravée au-dessus
+     (bandeau), « ÉCOLE » gravé dans la frise, le fronton et son horloge (ses aiguilles : ecole.js), les deux drapeaux, le
+     campanile et sa cloche (ecole.js) ; de part et d'autre, une aile de classe aux grandes fenêtres (derrière la vitre, la
+     classe peinte et les dessins d'enfants : ecole.js). La cour, en enrobé : le préau, deux tilleuls (un banc rond autour
+     du premier), la marelle, l'escargot, des points de couleur, le terrain et son but peints au sol, un panier de
+     basket ; les jeux des petits sur un sol souple (la structure à toboggan, le portique et ses deux balançoires, deux jeux
+     à ressort, le bac à sable) ; le potager et la cabane ; des bancs, une jardinière. L'enceinte : un mur bahut et sa
+     grille du côté de la place (on voit la cour), des murs de moellons ailleurs, les piliers du portail (ses vantaux :
+     ecole.js). Dehors : le parvis pavé qui longe la grille, les barrières devant le portail, la plaque, le panneau
+     d'affichage, les panneaux « École » sur les routes, deux passages piétons (la départementale, la rue de la place).
+     On n'y entre jamais : toute l'enceinte est une boîte de collision (posée après les herbes : leur tirage au sort ne
+     bouge pas ; celles qui y tombent sont réduites à rien) ; le bâtiment arrête aussi la caméra. Rien n'est tiré au sort.
+     Devant le portail, au nord des barrières (x de 112,4 à 113,9, z de -35,8 à -38,6), la place d'un range-vélos. */
+  const ECOLE = { x0: 114.3, x1: 143.7, z0: -39.6, z1: -8.4 }, PARVIS_E = { x0: 108.5, x1: 114.5, z0: -29.3, z1: -9.8 };
+  const dansEcole = (x, z, m = 0) => (x > ECOLE.x0 - m && x < ECOLE.x1 + m && z > ECOLE.z0 - m && z < ECOLE.z1 + m) || (x > PARVIS_E.x0 - m && x < PARVIS_E.x1 && z > PARVIS_E.z0 && z < PARVIS_E.z1 + m);
+  // Les chemins des enfants, de chez eux au portail de l'école : la porte de leur maison (dans la rue de la place, sur la
+  // place, le long de la départementale, de part et d'autre), les trottoirs (au bord de la rue de la place, qui n'en a
+  // pas), les deux passages piétons, la place, le sas des barrières. Dans l'autre sens, le soir.
+  const DEVANT_ECOLE = [[103.5, -31.2], [110.6, -33.4], [112.8, -33.0]], RUE_EST = [[97.6, 2.6], [97.6, -26.0], ...DEVANT_ECOLE];
+  const ZEBRE = [[92.3, -26.8], [98.3, -27.0], ...DEVANT_ECOLE], TRAVERSEE = [[101.5, 14.2], [101.5, 5.8], [99.6, 3.6], ...RUE_EST];
+  const CHEMINS_ECOLE = [
+    [[99.6, -22.0], [99.6, -28.2], ...DEVANT_ECOLE], [[99.6, -11.8], [99.5, -28.2], ...DEVANT_ECOLE],
+    [[90.3, -26.0], ...ZEBRE], [[90.3, -16.25], [91.6, -17.0], ...ZEBRE],
+    [[108.0, -65.5], [109.3, -61.5], [109.3, -37.6], [110.6, -34.2], [112.8, -33.0]],
+    [[72.3, -38.0], [76.2, -37.4], [86.0, -33.6], [100.5, -32.2], [110.6, -33.4], [112.8, -33.0]],
+    [[72.3, -58.0], [76.5, -56.8], [88.0, -50.5], [100.5, -32.2], [110.6, -33.4], [112.8, -33.0]],
+    [[124.0, 1.9], [124.0, 3.6], [99.6, 3.6], ...RUE_EST], [[137.0, 1.9], [137.0, 3.6], [99.6, 3.6], ...RUE_EST],
+    [[48.25, 1.9], [48.25, 3.6], [92.3, 3.6], ...ZEBRE], [[34.0, 1.9], [34.0, 3.6], [92.3, 3.6], ...ZEBRE],
+    [[114.0, 18.2], [114.0, 16.4], [103.0, 16.4], ...TRAVERSEE], [[84.0, 18.2], [84.0, 16.4], [100.0, 16.4], ...TRAVERSEE],
+    [[142.0, 18.2], [142.0, 16.4], [103.0, 16.4], ...TRAVERSEE], [[68.0, 18.2], [68.0, 16.4], [100.0, 16.4], ...TRAVERSEE],
+  ];
+  const lieuxEcole = ecole();
+  function ecole() {
+    const L = [], D = []; // le bâti (fusionné avec son quartier) ; les petits détails (dessinés de près : proches)
+    const FER = '#2b3a33', MOEL = MOELLONS[0], ENROBE = '#78736b', BLANC = '#ece6d4', JAUNE = '#e0b13a', ROUGE = '#c8443a', VERT = '#3f8a4f', BOIS = '#9a7b55', BOIS2 = '#6b4a30';
+    // un pavé tourné autour de x ou de z, posé en (x, y, z)
+    const Bx = (w, h, d, c, x, y, z, rx) => deplacer(B(w, h, d, c).rotateX(rx), x, y, z);
+    const Bz = (w, h, d, c, x, y, z, rz) => deplacer(B(w, h, d, c).rotateZ(rz), x, y, z);
+    // un trait peint au sol de a à b (largeur l)
+    const trait = (ax, az, bx, bz, l, c, P = L) => { const dx = bx - ax, dz = bz - az; P.push(B(Math.hypot(dx, dz) + l * 0.5, 0.01, l, c, (ax + bx) / 2, 0.046, (az + bz) / 2, Math.atan2(-dz, dx))); };
+    const cercle = (x, z, r, l, c, n = 20, a0 = 0, a1 = Math.PI * 2) => { for (let i = 0; i < n; i++) { const p = a0 + (a1 - a0) * i / n, q = a0 + (a1 - a0) * (i + 1) / n; trait(x + Math.cos(p) * r, z + Math.sin(p) * r, x + Math.cos(q) * r, z + Math.sin(q) * r, l, c); } };
+    // une inscription gravée dans la pierre : les lettres en creux (l'ombre en haut à gauche, la lumière en bas à droite)
+    const grave = (txt, taille, fond) => (c, W, H) => {
+      c.fillStyle = fond; c.fillRect(0, 0, W, H);
+      c.strokeStyle = 'rgba(120,104,80,0.55)'; c.lineWidth = 3; c.strokeRect(3, 3, W - 6, H - 6);
+      c.font = `${taille}px Georgia, 'Times New Roman', serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = 'rgba(255,250,236,0.85)'; c.fillText(txt, W / 2 + 1.5, H / 2 + 3.5);
+      c.fillStyle = '#6f6250'; c.fillText(txt, W / 2, H / 2 + 2);
+      c.fillStyle = '#9d8f76'; c.fillText(txt, W / 2 + 0.8, H / 2 + 2.8);
+    };
+
+    /* -- le sol : la cour en enrobé (sous le bâtiment aussi), le parvis pavé qui longe la grille jusqu'à la place */
+    L.push(B(ECOLE.x1 - ECOLE.x0, 0.08, ECOLE.z1 - ECOLE.z0, ENROBE, (ECOLE.x0 + ECOLE.x1) / 2, 0, (ECOLE.z0 + ECOLE.z1) / 2));
+    L.push(B(PARVIS_E.x1 - PARVIS_E.x0, 0.08, PARVIS_E.z1 - PARVIS_E.z0, '#cdb998', (PARVIS_E.x0 + PARVIS_E.x1) / 2, 0, (PARVIS_E.z0 + PARVIS_E.z1) / 2));
+    rect(ECOLE.x0, ECOLE.z0, ECOLE.x1, ECOLE.z1, '#8f8a80'); rect(PARVIS_E.x0, PARVIS_E.z0, PARVIS_E.x1, PARVIS_E.z1, '#cdb998');
+
+    /* -- l'enceinte : à l'ouest, côté place, un mur bahut et sa grille (barreaux à pointe de lance, deux lisses), des
+       piliers de tuffeau ; le portail entre deux piliers plus hauts (ses vantaux : ecole.js) ; ailleurs, des murs de
+       moellons et leur chaperon, plus haut derrière le préau */
+    const XG = 114.5, PZ0 = -31.45, PZ1 = -34.55;
+    const piliers = [-8.65, -12.5, -16.35, -20.2, -24.05, -27.9, PZ0 + 0.3, PZ1 - 0.3, -37.0, -39.4];
+    for (let i = 0; i < piliers.length - 1; i++) {
+      const za = piliers[i] - 0.28, zb = piliers[i + 1] + 0.28;
+      if (i === 6) continue; // le portail
+      const zc = (za + zb) / 2, l = za - zb;
+      L.push(B(0.4, 0.72, l, MOEL, XG, 0.36, zc), B(0.48, 0.08, l + 0.02, APPUI, XG, 0.76, zc));
+      L.push(B(0.03, 0.04, l, FER, XG, 0.9, zc), B(0.03, 0.04, l, FER, XG, 1.82, zc));
+      for (let z = za - 0.07; z > zb; z -= 0.13) D.push(B(0.022, 1.2, 0.022, FER, XG, 1.38, z), C(0, 0.024, 0.08, 4, FER, XG, 2.02, z, 'y', Math.PI / 4));
+    }
+    for (const z of piliers) {
+      const haut = z === PZ0 + 0.3 || z === PZ1 - 0.3 ? 2.5 : 2.05;
+      L.push(B(0.56, haut, 0.56, TUF, XG, haut / 2, z), B(0.68, 0.1, 0.68, APPUI, XG, haut + 0.05, z));
+      if (haut > 2.1) L.push(S(0.17, APPUI, XG, haut + 0.27, z, 1, 1, 1, 1), B(0.22, 0.06, 0.22, APPUI, XG, haut + 0.12, z));
+      else L.push(C(0, 0.42, 0.22, 4, APPUI, XG, haut + 0.21, z, 'y', Math.PI / 4));
+    }
+    contact.jupe(XG - 0.2, ECOLE.z0, XG + 0.2, ECOLE.z1, 0.5, 0.3);
+    const mur = (x0, z0, x1, z1, h) => {
+      L.push(B(x1 - x0, h, z1 - z0, MOEL, (x0 + x1) / 2, h / 2, (z0 + z1) / 2), B(x1 - x0 + 0.1, 0.12, z1 - z0 + 0.1, APPUI, (x0 + x1) / 2, h + 0.06, (z0 + z1) / 2));
+      contact.jupe(x0, z0, x1, z1, 0.9, 0.42);
+      plan.push({ t: 'b', x0, z0, x1, z1 });
+    };
+    mur(XG + 0.2, -8.65, 122.0, -8.2, 2.2); mur(122.0, -8.65, 133.4, -8.2, 3.5); mur(133.4, -8.65, ECOLE.x1, -8.2, 2.2); // au sud (derrière les jardins)
+    mur(ECOLE.x1 - 0.45, ECOLE.z0, ECOLE.x1, -8.65, 2.2); // à l'est (les vignes)
+    mur(XG + 0.2, ECOLE.z0, ECOLE.x1 - 0.45, -39.2, 2.2); // au nord (l'église)
+
+    /* -- le bâtiment : deux ailes de classe d'un étage sous un grand toit d'ardoise, le pavillon au milieu, plus haut, en
+       avancée ; la façade à l'ouest (sur la cour) */
+    const XF = 133.6, XB = 142.4, XM = (XF + XB) / 2, ZS = -12.4, ZN = -37.2, ZP = -24.8, PW = 7.0, XP = 132.9, HW = 5.6, HP = 8.4, SOCLE = '#b9a98b';
+    const fenetresClasse = [];
+    for (const [za, zb] of [[ZS, ZP + PW / 2], [ZP - PW / 2, ZN]]) {
+      const zc = (za + zb) / 2, l = za - zb;
+      L.push(B(XB - XF, HW, l, TUF, XM, HW / 2, zc), B(XB - XF + 0.14, 0.9, l, SOCLE, XM, 0.45, zc));
+      L.push(...toit(XB - XF, l, 3.2, ARD, XM, HW, zc, true, { mur: TUF }));
+      for (const s of [-1, 1]) L.push(B(0.2, 0.28, l, APPUI, XM + s * ((XB - XF) / 2 + 0.07), HW - 0.2, zc));
+      // la souche de cheminée, sur le pan de derrière
+      L.push(B(0.6, 2.9, 0.7, APPUI, XB - 1.9, 7.6, zc), B(0.74, 0.1, 0.84, PIERRE, XB - 1.9, 9.1, zc), B(0.14, 0.28, 0.14, '#9a5a3e', XB - 1.9, 9.28, zc + 0.15), B(0.14, 0.28, 0.14, '#9a5a3e', XB - 1.9, 9.28, zc - 0.15));
+      for (const k of [-1, 0, 1]) {
+        const zw = zc + k * 2.7;
+        fenetresClasse.push(zw);
+        // les grandes fenêtres de classe (côté cour) : l'encadrement de pierre, l'appui, le linteau et sa clé ; le cadre et
+        // les petits bois blancs (la vitre et la classe derrière : vitres, ecole.js)
+        L.push(B(0.05, 2.98, 0.18, APPUI, XF - 0.025, 2.3, zw - 0.84), B(0.05, 2.98, 0.18, APPUI, XF - 0.025, 2.3, zw + 0.84), B(0.3, 0.1, 1.9, APPUI, XF - 0.13, 0.95, zw), B(0.08, 0.34, 1.96, APPUI, XF - 0.04, 3.8, zw), B(0.12, 0.46, 0.3, TAILLE, XF - 0.07, 3.82, zw));
+        L.push(B(0.06, 2.66, 0.08, '#efe7d6', XF - 0.065, 2.3, zw - 0.75), B(0.06, 2.66, 0.08, '#efe7d6', XF - 0.065, 2.3, zw + 0.75), B(0.06, 0.08, 1.58, '#efe7d6', XF - 0.065, 3.6, zw), B(0.06, 0.08, 1.58, '#efe7d6', XF - 0.065, 1.0, zw));
+        D.push(B(0.04, 2.56, 0.05, '#efe7d6', XF - 0.07, 2.3, zw), B(0.04, 0.04, 1.5, '#efe7d6', XF - 0.07, 1.86, zw), B(0.04, 0.04, 1.5, '#efe7d6', XF - 0.07, 2.73, zw), B(0.04, 0.04, 1.5, '#efe7d6', XF - 0.07, 3.17, zw));
+        vitresB.push(B(0.01, 2.6, 1.5, '#3a5068', XF - 0.055, 2.3, zw));
+        // derrière : des fenêtres plus simples (les vignes)
+        L.push(B(0.08, 2.5, 1.36, '#efe7d6', XB + 0.03, 2.3, zw), B(0.1, 2.3, 1.16, '#2f3c4f', XB + 0.05, 2.3, zw), B(0.24, 0.08, 1.5, APPUI, XB + 0.1, 1.02, zw));
+        D.push(B(0.03, 2.3, 0.04, '#efe7d6', XB + 0.1, 2.3, zw), B(0.03, 0.04, 1.16, '#efe7d6', XB + 0.1, 2.7, zw));
+      }
+      // le pignon du bout : un œil-de-bœuf dans son anneau de pierre
+      const zg = za === ZS ? ZS + 0.06 : ZN - 0.06, sg = za === ZS ? 1 : -1;
+      L.push(C(0.5, 0.5, 0.1, 16, APPUI, XM, HW + 1.15, zg, 'z'), C(0.36, 0.36, 0.12, 16, '#2f3c4f', XM, HW + 1.15, zg + sg * 0.01, 'z'));
+    }
+    // les chaînes d'angle des ailes (tuffeau lisse, un bloc sur deux plus long)
+    for (const [x, z, s] of [[XF, ZS, 1], [XF, ZN, -1], [XB, ZS, 1], [XB, ZN, -1]]) for (let i = 0, y = 1.15; y < HW - 0.4; i++, y += 0.5) {
+      const l = i % 2 ? 0.32 : 0.56;
+      plaque(x + (x === XF ? -0.006 : 0.006), y, z - s * l / 2, 'x', x === XF ? -1 : 1, l, 0.46);
+    }
+    // le pavillon : rez-de-chaussée (la porte, deux fenêtres), le bandeau et la devise, l'étage (trois fenêtres), la frise
+    // et « ÉCOLE », la corniche, le fronton (le pignon du toit) et son horloge ; les pilastres d'angle
+    {
+      const xc = (XP + XB) / 2;
+      L.push(B(XB - XP, HP, PW, TUF, xc, HP / 2, ZP), B(XB - XP + 0.14, 0.9, PW + 0.14, SOCLE, xc, 0.45, ZP));
+      L.push(...toit(XB - XP, PW, 3.0, ARD2, xc, HP, ZP, false, { mur: TUF }));
+      L.push(B(0.12, 0.34, PW + 0.1, APPUI, XP - 0.06, 4.17, ZP), B(0.26, 0.3, PW + 0.24, APPUI, XP - 0.11, HP - 0.15, ZP), B(0.18, 0.12, PW + 0.12, APPUI, XP - 0.07, HP - 0.36, ZP));
+      for (const s of [-1, 1]) L.push(B(0.12, HP - 0.9, 0.6, TAILLE, XP - 0.06, 0.9 + (HP - 0.9) / 2, ZP + s * (PW / 2 - 0.3)));
+      // la porte : l'encadrement, l'imposte vitrée, le noir du couloir (on le voit quand les vantaux s'ouvrent : ecole.js) ;
+      // trois marches de pierre
+      L.push(B(0.08, 3.45, 2.4, TAILLE, XP - 0.04, 2.24, ZP), B(0.12, 0.08, 2.6, APPUI, XP - 0.07, 3.93, ZP), B(0.02, 2.78, 1.84, '#231f1c', XP - 0.085, 1.9, ZP));
+      vitresB.push(B(0.01, 0.42, 1.8, '#3a5068', XP - 0.1, 3.56, ZP));
+      D.push(B(0.03, 0.06, 1.84, '#efe7d6', XP - 0.1, 3.32, ZP), B(0.03, 0.42, 0.04, '#efe7d6', XP - 0.1, 3.56, ZP), B(0.03, 0.42, 0.04, '#efe7d6', XP - 0.1, 3.56, ZP - 0.45), B(0.03, 0.42, 0.04, '#efe7d6', XP - 0.1, 3.56, ZP + 0.45));
+      for (let k = 0; k < 3; k++) L.push(B(1.0 - k * 0.33, 0.17, 3.0 - k * 0.2, '#cbbf9f', XP - 0.5 + k * 0.165, 0.085 + k * 0.17, ZP));
+      // deux fenêtres au rez-de-chaussée, trois à l'étage
+      for (const [zw, y, hh, w] of [[ZP - 2.3, 2.4, 2.2, 1.0], [ZP + 2.3, 2.4, 2.2, 1.0], [ZP - 1.8, 5.85, 1.6, 0.95], [ZP, 5.85, 1.6, 0.95], [ZP + 1.8, 5.85, 1.6, 0.95]]) {
+        L.push(B(0.05, hh + 0.3, w + 0.32, APPUI, XP - 0.025, y, zw), B(0.08, hh + 0.12, w + 0.12, '#efe7d6', XP - 0.04, y, zw), B(0.1, hh - 0.04, w - 0.08, '#2f3c4f', XP - 0.05, y, zw), B(0.28, 0.08, w + 0.4, APPUI, XP - 0.13, y - hh / 2 - 0.12, zw));
+        D.push(B(0.03, hh - 0.04, 0.04, '#efe7d6', XP - 0.105, y, zw), B(0.03, 0.04, w - 0.08, '#efe7d6', XP - 0.105, y + hh / 6, zw), B(0.03, 0.04, w - 0.08, '#efe7d6', XP - 0.105, y - hh / 6, zw));
+      }
+      // la frise : « ÉCOLE » gravé dans un cartouche ; le bandeau : la devise gravée au-dessus de la porte
+      L.push(B(0.06, 0.78, 3.5, TAILLE, XP - 0.03, 7.45, ZP));
+      atlas.poser(384, 80, grave('ÉCOLE', 64, '#e6dcc6'), 3.2, 0.66, XP - 0.065, 7.45, ZP, -Math.PI / 2);
+      atlas.poser(768, 44, grave('LIBERTÉ   ÉGALITÉ   FRATERNITÉ', 30, '#ddd1b6'), 5.6, 0.31, XP - 0.125, 4.17, ZP, -Math.PI / 2);
+      // l'horloge du fronton : le cadran émaillé (ses aiguilles : ecole.js) dans un anneau de pierre ; un œil-de-bœuf derrière
+      L.push(C(0.66, 0.66, 0.1, 24, APPUI, XP - 0.03, HP + 1.15, ZP, 'x'));
+      atlas.poser(128, 128, (c, W, H) => {
+        c.clearRect(0, 0, W, H);
+        c.fillStyle = '#26262a'; c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 1, 0, 7); c.fill();
+        c.fillStyle = '#f6f2e6'; c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 6, 0, 7); c.fill();
+        c.fillStyle = '#1d1d1d'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = 'bold 13px Georgia, serif';
+        const R = ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+        for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, r0 = W / 2 - 9, r1 = i % 5 ? r0 - 3 : r0 - 6; c.lineWidth = i % 5 ? 1 : 2; c.beginPath(); c.moveTo(W / 2 + Math.sin(a) * r0, H / 2 - Math.cos(a) * r0); c.lineTo(W / 2 + Math.sin(a) * r1, H / 2 - Math.cos(a) * r1); c.strokeStyle = '#1d1d1d'; c.stroke(); }
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, r = W / 2 - 25; c.fillText(R[i], W / 2 + Math.sin(a) * r, H / 2 - Math.cos(a) * r); }
+      }, 1.08, 1.08, XP - 0.09, HP + 1.15, ZP, -Math.PI / 2);
+      L.push(C(0.42, 0.42, 0.1, 16, APPUI, XB + 0.03, HP + 1.15, ZP, 'x'), C(0.3, 0.3, 0.12, 16, '#2f3c4f', XB + 0.04, HP + 1.15, ZP, 'x'));
+      // les deux drapeaux au-dessus de la porte, sur leurs hampes penchées, écartées de la façade (on les voit de face comme
+      // de côté) : le tricolore au nord, le drapeau européen au sud (ses étoiles : l'atlas, des deux côtés). U : le long de
+      // la hampe ; N : vers le bas, dans le plan du drapeau ; W : la normale du drapeau
+      for (const s of [-1, 1]) {
+        const z = ZP + s * 1.45, a = [XP - 0.1, 4.55, z], al = 0.5, be = 0.6, l = 1.8;
+        const U = new THREE.Vector3(-Math.cos(be) * Math.cos(al), Math.sin(al), s * Math.sin(be) * Math.cos(al)), N = new THREE.Vector3(-Math.cos(be) * Math.sin(al), -Math.cos(al), s * Math.sin(be) * Math.sin(al));
+        const Hn = N.clone().negate(), W = new THREE.Vector3().crossVectors(U, Hn).normalize(), base = new THREE.Matrix4().makeBasis(U, Hn, W);
+        const b = [a[0] + U.x * l, a[1] + U.y * l, a[2] + U.z * l];
+        L.push(manche(a, b, 0.024, '#d8d8d8'), B(0.1, 0.1, 0.1, '#9a8a5a', XP - 0.05, 4.55, z), S(0.045, '#c9a55a', b[0] + U.x * 0.04, b[1] + U.y * 0.04, b[2] + U.z * 0.04));
+        const centre = d => [a[0] + U.x * d + N.x * 0.36, a[1] + U.y * d + N.y * 0.36, a[2] + U.z * d + N.z * 0.36];
+        if (s < 0) [['#2b4ea2', 0.62], ['#f4f1ea', 0.95], ['#d23a3a', 1.28]].forEach(([c, d]) => { const [cx, cy, cz] = centre(d + 0.165); L.push(deplacer(B(0.33, 0.66, 0.025, c).applyMatrix4(base), cx, cy, cz)); });
+        else {
+          const [cx, cy, cz] = centre(1.11), envers = new THREE.Matrix4().makeBasis(U.clone().negate(), Hn, W.clone().negate());
+          const k = atlas.poser(132, 88, (c, Wd, Hd) => {
+            c.fillStyle = '#1f3c96'; c.fillRect(0, 0, Wd, Hd); c.fillStyle = '#f2c230';
+            for (let i = 0; i < 12; i++) {
+              const t = i / 12 * Math.PI * 2, x0 = Wd / 2 + Math.sin(t) * Hd * 0.33, y0 = Hd / 2 - Math.cos(t) * Hd * 0.33;
+              c.beginPath(); for (let j = 0; j < 10; j++) { const r = j % 2 ? 2.4 : 5.6, u = j / 10 * Math.PI * 2; c.lineTo(x0 + Math.sin(u) * r, y0 - Math.cos(u) * r); } c.fill();
+            }
+          }, 0.001, 0.001, cx, -2, cz, 0);
+          atlas.copie(k, new THREE.PlaneGeometry(0.99, 0.66).applyMatrix4(base).translate(cx + W.x * 0.006, cy + W.y * 0.006, cz + W.z * 0.006));
+          atlas.copie(k, new THREE.PlaneGeometry(0.99, 0.66).applyMatrix4(envers).translate(cx - W.x * 0.006, cy - W.y * 0.006, cz - W.z * 0.006));
+        }
+      }
+      // le campanile sur le faîtage, côté fronton : quatre poteaux, la poutre de la cloche (la cloche : ecole.js), un toit
+      // pointu d'ardoise, la girouette
+      const xk = XP + 1.4;
+      for (const [dx, dz] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]]) L.push(B(0.1, 1.75, 0.1, BOIS2, xk + dx, 11.75, ZP + dz));
+      L.push(B(1.0, 0.1, 0.1, '#5a3f2b', xk, 12.56, ZP), B(1.04, 0.12, 1.04, BOIS2, xk, 12.66, ZP), B(1.0, 0.14, 1.0, BOIS2, xk, 10.95, ZP));
+      L.push(C(0, 0.78, 0.78, 4, ARD, xk, 13.1, ZP, 'y', Math.PI / 4), B(0.03, 0.7, 0.03, '#2b2b30', xk, 13.8, ZP), B(0.55, 0.04, 0.03, '#2b2b30', xk, 13.92, ZP), C(0, 0.05, 0.12, 4, '#2b2b30', xk - 0.3, 13.92, ZP, 'x'));
+      contact.jupe(XP - 0.1, ZP - PW / 2, XB, ZP + PW / 2, 1.5, 0.45);
+    }
+    contact.jupe(XF, ZN, XB, ZS, 1.6, 0.5);
+    plan.push({ t: 'b', x0: XF, z0: ZN, x1: XB, z1: ZS }, { t: 'b', x0: XP, z0: ZP - PW / 2, x1: XF, z1: ZP + PW / 2 });
+
+    /* -- le préau, contre le mur du sud : une dalle, quatre colonnes de fonte, la poutre, un toit d'ardoise à un pan, le
+       dessous en planches ; dessous, deux bancs, la rangée de portemanteaux (des manteaux, des sacs), un panneau de liège
+       couvert de dessins */
+    {
+      const x0 = 122.0, x1 = 133.0, z0 = -12.95, z1 = -8.65, xc = (x0 + x1) / 2;
+      L.push(B(x1 - x0, 0.12, z1 - z0, '#8f8a80', xc, 0.06, (z0 + z1) / 2));
+      for (const x of [x0 + 0.3, 125.9, 129.5, x1 - 0.3]) L.push(C(0.075, 0.095, 2.95, 8, FER, x, 1.6, z0 + 0.2), C(0.13, 0.13, 0.12, 8, FER, x, 3.06, z0 + 0.2), C(0.12, 0.12, 0.1, 8, FER, x, 0.17, z0 + 0.2));
+      L.push(B(x1 - x0, 0.24, 0.2, '#5e4a36', xc, 3.18, z0 + 0.2));
+      const a = Math.atan2(0.55, 4.9);
+      L.push(Bx(x1 - x0 + 0.6, 0.14, 5.0, ARD2, xc, 3.4, -10.95, -a), Bx(x1 - x0 + 0.4, 0.03, 4.8, BOIS2, xc, 3.31, -10.95, -a));
+      for (const x of [124.6, 129.0]) {
+        L.push(B(2.6, 0.06, 0.4, BOIS, x, 0.48, -9.1), B(2.6, 0.32, 0.05, BOIS, x, 0.78, -8.92));
+        for (const dx of [-1.1, 1.1]) L.push(B(0.06, 0.45, 0.38, FER, x + dx, 0.27, -9.1));
+      }
+      L.push(B(9.6, 0.12, 0.04, BOIS, xc, 1.42, -8.66));
+      const MANTEAUX = ['#c0392b', '#2e86de', '#f1c40f', '#8e44ad', '#16a085', '#e67e22', '#e84393', '#2c3e50'];
+      for (let i = 0; i < 26; i++) {
+        const x = x0 + 0.95 + i * 0.36;
+        D.push(B(0.03, 0.08, 0.06, '#c9a55a', x, 1.38, -8.63));
+        if (i % 3 === 1) D.push(B(0.3, 0.55, 0.1, MANTEAUX[i % 8], x, 1.08, -8.6)); // un manteau
+        else if (i % 5 === 3) D.push(B(0.24, 0.3, 0.1, MANTEAUX[(i + 3) % 8], x, 1.17, -8.6)); // un sac
+      }
+      // le panneau de liège et ses dessins (des feuilles de couleur)
+      L.push(B(2.2, 1.0, 0.04, '#b98a55', 131.3, 2.15, -8.64));
+      for (let i = 0; i < 10; i++) D.push(B(0.36, 0.27, 0.01, ['#f7f3ea', '#fdf2c7', '#e8f2fb', '#fbe3e8'][i % 4], 130.45 + (i % 5) * 0.42, 1.9 + Math.floor(i / 5) * 0.42 + (i % 2) * 0.04, -8.615));
+      for (let i = 0; i < 10; i++) D.push(B(0.16, 0.12, 0.005, ['#e74c3c', '#27ae60', '#f39c12', '#2980b9', '#8e44ad'][i % 5], 130.45 + (i % 5) * 0.42 + 0.03, 1.9 + Math.floor(i / 5) * 0.42 + 0.02, -8.61));
+      contact.tache(xc, -10.8, 6.5, 2.6, 0.32);
+    }
+
+    /* -- le coin des petits : le sol souple ; le portique et ses deux balançoires (les sièges et les chaînes : ecole.js) ;
+       la structure à toboggan (l'escalier, la plateforme, son toit, le toboggan) ; deux jeux à ressort (les ressorts : le
+       jeu lui-même, qui se balance, est dans ecole.js) ; le bac à sable */
+    L.push(B(11.0, 0.03, 9.4, '#4f8a4a', 120.6, 0.045, -18.2), B(2.6, 0.032, 4.6, '#b8463a', 116.6, 0.046, -16.5), B(2.0, 0.032, 2.0, '#3f6fa8', 120.5, 0.047, -20.9));
+    const XS = 116.6, YS = 2.25, ZB = [-15.75, -17.25];
+    L.push(C(0.07, 0.07, 4.3, 8, BOIS2, XS, YS, -16.5, 'z'));
+    for (const z of [-14.55, -18.45]) {
+      L.push(manche([XS, YS + 0.05, z], [XS - 1.15, 0, z], 0.065, BOIS2), manche([XS, YS + 0.05, z], [XS + 1.15, 0, z], 0.065, BOIS2), B(1.3, 0.07, 0.07, BOIS2, XS, 0.85, z));
+      contact.tache(XS, z, 1.3, 0.35, 0.25);
+    }
+    for (const z of ZB) for (const dz of [-0.2, 0.2]) L.push(B(0.06, 0.06, 0.06, '#5d5d63', XS, YS - 0.08, z + dz));
+    const TB = { x: 121.0, z: -15.6, y: 1.06 };
+    L.push(B(1.25, 0.08, 1.25, BOIS, TB.x, TB.y, TB.z));
+    for (const [dx, dz] of [[-0.58, -0.58], [0.58, -0.58], [-0.58, 0.58], [0.58, 0.58]]) L.push(B(0.1, 2.55, 0.1, BOIS2, TB.x + dx, 1.27, TB.z + dz));
+    L.push(C(0, 1.05, 0.85, 4, ROUGE, TB.x, 2.95, TB.z, 'y', Math.PI / 4), B(1.24, 0.58, 0.04, VERT, TB.x, 1.42, TB.z - 0.6), B(1.24, 0.58, 0.04, VERT, TB.x, 1.42, TB.z + 0.6));
+    D.push(C(0.16, 0.16, 0.03, 12, JAUNE, TB.x, 1.42, TB.z - 0.63, 'z'), C(0.16, 0.16, 0.03, 12, '#e84393', TB.x, 1.42, TB.z + 0.63, 'z'));
+    for (let k = 0; k < 5; k++) L.push(B(0.32, 0.05, 0.66, BOIS, 118.86 + 0.32 * k + 0.16, 0.21 * (k + 1) - 0.025, TB.z));
+    for (const s of [-1, 1]) L.push(manche([118.7, 0.02, TB.z + s * 0.36], [120.42, 1.1, TB.z + s * 0.36], 0.04, BOIS2), manche([118.7, 0.8, TB.z + s * 0.38], [120.42, 1.85, TB.z + s * 0.38], 0.025, JAUNE), B(0.05, 0.8, 0.05, BOIS2, 118.72, 0.4, TB.z + s * 0.38));
+    {
+      const a = Math.atan2(TB.y - 0.22, 2.8), l = Math.hypot(2.8, TB.y - 0.22), cx = TB.x + 0.6 + 1.4, cy = (TB.y + 0.22) / 2 + 0.02;
+      L.push(Bz(l, 0.05, 0.56, JAUNE, cx, cy, TB.z, -a), Bz(l, 0.16, 0.04, JAUNE, cx, cy + 0.08, TB.z - 0.3, -a), Bz(l, 0.16, 0.04, JAUNE, cx, cy + 0.08, TB.z + 0.3, -a));
+      L.push(B(0.7, 0.05, 0.56, JAUNE, 124.75, 0.2, TB.z), B(0.7, 0.14, 0.04, JAUNE, 124.75, 0.27, TB.z - 0.3), B(0.7, 0.14, 0.04, JAUNE, 124.75, 0.27, TB.z + 0.3));
+      for (const s of [-1, 1]) L.push(B(0.07, 0.62, 0.07, BOIS2, 123.0, 0.31, TB.z + s * 0.24), B(0.06, 0.2, 0.06, BOIS2, 124.75, 0.1, TB.z + s * 0.24));
+      contact.tache(122.6, TB.z, 2.8, 0.9, 0.28);
+    }
+    const RESSORTS = [{ x: 119.4, z: -20.4, h: -Math.PI / 2, y: 0.66 }, { x: 121.6, z: -21.6, h: -Math.PI / 2, y: 0.66 }];
+    for (const r of RESSORTS) {
+      L.push(C(0.3, 0.3, 0.04, 12, '#5a5a60', r.x, 0.07, r.z));
+      for (let k = 0; k < 6; k++) L.push(C(0.1, 0.1, 0.035, 10, '#c0392b', r.x, 0.13 + k * 0.065, r.z));
+    }
+    {
+      const x = 124.7, z = -19.7;
+      for (const s of [-1, 1]) L.push(B(2.6, 0.3, 0.14, BOIS, x, 0.15, z + s * 1.23), B(0.14, 0.3, 2.6, BOIS, x + s * 1.23, 0.15, z));
+      L.push(B(2.34, 0.2, 2.34, '#d9c28b', x, 0.12, z), C(0.24, 0.32, 0.22, 8, '#cdb67e', x + 0.45, 0.32, z - 0.5), C(0.06, 0.09, 0.18, 6, '#cdb67e', x + 0.32, 0.5, z - 0.38), C(0.06, 0.09, 0.18, 6, '#cdb67e', x + 0.6, 0.5, z - 0.6));
+      D.push(C(0.09, 0.07, 0.14, 8, ROUGE, x - 0.6, 0.29, z + 0.55), C(0.08, 0.06, 0.13, 8, '#2e86de', x + 0.7, 0.29, z + 0.6), B(0.04, 0.03, 0.42, JAUNE, x - 0.3, 0.24, z + 0.1, 0.6), B(0.14, 0.02, 0.1, JAUNE, x - 0.18, 0.24, z + 0.28, 0.6));
+      contact.jupe(x - 1.3, z - 1.3, x + 1.3, z + 1.3, 0.4, 0.25);
+    }
+
+    /* -- le potager (deux bacs de bois, des choux, des poireaux, un arrosoir) et la cabane des jeux, dans le coin sud-ouest */
+    for (const x of [118.3, 120.6]) {
+      L.push(B(2.0, 0.4, 0.9, BOIS, x, 0.2, -9.4), B(1.88, 0.05, 0.78, '#6f5238', x, 0.42, -9.4));
+      for (let i = 0; i < 4; i++) D.push(S(0.13, ['#5d8a36', '#6f9a3e', '#4f7a32'][i % 3], x - 0.7 + i * 0.47, 0.52, -9.4, 1, 0.8, 1, 1));
+      for (let i = 0; i < 6; i++) D.push(C(0.018, 0.02, 0.3, 4, '#7fae5a', x - 0.75 + i * 0.3, 0.6, -9.12));
+    }
+    D.push(C(0.11, 0.12, 0.2, 8, '#2f7d4a', 121.9, 0.14, -9.9), manche([121.98, 0.16, -9.9], [122.25, 0.3, -9.9], 0.015, '#2f7d4a'));
+    L.push(B(1.9, 2.0, 2.0, BOIS2, 115.9, 1.0, -9.75), Bx(2.3, 0.08, 2.5, ARD2, 115.9, 2.12, -9.75, -0.12), B(0.8, 1.7, 0.04, '#5a3f2b', 115.9, 0.88, -10.77), B(0.5, 0.4, 0.04, '#2f3c4f', 115.2, 1.4, -10.77));
+    D.push(S(0.03, '#c9a55a', 116.2, 0.9, -10.8));
+    contact.jupe(114.95, -10.75, 116.85, -8.75, 0.6, 0.35);
+
+    /* -- les tilleuls : un tronc, un houppier de touffes que le vent balance ; un banc rond autour du premier, une grille de
+       fonte au pied du second */
+    const tilleul = (X, Z) => {
+      L.push(teinter(C(0.2, 0.3, 3.6, 8, '#6a5441', X, 1.8, Z), '#6a5441', T.bois));
+      L.push(teinter(C(0.08, 0.13, 1.6, 6, '#6a5441', X + 0.55, 3.9, Z - 0.3, 'y'), '#6a5441', T.bois));
+      [[0, 5.6, 0, 2.6], [1.4, 4.9, 0.6, 1.9], [-1.3, 5.0, -0.7, 1.9], [0.5, 6.6, -0.9, 1.7], [-0.6, 4.6, 1.3, 1.6]].forEach(([dx, y, dz, r], i) => {
+        const c = ['#c9a845', '#b9a23c', '#d9b04a', '#a3a240', '#c79a3a'][i], g = teinter(S(r, c, X + dx, y, Z + dz, 1, 0.82, 1, 1), c, T.feuillage), p = g.attributes.position, w = new Float32Array(p.count);
+        for (let k = 0; k < p.count; k++) w[k] = 0.25 + 0.55 * Math.max(0, (p.getY(k) - (y - r * 0.82)) / (r * 1.64));
+        g.setAttribute('aVent', new THREE.BufferAttribute(w, 1)); L.push(g);
+      });
+      contact.tache(X, Z, 3.0, 3.0, 0.3);
+      plan.push({ t: 'a', x: X, z: Z, r: 2.6 });
+    };
+    const T1 = { x: 118.6, z: -37.0 }, T2 = { x: 129.4, z: -18.4 };
+    tilleul(T1.x, T1.z); tilleul(T2.x, T2.z);
+    for (let i = 0; i < 8; i++) {
+      const a = (i + 0.5) / 8 * Math.PI * 2, r = 1.15;
+      L.push(B(0.42, 0.05, 0.92, BOIS, T1.x + Math.cos(a) * r, 0.42, T1.z + Math.sin(a) * r, -a), B(0.06, 0.4, 0.06, FER, T1.x + Math.cos(a) * (r + 0.1), 0.2, T1.z + Math.sin(a) * (r + 0.1)));
+    }
+    L.push(C(0.8, 0.8, 0.02, 16, FER, T2.x, 0.05, T2.z));
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI; D.push(B(1.55, 0.015, 0.03, '#1f2a25', T2.x, 0.065, T2.z, a)); }
+
+    /* -- les bancs contre la façade, la jardinière de pierre */
+    const BANCS = [{ x: 132.35, z: -21.0, h: -Math.PI / 2 }, { x: 132.35, z: -31.4, h: -Math.PI / 2 }];
+    for (const b of BANCS) {
+      L.push(B(0.42, 0.06, 1.9, BOIS, b.x, 0.45, b.z), B(0.05, 0.38, 1.9, BOIS, b.x + 0.22, 0.78, b.z));
+      for (const dz of [-0.8, 0.8]) L.push(B(0.42, 0.44, 0.06, FER, b.x + 0.02, 0.22, b.z + dz));
+      contact.tache(b.x, b.z, 0.5, 1.1, 0.25);
+    }
+    L.push(B(0.62, 0.5, 1.8, MOEL, 132.5, 0.25, -16.5), B(0.7, 0.06, 1.88, APPUI, 132.5, 0.53, -16.5), B(0.5, 0.04, 1.68, '#6f5238', 132.5, 0.5, -16.5));
+    for (let i = 0; i < 3; i++) L.push(S(0.32, ['#4f7a32', '#5d8a36', '#3f6a2a'][i], 132.5, 0.78, -17.1 + i * 0.6, 1, 0.8, 1, 1));
+
+    /* -- peint au sol : la marelle (de la Terre au Ciel, ses chiffres), l'escargot, des points de couleur, le terrain (ses
+       lignes jaunes, son rond central) ; le but et son filet, le panier de basket contre le mur du nord */
+    const MARELLE = { x: 116.0, z0: -23.55, p: 0.55 };
+    {
+      const { x, z0, p } = MARELLE, w = 0.3, cases = [[0], [0], [0], [-1, 1], [0], [-1, 1]];
+      cases.forEach((c, i) => {
+        const za = z0 - i * p, zb = za - p, lg = c.length > 1 ? 0.6 : 0.3;
+        trait(x - lg, za, x + lg, za, 0.05, BLANC); trait(x - lg, zb, x + lg, zb, 0.05, BLANC);
+        trait(x - lg, za, x - lg, zb, 0.05, BLANC); trait(x + lg, za, x + lg, zb, 0.05, BLANC);
+        if (c.length > 1) trait(x, za, x, zb, 0.05, BLANC);
+      });
+      const zc = z0 - 6 * p;
+      cercle(x, zc, 0.6, 0.05, BLANC, 10, Math.PI, Math.PI * 2);
+      trait(x - 0.45, z0 + 0.15, x + 0.45, z0 + 0.15, 0.04, JAUNE); // la ligne de la Terre
+      // les chiffres et le Ciel : une bande de l'atlas, une case par chiffre
+      const k = atlas.poser(360, 40, (c, W, H) => {
+        c.clearRect(0, 0, W, H); c.fillStyle = '#f4efe2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = 'bold 30px Arial, sans-serif';
+        for (let i = 0; i < 8; i++) c.fillText(String(i + 1), 20 + i * 40, 22);
+        c.font = 'bold 22px Arial, sans-serif'; c.fillText('CIEL', 340, 22);
+      }, 0.001, 0.001, x, -2, z0, 0);
+      const num = (i, cx, cz, w3) => atlas.copie(k, new THREE.PlaneGeometry(w3, 0.26).rotateX(-Math.PI / 2).translate(cx, 0.053, cz), i * 40 / 360, (i * 40 + (i === 8 ? 80 : 40)) / 360);
+      [[0, x, 0], [1, x, 1], [2, x, 2], [3, x - 0.3, 3], [4, x + 0.3, 3], [5, x, 4], [6, x - 0.3, 5], [7, x + 0.3, 5]].forEach(([i, cx, r]) => num(i, cx, z0 - (r + 0.5) * p, 0.26));
+      num(8, x, zc - 0.3, 0.52);
+    }
+    const ESCARGOT = { x: 123.0, z: -36.6 };
+    {
+      const n = 64;
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 1) / n, a0 = t0 * Math.PI * 4.6, a1 = t1 * Math.PI * 4.6, r0 = 1.5 - 1.25 * t0, r1 = 1.5 - 1.25 * t1;
+        trait(ESCARGOT.x + Math.cos(a0) * r0, ESCARGOT.z + Math.sin(a0) * r0, ESCARGOT.x + Math.cos(a1) * r1, ESCARGOT.z + Math.sin(a1) * r1, 0.05, BLANC);
+        if (i % 4 === 0 && i < n - 8) trait(ESCARGOT.x + Math.cos(a0) * r0, ESCARGOT.z + Math.sin(a0) * r0, ESCARGOT.x + Math.cos(a0) * (r0 - 0.3), ESCARGOT.z + Math.sin(a0) * (r0 - 0.3), 0.04, BLANC);
+      }
+      L.push(C(0.22, 0.22, 0.012, 12, ROUGE, ESCARGOT.x, 0.046, ESCARGOT.z));
+    }
+    {
+      const COUL = [ROUGE, JAUNE, '#3f7fc0', VERT];
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) L.push(C(0.2, 0.2, 0.012, 12, COUL[(i + j) % 4], 127.6 + i * 0.6, 0.046, -14.4 - j * 0.6));
+    }
+    const TERRAIN = { x0: 125.6, x1: 131.6, z0: -38.85, z1: -25.8 };
+    {
+      const { x0, x1, z0, z1 } = TERRAIN, zm = (z0 + z1) / 2;
+      trait(x0, z0, x0, z1, 0.06, JAUNE); trait(x1, z0, x1, z1, 0.06, JAUNE); trait(x0, z1, x1, z1, 0.06, JAUNE); trait(x0, zm, x1, zm, 0.06, JAUNE);
+      cercle((x0 + x1) / 2, zm, 1.0, 0.06, JAUNE, 18);
+      cercle((x0 + x1) / 2, z0, 1.6, 0.06, JAUNE, 9, 0, Math.PI);
+    }
+    const BUT = { x: 128.6, z: -38.9, l: 2.0, h: 1.2 };
+    {
+      const { x, z, l, h } = BUT;
+      for (const s of [-1, 1]) L.push(B(0.07, h, 0.07, '#f1f1ee', x + s * l / 2, h / 2, z), B(0.05, h, 0.05, '#f1f1ee', x + s * l / 2, h / 2, z - 0.22), B(0.05, 0.05, 0.24, '#f1f1ee', x + s * l / 2, h, z - 0.11));
+      L.push(B(l + 0.07, 0.07, 0.07, '#f1f1ee', x, h, z));
+      for (let i = 0; i <= 10; i++) D.push(B(0.012, h, 0.012, '#d9dcd8', x - l / 2 + i * l / 10, h / 2, z - 0.24));
+      for (let i = 1; i <= 4; i++) D.push(B(l, 0.012, 0.012, '#d9dcd8', x, i * h / 5, z - 0.24));
+      for (let i = 0; i <= 10; i++) D.push(B(0.012, 0.012, 0.24, '#d9dcd8', x - l / 2 + i * l / 10, h, z - 0.12));
+    }
+    {
+      const x = 120.6, z = -39.1;
+      L.push(B(1.1, 0.74, 0.05, '#f1f1ee', x, 2.85, z), B(0.42, 0.3, 0.052, ROUGE, x, 2.72, z), B(0.36, 0.24, 0.054, '#f1f1ee', x, 2.72, z));
+      L.push(teinter(new THREE.TorusGeometry(0.22, 0.016, 4, 14).rotateX(Math.PI / 2).translate(x, 2.55, z + 0.27), '#d35400'), B(0.04, 0.04, 0.12, '#d35400', x, 2.55, z + 0.06));
+      D.push(C(0.21, 0.14, 0.36, 8, '#eeeeea', x, 2.36, z + 0.27, 'y', 0, 0));
+    }
+
+    /* -- dehors : les barrières devant le portail (un sas qui s'ouvre vers la place), la plaque de l'école sur un pilier du
+       portail, le panneau d'affichage ; les passages piétons de la départementale (devant la rue de la place) et de la
+       rue de la place (à l'entrée de la place) ; les panneaux « École » (enfants) sur les routes qui y mènent et ceux des
+       passages piétons */
+    const BARRIERES = [-30.55, -35.45];
+    for (const z of BARRIERES) {
+      const xa = 112.3, xb = 114.2, VB = '#2f6b3a';
+      L.push(manche([xa, 1.0, z], [xb, 1.0, z], 0.025, VB), manche([xa, 0.3, z], [xb, 0.3, z], 0.025, VB));
+      for (const x of [xa, xb]) L.push(B(0.05, 1.02, 0.05, VB, x, 0.51, z));
+      for (let x = xa + 0.12; x < xb - 0.05; x += 0.12) D.push(B(0.015, 0.7, 0.015, VB, x, 0.65, z));
+      L.push(B(0.56, 0.34, 0.03, '#f4f1ea', (xa + xb) / 2, 0.66, z), B(0.6, 0.38, 0.025, ROUGE, (xa + xb) / 2, 0.66, z));
+      contact.tache((xa + xb) / 2, z, 1.0, 0.2, 0.2);
+    }
+    atlas.poser(192, 132, (c, W, H) => {
+      c.fillStyle = '#ffffff'; c.beginPath(); c.roundRect(0, 0, W, H, 14); c.fill();
+      c.fillStyle = '#1f3f8a'; c.beginPath(); c.roundRect(5, 5, W - 10, H - 10, 11); c.fill();
+      c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.roundRect(10, 10, W - 20, H - 20, 8); c.stroke();
+      c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 30px Georgia, serif'; c.fillText('ÉCOLE', W / 2, 36);
+      c.font = 'bold 21px Georgia, serif'; c.fillText('DES TILLEULS', W / 2, 68);
+      c.font = '13px Georgia, serif'; c.fillText('maternelle et élémentaire', W / 2, 98);
+    }, 0.52, 0.36, XG - 0.29, 1.55, PZ0 + 0.3, -Math.PI / 2);
+    {
+      const x = 113.9, z = -29.35;
+      L.push(B(0.1, 0.95, 1.15, '#2f5d50', x, 1.4, z), C(0.035, 0.035, 0.95, 6, '#2f5d50', x, 0.47, z - 0.4), C(0.035, 0.035, 0.95, 6, '#2f5d50', x, 0.47, z + 0.4), B(0.14, 0.06, 1.2, '#24473d', x, 1.9, z));
+      vitresB.push(B(0.01, 0.82, 1.02, '#3a5068', x - 0.065, 1.4, z));
+      atlas.poser(224, 180, (c, W, H) => {
+        c.fillStyle = '#b98a55'; c.fillRect(0, 0, W, H);
+        for (let i = 0; i < 260; i++) { c.fillStyle = `rgba(90,60,30,${0.1 + (i % 5) * 0.03})`; c.fillRect((i * 37) % W, (i * 53) % H, 2, 2); }
+        const feuille = (x0, y0, w, h, r, fond) => { c.save(); c.translate(x0 + w / 2, y0 + h / 2); c.rotate(r); c.fillStyle = fond; c.fillRect(-w / 2, -h / 2, w, h); c.restore(); };
+        feuille(10, 12, 92, 120, -0.03, '#fbf8f0');
+        c.fillStyle = '#2b2b30'; c.font = 'bold 16px Georgia, serif'; c.textAlign = 'center'; c.fillText('Menu', 56, 34);
+        c.fillStyle = '#6a6a72'; for (let i = 0; i < 6; i++) c.fillRect(22, 46 + i * 13, 50 + (i * 17) % 22, 3);
+        feuille(112, 10, 100, 76, 0.04, '#fdf2c7');
+        c.fillStyle = '#2b2b30'; c.font = 'bold 14px Georgia, serif'; c.fillText('Garderie', 162, 32);
+        c.font = '12px Georgia, serif'; c.fillText('7 h 30 · 8 h 30', 162, 52); c.fillText('16 h 30 · 18 h 30', 162, 70);
+        feuille(116, 96, 92, 72, -0.05, '#ffffff');
+        c.fillStyle = '#f1c40f'; c.beginPath(); c.arc(140, 116, 10, 0, 7); c.fill();
+        c.fillStyle = '#c0392b'; c.fillRect(160, 124, 30, 24); c.fillStyle = '#8e2a3b'; c.beginPath(); c.moveTo(156, 125); c.lineTo(175, 108); c.lineTo(194, 125); c.fill();
+        c.fillStyle = '#27ae60'; c.fillRect(120, 150, 84, 6);
+        for (const [px, py] of [[56, 14], [162, 12], [162, 98]]) { c.fillStyle = '#c0392b'; c.beginPath(); c.arc(px, py, 3, 0, 7); c.fill(); }
+      }, 0.98, 0.79, x - 0.06, 1.4, z, -Math.PI / 2);
+    }
+    // les passages piétons : des bandes blanches de 50 cm, dans l'axe de la chaussée
+    for (let z = 7.45; z < 12.6; z += 1.0) L.push(B(2.5, 0.01, 0.5, BLANC, 101.5, 0.04, z));
+    for (let x = 92.75; x < 97.4; x += 1.0) L.push(B(0.5, 0.01, 2.4, BLANC, x, 0.036, -27.0));
+    // les panneaux : un dessin de l'atlas pour chaque sorte, recopié ; le dos gris, le poteau
+    const panneauX = (k, w, h, x, y, z, rot, tri) => {
+      if (k.premier) k.premier = false; else atlas.copie(k, new THREE.PlaneGeometry(w, h).rotateY(rot).translate(x, y, z));
+      const g = tri ? new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-w / 2, -h / 2, 0, 0, h / 2, 0, w / 2, -h / 2, 0], 3)) : new THREE.PlaneGeometry(w * 0.96, h * 0.96);
+      g.computeVertexNormals(); g.rotateY(rot + Math.PI); g.translate(x - Math.sin(rot) * 0.02, y, z - Math.cos(rot) * 0.02);
+      L.push(teinter(g, '#8d9196'), C(0.04, 0.04, y, 6, '#b9bcc2', x - Math.sin(rot) * 0.04, y / 2, z - Math.cos(rot) * 0.04));
+      return [x, z];
+    };
+    const POTEAUX = [];
+    {
+      const SIGNES = [[99.0, -5.6, 0], [84.5, 6.1, -Math.PI / 2], [119.5, 13.95, Math.PI / 2]];
+      const k = atlas.poser(128, 112, (c, W, H) => {
+        c.clearRect(0, 0, W, H);
+        const tri = (m, f) => { c.beginPath(); c.moveTo(W / 2, m); c.lineTo(W - m * 1.15, H - m * 0.6); c.lineTo(m * 1.15, H - m * 0.6); c.closePath(); c.fillStyle = f; c.fill(); };
+        tri(2, '#c8202a'); tri(15, '#ffffff');
+        // deux enfants qui marchent, le plus grand tient le plus petit par la main
+        c.fillStyle = '#1d1d1d';
+        const enfant = (x, y, k) => { c.beginPath(); c.arc(x, y - 22 * k, 5 * k, 0, 7); c.fill(); c.beginPath(); c.moveTo(x - 4 * k, y - 16 * k); c.lineTo(x + 5 * k, y - 16 * k); c.lineTo(x + 4 * k, y - 2 * k); c.lineTo(x + 9 * k, y + 12 * k); c.lineTo(x + 4 * k, y + 13 * k); c.lineTo(x, y + 3 * k); c.lineTo(x - 5 * k, y + 13 * k); c.lineTo(x - 9 * k, y + 11 * k); c.lineTo(x - 4 * k, y - 2 * k); c.closePath(); c.fill(); };
+        enfant(56, 78, 1.05); enfant(78, 82, 0.82);
+        c.lineWidth = 3; c.strokeStyle = '#1d1d1d'; c.beginPath(); c.moveTo(61, 68); c.lineTo(73, 72); c.stroke();
+      }, 0.9, 0.79, SIGNES[0][0], 2.25, SIGNES[0][1], SIGNES[0][2]);
+      k.premier = true;
+      for (const [x, z, r] of SIGNES) POTEAUX.push(panneauX(k, 0.9, 0.79, x, 2.25, z, r, true));
+      const kp = atlas.poser(96, 96, (c, W, H) => {
+        c.fillStyle = '#1f5fae'; c.beginPath(); c.roundRect(0, 0, W, H, 8); c.fill();
+        c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(W / 2, 10); c.lineTo(W - 10, H - 12); c.lineTo(10, H - 12); c.closePath(); c.fill();
+        c.fillStyle = '#1d1d1d'; for (let i = 0; i < 4; i++) c.fillRect(24 + i * 13, H - 22, 8, 6);
+        c.beginPath(); c.arc(W / 2 + 2, 34, 5, 0, 7); c.fill();
+        c.lineWidth = 4; c.strokeStyle = '#1d1d1d'; c.beginPath(); c.moveTo(W / 2 + 1, 40); c.lineTo(W / 2 - 2, 56); c.lineTo(W / 2 - 9, 68); c.moveTo(W / 2 - 2, 56); c.lineTo(W / 2 + 7, 68); c.moveTo(W / 2 - 8, 48); c.lineTo(W / 2 + 9, 47); c.stroke();
+      }, 0.55, 0.55, 100.0, 2.35, 6.15, -Math.PI / 2);
+      kp.premier = true;
+      POTEAUX.push(panneauX(kp, 0.55, 0.55, 100.0, 2.35, 6.15, -Math.PI / 2), panneauX(kp, 0.55, 0.55, 103.0, 2.35, 13.85, Math.PI / 2));
+    }
+
+    finirPlaques(L);
+    bati.push(...L);
+    proches.push(...D);
+    // les collisions, une fois les herbes semées : l'enceinte entière (on n'y entre jamais), le bâtiment (il arrête aussi la
+    // caméra), les barrières, le panneau d'affichage, les poteaux des panneaux
+    plusTard.push(() => {
+      col.boite(ECOLE.x0, ECOLE.z0, ECOLE.x1, ECOLE.z1).haut = false;
+      col.boite(XP - 0.1, ZN, XB, ZS).haut = true;
+      for (const z of BARRIERES) col.boite(112.25, z - 0.08, 114.3, z + 0.08);
+      col.boiteC(113.9, -29.35, 0.2, 1.2);
+      for (const [x, z] of POTEAUX) col.boiteC(x, z, 0.15, 0.15);
+    });
+
+    /* -- ce que ecole.js fait vivre : le portail, la porte, l'horloge, la cloche, les fenêtres des classes, les jeux, les
+       chemins dans la cour (des points de passage, voir ecole.js) et ceux qui ramènent les enfants chez eux */
+    return {
+      zone: ECOLE, parvis: PARVIS_E,
+      portail: { x: XG, z: (PZ0 + PZ1) / 2, z0: PZ0, z1: PZ1, dehors: { x: 112.8, z: -33.0 }, dedans: { x: 116.1, z: -33.0 } },
+      porte: { x: XP - 0.08, z: ZP, l: 1.8, h: 2.78, y: 0.51, dehors: { x: 131.6, z: ZP } },
+      horloge: { x: XP - 0.11, y: HP + 1.15, z: ZP },
+      cloche: { x: XP + 1.4, y: 12.5, z: ZP },
+      classes: { x: XF - 0.012, fenetres: fenetresClasse, y0: 1.0, y1: 3.6, w: 1.5, ailes: [[ZS, ZP + PW / 2], [ZP - PW / 2, ZN]] },
+      balancoires: ZB.map(z => ({ x: XS, y: YS - 0.08, z, L: 1.7, h: -Math.PI / 2 })),
+      toboggan: { pied: { x: 118.35, z: TB.z }, bas0: { x: 118.75, z: TB.z }, haut: { x: 120.45, z: TB.z, y: TB.y + 0.04 }, assise: { x: 121.62, z: TB.z, y: TB.y + 0.04 }, fin: { x: 124.42, y: 0.25 }, bas: { x: 125.0, z: TB.z, y: 0.25 } },
+      ressorts: RESSORTS, sable: { x: 124.7, z: -19.7, y: 0.22 }, marelle: MARELLE, escargot: ESCARGOT, terrain: TERRAIN, but: BUT,
+      corde: { a: { x: 119.4, z: -24.6 }, b: { x: 123.2, z: -24.6 } }, ronde: { x: 121.6, z: -29.4, r: 1.35 }, billes: { x: 128.4, z: -20.6 },
+      bancs: BANCS, rond: { x: T1.x, z: T1.z, r: 1.15, y: 0.42 }, chat: { x0: 126.8, x1: 132.0, z0: -23.6, z1: -14.4 },
+      perchoirs: [{ x: 132.5, z: -16.0, y: 0.56 }, { x: 132.5, z: -17.0, y: 0.56 }, { x: 127.0, z: -13.1, y: 0.12 }, { x: 130.5, z: -13.1, y: 0.12 }],
+      preau: { x0: 122.6, x1: 132.6, z0: -12.4, z1: -9.6 },
+      // les points de passage de la cour (on va de l'un à l'autre, jamais à travers un jeu) et leurs liens
+      noeuds: { G: [116.1, -33.0], A1: [124.4, -32.6], A2: [124.6, -27.0], H: [125.2, -25.0], D: [131.6, -24.8], Z1: [124.6, -23.0], M1: [118.3, -27.0], P1: [127.2, -22.4], P2: [127.4, -14.0], N1: [124.4, -37.9], E1: [132.0, -27.6] },
+      liens: [['G', 'A1'], ['A1', 'A2'], ['A2', 'H'], ['H', 'D'], ['H', 'Z1'], ['A2', 'M1'], ['M1', 'G'], ['Z1', 'P1'], ['H', 'P1'], ['P1', 'D'], ['P1', 'P2'], ['A1', 'N1'], ['N1', 'G'], ['D', 'E1'], ['E1', 'A1']],
+      // les chemins de la maison au portail (le premier point : devant chez soi ; le dernier : devant le portail)
+      chemins: CHEMINS_ECOLE.map(c => c.map(([x, z]) => ({ x, z }))),
+      // là où l'on traverse une rue (on attend qu'aucune voiture n'arrive) : la départementale, la rue de la place
+      passages: [{ x0: 101.5, z0: 14.2, x1: 101.5, z1: 5.8 }, { x0: 98.3, z0: -27.0, x1: 92.3, z1: -26.8 }],
+    };
+  }
+
   /* ------------------------------------------------------------ le château et sa colline (relief.js)
      La route du château part de la départementale (x = -176) et monte en 520 m (11 % au plus) jusqu'au plateau du
      sommet, parapets du côté du vide ; la route du tour, pavée, fait le tour du château ; les maisons du village la
@@ -3430,6 +3920,9 @@ void main() {
     R(89.4, -62.3, 0, { n: 2, garnis: 3, graine: 23 });
     { const a = 0.45, r = 36.7; R(CHATEAU.x + Math.cos(a) * r, CHATEAU.z + Math.sin(a) * r, Math.PI / 2 - a, { n: 3, garnis: 4, graine: 37, genres: ['vae', 'vae', 'course', 'ville'] }); }
     R(226.8, -50.5, 0, { n: 3, garnis: 3, graine: 41, genres: ['vae', 'course', 'vtt'] });
+    // devant l'école des Tilleuls, contre la grille, au nord des barrières (la place gardée par ecole) : un râtelier, des
+    // vélos d'enfant, la roue avant dans la fente, tournés vers la place
+    R(113.7, -37.2, -Math.PI / 2, { type: 'ratelier', genres: ['enfant'], n: 6, garnis: 4, graine: 53 });
     S(240.5, -15.62, Math.PI / 2, 'ville', '#6b6f73', { contre: 1, selle2: '#1d1e21' });
     return l;
   }
@@ -3493,7 +3986,7 @@ void main() {
         q.setFromAxisAngle(axe, rnd() * 6.28);
         // dans l'entrepôt de l'imprimeur, sa cour et son accès (mission 3) : tirée au sort comme avant (la suite du tirage
         // ne bouge pas), mais réduite à rien
-        const s = dansEntrepot(x, z, 0.6) || (x > -80 && x < -58 && z > -95 && z < -72) || SANS_HERBE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) ? 0 : 1; // (ni dans le hangar du domaine, ni devant ; ni sous les terrasses des restaurateurs)
+        const s = dansEntrepot(x, z, 0.6) || (x > -80 && x < -58 && z > -95 && z < -72) || dansEcole(x, z, 0.4) || SANS_HERBE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) ? 0 : 1; // (ni dans le hangar du domaine, ni devant ; ni dans l'école ; ni sous les terrasses des restaurateurs)
         m.compose(pv.set(x, 0, z), q, e.set(k * s, k * (0.8 + rnd() * 0.5) * s, k * s));
         im.setMatrixAt(i, m); im.setColorAt(i, c.copy(pick(TEINTES)));
       }
@@ -3649,6 +4142,7 @@ void main() {
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
   lieux.velos = velosGares; // les vélos garés (velos.js ; essais)
   lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
+  lieux.ecole = lieuxEcole; // l'école (ecole.js : les enfants, les adultes, le portail, la porte, les jeux, l'horloge, la cloche)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
   // gerbeur électrique de Marc : transpalette.js) dans la troisième travée, contre le poteau, à côté de la remorque rangée
   lieux.enjambeur = { x: -68.25, z: -87.2, h: 0 };
