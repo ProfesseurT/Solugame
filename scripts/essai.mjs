@@ -591,10 +591,13 @@ if (scenario === 'chateau') {
         CL.teleporter(-185, 11.7, Math.PI / 2); CL.step(5);
         CL.ctrl.ky = -1; for (let k = 0; k < 400 && CL.tr.v < 17; k++) CL.step(1);
         let tenue = 0, bmax = 0, vmin = 99;
+        // (mesuré jusqu'au premier choc : la glisse peut finir contre un mur ou un cycliste, selon l'endroit où elle mène ;
+        // c'est la tenue de route qu'on vérifie, et elle doit tenir 2,5 s au moins avant)
         for (let k = 0; k < 300; k++) {
           const tr = CL.tr, beta = Math.atan2(tr.vT, Math.max(1, Math.abs(tr.v))), T = k / 60;
           if (T < 0.45) { CL.ctrl.kx = -1; CL.ctrl.fm = true; } else { CL.ctrl.fm = false; CL.ctrl.kx = Math.max(-1, Math.min(1, -(beta + 0.5) * 2)); }
           CL.ctrl.ky = -1; CL.step(1);
+          if (T > 1.5 && tr.chocVu > 0.15) break;
           if (T > 1.5) { if (Math.abs(beta) > 0.3) tenue += 1 / 60; vmin = Math.min(vmin, tr.v); }
           bmax = Math.max(bmax, Math.abs(beta));
         }
