@@ -1769,7 +1769,7 @@ if (scenario === 'velos') {
           suivre(c, 1); CL.scene.updateMatrixWorld();
           if (!c.p || c.etat !== 'roule' || !c.vu) continue;
           for (const [pied, pedale, gauche] of [[12, 5, true], [15, 6, false]]) {
-            if (gauche && c.pied > 0.3) continue;
+            if (gauche && c.pied > 0.02) continue; // (le pied gauche qui va se poser à terre, ou y est, n'est plus sur sa pédale)
             const b = c.p.m.os[pied].localToWorld(new V3(0, -0.08, 0.11)), q = c.m.os[pedale].getWorldPosition(new V3()); q.y += 0.016;
             pire = Math.max(pire, b.distanceTo(q)); n++;
           }
