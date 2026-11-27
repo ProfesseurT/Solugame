@@ -1585,7 +1585,7 @@ if (scenario === 'diversite') {
   ok(r.aines / r.n > 0.12 && r.jeunes / r.n > 0.12 && r.voutes >= 3 && r.cannes >= 1 && r.gris >= 8, 'des jeunes et des aînés (' + r.gris + ' aux cheveux gris ou blancs, ' + r.voutes + ' voûtés, ' + r.cannes + ' avec une canne)');
   ok(['courte', 'pleine', 'bouc', 'moustache'].every(b => r.barbes.includes(b)), 'des barbes : courte, pleine, bouc, moustache');
   ok(['manteau', 'doudoune'].every(t => r.tenues.includes(t)) && r.echarpes >= 4 && r.chapeaux.length >= 4, 'décembre : manteaux, doudounes, ' + r.echarpes + ' écharpes, ' + r.chapeaux.length + ' sortes de couvre-chefs');
-  ok(max <= 4200 && moy <= 3400, 'triangles par personnage : ' + Math.round(moy) + ' en moyenne, ' + max + ' au plus (plafonds 3 400 et 4 200)');
+  ok(max <= 4800 && moy <= 4500, 'triangles par personnage : ' + Math.round(moy) + ' en moyenne, ' + max + ' au plus (plafonds 4 500 et 4 800 : les visages, les mains à doigts, 27/11/2026)');
   ok(r.enfantOk, 'une apparence d\'enfant : ni barbe, ni foulard, ni canne, ni dos voûté, ni cheveux gris');
   // de près, quelques visages de tous les teints au soleil, et la place
   await ev(() => {
