@@ -750,7 +750,7 @@ const scal = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 // Tube le long d'une ligne brisée : pts, rayons R ([vers le dos, de côté] par point), n côtés ; dos : le côté de l'ongle,
 // lat : l'axe de côté ; un bout arrondi au-delà du dernier anneau ; u autour (sin > 0 : le dos), v de v0 à v1 le long
 function tube(pts, R, n, dos, lat, c, zone, v0, v1) {
-  const m = pts.length, A = [], C = [];
+  const m = pts.length, A = [], C = [], NR = [];
   let long = 0; const Lc = [0];
   for (let i = 1; i < m; i++) Lc.push(long += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]));
   let t = [0, -1, 0];
@@ -759,23 +759,30 @@ function tube(pts, R, n, dos, lat, c, zone, v0, v1) {
     t = norme([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
     let e2 = norme(ajoute(lat, t, -scal(lat, t))), e1 = vect(e2, t);
     if (scal(e1, dos) < 0) e1 = [-e1[0], -e1[1], -e1[2]];
-    const anneau = [];
-    for (let j = 0; j <= n; j++) { const an = Math.PI / n + j * 2 * Math.PI / n; anneau.push(ajoute(ajoute(pts[i], e1, Math.sin(an) * R[i][0]), e2, Math.cos(an) * R[i][1])); }
-    A.push(anneau); C.push(pts[i]);
+    const anneau = [], nrm = [];
+    for (let j = 0; j <= n; j++) {
+      const an = Math.PI / n + j * 2 * Math.PI / n;
+      anneau.push(ajoute(ajoute(pts[i], e1, Math.sin(an) * R[i][0]), e2, Math.cos(an) * R[i][1]));
+      nrm.push(norme(ajoute(ajoute(t, e1, Math.sin(an) / R[i][0] * 0.02), e2, Math.cos(an) / R[i][1] * 0.02).map((v, k) => v - t[k] * (i === m - 1 ? 0.6 : 1))));
+    }
+    A.push(anneau); C.push(pts[i]); NR.push(nrm);
   }
-  const bout = ajoute(pts[m - 1], t, R[m - 1][1] * 0.85), P = [], UV = [], vl = i => v0 + (v1 - v0) * Lc[i] / (long + R[m - 1][1] * 0.85);
-  const tri = (a, b, c2, ua, ub, uc, ctr) => {
+  const bout = ajoute(pts[m - 1], t, R[m - 1][1] * 0.85), P = [], UV = [], N = [], vl = i => v0 + (v1 - v0) * Lc[i] / (long + R[m - 1][1] * 0.85);
+  // (normales : celles de la section elliptique, calculées ici, sans lisser)
+  const tri = (a, b, c2, ua, ub, uc, ctr, na, nb, nc) => {
     const nn = vect([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c2[0] - a[0], c2[1] - a[1], c2[2] - a[2]]);
-    if (scal(nn, [a[0] - ctr[0], a[1] - ctr[1], a[2] - ctr[2]]) < 0) { [b, c2] = [c2, b]; [ub, uc] = [uc, ub]; }
-    P.push(...a, ...b, ...c2); UV.push(...ua, ...ub, ...uc);
+    if (scal(nn, [a[0] - ctr[0], a[1] - ctr[1], a[2] - ctr[2]]) < 0) { [b, c2] = [c2, b]; [ub, uc] = [uc, ub]; [nb, nc] = [nc, nb]; }
+    P.push(...a, ...b, ...c2); UV.push(...ua, ...ub, ...uc); N.push(...na, ...nb, ...nc);
   };
   for (let i = 0; i < m - 1; i++) for (let j = 0; j < n; j++) {
     const ctr = [(C[i][0] + C[i + 1][0]) / 2, (C[i][1] + C[i + 1][1]) / 2, (C[i][2] + C[i + 1][2]) / 2];
-    tri(A[i][j], A[i][j + 1], A[i + 1][j + 1], [j / n, vl(i)], [(j + 1) / n, vl(i)], [(j + 1) / n, vl(i + 1)], ctr);
-    tri(A[i][j], A[i + 1][j + 1], A[i + 1][j], [j / n, vl(i)], [(j + 1) / n, vl(i + 1)], [j / n, vl(i + 1)], ctr);
+    tri(A[i][j], A[i][j + 1], A[i + 1][j + 1], [j / n, vl(i)], [(j + 1) / n, vl(i)], [(j + 1) / n, vl(i + 1)], ctr, NR[i][j], NR[i][j + 1], NR[i + 1][j + 1]);
+    tri(A[i][j], A[i + 1][j + 1], A[i + 1][j], [j / n, vl(i)], [(j + 1) / n, vl(i + 1)], [j / n, vl(i + 1)], ctr, NR[i][j], NR[i + 1][j + 1], NR[i + 1][j]);
   }
-  for (let j = 0; j < n; j++) tri(A[m - 1][j], A[m - 1][j + 1], bout, [j / n, vl(m - 1)], [(j + 1) / n, vl(m - 1)], [(j + 0.5) / n, v1], C[m - 1]);
-  return finir(nouvelle(P), c, zone, new Float32Array(UV));
+  for (let j = 0; j < n; j++) tri(A[m - 1][j], A[m - 1][j + 1], bout, [j / n, vl(m - 1)], [(j + 1) / n, vl(m - 1)], [(j + 0.5) / n, v1], C[m - 1], NR[m - 1][j], NR[m - 1][j + 1], t);
+  const g = nouvelle(P);
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  return finir(g, c, zone, new Float32Array(UV));
 }
 function main(s, kh, c) {
   const L = [], dos = [s, 0, 0], lat = [0, 0, 1];
