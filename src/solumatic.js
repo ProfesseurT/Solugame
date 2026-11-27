@@ -519,6 +519,15 @@ export function interieurSolumatic() {
   // au mur (x, z au pied du mur, h vers la pièce)
   const interrupteur = (x, z, h, y = 1.1) => { const r = R(x, z, h); bx(r, h, 0.085, 0.085, 0.012, '#f6f6f4', 0, y, 0.006); bx(r, h, 0.035, 0.05, 0.008, '#e8e8e6', 0, y, 0.014); };
   const prise = (x, z, h, y = 0.3) => { const r = R(x, z, h); bx(r, h, 0.08, 0.08, 0.012, '#f6f6f4', 0, y, 0.006); for (const s of [-1, 1]) bx(r, h, 0.009, 0.009, 0.004, '#5a5d63', s * 0.012, y, 0.013); };
+  // une goulotte le long du mur (PVC blanc, à 0,9 m), ses prises et ses prises réseau ; de a à b le long du mur
+  const goulotte = (q, cote, a, b, y = 0.9) => {
+    const ns = cote === 's' || cote === 'n', c = { s: q.z1, n: q.z0, e: q.x1, o: q.x0 }[cote], n = cote === 's' || cote === 'e' ? -1 : 1, h = { s: NORD, n: SUD, e: OUEST, o: EST }[cote];
+    for (const [s0, s1] of ouvert(a, b, TROUS.filter(T => T.o === (ns ? 'x' : 'z') && Math.abs(T.c - c) < 0.2).map(T => [(T.a + T.b) / 2, T.b - T.a + 0.2]))) {
+      if (s1 - s0 < 0.4) continue;
+      G.push(ns ? B(s1 - s0, 0.09, 0.05, '#f6f6f4', (s0 + s1) / 2, y, c + n * 0.025) : B(0.05, 0.09, s1 - s0, '#f6f6f4', c + n * 0.025, y, (s0 + s1) / 2));
+      for (let s_ = s0 + 0.35; s_ < s1 - 0.2; s_ += 1.2) for (const k of [0, 1, 2]) { const [px, pz] = ns ? [s_ + k * 0.085, c + n * 0.05] : [c + n * 0.05, s_ + k * 0.085]; G.push(B(0.075, 0.075, 0.008, k === 2 ? '#2e86de' : '#ececea', px, y, pz, h)); }
+    }
+  };
   const thermostat = (x, z, h) => { const r = R(x, z, h); bx(r, h, 0.12, 0.09, 0.025, '#f4f4f2', 0, 1.5, 0.013); bx(r, h, 0.06, 0.028, 0.004, '#34495e', 0, 1.51, 0.027); };
   const baes = (x, z, h, y = 2.32) => { const r = R(x, z, h); bx(r, h, 0.34, 0.13, 0.07, '#f4f4f2', 0, y, 0.035); quad(r, h, 'baes', 0, y, 0.0712, 0.29, 0.1, true); };
   const extincteur = (x, z, h) => {
@@ -685,16 +694,31 @@ export function interieurSolumatic() {
   };
   const tableRonde = (x, z, ra, c = PLAN, haut = 0.74) => { G.push(C(ra, ra, 0.035, 20, c, x, haut - 0.0175, z), C(0.035, 0.035, haut - 0.04, 8, PIED, x, haut / 2, z), C(0.24, 0.26, 0.03, 14, PIED, x, 0.015, z)); col(x - ra * 0.75, z - ra * 0.75, x + ra * 0.75, z + ra * 0.75); };
   const mug = (x, z, y, c) => { G.push(C(0.04, 0.036, 0.095, 10, c, x, y + 0.048, z), C(0.033, 0.033, 0.004, 8, '#4a2f1f', x, y + 0.09, z), B(0.012, 0.05, 0.03, c, x + 0.045, y + 0.05, z)); };
+  // une pièce couchée le long de +z depuis l'origine, levée de elev au-dessus de l'horizontale, tournée de a, posée en (x, y, z)
+  const RX = new THREE.Matrix4(), RY = new THREE.Matrix4();
+  const orienter = (g, elev, a, x, y, z) => { g.applyMatrix4(RX.makeRotationX(-elev)); g.applyMatrix4(RY.makeRotationY(a)); return g.translate(x, y, z); };
   const plante = (x, z, genre = 'ficus', k = 1, collision = true) => {
     const rp = hasard(Math.floor(x * 73 + z * 31) >>> 0), F = () => FEUILLES[Math.floor(rp() * FEUILLES.length)];
     const pr = genre === 'petite' ? 0.07 : 0.19 * k, ph = genre === 'petite' ? 0.09 : 0.4 * k;
     G.push(C(pr, pr * 0.78, ph, 12, genre === 'petite' ? '#d8cfc2' : POT, x, ph / 2, z), C(pr * 0.92, pr * 0.92, 0.01, 10, '#4a3a2c', x, ph - 0.015, z));
     if (genre === 'ficus') { G.push(C(0.02, 0.03, 1.0 * k, 6, '#6b5238', x, ph + 0.45 * k, z)); for (let i = 0; i < 7; i++) { const a = i * 2.4 + rp(), rr = 0.12 + rp() * 0.14; G.push(S(0.16 + rp() * 0.12, F(), x + Math.sin(a) * rr, ph + (0.75 + i * 0.12 + rp() * 0.1) * k, z + Math.cos(a) * rr, 1, 0.85, 1, 1)); } }
-    else if (genre === 'sansevieria') { for (let i = 0; i < 9; i++) { const a = i * 0.7 + rp(), rr = 0.04 + rp() * 0.08, hh = (0.45 + rp() * 0.4) * k; G.push(B(0.055, hh, 0.012, i % 3 ? '#3f6a32' : '#5a7f3e', x + Math.sin(a) * rr, ph + hh / 2, z + Math.cos(a) * rr, a)); } }
-    else if (genre === 'strelitzia') { for (let i = 0; i < 9; i++) { const a = i * 2.4 + rp(), rr = 0.05 + rp() * 0.1, hs = (0.35 + rp() * 0.55) * k, r2 = rr + 0.09; G.push(C(0.008, 0.011, hs, 4, '#4a7034', x + Math.sin(a) * rr, ph + hs / 2, z + Math.cos(a) * rr), B(0.19 * k, 0.36 * k, 0.014, F(), x + Math.sin(a) * r2, ph + hs + 0.16 * k, z + Math.cos(a) * r2, a), B(0.11 * k, 0.1 * k, 0.014, F(), x + Math.sin(a) * r2, ph + hs + 0.38 * k, z + Math.cos(a) * r2, a)); } }
+    else if (genre === 'sansevieria') { for (let i = 0; i < 10; i++) { const a = i * 0.7 + rp(), hh = (0.45 + rp() * 0.4) * k; G.push(orienter(B(0.06, 0.012, hh, i % 3 ? '#3f6a32' : '#5a7f3e', 0, 0, hh / 2), 1.25 + rp() * 0.25, a, x + Math.sin(a) * 0.04, ph - 0.02, z + Math.cos(a) * 0.04)); } }
+    else if (genre === 'strelitzia') {
+      // de grandes feuilles au bout de tiges qui s'écartent, chacune penchée à sa façon
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.4 + rp(), L = (0.4 + rp() * 0.5) * k, el = 1.1 + rp() * 0.32, l = (0.3 + rp() * 0.16) * k, w = (0.15 + rp() * 0.07) * k;
+        G.push(orienter(C(0.008, 0.011, L, 5, '#4a7034', 0, 0, L / 2, 'z'), el, a, x, ph - 0.02, z));
+        G.push(orienter(S(1, F(), 0, 0, l / 2, w / 2, 0.012, l / 2), 0.15 + rp() * 0.6, a, x + Math.cos(el) * Math.sin(a) * L, ph + Math.sin(el) * L, z + Math.cos(el) * Math.cos(a) * L));
+      }
+    }
     else if (genre === 'kentia') {
-      G.push(C(0.02, 0.025, 0.7 * k, 6, '#6b7a3a', x, ph + 0.35 * k, z));
-      for (let i = 0; i < 10; i++) { const a = i * 0.7 + rp() * 0.3, y0 = ph + (0.62 + (i % 3) * 0.16) * k, L = (0.42 + rp() * 0.2) * k, c = F(); for (let s_ = 0; s_ < 4; s_++) { const r0 = 0.04 + (s_ + 0.5) * L / 4; G.push(B(0.15 - s_ * 0.03, 0.012, L / 4 + 0.03, c, x + Math.sin(a) * r0, y0 + k * (0.11 * s_ - 0.065 * s_ * s_), z + Math.cos(a) * r0, a)); } }
+      // le palmier d'appartement : des palmes qui montent puis retombent
+      G.push(C(0.02, 0.025, 0.55 * k, 6, '#6b7a3a', x, ph + 0.27 * k, z));
+      for (let i = 0; i < 10; i++) {
+        const a = i * 0.7 + rp() * 0.3, y0 = ph + (0.42 + (i % 3) * 0.13) * k, L1 = (0.3 + rp() * 0.12) * k, L2 = (0.3 + rp() * 0.12) * k, e1 = 0.7 + rp() * 0.35, c = F();
+        G.push(orienter(B(0.12 * k, 0.01, L1, c, 0, 0, L1 / 2), e1, a, x, y0, z));
+        G.push(orienter(B(0.1 * k, 0.01, L2, c, 0, 0, L2 / 2), -0.2 - rp() * 0.4, a, x + Math.cos(e1) * Math.sin(a) * L1, y0 + Math.sin(e1) * L1, z + Math.cos(e1) * Math.cos(a) * L1));
+      }
     }
     else if (genre === 'cactus') { G.push(C(0.07, 0.08, 0.5 * k, 8, '#4f7a3a', x, ph + 0.25 * k, z), C(0.035, 0.035, 0.2 * k, 6, '#4f7a3a', x + 0.09, ph + 0.32 * k, z), S(0.07, '#4f7a3a', x, ph + 0.5 * k, z, 1, 0.7, 1)); }
     else if (genre === 'petite') { for (let i = 0; i < 4; i++) G.push(S(0.035, F(), x + (rp() - 0.5) * 0.06, ph + 0.03, z + (rp() - 0.5) * 0.06, 1, 0.8, 1)); }
@@ -845,7 +869,7 @@ export function interieurSolumatic() {
     auMur(q, 'n', q.x1 - 0.9, 0.45, (x, z, h) => horlogeMur(x, z, h, 2.3, 0.34));
     auMur(q, 'e', q.z0 + 1.6, 0.4, (x, z, h) => cadre(x, z, h, 0.3, 0.42, 'calendrier', 1.6, '#f4f4f2'));
     extincteur(q.x0, q.z0 + 0.65, EST); thermostat(q.x0, q.z1 - 1.4, EST);
-    for (const lx of [-1.6, 1.6]) prise(ci + lx, q.z0, SUD);
+    goulotte(q, 'n', q.x0 + 3.0, q.x1 - 0.3); goulotte(q, 's', q.x0 + 0.9, q.x1 - 0.9, 0.95);
     clim(ci - 1.2, zi - 0.3); clim(ci + 1.8, q.z1 - 1.4); detecteur(ci, q.z0 + 1.2); detecteur(q.x0 + 1.5, q.z1 - 1.5);
     // le voyant « En formation » au-dessus de la double porte, côté plateau du support
     { const pz = Z(3.62), xp = X(6.5) + e / 2; G.push(B(0.06, 0.12, 0.38, '#2b2d31', xp + 0.03, 2.32, pz)); affiche('enFormation', xp + 0.061, 2.32, pz, EST, 0.34, 0.096, true); }
@@ -1046,7 +1070,7 @@ export function interieurSolumatic() {
     auMur(q, 's', q.x0 + 1.2, 1.2, (x, z, h) => armoire(x, z, h, 1.1, 1.25));
     portemanteau(q.x0 + 0.5, q.z0 + 0.5, 4); plante(q.x1 - 0.5, q.z0 + 0.5, 'ficus', 1.2);
     auMur(q, 'e', q.z0 + 1.6, 0.4, (x, z, h) => horlogeMur(x, z, h, 2.3, 0.32));
-    thermostat(q.x1, q.z0 + 2.6, OUEST); clim(xi, zi); detecteur(xi, q.z1 - 1.0); prise(q.x1, zi, OUEST);
+    thermostat(q.x1, q.z0 + 2.6, OUEST); clim(xi, zi); detecteur(xi, q.z1 - 1.0); goulotte(q, 'e', q.z0 + 0.4, q.z1 - 1.3);
     VIE.cibles.saturne = [q.x1 - 0.9, zi - 1.4];
   }
 
@@ -1070,7 +1094,7 @@ export function interieurSolumatic() {
     portemanteau(q.x0 + 1.25, q.z1 - 0.5, 4);
     auMur(q, 'o', (q.z0 + q.z1) / 2 + 0.3, 0.45, (x, z, h) => horlogeMur(x, z, h, 2.35, 0.32));
     auMur(q, 'o', q.z1 - 1.2, 0.5, (x, z, h) => cadre(x, z, h, 0.36, 0.5, 'equipe'));
-    thermostat(q.x1, q.z0 + 4.2, OUEST); clim(xi, zi); clim(xi, q.z0 + 4.0); detecteur(xi + 1.5, q.z1 - 2.0); detecteur(xi, q.z0 + 2.5); for (const dz of [-1.5, 1.5]) prise(q.x0, zi + dz, EST);
+    thermostat(q.x1, q.z0 + 4.2, OUEST); clim(xi, zi); clim(xi, q.z0 + 4.0); detecteur(xi + 1.5, q.z1 - 2.0); detecteur(xi, q.z0 + 2.5); goulotte(q, 'o', q.z0 + 0.5, q.z1 - 0.5);
     VIE.cibles.jupiter = [xi + 2.0, zi];
   }
 
@@ -1436,7 +1460,9 @@ export class Solumatic {
     const m = this.c.jeu.minutes, nat = !sauter && this.dedans && this.mPrec != null && m - this.mPrec >= 0 && m - this.mPrec < 3;
     this.mPrec = m;
     for (const g of this.gens) {
-      const v = etatVoulu(g.e, m); if (v === g.etat) continue;
+      const v = etatVoulu(g.e, m);
+      if (sauter && g.tache && g.tache.type === 'sortir') { this.placerSelon(g, v); continue; } // (on revient : il est parti)
+      if (v === g.etat) continue;
       const avant = g.etat, entre = avant === 'absent' || avant === 'fume', sort = v === 'absent' || v === 'fume';
       // dehors, ou un saut dans le temps : d'un coup, hors de la vue
       if (!nat || (entre && sort)) { this.placerSelon(g, v); continue; }

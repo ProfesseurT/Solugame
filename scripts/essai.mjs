@@ -2019,7 +2019,6 @@ if (scenario === 'ecole') {
 
 if (scenario === 'solumatic') {
   // Les bureaux de Solumatic (solumatic.js) : les horaires, puis dedans, pièce par pièce
-  const etat = () => ev(() => { const S = CL.solu; return { gens: S.etats(), ouverte: S.ouverte }; });
   await ev(() => { CL.jouer(); CL.step(60); });
   // 1. la nuit (mardi, 23 h) : personne, la porte fermée, l'étiquette dit pourquoi et quand l'équipe arrive
   let r = await ev(() => {
@@ -2164,7 +2163,6 @@ if (scenario === 'solumatic') {
     return { dedans: J.dedans, isoles: !!CL.isoles, n: CL.scene.children.length, toit: CL.monde.toitSolu.visible };
   });
   ok(!r.dedans && !r.isoles && r.toit, `on ressort même fermé : dehors, les objets du dehors revenus (${r.n} objets)`);
-  void etat;
 }
 
 if (scenario === 'photo') {
