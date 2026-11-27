@@ -1409,7 +1409,7 @@ export class Solumatic {
   }
   // une personne de plus (dans l'ordre : Romane d'abord) ; son apparence, tirée d'après son nom (textes.js : EQUIPE)
   creer() {
-    const s = this.ordre[this.n], e = EQ[s.id], ra = hasard(graine(e.id) ^ 0x5017);
+    const s = this.ordre[this.n], e = EQ[s.id], ra = hasard(graine(e.id) ^ 0x502e); // (le sel : onze coiffures, treize teints)
     const a = tirerApparence(ra, { femme: e.silhouette === 'femme', actif: true, couvreChef: false, chapeau: null });
     // le casque-micro sur les deux plateaux ; le badge au cordon orange, pour tout le monde (perso.js)
     const o = { ...a, tenue: e.tenue, haut: e.haut, bas: e.bas, casque: ['support', 'manager', 'formation'].includes(e.role), badge: ORANGE };

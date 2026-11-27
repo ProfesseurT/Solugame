@@ -1696,7 +1696,7 @@ if (scenario === 'restaurateurs') {
 }
 
 if (scenario === 'diversite') {
-  // La diversité des adultes (perso.js : tirerApparence) : tout le monde créé (le bourg, le village du château, les 34 de
+  // La diversité des adultes (perso.js : tirerApparence) : tout le monde créé (le bourg, le village du château, les 22 de
   // Solumatic, les conducteurs, les ouvriers, les clients), puis leurs traits comptés : des teints de très clair à très
   // foncé, toutes les coiffures, des femmes une fois sur deux, des aînés (voûtés, une canne), des barbes, des manteaux et
   // des doudounes, des couvre-chefs dont le foulard ; des triangles sous un plafond
@@ -1727,7 +1727,7 @@ if (scenario === 'diversite') {
   const moy = r.tris.reduce((a, b) => a + b, 0) / r.tris.length, max = Math.max(...r.tris);
   console.log(`${r.n} personnes : ${r.femmes} femmes, ${r.jeunes} jeunes, ${r.aines} aînés (${r.voutes} voûtés, ${r.cannes} cannes), ${r.teints} teints (${r.clairs} clairs, ${r.fonces} foncés dont ${r.tresFonces} très foncés)`);
   console.log(`coiffures : ${r.coiffures.join(', ')} ; ${r.foulards} foulards ; barbes : ${r.barbes.join(', ')} ; tenues : ${r.tenues.join(', ')} ; ${r.echarpes} écharpes ; couvre-chefs : ${r.chapeaux.join(', ')}`);
-  ok(r.n >= 95, 'tout le monde est compté (' + r.n + ' personnes)');
+  ok(r.n >= 83, 'tout le monde est compté (' + r.n + ' personnes)'); // (chez Solumatic, l'équipe : 22, au lieu de 34 figurants)
   ok(r.teints >= 12 && r.clairs >= 5 && r.fonces >= 10 && r.tresFonces >= 4, 'des teints du très clair au très foncé : ' + r.teints + ' teints, ' + r.clairs + ' clairs, ' + r.fonces + ' foncés, ' + r.tresFonces + ' très foncés');
   const TOUTES = ['court', 'chauve', 'chignon', 'queue', 'long', 'carre', 'afro', 'crepu', 'degrade', 'tresses', 'locks', 'boucles', 'rase'];
   ok(TOUTES.every(c => r.coiffures.includes(c)) && r.foulards >= 2, 'toutes les coiffures sont dans le monde, et des foulards (' + r.foulards + ') ; manque : ' + (TOUTES.filter(c => !r.coiffures.includes(c)).join(', ') || 'rien'));
