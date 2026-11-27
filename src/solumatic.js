@@ -45,6 +45,8 @@ const P = {
 export const ENTREE = { z: +Z(7.03).toFixed(2), l: 1.05, h: 2.2 };
 export const PORTE_ATELIER = { z: Z(5.0), l: 2.0, h: 2.3 };
 export const PORTE_ATLAS = { x: X(18.55), l: 2.7, h: 2.3 };
+// la hauteur des fenêtres (appui, linteau), la même dehors (monde.js) et dedans
+export const FEN = { y0: 0.9, y1: 2.55 };
 // les deux vitrines de l'atelier, dans la devanture (rideaux métalliques levés le jour)
 export const VITRINES = [X(1.9), X(4.7)], VITRINE = { l: 1.8, y0: 0.45, y1: 2.4 };
 // les fenêtres des murs extérieurs : [mur, position le long, largeur] (sud et nord : x ; est et ouest : z)
