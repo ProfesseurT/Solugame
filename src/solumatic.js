@@ -21,10 +21,13 @@ import { SOLUMATIC as TXT } from './textes.js';
 import { $, hasard } from './outils.js';
 
 // Le plan en mètres : u vers la droite du plan (l'ouest), v vers le bas (le nord), depuis l'angle intérieur en haut à
-// gauche (au sud-est). Murs extérieurs de 30 cm, 3,6 m sous l'acrotère ; dedans, un faux plafond à 2,7 m.
-const XE = 221.6, ZS = -54, LU = 21.35, LV = 25.6;
-const X = u => XE - u, Z = v => ZS - v;
-export const SOLU = { x0: X(LU), x1: XE, z0: Z(LV), z1: ZS, ep: 0.3, H: 3.6, HC: 2.75, HP: 2.7 };
+// gauche (au sud-est). Agrandi de 30 % (Teddy, 27/11/2026 : « augmenter les proportions de 30 %, afin qu'on puisse se
+// déplacer plus facilement ») : un mètre du plan fait K mètres dans le monde (X, Z) ; les portes et le mobilier gardent
+// leur vraie taille. Murs extérieurs de 30 cm, 4 m sous l'acrotère ; dedans, un faux plafond à 3 m.
+export const K = 1.3;
+const XE = 226, ZS = -60, LU = 21.35, LV = 25.6;
+const X = u => XE - K * u, Z = v => ZS - K * v;
+export const SOLU = { x0: X(LU), x1: XE, z0: Z(LV), z1: ZS, ep: 0.3, H: 4.0, HC: 3.05, HP: 3.0 };
 // une pièce du plan [u0, v0, u1, v1] : son rectangle dans le monde
 const piece = ([u0, v0, u1, v1]) => ({ x0: X(u1), x1: X(u0), z0: Z(v1), z1: Z(v0) });
 const P = {
