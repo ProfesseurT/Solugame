@@ -83,25 +83,35 @@ const MAT_PERSO = new THREE.MeshLambertMaterial({ vertexColors: true });
 // pommettes, le menton : un visage foncé n'est ni gris ni plat. Un reflet plus large et plus faible sur les cheveux (des
 // cheveux noirs restent des cheveux, pas un casque). (directLight : le soleil, tel que l'a laissé la boucle des lumières
 // de three.js, ombre et intérieurs compris.)
+// La lumière qui enveloppe : sur la peau, le passage de la lumière à l'ombre est doux et chaud (la lumière traverse un
+// peu la peau : les joues, le nez, les oreilles, les doigts rosissent au bord de l'ombre) ; sur les étoffes, un peu plus
+// doux que du plâtre. Le liseré : le ciel sur les bords du personnage (vus de biais), qui le détache du décor.
 const zones = l => l.map(n => `iz2 == ${Z[n]}`).join(' || ');
 const GLSL_LUSTRE = `#include <lights_fragment_end>
 #if NUM_DIR_LIGHTS > 0
 {
   int iz2 = int(vZone + 0.5);
-  float ks = (${zones(['peau', 'visageH', 'visageB', 'visageF', 'main', 'pouce'])}) ? 0.035 : (${zones(['cheveux', 'crepu', 'tresses', 'locks', 'barbe'])}) ? 0.016 : 0.0;
+  bool peau = ${zones(['peau', 'visageH', 'visageB', 'visageF', 'main', 'pouce'])};
+  float ks = peau ? 0.035 : (${zones(['cheveux', 'crepu', 'tresses', 'locks', 'barbe'])}) ? 0.016 : 0.0;
+  float nl0 = dot(geometryNormal, directLight.direction), nl = max(nl0, 0.0);
   if (ks > 0.0) {
     vec3 lh = normalize(directLight.direction + geometryViewDir);
-    float nl = max(dot(geometryNormal, directLight.direction), 0.0), nh = max(dot(geometryNormal, lh), 0.0);
+    float nh = max(dot(geometryNormal, lh), 0.0);
     reflectedLight.directDiffuse += directLight.color * (ks * pow(nh, ks > 0.02 ? 18.0 : 7.0) * nl);
   }
+  float w = peau ? 0.55 : 0.25, en = max(0.0, (nl0 + w) / (1.0 + w)) - nl;
+  reflectedLight.directDiffuse += directLight.color * BRDF_Lambert(material.diffuseColor) * (peau ? vec3(0.72, 0.36, 0.26) : vec3(0.45)) * max(en, 0.0);
+}
+#endif
+#if defined( RE_IndirectDiffuse )
+{
+  float rim = 1.0 - max(dot(geometryNormal, geometryViewDir), 0.0);
+  reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert(material.diffuseColor) * (rim * rim * rim * 0.7);
 }
 #endif`;
-// (les couleurs des sommets sont rangées en sRGB sur 8 bits et remises en linéaire ici : rangées linéaires, les teints
-// foncés n'avaient que quelques valeurs, la teinte faussée de 10 à 15 %)
 MAT_PERSO.onBeforeCompile = sh => {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aMat;\nflat varying float vZone;')
-    .replace('#include <color_vertex>', 'vColor = mix(color.rgb / 12.92, pow((color.rgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, color.rgb));')
     .replace('#include <uv_vertex>', '#include <uv_vertex>\nvZone = aMat;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', '#include <common>\nflat varying float vZone;\n' + GLSL_ZONES)
@@ -792,13 +802,15 @@ function main(s, kh, c) {
 
 /* ---------------------------------------------------------------- assemblage
    Les pièces de chaque os (dépliées : trois sommets par triangle) sont écrites directement dans les tableaux compacts que
-   lit la carte graphique : position, normale (3 octets), couleur (3 octets, sRGB), zone de l'atlas (1 octet), coordonnées
+   lit la carte graphique : position, normale (3 octets), couleur (3 octets), zone de l'atlas (1 octet), coordonnées
    de texture (16 bits : uv / UVK), os et poids (4 + 4 octets). Les sommets identiques d'une même pièce (même position,
    même normale, mêmes coordonnées de texture) ne sont gardés qu'une fois (table de hachage) : la géométrie est indexée,
    chaque sommet n'est calculé (et déformé par les os) qu'une fois. Sans fusion intermédiaire ni recopie : la création d'un
    personnage coûte moitié moins. */
 let TH = new Int32Array(0), TS = new Int32Array(0), MARQUE = 0; // table de hachage : numéro du sommet, pièce qui l'a écrit
 const OCTETS = new Map(), PAUME = [180, 122, 102];
+// (les couleurs se calculent en octets sRGB ; la carte graphique les reçoit linéaires, comme celles du chien, même matière)
+const LIN = Uint8Array.from({ length: 256 }, (_, i) => { const c = i / 255; return Math.round(255 * (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))); });
 // une couleur en octets sRGB
 function octets(c) {
   let o = OCTETS.get(c);
@@ -843,7 +855,7 @@ function assembler(G, W, kj, ka) {
           let r = c0[0], gg = c0[1], b = c0[2];
           if (cs) { r = cs[k * 3]; gg = cs[k * 3 + 1]; b = cs[k * 3 + 2]; }
           if (pm) { const w = pm[1] * Math.max(0, Math.min(1, (-pm[0] * n[k * 3] - 0.35) * 2)); r += (PAUME[0] - r) * w; gg += (PAUME[1] - gg) * w; b += (PAUME[2] - b) * w; }
-          COL[j * 3] = r; COL[j * 3 + 1] = gg; COL[j * 3 + 2] = b;
+          COL[j * 3] = LIN[(r + 0.5) | 0]; COL[j * 3 + 1] = LIN[(gg + 0.5) | 0]; COL[j * 3 + 2] = LIN[(b + 0.5) | 0];
           const l = liens(i, x - wx, (y - wy) / ky), w = l ? Math.round(l[1] * 255) : 0;
           SI[j * 4] = i; SW[j * 4] = 255 - w;
           if (w) { SI[j * 4 + 1] = l[0]; SW[j * 4 + 1] = w; }
@@ -1023,7 +1035,14 @@ export function perso(o0) {
     // col de chemise et boutons
     // col de chemise : le pied autour du cou, les pointes rabattues du haut du col sur la poitrine
     const cc0 = o.col || '#f3eee6', anCol = [[-0.02, 0.09, 0.086, 0.004], [0, 0.085, 0.08, 0], [0.038, 0.079, 0.075, -0.01]];
-    add(2, col(anCol, cc0, Z.chemise, kCol), ...[1, -1].map(s => barre(surCol(anCol, kCol, s * 0.02, 0.032, 0.003), surLoft(anP, s * 0.042, 0.28, 1, 0.004), 0.022, 0.004, cc0, Z.chemise)));
+    // (les pointes : deux triangles minces, de part et d'autre de l'ouverture, rabattus sur la poitrine)
+    add(2, col(anCol, cc0, Z.chemise, kCol));
+    for (const sg of [1, -1]) {
+      const A = surCol(anCol, kCol, sg * 0.007, 0.036, 0.003), Bp = surCol(anCol, kCol, sg * 0.04, 0.028, 0.003), Cp = surLoft(anP, sg * 0.036, 0.268, 1, 0.005);
+      const d = (q, e) => [q[0], q[1], q[2] - e], Pp = [...A, ...Bp, ...Cp, ...d(A, 0.002), ...d(Cp, 0.002), ...d(Bp, 0.002)];
+      const g = surVisage(Pp, new Array(12).fill(0), 0, 0.15, -0.05);
+      add(2, finir(g, cc0, Z.chemise, uvBoite(g, Z.chemise)));
+    }
     for (let i = 0; i < 3; i++) add(2, boite(0.012, 0.012, 0.006, '#ece6da', Z.uni, 0, 0.2 - i * 0.075, avant(anP, 0.2 - i * 0.075) + 0.003));
   } else if (tenue === 'robe') {
     add(1, bande(anV, -0.03, 0.0, 1.03, fonce(haut, 0.6), Z.toile, NT));
@@ -1191,7 +1210,7 @@ export function perso(o0) {
       const P = (yy, da, f) => pointTete(...d(yy, da), f);
       // (la pointe : émoussée, une mèche, pas une dent)
       const rl = P(yr, -l / 2, k * 0.985), rr = P(yr, l / 2, k * 0.985), ml = P(ym, -l * 0.36 + dv, 1 + (k - 1) * 0.6), mr = P(ym, l * 0.36 + dv, 1 + (k - 1) * 0.6);
-      const tl = P(yp, -l * 0.16 + dv * 1.6, 1.016), tr = P(yp, l * 0.16 + dv * 1.6, 1.016);
+      const tl = P(yp, -l * 0.3 + dv * 1.6, 1.016 + 0.002 * (i % 2)), tr = P(yp, l * 0.3 + dv * 1.6, 1.016 + 0.002 * (i % 2));
       Pm.push(...rl, ...rr, ...mr, ...rl, ...mr, ...ml, ...ml, ...mr, ...tr, ...ml, ...tr, ...tl);
       const u1 = l * rx / zs.tu, v1 = (yr - yp) * ry / zs.tv;
       Um.push(0, 0, u1, 0, u1 * 0.86, v1 / 2, 0, 0, u1 * 0.86, v1 / 2, u1 * 0.14, v1 / 2, u1 * 0.14, v1 / 2, u1 * 0.86, v1 / 2, u1 * 0.66, v1, u1 * 0.14, v1 / 2, u1 * 0.66, v1, u1 * 0.34, v1);
@@ -1211,7 +1230,8 @@ export function perso(o0) {
     g.userData.cs = cs;
     add(T, g);
   };
-  const lisses = zCh === Z.cheveux;
+  // (une frange pour une personne aux cheveux longs sur deux : d'après ses couleurs, sans rien tirer au sort)
+  const lisses = zCh === Z.cheveux, frange = ((octets(ch)[0] + 3 * octets(peau)[1] + (o.iris ? octets(o.iris)[2] : 0)) & 1) === 0;
   // (la lisière du front remonte aux tempes)
   const court = (x, y, z) => Math.max(y - 0.5 - 0.1 * cloche(Math.abs(x) - 0.45, 0.17), Math.min(0.25 - z, y + 0.42 + nuque(z)), Math.min(Math.abs(x) - 0.82, y + 0.1, 0.5 - z));
   // ce qui tombe dans le dos (tresses, locks, boucles), derrière la nuque, jusqu'à « bas » sous le centre du crâne ; l : sa
@@ -1234,10 +1254,10 @@ export function perso(o0) {
   else if (coif === 'carre') {
     const cc0 = (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.62));
     add(T, cheveux(1.06 + kN, cc0, 1, 1, 1, 0, ch, zCh, 0.09, 4, eCh, 0.9), cheveux(1.1 + kN, (x, y, z) => Math.min(-0.08 - z, y + 0.62, 0.6 - y), 1, 1, 1, -0.012));
-    if (lisses) meches(cc0, 1.06, -70, 70, 10, 0.13, 0.19);
+    if (lisses && frange) meches(cc0, 1.06, -70, 70, 11, 0.11, 0.34);
   }
   else if (coif === 'long') {
-    { const cl = (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.6)); add(T, cheveux(1.06 + kN, cl, 1, 1, 1, 0, ch, zCh, 0.09, 4, eCh, 0.9)); if (lisses) meches(cl, 1.06, -70, 70, 10, 0.14, 0.19); }
+    { const cl = (x, y, z) => Math.max(y - 0.42, Math.min(0.02 - z, y + 0.6)); add(T, cheveux(1.06 + kN, cl, 1, 1, 1, 0, ch, zCh, 0.09, 4, eCh, 0.9)); if (lisses && frange) meches(cl, 1.06, -70, 70, 11, 0.12, 0.34); }
     // longueur qui tombe dans le dos, en mèches
     add(T, loft([[yc - 0.3, 0.085, 0.032, zc - 0.085], [yc - 0.17, 0.092, 0.042, zc - 0.078], [yc - 0.05, 0.088, 0.055, zc - 0.058], [yc + 0.03, 0.07, 0.05, zc - 0.045]], 8, ch, zCh, true, false, { ech: eCh }));
   } else if (coif === 'afro') {

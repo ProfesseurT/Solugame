@@ -121,6 +121,7 @@ export class Anim {
     this.meche = 0; this.mecheV = 0; this.telVu = false; this.vt = 0;
     this.wServ = 0; this.wVerre = 0;
     this.wPorte = 0; this.wOutil = 0; this.accroupi = 0; this.pile = new THREE.Vector3(0, 0.95, 0.36); this.pileL = 0.2;
+    this.F = new Float64Array(4);
     this.wFume = 0; this.tFume = 2 + r() * 6; this.uFume = -1; this.fRepos = r() < 0.6 ? 1 : 0; this.fAutre = r() < 0.5 ? 1 : 0;
     this.wParle = 0; this.att = 0; this.tAtt = 4 + r() * 10; this.wAtt = 0; this.tCligne = 0.5 + r() * 4; this.cligne = 0;
   }
@@ -128,6 +129,7 @@ export class Anim {
   // dt = 0 : tout se place d'un coup (placement, changement de personnage)
   poser(dt, p, t) {
     const o = this.o, m = this.m, g = m.groupe;
+    this.F[0] = dt; this.F[1] = t; // (lus par vivre, cligner, poseClavier, poseFume : sans nombre à virgule en argument)
     const conduite = p.assis && p.conduite;
     const r = Math.random;
 
@@ -184,42 +186,12 @@ export class Anim {
     else if (p.velo) this.poseVelo(p, br); // à vélo (velos.js)
     else if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
     else if (conduite) this.poseConduite(dt, p, t, br);
-    else if (p.assis) this.poseAssise(br, p, t, dt);
+    else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
-    // parler (p.parle, vrai ou de 0 à 1 ; au bureau, poseClavier s'en charge) : la tête hoche et tourne, une main accompagne
-    const pa = p.parle === true ? 1 : +p.parle || 0;
-    this.wParle += (pa - this.wParle) * kl(dt, 4);
-    const libres = !p.fume && !pile && !p.outil && this.wTel < 0.05 && this.wSalut < 0.05 && !p.service && !(p.verre > 0) && !p.appuis && !p.saisir && !(p.caresse && p.caresse.w > 0.01) && !p.jeu && !p.velo;
-    if (this.wParle > 0.01 && !(p.assis && p.clavier) && !conduite) {
-      const w = this.wParle;
-      o[OS.tete].rotation.x += w * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
-      o[OS.tete].rotation.y += w * 0.14 * Math.sin(t * 0.8 + this.resp);
-      o[OS.tete].rotation.z += w * 0.04 * Math.sin(t * 1.3);
-      if (libres) {
-        const yb = o[OS.bassin].position.y, gs = w * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2));
-        this.brasIK(0, 0.15 + 0.05 * Math.sin(t * 1.7), yb + 0.2 + 0.05 * Math.sin(t * 2.9), 0.26 + 0.03 * Math.sin(t * 2.3), 0.7, -0.5, -0.6, gs);
-        o[OS.mainG].rotation.x -= 0.6 * gs; o[OS.mainG].rotation.y += 0.9 * gs;
-      }
-    }
-    // Une attitude, à l'arrêt, de temps en temps (un adulte debout, les mains libres) : les mains jointes devant, dans le
-    // dos, les bras croisés (pas en manteau ni en doudoune), une main sur la hanche. Fondue en 0,6 s.
-    const tr = this.m.traits, debout = immobile && !p.assis && libres && !this.m.enfant && this.wParle < 0.05 && !(tr && tr.canne);
-    if ((this.tAtt -= dt) <= 0) {
-      this.tAtt = 6 + r() * 12;
-      const x = r(), epais = tr && (tr.tenue === 'manteau' || tr.tenue === 'doudoune');
-      this.att = x < 0.5 ? 0 : x < 0.65 ? 1 : x < 0.8 ? 2 : x < 0.9 && !epais ? 3 : 4;
-    }
-    this.wAtt += ((debout && this.repos > 2 && this.att ? 1 : 0) - this.wAtt) * kl(dt, 3);
-    if (this.wAtt > 0.01 && this.att && !p.assis && !p.jeu && !p.velo) {
-      const w = this.wAtt, yb = o[OS.bassin].position.y, dm = this.m.dim;
-      if (this.att === 1) { this.brasIK(0, 0.035, yb - 0.07, 0.15, 0.8, -0.3, 0.2, w); this.brasIK(3, -0.035, yb - 0.06, 0.16, -0.8, -0.3, 0.2, w); }
-      else if (this.att === 2) { this.brasIK(0, 0.05, yb + 0.03, -0.17, 1, -0.2, -0.6, w); this.brasIK(3, -0.05, yb + 0.05, -0.18, -1, -0.2, -0.6, w); }
-      else if (this.att === 3) { this.brasIK(0, -0.11, yb + 0.37, 0.17, 1, -0.4, 0.2, w); this.brasIK(3, 0.11, yb + 0.35, 0.2, -1, -0.4, 0.2, w); }
-      else this.brasIK(0, dm.xh + 0.12, yb + 0.08, 0.01, 1, -0.1, -0.4, w);
-    }
+    this.vivre(p, conduite, immobile, pile);
     // fumer (p.fume), debout ou assis
-    if (p.fume || (this.wFume > 0.01)) this.poseFume(p, t, dt, conduite);
+    if (p.fume || (this.wFume > 0.01)) this.poseFume(p, conduite);
     if (p.appuis) this.poseAppuis(p.appuis);
     if (p.caresse && p.caresse.w > 0.01 && !p.assis) this.poseCaresse(p.caresse);
     if (lisse) this.lisserJeu(dt);
@@ -287,15 +259,57 @@ export class Anim {
       if (dt === 0) { this.meche = vise; this.mecheV = 0; }
       o[OS.meche].rotation.set(this.meche, 0, 0.25 * Math.sin(TAU * this.ph) * Math.min(1, va) - tete.z - tete.y * 0.3);
     }
-    /* ------------------------------------------------ le clignement (perso.js : les paupières fermées, sur l'os de la mèche
-       de qui n'a pas de queue de cheval ; l'œil ouvert, l'os les écrase dans le pli de la paupière et les recule) : toutes
-       les 2 à 6,5 s, fermé en 80 ms, rouvert en 80 ms ; parfois deux fois de suite */
-    if (m.paupieres) {
-      if ((this.tCligne -= dt) <= 0) { this.tCligne = r() < 0.15 ? 0.3 : 2 + r() * 4.5; this.cligne = 0.16; }
-      this.cligne = Math.max(0, this.cligne - dt);
-      const c = this.cligne > 0 ? Math.sin(PI * this.cligne / 0.16) : 0, b = o[OS.meche];
-      b.scale.y = 0.03 + 0.97 * c; b.position.z = m.mecheZ - 0.004 * (1 - c);
+    if (m.paupieres) this.cligner();
+  }
+
+  // Parler (hors du bureau), les attitudes au repos (méthode à part : poser reste assez court pour que le moteur
+  // JavaScript y garde ses petites fonctions en ligne, sans mettre de nombres en boîte)
+  vivre(p, conduite, immobile, pile) {
+    const o = this.o, r = Math.random, dt = this.F[0], t = this.F[1];
+    // parler (p.parle, vrai ou de 0 à 1 ; au bureau, poseClavier s'en charge) : la tête hoche et tourne, une main accompagne
+    const pa = p.parle === true ? 1 : +p.parle || 0;
+    // (sans appel inutile à kl : le nombre qu'elle rend serait mis en boîte, à chaque image)
+    if (pa || this.wParle) { this.wParle += (pa - this.wParle) * kl(dt, 4); if (!pa && this.wParle < 0.002) this.wParle = 0; }
+    const libres = !p.fume && !pile && !p.outil && this.wTel < 0.05 && this.wSalut < 0.05 && !p.service && !(p.verre > 0) && !p.appuis && !p.saisir && !(p.caresse && p.caresse.w > 0.01) && !p.jeu && !p.velo;
+    if (this.wParle > 0.01 && !(p.assis && p.clavier) && !conduite) {
+      const w = this.wParle;
+      o[OS.tete].rotation.x += w * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
+      o[OS.tete].rotation.y += w * 0.14 * Math.sin(t * 0.8 + this.resp);
+      o[OS.tete].rotation.z += w * 0.04 * Math.sin(t * 1.3);
+      if (libres) {
+        const yb = o[OS.bassin].position.y, gs = w * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2));
+        this.brasIK(0, 0.15 + 0.05 * Math.sin(t * 1.7), yb + 0.2 + 0.05 * Math.sin(t * 2.9), 0.26 + 0.03 * Math.sin(t * 2.3), 0.7, -0.5, -0.6, gs);
+        o[OS.mainG].rotation.x -= 0.6 * gs; o[OS.mainG].rotation.y += 0.9 * gs;
+      }
     }
+    // Une attitude, à l'arrêt, de temps en temps (un adulte debout, les mains libres) : les mains jointes devant, dans le
+    // dos, les bras croisés (pas en manteau ni en doudoune), une main sur la hanche. Fondue en 0,6 s.
+    const tr = this.m.traits, debout = immobile && !p.assis && libres && !this.m.enfant && this.wParle < 0.05 && !(tr && tr.canne);
+    if ((this.tAtt -= dt) <= 0) {
+      this.tAtt = 6 + r() * 12;
+      const x = r(), epais = tr && (tr.tenue === 'manteau' || tr.tenue === 'doudoune');
+      this.att = x < 0.5 ? 0 : x < 0.65 ? 1 : x < 0.8 ? 2 : x < 0.9 && !epais ? 3 : 4;
+    }
+    const vAtt = debout && this.repos > 2 && this.att ? 1 : 0;
+    if (vAtt || this.wAtt) { this.wAtt += (vAtt - this.wAtt) * kl(dt, 3); if (!vAtt && this.wAtt < 0.002) this.wAtt = 0; }
+    if (this.wAtt > 0.01 && this.att && !p.assis && !p.jeu && !p.velo) {
+      const w = this.wAtt, yb = o[OS.bassin].position.y, dm = this.m.dim;
+      if (this.att === 1) { this.brasIK(0, 0.035, yb - 0.07, 0.15, 0.8, -0.3, 0.2, w); this.brasIK(3, -0.035, yb - 0.06, 0.16, -0.8, -0.3, 0.2, w); }
+      else if (this.att === 2) { this.brasIK(0, 0.05, yb + 0.03, -0.17, 1, -0.2, -0.6, w); this.brasIK(3, -0.05, yb + 0.05, -0.18, -1, -0.2, -0.6, w); }
+      else if (this.att === 3) { this.brasIK(0, -0.11, yb + 0.37, 0.17, 1, -0.4, 0.2, w); this.brasIK(3, 0.11, yb + 0.35, 0.2, -1, -0.4, 0.2, w); }
+      else this.brasIK(0, dm.xh + 0.12, yb + 0.08, 0.01, 1, -0.1, -0.4, w);
+    }
+  }
+
+  // Le clignement (perso.js : les paupières fermées, sur l'os de la mèche de qui n'a pas de queue de cheval ; l'œil ouvert,
+  // l'os les écrase dans le pli de la paupière et les recule) : toutes les 2 à 6,5 s, fermé en 80 ms, rouvert en 80 ms ;
+  // parfois deux fois de suite
+  cligner() {
+    const dt = this.F[0];
+    if ((this.tCligne -= dt) <= 0) { this.tCligne = Math.random() < 0.15 ? 0.3 : 2 + Math.random() * 4.5; this.cligne = 0.16; }
+    this.cligne = Math.max(0, this.cligne - dt);
+    const c = this.cligne > 0 ? Math.sin(PI * this.cligne / 0.16) : 0, b = this.o[OS.meche];
+    b.scale.y = 0.03 + 0.97 * c; b.position.z = this.m.mecheZ - 0.004 * (1 - c);
   }
 
   // Bras par cinématique inverse, mélangé à la pose déjà posée. c : 0 gauche, 3 droit ; cible et pôle dans le repère du personnage.
@@ -567,7 +581,7 @@ export class Anim {
   }
 
   /* ---------------------------------------------------------------- assis sur un banc ou une chaise */
-  poseAssise(br, p, t = 0, dt = 0) {
+  poseAssise(br, p) {
     // (p.y0 : la hauteur du sol sous la chaise ; les terrasses et les bancs du village du château sont sur son plateau)
     const o = this.o, g = this.m.groupe, s = this.m.echelle, dm = this.m.dim, y0 = (p && p.y0) || 0;
     const yB = (y0 + ((p && p.siege) || 0.46) + 0.1 - g.position.y) / s + 0.1, yP = (y0 - g.position.y) / s + DIM.cheville;
@@ -579,7 +593,7 @@ export class Anim {
     this.reperes();
     for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (dm.xh + 0.04), yP, 0.42 + (sg * this.poids > 0 ? 0.06 : 0), 0, sg * 0.12, 0.6); }
     // mains posées sur les cuisses ; au bureau (p.clavier), au travail : poseClavier
-    if (p && p.clavier) { this.poseClavier(p, t, dt, (y0 + 0.82 - g.position.y) / s, yB, s); return; }
+    if (p && p.clavier) { this.F[2] = (y0 + 0.82 - g.position.y) / s; this.F[3] = yB; this.poseClavier(p); return; }
     this.brasIK(0, dm.xh + 0.03, yB + 0.06, 0.24, 0.6, -0.4, -1, 1);
     this.brasIK(3, -dm.xh - 0.03, yB + 0.06, 0.24, -0.6, -0.4, -1, 1);
     o[OS.mainG].rotation.set(-0.5, 0, 0.3); o[OS.mainD].rotation.set(-0.5, 0, -0.3);
@@ -592,7 +606,8 @@ export class Anim {
      dans l'autre. p.parle (vrai, ou de 0 à 1) : on parle au casque ou au téléphone, la tête hoche et tourne, la main
      gauche fait des gestes, la droite reste sur la souris. Le clavier : à 0,82 m du sol, à p.clavierZ (m) devant soi (par
      défaut : les poignets à 0,44 m, le clavier des postes de Solumatic à 0,5 m ; le portable du héros, plus loin). yC : sa hauteur, repère du personnage. */
-  poseClavier(p, t, dt, yC, yB, s) {
+  poseClavier(p) {
+    const dt = this.F[0], t = this.F[1], yC = this.F[2], yB = this.F[3], s = this.m.echelle;
     const o = this.o, dm = this.m.dim, heros = !!(this.m.traits && this.m.traits.heros), B = this.bur || (this.bur = new Float64Array(16));
     const kz = p.clavierZ != null ? p.clavierZ / s : heros ? 0.62 : 0.46;
     // B : [état, minuteur, poids de taper, de la souris, de lire, d'adossé, de parler, phase de la rafale, rafale]
@@ -860,7 +875,8 @@ export class Anim {
      main redescend, on souffle la fumée la tête un peu relevée. Le transfert du poids, les coups d'œil : ceux du repos.
      Rend, pour la fumée (particules.js) : p.bout, le bout allumé en coordonnées du monde, et p.bouffee, vrai à l'image où
      la fumée sort de la bouche (p.bouche : où). */
-  poseFume(p, t, dt, conduite) {
+  poseFume(p, conduite) {
+    const dt = this.F[0], t = this.F[1];
     const o = this.o, m = this.m, dm = m.dim, fume = !!p.fume && !conduite && !(p.assis && p.clavier) && !p.velo && !p.jeu;
     this.wFume += ((fume ? 1 : 0) - this.wFume) * kl(dt, 4);
     const cig = cigarette(m), w = this.wFume;
