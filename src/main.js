@@ -80,7 +80,7 @@ const L = monde.lieux;
 const paliers = new Paliers({
   renderer, scene, camera, monde, tactile, mesures, redimensionner,
   // réglages propres au jeu : au-delà de 1,6 fois la fin de la brume tout est couleur de brume, inutile de le dessiner
-  regler(q) { monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800); regarder(); taches.mat.opacity = q.tache; },
+  regler(q) { monde.ciel.scale.setScalar((q.brume[1] * 1.6 + 60) * 0.9 / 800); regarder(vueDedans, vueLoin); taches.mat.opacity = q.tache; }, // (dedans, la vue garde sa portée : chez Solumatic, tout le bâtiment)
 });
 // Jusqu'où la caméra dessine : loin dehors (la brume du palier) ; dans le bureau du chai, la pièce seulement (le monde
 // extérieur, derrière les murs, n'est pas dessiné, ni le ciel) ; chez Solumatic, tout le bâtiment (loin), et de plus près
@@ -595,7 +595,7 @@ const etqCible = hud.etiquette('', 'cible');
 const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, pc, tel, regarder });
 // les bureaux de Solumatic, dans la zone d'activités (solumatic.js) : la porte d'entrée, ceux qui y travaillent
 for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
-const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, garder: o => GARDES.add(o) });
+const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, emettre, garder: o => GARDES.add(o) });
 const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
 // Le chien du domaine (chien.js) : il vit dans la cour, s'écarte de tout véhicule qui roule vers lui, se laisse caresser,
 // dort à la maison. mobiles : ce qui peut rouler (les véhicules du joueur, la remorque, le transpalette de Marc) ; gens :

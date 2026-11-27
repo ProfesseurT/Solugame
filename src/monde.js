@@ -3869,7 +3869,7 @@ void main() {
     const vitresSolu = new THREE.Mesh(indexer(fusion(I.vitres), true), new THREE.MeshBasicMaterial({ color: '#d9e6ef' }));
     vitresSolu.name = 'vitres Solumatic'; vitresSolu.matrixAutoUpdate = false;
     interieurSolu.matrixAutoUpdate = false; interieurSolu.add(...panneauxSolumatic(I.affiches, I.ecrans), vitresSolu); scene.add(interieurSolu);
-    interieurs.push({ min: [SOLU.x0 - 0.12, -1, SOLU.z0 - 0.12], max: [SOLU.x1 + 0.12, SOLU.HP + 0.06, SOLU.z1 + 0.12], pieces: I.pieces, lampes: I.lampes, couleur: [1.0, 0.97, 0.92], force: 1.4, portee: 0.2, fond: [0.62, 0.62, 0.6], relief: true });
+    interieurs.push({ min: [SOLU.x0 - 0.12, -1, SOLU.z0 - 0.12], max: [SOLU.x1 + 0.12, SOLU.HP + 0.06, SOLU.z1 + 0.12], pieces: I.pieces, lampes: I.lampes, ...I.lumiere });
 
     /* -- les abords (SITE ; Teddy, 27/11/2026 : « y'a une route qui fait le tour du bureau avec des arbres de l'autre côté de
        la route et une clôture ») : la route (son enrobé : plus haut, avec les sols), ses bordures, ses lignes de rive, le

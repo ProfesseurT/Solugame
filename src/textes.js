@@ -678,27 +678,72 @@ export const energie = (degre, glucides) => {
   return { kj: Math.round((alcool * 29 + glucides * 17) * 10) / 10, kcal: Math.round((alcool * 7 + glucides * 4) * 100) / 100 };
 };
 
-// Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la
-// tournée ; le lendemain matin, jour du traitement.
-// Les bureaux de Solumatic (solumatic.js) : ce que disent ceux qui y travaillent quand on passe près de leur poste (rien
-// sur les produits : un bonjour)
-// Les bureaux de Solumatic (solumatic.js) : ce que dit chacun quand on passe tout près, selon sa pièce (rien sur les
-// logiciels : des mots de bureau) ; les buts au baby-foot
+/* L'équipe de Solumatic (solumatic.js) : les 21 du site et Vanessa. Source : la page « À propos » de vitisoft.fr, bloc
+   « L'équipe » (dépôt local vitisoft.fr, src/pages/a-propos.astro, lu le 27/11/2026) : les noms et, quand le site les donne,
+   les fonctions (titre). Vanessa, commerciale en freelance, vient certains jours (Teddy, 27/11/2026 : « dans le bureau des
+   sales, elles sont 3 + vanessa ») ; le site ne la cite pas, on ne donne que son prénom. Jérémie s'écrit comme Teddy l'écrit
+   (le site : « Jeremie »). La place de chacun, d'après Teddy (27/11/2026) : piece (une pièce du plan, solumatic.js : P) ;
+   role : ses répliques (SOLUMATIC) et son poste (écrans, casque) ; silhouette : 'femme' ou 'homme' (celles que Teddy
+   désigne par « elles » sont des femmes, le patron et l'associé des hommes ; les autres d'après le prénom, à changer ici
+   au besoin) ; tenue de bureau d'hiver, sans manteau (perso.js : veste, chemise, pull, gilet, robe, jupe), ses couleurs ;
+   le reste (teint, cheveux, âge, taille) est tiré au sort (perso.js : tirerApparence), sans ressemblance cherchée.
+   Les répliques ne disent jamais « il » ou « elle » d'un collègue. */
+export const EQUIPE = [
+  { id: 'thomas', prenom: 'Thomas', nom: 'Petit', titre: 'Président de Solugroup', piece: 'uranus', role: 'patron', silhouette: 'homme', tenue: 'veste', haut: '#2c3e66', bas: '#2f2f35', col: '#e9eef4', lunettes: true },
+  { id: 'teddy', prenom: 'Teddy', nom: 'Pereira', titre: 'Associé, directeur marketing commercial', piece: 'neptune', role: 'associe', silhouette: 'homme', tenue: 'chemise', haut: '#e9eef4', bas: '#2f3440' },
+  { id: 'romane', prenom: 'Romane', nom: 'Bouijoux', titre: '', piece: 'saturne', role: 'commerciale', silhouette: 'femme', tenue: 'pull', haut: '#b8524a', bas: '#2c3e50' },
+  { id: 'alice', prenom: 'Alice', nom: 'Fontaine', titre: '', piece: 'saturne', role: 'commerciale', silhouette: 'femme', tenue: 'veste', haut: '#33404f', bas: '#3a3f48' },
+  { id: 'camila', prenom: 'Camila', nom: 'Vendramini', titre: '', piece: 'saturne', role: 'commerciale', silhouette: 'femme', tenue: 'gilet', haut: '#d9c7a7', bas: '#2a2d36' },
+  { id: 'vanessa', prenom: 'Vanessa', nom: '', titre: 'Freelance', piece: 'saturne', role: 'freelance', silhouette: 'femme', tenue: 'chemise', haut: '#f2ede4', bas: '#1f2430', freelance: true },
+  { id: 'dylan', prenom: 'Dylan', nom: 'Lecomte', titre: 'Manager dév. logiciel', piece: 'jupiter', role: 'dev', silhouette: 'homme', tenue: 'pull', haut: '#2f3e4e', bas: '#3b4a5e', tissuBas: 'jean' },
+  { id: 'emeline', prenom: 'Emeline', nom: 'Marchi', titre: 'Dév. logiciel', piece: 'jupiter', role: 'dev', silhouette: 'femme', tenue: 'pull', haut: '#5f7d4e', bas: '#2c3442', tissuBas: 'jean' },
+  { id: 'nathan', prenom: 'Nathan', nom: 'Peltier', titre: 'Dév. Web', piece: 'jupiter', role: 'dev', silhouette: 'homme', tenue: 'gilet', haut: '#8a8f96', bas: '#2f3a4c', tissuBas: 'jean' },
+  { id: 'kevin', prenom: 'Kevin', nom: 'Lamant', titre: 'Dév. Web', piece: 'jupiter', role: 'dev', silhouette: 'homme', tenue: 'pull', haut: '#7a2e3a', bas: '#30343c', tissuBas: 'jean' },
+  { id: 'jeremie', prenom: 'Jérémie', nom: 'Delavault', titre: 'Responsable partenariats', piece: 'jupiter', role: 'partenariats', silhouette: 'homme', tenue: 'chemise', haut: '#a9c1dc', bas: '#2b3340' },
+  { id: 'vincent', prenom: 'Vincent', nom: 'Jallerat', titre: 'Manager dév. Web', piece: 'venus', role: 'devweb', silhouette: 'homme', tenue: 'pull', haut: '#3f4a3c', bas: '#2c2f36' },
+  { id: 'jessica', prenom: 'Jessica', nom: 'Perochon', titre: 'Intégratrice de données', piece: 'terre', role: 'donnees', silhouette: 'femme', tenue: 'pull', haut: '#6c4f7f', bas: '#24262d' },
+  { id: 'charlene', prenom: 'Charlene', nom: 'Terrier', titre: 'Formatrice', piece: 'terre', role: 'formatrice', silhouette: 'femme', tenue: 'gilet', haut: '#c98b5b', bas: '#2f3440' },
+  { id: 'ophelie', prenom: 'Ophélie', nom: 'Tessereau', titre: 'Manager support', piece: 'atelier', role: 'manager', silhouette: 'femme', tenue: 'veste', haut: '#41546b', bas: '#262a31' },
+  { id: 'clement', prenom: 'Clément', nom: 'Chevallier', titre: 'Opérateurs de maintenance', piece: 'atelier', role: 'support', silhouette: 'homme', tenue: 'pull', haut: '#ef6c26', bas: '#2f3440', tissuBas: 'jean' },
+  { id: 'cindy', prenom: 'Cindy', nom: 'Tillet', titre: 'Opérateurs de maintenance', piece: 'atelier', role: 'support', silhouette: 'femme', tenue: 'pull', haut: '#2e6f8e', bas: '#2a2d36' },
+  { id: 'hugo', prenom: 'Hugo', nom: 'Rajoye', titre: 'Opérateurs de maintenance', piece: 'atelier', role: 'support', silhouette: 'homme', tenue: 'chemise', haut: '#5d7f99', bas: '#2c3e50' },
+  { id: 'lorette', prenom: 'Lorette', nom: 'Chanvalon', titre: 'Opérateurs de maintenance', piece: 'atelier', role: 'support', silhouette: 'femme', tenue: 'gilet', haut: '#9c6b8a', bas: '#25282f' },
+  { id: 'raphael', prenom: 'Raphaël', nom: 'Desmard', titre: 'Opérateurs de maintenance', piece: 'atelier', role: 'support', silhouette: 'homme', tenue: 'pull', haut: '#4a5a43', bas: '#33373f', tissuBas: 'jean' },
+  { id: 'emma', prenom: 'Emma', nom: 'Pillette', titre: 'Formatrice', piece: 'soleil', role: 'formation', silhouette: 'femme', tenue: 'chemise', haut: '#f4f1ea', bas: '#2b2f3a' },
+  { id: 'emilie', prenom: 'Emilie', nom: 'Barbottin', titre: 'Formatrice', piece: 'soleil', role: 'formation', silhouette: 'femme', tenue: 'pull', haut: '#2f5d62', bas: '#2a2d34' },
+];
+
+/* Les bureaux de Solumatic (solumatic.js) : ce que dit chacun quand on passe tout près, selon son rôle (EQUIPE) ou ce qu'il
+   fait (café, imprimante, baby-foot, réunion, visite) ; la bulle commence par son prénom. Des mots de bureau : on nomme les
+   logiciels, sans rien promettre ni chiffrer (règle de vérité, CLAUDE.md) ; jamais « il » ni « elle » d'un collègue, ni
+   d'accord qui dise qui parle. Les buts au baby-foot. */
 export const SOLUMATIC = {
   bonjour: ['Bonjour ! Bienvenue chez Solumatic.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !'],
-  dev: ['Salut ! Je suis en plein dedans, je reviens vers toi.', 'Le café ? Dans la cuisine, à Mars.', 'Chut, ça compile.', 'Salut ! Tu as vu le tableau des tâches ?', 'Bonjour ! Encore une relecture et je pousse.'],
-  commercial: ['Bonjour ! Je suis au téléphone avec un domaine, deux minutes.', 'Salut ! Belle journée pour appeler les vignerons.', 'Bonjour ! Le patron est à Uranus, au fond.', 'Je note le rappel et je suis à vous.'],
   patron: ['Bienvenue chez Solumatic ! Faites comme chez vous.', 'Bonjour ! La porte est toujours ouverte.', 'Ah, bonjour ! Vous avez vu Atlas ? C\'est là qu\'on se réunit.'],
-  associe: ['Bonjour ! Neptune, c\'est mon bureau. Entrez.', 'Salut ! La réunion est à Mercure, si vous la cherchez.', 'Bonjour ! Je relis un contrat, je suis à vous.'],
-  technicien: ['Salut ! Je change un disque, ce PC repart ce soir.', 'Attention, câbles partout !', 'Bonjour ! L\'atelier, c\'est la maintenance.'],
-  formateur: ['On reprend : tout le monde voit l\'écran ?', 'Bonjour ! La formation est à Soleil, installez-vous.', 'Une question ? Levez la main.'],
-  stagiaire: ['Bonjour ! On est en formation.', 'Chut, on écoute.', 'Bonjour ! Pause dans dix minutes.'],
+  associe: ['Bonjour ! Neptune, c\'est mon bureau. Entrez.', 'La réunion est à Mercure, si vous la cherchez.', 'Bonjour ! Je relis un contrat, je suis à vous.'],
+  commerciale: ['Bonjour ! Je suis au téléphone avec un domaine, deux minutes.', 'Belle journée pour appeler les vignerons.', 'Je note le rappel dans Le bureau et je suis à vous.', 'Une démonstration ? Je regarde mon agenda.'],
+  freelance: ['Bonjour ! Je ne passe que certains jours, alors j\'en profite.', 'Je viens en renfort, et toujours pour le café du matin.', 'Bonjour ! Le poste du bout, c\'est le mien quand je suis là.'],
+  dev: ['Chut, ça compile.', 'Encore une relecture et je pousse.', 'Ça marche sur mon poste, c\'est déjà ça.', 'Le café ? À Mars, au bout du couloir.', 'Vous avez vu le tableau des tâches ?', 'Un bug ? Montrez-moi ça.'],
+  partenariats: ['Bonjour ! Je prépare un rendez-vous avec un partenaire.', 'Les partenariats, c\'est par ici.', 'Un café, et j\'appelle le suivant.'],
+  devweb: ['Bonjour ! Le site web, c\'est ici.', 'Je relis une page avant la mise en ligne.', 'On regarde d\'abord sur téléphone, toujours.'],
+  donnees: ['J\'importe le fichier d\'un nouveau client : attention, ça défile.', 'Une colonne de plus et tout est à sa place.', 'Les données, c\'est comme la vigne : ça se taille.'],
+  formatrice: ['Bonjour ! Je prépare la prochaine formation.', 'Un vigneron m\'attend en visio tout à l\'heure.', 'Le cahier d\'exercices est presque bouclé.'],
+  manager: ['Bonjour ! Ici, c\'est le plateau du support.', 'La file d\'appels est calme : on en profite pour les tickets.', 'Chut, l\'équipe est en ligne.'],
+  support: ['Support, bonjour ! Je vous écoute.', 'Vous voyez la petite flèche ? Cliquez juste là.', 'Je prends la main sur votre poste, ne touchez plus la souris.', 'Le casque sur les oreilles : je suis en ligne.', 'Je note tout dans le ticket.', 'Redémarrer ? C\'est souvent la première question.'],
+  formation: ['Formation à distance en cours : un petit coucou à la caméra ?', 'Partagez votre écran, on regarde ensemble.', 'Vous m\'entendez bien ? Je coupe mon micro une seconde.', 'On passe à l\'exercice suivant.', 'Le voyant est allumé : session en cours.'],
+  // ce qu'on fait loin de son poste
+  cafe: ['Un café ? La machine est sur le comptoir.', 'On parlait du week-end.', 'Il reste des croissants, servez-vous.', 'Le meilleur moment de la matinée.'],
+  imprimante: ['L\'imprimante fait encore des siennes.', 'Bourrage papier, évidemment.', 'Je récupère mes impressions et je file.'],
   reunion: ['On fait le point, on en a pour un moment.', 'Bonjour ! Réunion en cours.', 'Vous restez avec nous ?'],
+  visite: ['Deux minutes, on regarde ça ensemble.', 'Je passais en coup de vent.', 'On en reparle au café ?'],
   babyfoot: ['Pas de pissette !', 'Tu joues la gagne ?', 'Attends, je suis en défense.', 'Revanche à midi !'],
-  cafe: ['Un café ? La machine est sur le comptoir.', 'On parlait du week-end.', 'Salut ! Il reste des croissants.'],
-  pause: ['Bonjour ! Petite pause.', 'Salut ! Il y a du café chaud.'],
-  bureau: ['Bonjour ! Bienvenue chez Solumatic.', 'Bonjour ! Vous cherchez quelqu\'un ?', 'Bonne journée !'],
   but: ['But !', 'Et un but !', 'Gamelle !'],
+  repas: ['Bon appétit !', 'Il reste de la place, installez-vous.', 'On parle de tout, sauf du travail.'],
+  // Romane, devant l'entrée, en pause (rien à moraliser)
+  fume: ['Bonjour ! Toujours la première arrivée, jamais la première entrée.', 'Deux minutes de pause et je rappelle mon domaine.', 'Il pique, ce matin ! La porte est ouverte, entrez.', 'Ma pause, mon bureau à ciel ouvert.', 'Vous venez pour une démonstration ? J\'arrive tout de suite.'],
+  // la porte fermée : personne (les horaires : solumatic.js) ; quand l'équipe arrive (« à 7 h 45 », « demain à 7 h 45 »)
+  ferme: quand => `Solumatic est fermé à cette heure-ci : l'équipe arrive ${quand}.`,
+  etiquetteFerme: quand => `Fermé · l'équipe arrive ${quand}`,
 };
 
 // Le parvis de la tonnellerie (tonnellerie.js) : le tonnelier qui cercle, le chauffeur, le rouleur
@@ -725,6 +770,8 @@ export const VELOS = {
   repart: ['Bon, il n\'a rien. On repart.', 'Plus de peur que de mal.', 'Les tracteurs, je vous jure !', 'Allez, en selle.'],
 };
 
+// Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la
+// tournée ; le lendemain matin, jour du traitement.
 export const PARVIS = {
   rinceur: {
     tournee: ['Salut ! Je finis de rincer les barriques et j\'y vais.', 'Recule un peu, ça éclabousse !', 'Encore deux barriques et c\'est bon pour ce soir.'],

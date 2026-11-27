@@ -408,6 +408,23 @@ export const son = {
     const t = ctx.currentTime;
     for (let i = 0, n = 2 + Math.floor(Math.random() * 4); i < n; i++) bruit(t + i * (0.07 + Math.random() * 0.06), 0.012, 3200 + Math.random() * 1800, 0.035 * k, 'bandpass');
   },
+  // les plateaux de Solumatic : une voix au casque, étouffée (trois ou quatre syllabes, des formants qui glissent, sans
+  // un mot), k de 0 à 1 selon la distance ; la tonalité douce d'un appel qui arrive
+  voix(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime, f0 = hasard(150, 230);
+    for (let i = 0, n = 2 + Math.floor(Math.random() * 3), ti = t; i < n; i++) {
+      const d = hasard(0.08, 0.17);
+      note(f0 * hasard(0.9, 1.15), ti, d, 'triangle', 0.012 * k, sfx, 520);
+      bruit(ti, d * 0.9, hasard(500, 900), 0.008 * k, 'bandpass');
+      ti += d + hasard(0.03, 0.09);
+    }
+  },
+  tonalite(k) {
+    if (!ctx || !actif || k < 0.05) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 2; i++) { note(880, t + i * 0.22, 0.12, 'sine', 0.012 * k, sfx, 0, true); note(1320, t + i * 0.22, 0.12, 'sine', 0.006 * k, sfx, 0, true); }
+  },
   // une balle de baby-foot frappée : un coup de bois, sec
   babyfoot(k) {
     if (!ctx || !actif || k < 0.05) return;

@@ -13,6 +13,10 @@ export const SOLEIL = new THREE.Vector3(-0.75, 0.42, 0.55).normalize();
 // carrosserie : peinture vernie des véhicules (reflet du ciel, éclat du soleil), appliquée à toute couleur par
 // teinter(g, couleur, T.carrosserie) : elle n'a pas de couleur réservée dans TYPES.
 export const T = { lisse: 0, pierre: 1, ardoise: 2, asphalte: 3, herbe: 4, gravier: 5, terre: 6, bois: 7, feuillage: 8, vitre: 9, paves: 10, eau: 11, peinture: 12, champ: 13, lampe: 14, allumee: 15, carrosserie: 16, moellon: 17, enduit: 18, petitsPaves: 19, enrobe: 20 };
+// Les bureaux de Solumatic (solumatic.js ; 21 à 27, cl_bureaux) : peinture murale blanche, moquette en dalles, carrelage
+// de 30 cm, faux plafond en dalles de 60 cm et son ossature, parquet en lames, tissu (cloisonnettes, panneaux acoustiques,
+// assises), grès de 60 cm (couloirs, entrée)
+Object.assign(T, { murBureau: 21, moquette: 22, carrelage: 23, fauxPlafond: 24, parquet: 25, tissu: 26, gres: 27 });
 const TYPES = new Map(Object.entries({
   '#ebe0c6': T.pierre, '#b9a98b': T.pierre, '#d9cdb2': T.pierre, '#efe6d3': T.pierre, '#a99a82': T.pierre,
   '#cfc3a8': T.pierre, '#e3dac6': T.pierre, '#cbbf9f': T.pierre, '#d8cbb0': T.pierre,
@@ -37,6 +41,14 @@ const TYPES = new Map(Object.entries({
   '#6e4227': T.bois, // douelles plus sombres des barriques (parvis du chai)
   '#8f877a': T.eau, // les flaques du parvis : elles reflètent le ciel
   '#eef0f2': T.lampe, // les néons de l'entrepôt de l'imprimeur (mission 3)
+  // les bureaux de Solumatic (solumatic.js : leurs couleurs réservées)
+  '#f1efea': T.murBureau, '#e9e7e1': T.murBureau,
+  '#5b6573': T.moquette, '#4c5563': T.moquette, '#6b6f78': T.moquette, '#6a7f8f': T.moquette, '#56606b': T.moquette,
+  '#d8d9d4': T.carrelage, '#e3e5e3': T.carrelage, '#dcdad3': T.carrelage,
+  '#f2f1ec': T.fauxPlafond,
+  '#a98a62': T.parquet, '#b08d63': T.parquet, '#8a6d5a': T.parquet,
+  '#4f6a7a': T.tissu, '#8f9a82': T.tissu, '#c96f3b': T.tissu, '#3d4652': T.tissu, '#b9b4aa': T.tissu, '#7d8a99': T.tissu, '#e8e6df': T.tissu,
+  '#cfd1cf': T.gres, '#c9cbc7': T.gres,
 }));
 /* -- Solumatic, dehors (types 28 et 29, leurs couleurs réservées ; monde.js : zoneActivites). crepi : l'enduit blanc des
    murs, taloché fin, sali en pied de mur et coulé sous la couvertine ; translucide : dans les vitres traversées du regard
@@ -214,12 +226,64 @@ vec3 normaleMonde() { return normalize(cross(dFdx(vPosM), dFdy(vPosM))); }
 const vec2 SOLEIL_XZ = ${V2(SOLEIL)}; // vers le soleil, au sol
 // éclat moyen de chaque matière, pour la version allégée au loin
 const float KLOIN[20] = float[20](1.0, 0.92, 0.9, 0.96, 0.94, 1.0, 0.92, 0.88, 0.9, 1.0, 0.9, 1.0, 0.86, 0.96, 1.0, 1.0, 1.0, 0.9, 0.97, 0.84);
+// Les bureaux de Solumatic (types 21 à 27) : on ne les voit que dedans, de près (pas de version allégée au loin). Quelques
+// lectures du bruit, pas de boucle ; les joints et l'ossature s'adoucissent avec la distance (fwidth : pas de moiré).
+// (une ligne de largeur w, d : la distance au bord, en mètres)
+float cl_joint(float d, float w) { float fw = fwidth(d); return 1.0 - smoothstep(w - fw, w + fw, d); }
+vec3 cl_bureaux(vec3 col, vec2 uv, int m, float g) {
+  float f = texture(tBruit, uv * 0.73).r, k = 1.0;
+  if (m == 21) {
+    // peinture murale blanche : le grain fin du rouleau (une peau d'orange), une passe à peine plus claire que l'autre ;
+    // le pied du mur un rien plus sombre, jamais sale
+    float r = texture(tBruit, uv * 3.1).r, b = texture(tBruit, uv * 9.7).b;
+    k = 0.968 + 0.026 * r + 0.012 * b + 0.014 * f + 0.016 * g;
+    k *= mix(0.93, 1.0, smoothstep(0.0, 0.5, vPosM.y));
+  } else if (m == 22) {
+    // moquette en dalles de 50 cm, posées en damier : le sens du velours tourne d'un quart d'une dalle à l'autre ; la fibre,
+    // une teinte par dalle, le joint à peine marqué
+    vec2 p = uv / 0.5, c = floor(p), fr = fract(p), ed = min(fr, 1.0 - fr) * 0.5;
+    float sens = mod(c.x + c.y, 2.0);
+    float velours = texture(tBruit, sens > 0.5 ? vec2(uv.x * 7.0, uv.y * 0.9) : vec2(uv.x * 0.9, uv.y * 7.0)).r;
+    float fibre = texture(tBruit, uv * 6.3).b;
+    k = 0.86 + 0.1 * velours + 0.08 * fibre + 0.035 * (h21(c) - 0.5) + 0.03 * g;
+    k *= 1.0 - 0.1 * cl_joint(min(ed.x, ed.y), 0.002);
+  } else if (m == 23 || m == 27) {
+    // carrelage de 30 cm (cuisine, sanitaires), grès de 60 cm (couloirs, entrée) : un carreau à la fois, le joint gris
+    float s = m == 23 ? 0.3 : 0.6;
+    vec2 p = uv / s, c = floor(p), ed = min(fract(p), 1.0 - fract(p)) * s;
+    float nuage = texture(tBruit, uv * (m == 23 ? 1.7 : 0.9) + h21(c) * 3.0).g;
+    k = (0.93 + 0.05 * h21(c) + 0.05 * nuage + 0.02 * f) * (0.98 + 0.03 * g);
+    k = mix(k, m == 23 ? 0.76 : 0.8, cl_joint(min(ed.x, ed.y), m == 23 ? 0.0025 : 0.0018));
+  } else if (m == 24) {
+    // faux plafond : dalles de 60 cm en fibre minérale (mouchetis, petites fissures), posées sur l'ossature en T blanche
+    // de 24 mm, leur bord un peu dans l'ombre
+    vec2 p = uv / 0.6, c = floor(p), ed = min(fract(p), 1.0 - fract(p)) * 0.6;
+    float e = min(ed.x, ed.y), mou = texture(tBruit, uv * 7.3).b, fi = texture(tBruit, uv * 2.3 + 0.5).b;
+    float dalle = (0.95 + 0.035 * f + 0.02 * h21(c)) * (1.0 - 0.06 * smoothstep(0.72, 0.95, mou) - 0.04 * smoothstep(0.85, 0.97, fi));
+    dalle *= mix(0.88, 1.0, smoothstep(0.012, 0.035, e));
+    k = mix(dalle, 1.03, cl_joint(e, 0.012));
+  } else if (m == 25) {
+    // parquet : lames de 14 cm, de 0,9 à 1,5 m, à coupe perdue ; le fil du bois, une teinte par lame, les joints fins
+    float w = 0.14, r = floor(uv.y / w), L = 0.9 + 0.6 * h21(vec2(r, 7.0)), x = uv.x / L + h21(vec2(r, 3.0));
+    vec2 c = vec2(floor(x), r);
+    float ty = h21(c + 11.0), fil = texture(tBruit, vec2(uv.x * 0.45 + ty * 7.0, uv.y * 11.0)).r, noeud = texture(tBruit, uv * 1.9 + ty).b;
+    k = 0.8 + 0.14 * ty + 0.16 * (fil - 0.5) + 0.03 * f - 0.05 * smoothstep(0.93, 0.99, noeud);
+    col *= mix(vec3(1.0), vec3(1.07, 0.98, 0.88), ty);
+    float jy = min(fract(uv.y / w), 1.0 - fract(uv.y / w)) * w, jx = min(fract(x), 1.0 - fract(x)) * L;
+    k *= 1.0 - 0.3 * cl_joint(min(jx, jy), 0.0012);
+  } else if (m == 26) {
+    // tissu (cloisonnettes, panneaux acoustiques, assises) : un feutre, grain serré
+    k = 0.88 + 0.13 * texture(tBruit, uv * 8.3).b * (0.7 + 0.3 * f) + 0.04 * g;
+  }
+  return col * k;
+}
 vec3 cl_detail(vec3 col) {
   vec3 an = abs(normaleMonde());
   bool sol = an.y > 0.7;
   vec2 uv = sol ? vPosM.xz : (an.x > an.z ? vPosM.zy : vPosM.xy);
   int m = int(vMat + 0.5);
   float g = texture(tBruit, uv * 0.061 + 0.37).g;
+  if (m >= 21 && m <= 27) return cl_bureaux(col, uv, m, g); // (les bureaux de Solumatic)
   // fausse occlusion ambiante : le pied de tout ce qui est vertical s'assombrit près du sol
   float pied = sol ? 1.0 : mix(m == 1 ? 0.7 : 0.8, 1.0, smoothstep(0.0, m == 1 ? 1.6 : 1.1, vPosM.y));
   if (distance(vPosM, cameraPosition) > uLoin) {
