@@ -7,7 +7,7 @@ import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, def
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
 import { Atelier, camion, figer } from './engins.js';
 import { chariot } from './remorque.js';
-import { SOLU, K as K_SOLU, ENTREE, FEN, FENETRES, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
+import { SOLU, K as K_SOLU, ENTREE, FEN, FENETRES, VITRINES, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
 import { logoSolumatic } from './logo.js';
 import { rangeVelos, veloSeul } from './velos.js';
 import { naturelle, forme, sol, terrain, dalle, activerDalles, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
@@ -3561,7 +3561,7 @@ void main() {
      posées après les herbes. Le bâti fusionné avec son quartier ; le toit de Solumatic à part (il disparaît quand on est
      dedans), son intérieur à part (dessiné seulement dedans ou porte ouverte : solumatic.js). */
   function zoneActivites() {
-    const L = [], boites = [];
+    const L = [], boites = [], D = []; // (D : les petits détails de Solumatic, dessinés de près seulement : proches)
     const GRIS_F = '#3b3f46', ALU = '#c9ccd1', VERRE = '#2d3846', FER = '#3a3a3e';
     const bat = (x0, z0, x1, z1) => { contact.jupe(x0 - 0.07, z0 - 0.07, x1 + 0.07, z1 + 0.07, 1.6, 0.45); plan.push({ t: 'b', x0, z0, x1, z1 }); };
     // un feuillage qui bouge au vent (poids croissant vers le haut ; k : sa part de vent)
@@ -3638,10 +3638,12 @@ void main() {
        lui-même. La nuit, les lampadaires, les appliques, les projecteurs, le spot de la marquise, le porche et les bornes
        allument leurs flaques au sol et leurs halos sur les murs (lumieres : plus bas). */
     const I = interieurSolumatic();
-    const toitS = [], sols = [], nuitSol = [], nuitMur = []; // le toit (à part) ; des dalles ; la nuit : [x, z, rayon], [mur, le long, y, largeur, hauteur, vers le haut]
+    const toitS = [], trans = [], sols = [], nuitSol = [], nuitMur = []; // le toit (à part) ; des dalles ; la nuit : [x, z, rayon], [mur, le long, y, largeur, hauteur, vers le haut]
     const ANTH = GRIS_F, CREPI = '#e9ecef', JOINT_D = '#cdd0d3', SOCLE = '#aaa69e', BETON = '#a9a399', APPUI = '#4a4e55', VOLET = '#dde0e3', LAME = '#a3a8ad';
     const GRILLAGE = '#3c3f45', POLY = '#efe6cc', LAMPE = '#ffe1a0', GALVA = '#9aa0a6', PIERRE = '#cbbf9f', BLANC = '#e9ebe8', NOIR = '#2b2b30';
     let porteSolu, bache;
+    // la devanture, d'ouest en est (essais) : la baie d'Atlas, les fenêtres, la bâche, les vitrines (plus aucune)
+    const devanture = { baie: [PORTE_ATLAS.x - PORTE_ATLAS.l / 2, PORTE_ATLAS.x + PORTE_ATLAS.l / 2], fenetres: FENETRES.filter(f => f[0] === 's').map(([, p, l]) => [p - l / 2, p + l / 2]).sort((a, b) => a[0] - b[0]), vitrines: VITRINES.length };
     const { x0: sx0, x1: sx1, z1: sz1 } = SOLU, uX = u => sx1 - K_SOLU * u, vZ = v => sz1 - K_SOLU * v; // (le plan en mètres, comme solumatic.js)
     // une façade vue de dehors ('s', 'e', 'n', 'o') : P(w, h, d, c, y, av, le) pose un pavé de largeur w le long du mur, haut
     // de h, épais de d, son milieu à av mètres devant le mur, à la position le (x au sud et au nord, z à l'est et à l'ouest)
@@ -3689,7 +3691,7 @@ void main() {
         P(l, 0.06, 0.05, ANTH, y0 + 0.03, 0.025, p); P(0.06, hy - 0.1, 0.04, ANTH, ym, 0.022, p);
         P(l - 0.06, hy - 0.06, 0.02, allumee ? '#4a3a2a' : VERRE, ym, 0.012, p);
         for (const s of [-1, 1]) P(0.045, hy, 0.05, ANTH, ym, 0.027, p + s * (l / 2 - 0.0225));
-        if (kv > 0.02) { P(l - 0.08, y1 - yv, 0.025, VOLET, (y1 + yv) / 2, 0.04, p); for (let y = yv + 0.075; y < y1 - 0.03; y += 0.075) P(l - 0.08, 0.012, 0.03, LAME, y, 0.044, p); }
+        if (kv > 0.02) { P(l - 0.08, y1 - yv, 0.025, VOLET, (y1 + yv) / 2, 0.04, p); for (let y = yv + 0.075; y < y1 - 0.03; y += 0.075) P(l - 0.08, 0.012, 0.03, LAME, y, 0.044, p, D); }
         P(l - 0.07, 0.045, 0.045, ANTH, yv + 0.022, 0.042, p);
         P(lt + 0.05, 0.045, sa + 0.07, APPUI, y0 - 0.0225, (sa + 0.07) / 2, p); P(lt + 0.05, 0.04, 0.012, APPUI, y0 - 0.06, sa + 0.064, p);
         for (let k = 0, u = -lt / 2 + 0.04; k < 7 && u < lt / 2 - 0.08; k++) { const h = ((i * 7 + k * 5) % 9) / 9, w = 0.06 + 0.16 * (((i + k * 3) % 5) / 4); trainee(P, p + u + w / 2, w, y0 - 0.08, 0.12 + 0.55 * h * h); u += w + 0.04 + 0.14 * (((i * 3 + k) % 4) / 3); }
@@ -3700,7 +3702,7 @@ void main() {
       for (const s of [-1, 1]) Su(1.0, 0.04, 0.05, '#b9bcbf', 1.0, 0.1, PA.x + s * 0.65);
       L.push(B(PA.l + 0.3, 0.02, 0.5, BETON, PA.x, 0.08, Z1 + 0.25));
       // le porche de la baie (Teddy : « un porche en fibre de verre au dessus ») : des plaques ondulées de polyester armé de
-      // fibre de verre, translucides et laiteuses (dans les vitres : modeles.js, T.translucide), sur une ossature légère
+      // fibre de verre, translucides et laiteuses (les translucides : modeles.js, T.translucide), sur une ossature légère
       // d'acier laqué (la lisse contre le mur, quatre chevrons, la poutre et son chéneau, deux poteaux fins) ; 1,5 m de
       // débord, la pente vers le parvis, la descente le long d'un poteau ; un spot dessous
       {
@@ -3715,7 +3717,7 @@ void main() {
           const u0 = xa - 0.06 + k * pas, h0 = A * Math.sin(k * Math.PI / 2), h1 = A * Math.sin((k + 1) * Math.PI / 2);
           at.quad([u0, yM + 0.01 + h0, Z1 + 0.02], [u0 + pas, yM + 0.01 + h1, Z1 + 0.02], [u0 + pas, yF + 0.03 + h1, zF + 0.1], [u0, yF + 0.03 + h0, zF + 0.1], POLY, undefined, [0, 1, 0]);
         }
-        vitresB.push(...at.geos());
+        trans.push(...at.geos());
         L.push(B(0.18, 0.02, 0.18, LAMPE, PA.x, yM - 0.16, Z1 + 0.6)); nuitSol.push([PA.x, Z1 + 1.0, 2.4]);
       }
       // l'entrée (façade est) : le parement de pierre autour d'elle, l'encadrement d'aluminium et l'imposte, la marquise (ses
@@ -3733,16 +3735,16 @@ void main() {
         nuitSol.push([X1 + 1.0, ENTREE.z, 2.6]);
         atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, X1 + 0.066, 1.62, e0 - 0.8, Math.PI / 2);
         E(0.66, 0.19, 0.012, '#c9ccd1', 1.62, 0.06, e0 - 0.8);
-        E(0.15, 0.26, 0.04, NOIR, 1.4, 0.08, e1 + 0.34); E(0.09, 0.07, 0.01, '#3d5f8e', 1.46, 0.105, e1 + 0.34); E(0.03, 0.03, 0.01, '#c9ccd1', 1.33, 0.105, e1 + 0.34); E(0.07, 0.11, 0.03, NOIR, 1.12, 0.075, e1 + 0.34);
-        L.push(B(0.95, 0.012, 1.4, '#3a3a3a', X1 + 0.55, 0.076, ENTREE.z));
+        E(0.15, 0.26, 0.04, NOIR, 1.4, 0.08, e1 + 0.34, D); E(0.09, 0.07, 0.01, '#3d5f8e', 1.46, 0.105, e1 + 0.34, D); E(0.03, 0.03, 0.01, '#c9ccd1', 1.33, 0.105, e1 + 0.34, D); E(0.07, 0.11, 0.03, NOIR, 1.12, 0.075, e1 + 0.34, D);
+        D.push(B(0.95, 0.012, 1.4, '#3a3a3a', X1 + 0.55, 0.076, ENTREE.z));
         // (Teddy, 27/11/2026 : « y'a toujours Romane qui arrive avant et qui fume devant le bureau » : le cendrier sur pied en
         // (x1 + 1,3, ENTREE.z - 2,4), convenu avec solumatic.js ; autour de (x1 + 1,9, ENTREE.z - 2,0), sa place, rien à
         // moins de 0,6 m)
         const xc = X1 + 0.45, xr = x1 + 1.3, zr = ENTREE.z - 2.4;
-        L.push(C(0.16, 0.18, 0.03, 12, '#7d8288', xr, 0.085, zr), C(0.11, 0.11, 0.86, 12, '#c4c8cc', xr, 0.53, zr), C(0.125, 0.125, 0.05, 12, '#9aa0a6', xr, 0.985, zr), C(0.1, 0.1, 0.012, 12, NOIR, xr, 1.012, zr));
-        for (let k = -2; k <= 2; k++) L.push(B(0.018, 0.012, 0.2 - Math.abs(k) * 0.035, '#c4c8cc', xr + k * 0.04, 1.018, zr));
+        L.push(C(0.115, 0.12, 0.03, 12, '#7d8288', xr, 0.085, zr), C(0.085, 0.085, 0.86, 12, '#c4c8cc', xr, 0.53, zr), C(0.11, 0.11, 0.05, 12, '#9aa0a6', xr, 0.985, zr), C(0.09, 0.09, 0.012, 12, NOIR, xr, 1.012, zr));
+        for (let k = -2; k <= 2; k++) L.push(B(0.016, 0.012, 0.17 - Math.abs(k) * 0.03, '#c4c8cc', xr + k * 0.034, 1.018, zr));
         L.push(C(0.21, 0.19, 0.8, 10, ANTH, xc, 0.47, ENTREE.z - 1.75), C(0.22, 0.22, 0.05, 10, '#5b5f66', xc, 0.895, ENTREE.z - 1.75));
-        boites.push([xr - 0.15, zr - 0.15, xr + 0.15, zr + 0.15], [xc - 0.24, ENTREE.z - 2.0, xc + 0.24, ENTREE.z - 1.5]);
+        boites.push([xr - 0.08, zr - 0.08, xr + 0.08, zr + 0.08], [xc - 0.24, ENTREE.z - 2.0, xc + 0.24, ENTREE.z - 1.5]);
         for (const z of [P0 - 0.6, vZ(2.85)]) { L.push(B(0.7, 0.55, 0.7, BETON, xc + 0.05, 0.345, z), B(0.62, 0.04, 0.62, '#5a4a38', xc + 0.05, 0.6, z), feuille(S(0.42, '#4d6a36', xc + 0.05, 0.86, z, 1, 0.85, 1, 1), '#4d6a36', 0.4)); boites.push([xc - 0.32, z - 0.37, xc + 0.42, z + 0.37]); }
         E(0.07, 0.07, 0.24, BLANC, 3.5, 0.13, e0 - 0.35); E(0.05, 0.12, 0.05, BLANC, 3.6, 0.03, e0 - 0.35);
       }
@@ -3765,6 +3767,7 @@ void main() {
         const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
         bache = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh).translate(bx, by, Z1 + 0.04), new THREE.MeshLambertMaterial({ map: tex }));
         bache.name = 'bâche Solumatic'; bache.matrixAutoUpdate = false; bache.renderOrder = ORDRE.bati;
+        devanture.bache = [bx - bw / 2, bx + bw / 2];
       }
       // les deux projecteurs, au-dessus des fenêtres du plateau ; leur halo sur le mur, la nuit
       for (const x of [uX(4.15), uX(2.45)]) { Su(0.3, 0.2, 0.16, ANTH, 4.06, 0.13, x); Su(0.06, 0.06, 0.12, ANTH, 4.06, 0.03, x); Su(0.26, 0.02, 0.1, LAMPE, 3.95, 0.15, x); nuitMur.push([Su, x, 3.95, 3.2, 3.5, false]); }
@@ -3773,12 +3776,12 @@ void main() {
         P(0.25, 0.32, 0.2, GALVA, HT - 0.34, 0.1, le); P(0.12, 0.12, 0.12, GALVA, HT - 0.56, 0.09, le);
         const [x, z] = P.pt(0.09, le), [rx, rz] = P.pt(0.32, le);
         toitS.push(C(0.05, 0.05, HT - 0.95, 8, GALVA, x, (HT - 0.95) / 2 + 0.33, z));
-        for (const y of [0.95, 2.05, 3.15]) P(0.13, 0.035, 0.12, GALVA, y, 0.07, le);
+        for (const y of [0.95, 2.05, 3.15]) P(0.13, 0.035, 0.12, GALVA, y, 0.07, le, D);
         P(0.11, 0.3, 0.11, '#7d8288', 0.22, 0.09, le); L.push(B(0.36, 0.02, 0.36, '#7d8288', rx, 0.08, rz));
       }
       // les appliques (haut et bas) ; leur halo sur le mur et leur flaque au sol, la nuit
       const applique = (P, le) => {
-        P(0.12, 0.26, 0.12, ANTH, 3.1, 0.07, le); P(0.08, 0.015, 0.08, LAMPE, 2.965, 0.07, le); P(0.08, 0.015, 0.08, LAMPE, 3.235, 0.07, le);
+        P(0.12, 0.26, 0.12, ANTH, 3.1, 0.07, le, D); P(0.08, 0.015, 0.08, LAMPE, 2.965, 0.07, le, D); P(0.08, 0.015, 0.08, LAMPE, 3.235, 0.07, le, D);
         nuitMur.push([P, le, 2.96, 2.0, 2.6, false], [P, le, 3.24, 1.2, 1.0, true]);
         const [x, z] = P.pt(0.9, le); nuitSol.push([x, z, 1.9]);
       };
@@ -3787,9 +3790,9 @@ void main() {
       for (const le of [uX(17.0), uX(12.38), uX(6.46), uX(2.0)]) applique(N, le);
       for (const le of [vZ(1.8), vZ(8.9), vZ(17.75), vZ(23.2)]) applique(O, le);
       // les caméras (deux dômes aux angles, sous la couvertine), le boîtier d'alarme et son flash, les grilles de ventilation
-      for (const [P, le] of [[Su, X1 - 0.45], [N, X0 + 0.45]]) { P(0.06, 0.06, 0.22, BLANC, HT - 0.5, 0.11, le); P(0.16, 0.05, 0.16, BLANC, HT - 0.55, 0.22, le); const [x, z] = P.pt(0.22, le); L.push(S(0.075, NOIR, x, HT - 0.6, z, 1, 0.8, 1, 1)); }
-      E(0.3, 0.38, 0.1, BLANC, 3.6, 0.05, vZ(0.9)); E(0.12, 0.06, 0.04, '#e07a1f', 3.84, 0.1, vZ(0.9));
-      for (const [P, le, y] of [[N, uX(20.2), 3.4], [N, uX(17.6), 3.4], [E, vZ(9.85), 3.3]]) { P(0.34, 0.24, 0.03, '#c9ccd1', y, 0.015, le); for (let k = 0; k < 4; k++) P(0.3, 0.012, 0.035, GALVA, y - 0.075 + k * 0.05, 0.022, le); }
+      for (const [P, le] of [[Su, X1 - 0.45], [N, X0 + 0.45]]) { P(0.06, 0.06, 0.22, BLANC, HT - 0.5, 0.11, le, D); P(0.16, 0.05, 0.16, BLANC, HT - 0.55, 0.22, le, D); const [x, z] = P.pt(0.22, le); D.push(S(0.075, NOIR, x, HT - 0.6, z, 1, 0.8, 1, 1)); }
+      E(0.3, 0.38, 0.1, BLANC, 3.6, 0.05, vZ(0.9), D); E(0.12, 0.06, 0.04, '#e07a1f', 3.84, 0.1, vZ(0.9), D);
+      for (const [P, le, y] of [[N, uX(20.2), 3.4], [N, uX(17.6), 3.4], [E, vZ(9.85), 3.3]]) { P(0.34, 0.24, 0.03, '#c9ccd1', y, 0.015, le, D); for (let k = 0; k < 4; k++) P(0.3, 0.012, 0.035, GALVA, y - 0.075 + k * 0.05, 0.022, le, D); }
       // au nord, contre le mur aveugle de Saturne : les deux groupes de clim sur leur dalle, leurs liaisons et la goulotte
       // qui monte au toit ; les conteneurs (ordures, tri)
       {
@@ -3818,7 +3821,7 @@ void main() {
         }
         g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(p), 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
         g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aMat', new THREE.BufferAttribute(mat, 1));
-        L.push(g);
+        D.push(g);
       }
       plan.push({ t: 'b', x0: X0, z0: Z0, x1: X1, z1: Z1 }); contact.jupe(X0 - 0.03, Z0 - 0.03, X1 + 0.03, Z1 + 0.03, 1.4, 0.42, 0.085);
       // les murs arrêtent ; la porte d'entrée fermée aussi (gestes.js passe sans s'arrêter) ; dedans, ce qui est meublé
@@ -3826,8 +3829,10 @@ void main() {
       boites.push([X0, Z0, x0, Z1], [x0, Z0, x1, z0], [x0, z1, x1, Z1], [x1, Z0, X1, e0], [x1, e1, X1, Z1]);
       plusTard.push(() => {
         const pc = col.boite(x1, e0, X1, e1); pc.haut = true; lieux.solumatic.colPorte = pc; // (fantome le temps de la passer)
-        for (const [a, b, c, d] of I.boites) col.boite(a, b, c, d);
-        for (const [cx, cz, w, d, r] of I.tournees) col.boiteO(cx, cz, w, d, r);
+        // (seulement ce qui est dedans : un meuble posé hors des murs arrêterait sur la route ou le trottoir)
+        const dans = (x, z) => x > x0 - 0.05 && x < x1 + 0.05 && z > z0 - 0.05 && z < z1 + 0.05;
+        for (const [a, b, c, d] of I.boites) if (dans(a, b) && dans(c, d)) col.boite(a, b, c, d);
+        for (const [cx, cz, w, d, r] of I.tournees) if (dans(cx, cz)) col.boiteO(cx, cz, w, d, r);
         const f = col.boite(x0, z0, x1, z1); f.haut = true; f.fantome = true;
       });
       // la porte vitrée : un vantail sur ses gonds (côté sud), qui s'ouvre vers l'intérieur (gestes.js : passer) ; il tourne
@@ -3875,7 +3880,7 @@ void main() {
     {
       const { X0, X1, Z1, L: LR, o, e, n, s, park, cl, grille } = SITE, clotures = [], zp = (park[0] + park[1]) / 2;
       // la clôture : des panneaux rigides de grillage soudé à plis, gris anthracite, sur un soubassement de béton, leurs
-      // poteaux tous les 2,5 m ; le grillage lui-même est dans les vitres (modeles.js, T.translucide : un seul quadrilatère par
+      // poteaux tous les 2,5 m ; le grillage lui-même est dans les translucides (modeles.js, T.translucide : un seul quadrilatère par
       // côté, les fils dessinés dans le shader), ses plis sont de longues barres. D'un bout [x, z] à l'autre, droit.
       const cloture = (xa, za, xb, zb) => {
         const lg = Math.hypot(xb - xa, zb - za), le = Math.abs(xb - xa) > Math.abs(zb - za), cx = (xa + xb) / 2, cz = (za + zb) / 2;
@@ -3883,9 +3888,11 @@ void main() {
         bx(lg, 0.25, 0.07, BETON, 0.125); bx(lg, 0.02, 0.09, BETON, 0.25);
         for (const y of [0.56, 1.1, 1.64]) bx(lg, 0.045, 0.03, ANTH, y);
         bx(lg, 0.014, 0.014, ANTH, 1.975);
-        const np = Math.max(1, Math.round(lg / 2.5));
+        // (les poteaux d'un côté en un seul morceau : rangé dans le quartier de son milieu, pas dans celui de chaque poteau)
+        const np = Math.max(1, Math.round(lg / 2.5)), n0 = L.length;
         for (let k = 0; k <= np; k++) { const d = -lg / 2 + k * lg / np; bx(0.06, 2.02, 0.045, ANTH, 1.01, d); bx(0.075, 0.03, 0.06, ANTH, 2.035, d); }
-        const g = teinter(new THREE.PlaneGeometry(lg, 1.73), GRILLAGE); if (!le) tournerY(g, Math.PI / 2); vitresB.push(deplacer(g, cx, 0.25 + 0.865, cz));
+        L.push(fusion(L.splice(n0)));
+        const g = teinter(new THREE.PlaneGeometry(lg, 1.73), GRILLAGE); if (!le) tournerY(g, Math.PI / 2); trans.push(deplacer(g, cx, 0.25 + 0.865, cz));
         clotures.push(le ? [Math.min(xa, xb), cz - 0.1, Math.max(xa, xb), cz + 0.1] : [cx - 0.1, Math.min(za, zb), cx + 0.1, Math.max(za, zb)]);
         plan.push({ t: 'l', pts: [[xa, za], [xb, zb]], c: '#3b3f46', w: 0.4 });
       };
@@ -3919,16 +3926,16 @@ void main() {
       // le passage piéton, devant l'entrée ; les avaloirs (au pied des bordures) et les regards
       for (let k = 0; k < 6; k++) L.push(B(0.5, 0.012, 2.5, LIGNE, e - LR / 2 + 0.5 + k, 0.03, ENTREE.z));
       for (const [x, z, r] of [[213.0, s - LR / 2 + 0.25, 0], [e - LR / 2 + 0.25, -80.0, Math.PI / 2], [212.0, n + LR / 2 - 0.25, 0], [o + LR / 2 - 0.25, -78.0, Math.PI / 2]]) {
-        L.push(B(0.6, 0.012, 0.32, NOIR, x, 0.031, z, r));
-        for (let k = -2; k <= 2; k++) L.push(B(0.035, 0.014, 0.26, '#55595f', x + (r ? 0 : k * 0.11), 0.032, z + (r ? k * 0.11 : 0), r));
+        D.push(B(0.6, 0.012, 0.32, NOIR, x, 0.031, z, r));
+        for (let k = -2; k <= 2; k++) D.push(B(0.035, 0.014, 0.26, '#55595f', x + (r ? 0 : k * 0.11), 0.032, z + (r ? k * 0.11 : 0), r));
       }
-      for (const [x, z] of [[220.0, s + 0.6], [e - 0.4, -84.0], [205.0, n], [o + 0.5, -72.0]]) L.push(C(0.33, 0.33, 0.012, 12, '#5d6066', x, 0.034, z), C(0.25, 0.25, 0.013, 12, '#6b6f75', x, 0.035, z));
+      for (const [x, z] of [[220.0, s + 0.6], [e - 0.4, -84.0], [205.0, n], [o + 0.5, -72.0]]) D.push(C(0.33, 0.33, 0.012, 12, '#5d6066', x, 0.034, z), C(0.25, 0.25, 0.013, 12, '#6b6f75', x, 0.035, z));
       // le parking : les places (deux à l'ouest de l'accès, cinq à l'est, et celle des personnes handicapées, la plus proche
       // de l'entrée), leurs lignes, les butées, la bordure du fond ; la borne de recharge
       {
         const lignes = [199.3, 201.8, 204.3, 213.5, 216.0, 218.5, 221.0, 223.5, 226.0, 229.3];
         for (const x of lignes) L.push(B(0.1, 0.012, park[1] - park[0] - 0.1, LIGNE, x, 0.03, zp));
-        for (let k = 0; k < lignes.length - 1; k++) if (lignes[k] !== 204.3) L.push(B(1.5, 0.1, 0.14, BETON, (lignes[k] + lignes[k + 1]) / 2, 0.08, park[1] - 0.55));
+        for (let k = 0; k < lignes.length - 1; k++) if (lignes[k] !== 204.3) D.push(B(1.5, 0.1, 0.14, BETON, (lignes[k] + lignes[k + 1]) / 2, 0.08, park[1] - 0.55));
         const xh = (226.0 + 229.3) / 2;
         L.push(B(3.15, 0.008, park[1] - park[0] - 0.1, '#2e5fa8', xh, 0.031, zp));
         const k = atlas.poser(128, 128, (c, W, H) => {
@@ -3976,42 +3983,47 @@ void main() {
       }, 1.3, 0.26, uX(13.62), 1.9, s - LR / 2 - 0.45, 0);
       // de l'autre côté de la route, tout autour : des arbres plantés là (pas tirés au sort), d'essences variées, en couleurs
       // d'automne : tilleuls et bouleaux à l'ouest, pins, chênes et érables au nord, érables, tilleuls et un chêne à l'est,
-      // des charmes en colonne derrière le parking (le feuillage bouge au vent ; la taille varie d'après le rang)
+      // des charmes en colonne derrière le parking (le feuillage bouge au vent ; la taille varie d'après le rang). Tous à plus
+      // de 195 m du centre du monde : dans le secteur lointain de Solumatic, rien dans le quartier du bourg voisin
       const ESS = {
         tilleul: ['#c9a43a', '#b8922f', '#6a5441'], erable: ['#c8602c', '#d98a36', '#5e4a3c'], chene: ['#7f7a3a', '#8e8a42', '#594634'],
         bouleau: ['#dcb84a', '#e8cc62', '#e6e2d8'], pin: ['#3d5636', '#47603c', '#8a5a3a'], charme: ['#a8923c', '#b9a24a', '#6f6a5e'],
       };
       const arbre = (x, z, genre, h0, i) => {
         const [c1, c2, ct] = ESS[genre], h = h0 * (0.9 + 0.2 * ((i * 37) % 11) / 10), a = i * 2.39, ca = Math.cos(a), sa = Math.sin(a);
-        const boule = (r, c, dx, y, dz, sx, sy, sz, k = 0.8) => L.push(feuille(S(r, c, x + dx * ca - dz * sa, y, z + dx * sa + dz * ca, sx, sy, sz, 1), c, k));
+        const boule = (r, c, dx, y, dz, sx, sy, sz, k = 0.8, d = 0) => L.push(feuille(S(r, c, x + dx * ca - dz * sa, y, z + dx * sa + dz * ca, sx, sy, sz, d), c, k)); // (la masse principale plus fine : d = 1)
         const branche = (y0, y1, dx, dz, r) => L.push(teinter(manche([x, y0, z], [x + dx * ca - dz * sa, y1, z + dx * sa + dz * ca], r, ct), ct, T.bois));
-        let rc;
+        let rc; const n0 = L.length;
         if (genre === 'pin') {
           L.push(teinter(C(0.12, 0.2, h * 0.76, 7, ct, x, h * 0.38, z), ct, T.bois)); branche(h * 0.6, h * 0.74, h * 0.15, 0.4, 0.06); branche(h * 0.55, h * 0.7, -h * 0.13, -0.3, 0.06);
-          boule(h * 0.2, c1, 0, h * 0.82, 0, 1.4, 0.45, 1.3, 0.5); boule(h * 0.14, c2, h * 0.17, h * 0.74, h * 0.06, 1.3, 0.5, 1.2, 0.5); boule(h * 0.13, c1, -h * 0.15, h * 0.76, -h * 0.08, 1.3, 0.5, 1.2, 0.5);
+          boule(h * 0.2, c1, 0, h * 0.82, 0, 1.4, 0.45, 1.3, 0.5, 1); boule(h * 0.14, c2, h * 0.17, h * 0.74, h * 0.06, 1.3, 0.5, 1.2, 0.5); boule(h * 0.13, c1, -h * 0.15, h * 0.76, -h * 0.08, 1.3, 0.5, 1.2, 0.5);
           rc = h * 0.3;
         } else if (genre === 'bouleau') {
           L.push(teinter(C(0.08, 0.13, h * 0.8, 6, ct, x, h * 0.4, z), ct, T.bois));
           for (let k = 0; k < 4; k++) L.push(B(0.2 - k * 0.02, 0.035, 0.2 - k * 0.02, '#2e2a26', x, 0.9 + k * h * 0.13, z, k));
-          boule(h * 0.2, c1, 0, h * 0.62, 0, 0.85, 1.6, 0.85); boule(h * 0.14, c2, 0.45, h * 0.78, 0.2, 0.9, 1.3, 0.9);
+          boule(h * 0.2, c1, 0, h * 0.62, 0, 0.85, 1.6, 0.85, 0.8, 1); boule(h * 0.14, c2, 0.45, h * 0.78, 0.2, 0.9, 1.3, 0.9);
           rc = h * 0.2;
         } else if (genre === 'charme') {
           L.push(teinter(C(0.1, 0.17, h * 0.34, 7, ct, x, h * 0.17, z), ct, T.bois));
-          boule(h * 0.2, c1, 0, h * 0.58, 0, 0.8, 2.0, 0.8, 0.6); boule(h * 0.13, c2, 0.3, h * 0.76, 0.2, 0.9, 1.6, 0.9, 0.6);
+          boule(h * 0.2, c1, 0, h * 0.58, 0, 0.8, 2.0, 0.8, 0.6, 1); boule(h * 0.13, c2, 0.3, h * 0.76, 0.2, 0.9, 1.6, 0.9, 0.6);
           rc = h * 0.17;
         } else {
           const large = genre === 'chene' ? 1.3 : genre === 'erable' ? 1.1 : 1;
           L.push(teinter(C(0.15 * large, 0.26 * large, h * 0.52, 7, ct, x, h * 0.26, z), ct, T.bois));
           branche(h * 0.4, h * 0.62, h * 0.2 * large, 0.3, 0.075); branche(h * 0.42, h * 0.6, -h * 0.17 * large, -0.4, 0.07); branche(h * 0.45, h * 0.7, 0.2, h * 0.16, 0.06);
-          boule(h * 0.3, c1, 0, h * 0.66, 0, large, 1.0, large);
+          boule(h * 0.3, c1, 0, h * 0.66, 0, large, 1.0, large, 0.8, 1);
           boule(h * 0.19, c2, h * 0.17 * large, h * 0.56, h * 0.08, 1, 0.9, 1); boule(h * 0.18, c1, -h * 0.15 * large, h * 0.6, -h * 0.1, 1, 1, 1); boule(h * 0.15, c2, h * 0.02, h * 0.86, -h * 0.04, 1, 1, 1);
           rc = h * 0.32 * large;
         }
+        // (l'arbre en un seul morceau : rangé dans le quartier de son tronc ; le tronc et les branches ne bougent pas au vent)
+        const parts = L.splice(n0);
+        for (const g of parts) if (!g.attributes.aVent) g.setAttribute('aVent', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+        L.push(fusion(parts));
         boites.push([x - 0.3, z - 0.3, x + 0.3, z + 0.3]); plan.push({ t: 'a', x, z, r: rc }); contact.tache(x, z, rc * 0.85, rc * 0.85, 0.3);
       };
       let ia = 0;
       const xO = o - LR / 2 - 2, zN = n - LR / 2 - 2, xE = e + LR / 2 + 2, zS = park[1] + 0.8;
-      [-49.0, -56.5, -64.0, -71.5, -79.0, -86.5, -94.0, -101.5].forEach((z, k) => arbre(xO, z, k % 2 ? 'bouleau' : 'tilleul', k % 2 ? 9.5 : 9, ia++));
+      [-56.5, -64.0, -71.5, -79.0, -86.5, -94.0, -101.5].forEach((z, k) => arbre(xO, z, k % 2 ? 'bouleau' : 'tilleul', k % 2 ? 9.5 : 9, ia++));
       [190.5, 198.0, 205.5, 213.0, 220.5, 228.0, 235.5, 243.0].forEach((x, k) => arbre(x, zN, ['pin', 'chene', 'erable', 'pin'][k % 4], [11, 9, 8.5, 12][k % 4], ia++));
       [-55.5, -62.5, -77.0, -84.5, -92.0, -99.5].forEach((z, k) => arbre(xE, z, ['erable', 'tilleul', 'chene'][k % 3], [8.5, 9, 9.5][k % 3], ia++));
       for (const x of [190.0, 195.0, 216.0, 221.0, 226.0, 231.5, 245.0]) arbre(x, zS, 'charme', 8, ia++);
@@ -4019,7 +4031,7 @@ void main() {
       // sur la pelouse à l'est : les tables de pique-nique et l'allée qui les relie au passage piéton
       pique(241.8, -66.0, Math.PI / 2); pique(242.3, -74.5, Math.PI / 2 + 0.12); pique(241.8, -83.0, Math.PI / 2);
       sols.push(B(4.2, 0.08, 1.5, '#b4b0a7', e + LR / 2 + 2.1, 0, ENTREE.z), B(1.5, 0.08, 18.5, '#b4b0a7', e + LR / 2 + 4.95, 0, -74.0));
-      // l'abri à vélos, sur la pelouse au sud-est : ossature d'acier, toit de polycarbonate et fond grillagé (dans les vitres :
+      // l'abri à vélos, sur la pelouse au sud-est : ossature d'acier, toit de polycarbonate et fond grillagé (les translucides :
       // T.translucide), sa dalle ; ses arceaux et les vélos du personnel (garerVelos)
       {
         const ax0 = 238.6, ax1 = 242.6, az0 = -48.9, az1 = -46.1, am = (ax0 + ax1) / 2, azm = (az0 + az1) / 2;
@@ -4030,7 +4042,7 @@ void main() {
         }
         L.push(B(ax1 - ax0, 0.08, 0.06, ANTH, am, 2.3, az1 - 0.05), B(ax1 - ax0, 0.08, 0.06, ANTH, am, 2.1, az0 + 0.05));
         const at = new Atelier(); at.quad([ax0 - 0.1, 2.36, az1 + 0.12], [ax1 + 0.1, 2.36, az1 + 0.12], [ax1 + 0.1, 2.14, az0 - 0.15], [ax0 - 0.1, 2.14, az0 - 0.15], POLY, undefined, [0, 1, 0]);
-        vitresB.push(...at.geos(), deplacer(teinter(new THREE.PlaneGeometry(ax1 - ax0, 1.9), GRILLAGE), am, 1.15, az1 - 0.03));
+        trans.push(...at.geos(), deplacer(teinter(new THREE.PlaneGeometry(ax1 - ax0, 1.9), GRILLAGE), am, 1.15, az1 - 0.03));
         contact.tache(am, azm, 2.4, 1.6, 0.22);
       }
       dallesDe(sols); L.push(...sols);
@@ -4056,6 +4068,14 @@ void main() {
       lumieres = new THREE.Mesh(fusion(G), new THREE.MeshBasicMaterial({ map: tex, color: '#ffd49a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
       lumieres.renderOrder = 4; lumieres.visible = false; lumieres.matrixAutoUpdate = false; lumieres.name = 'lumières Solumatic';
       scene.add(lumieres);
+    }
+    // ce qu'on voit au travers (modeles.js, T.translucide) : le grillage de la clôture et le fond de l'abri, le polyester du
+    // porche, le toit de l'abri. Un maillage à part, de la matière des vitrines (rien de plus à compiler), élagué hors champ
+    {
+      const m = new THREE.Mesh(fusion(trans), MAT_VITRINE);
+      m.renderOrder = 3; m.matrixAutoUpdate = false; m.name = 'translucides Solumatic';
+      m.geometry.computeBoundingSphere(); proches.maillages.push(m); // (de près seulement, comme les petits détails : maj)
+      scene.add(m);
     }
 
     /* -- la tonnellerie du Coteau, à l'est de la rue (x de 212 à 249,5, z de -42 à 2,4). L'atelier, une vieille bâtisse
@@ -4223,9 +4243,9 @@ void main() {
       L.push(C(0.06, 0.09, 5.4, 6, '#3b3f46', x, 2.7, z), B(0.1, 0.07, 1.0, '#3b3f46', x, 5.4, z + (z < 10 ? 0.45 : -0.45)), B(0.36, 0.1, 0.5, '#ffe1a0', x, 5.33, z + (z < 10 ? 0.9 : -0.9)));
       boites.push([x - 0.15, z - 0.15, x + 0.15, z + 0.15]);
     }
-    bati.push(...L);
+    bati.push(...L); proches.push(...D);
     plusTard.push(() => { for (const [a, b, c, d] of boites) col.boite(a, b, c, d).haut = d - b > 4 || c - a > 4; });
-    return { porteSolu, toitSolu, interieurSolu, vitresSolu, lumieres, gens: I.gens, murs: I.murs, portes: I.portes, babyfoot: I.babyfoot };
+    return { porteSolu, toitSolu, interieurSolu, vitresSolu, lumieres, devanture, gens: I.gens, murs: I.murs, portes: I.portes, babyfoot: I.babyfoot };
   }
   const za = zoneActivites();
   lumieresSolu = za.lumieres;
@@ -4548,7 +4568,9 @@ void main() {
   // les bureaux de Solumatic (solumatic.js) : devant la porte d'entrée (façade est), dehors et dedans ; le cap pour entrer
   // (vers l'ouest) ; son vantail (gestes.js : passer) ; ceux qui y travaillent (leur place, leur rôle) ; les cloisons (pour
   // la caméra, et pour savoir qui l'on voit) ; le baby-foot d'Atlas
-  lieux.solumatic = { dehors: { x: SOLU.x1 + 1.75, z: ENTREE.z }, seuil: { x: SOLU.x1 + 0.15, z: ENTREE.z }, dedans: { x: SOLU.x1 - 1.3, z: ENTREE.z }, cap: -Math.PI / 2, battant: { obj: za.porteSolu, a: 1.45 }, gens: za.gens, murs: za.murs, portes: za.portes, babyfoot: za.babyfoot };
+  // (essais : le site et sa route, tourSolu ; la devanture d'ouest en est ; la place où Romane fume, devant l'entrée)
+  lieux.solumatic = { dehors: { x: SOLU.x1 + 1.75, z: ENTREE.z }, seuil: { x: SOLU.x1 + 0.15, z: ENTREE.z }, dedans: { x: SOLU.x1 - 1.3, z: ENTREE.z }, cap: -Math.PI / 2, battant: { obj: za.porteSolu, a: 1.45 }, gens: za.gens, murs: za.murs, portes: za.portes, babyfoot: za.babyfoot,
+    site: SITE, tour: tourSolu, devanture: za.devanture, fumeur: { x: SOLU.x1 + 1.9, z: ENTREE.z - 2.0 }, cendrier: { x: SOLU.x1 + 1.3, z: ENTREE.z - 2.4 } };
   // les collisions qui attendaient que les herbes soient semées : la devanture du laboratoire, l'entrepôt et sa cour
   for (const f of plusTard) f();
 

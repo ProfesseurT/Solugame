@@ -38,6 +38,11 @@
 //             la relance (jamais pendant un appel de mission), l'appel, une commande signée, une autre pas, la sauvegarde
 //   ecole     l'école des Tilleuls : on n'y entre jamais (à pied, en tracteur, mode WTF), la récréation, la classe, la nuit,
 //             le mercredi, la sortie de 16 h 30 (portail, parents), aucune étiquette, des enfants divers, ce qu'elle coûte
+//   abords    les abords de Solumatic : le tour du bâtiment par la route (voiture empruntée, van, tracteur : sur sa file,
+//             sans choc, revenu au départ), à pied ; la clôture arrête ; la grille ouverte ; la route dans le réseau ; la porte
+//             d'entrée proposée ; la place où Romane fume ; aucune voiture garée sur la route ; la devanture dans l'ordre
+//             voulu (baie, fenêtres, bâche, fenêtres) ; les lumières la nuit ; captures (devanture, trois quarts, route, dessus,
+//             nuit)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
 // Sortie : texte sur la console ; captures dans essais/<dossier>/ ; code 1 si une erreur JS est apparue.
@@ -1133,12 +1138,148 @@ if (scenario === 'conduite') {
 if (scenario === 'perf') {
   await ev(() => { CL.jouer(); CL.step(30); });
   await new Promise(r => setTimeout(r, 1500)); // chauffe (compilation des shaders)
-  for (const [nom, x, z, h] of [['domaine', -99, -55, 0], ['route', -30, 10, Math.PI / 2], ['bourg', 60, 10, Math.PI / 2], ['place', 95, -30, Math.PI], ['vignes', -130, 60, 0]]) {
+  for (const [nom, x, z, h] of [['domaine', -99, -55, 0], ['route', -30, 10, Math.PI / 2], ['bourg', 60, 10, Math.PI / 2], ['place', 95, -30, Math.PI], ['vignes', -130, 60, 0], ['solumatic', 208.5, -38, Math.PI]]) {
     const r = await ev((x, z, h) => { CL.teleporter(x, z, h); CL.step(60); CL.bench(30); return CL.bench(120); }, x, z, h);
     console.log(`${nom.padEnd(8)} ${r}`);
   }
   const ips = await ev(() => new Promise(res => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res((n / 3).toFixed(0)); }; requestAnimationFrame(f); }));
   console.log('images par seconde réelles (Chrome sans fenêtre) :', ips);
+}
+
+if (scenario === 'abords') {
+  // Les abords de Solumatic (Teddy, 27/11/2026 : « y'a une route qui fait le tour du bureau avec des arbres de l'autre côté
+  // de la route et une clôture » ; la devanture : « à gauche [...] la baie vitrée avec un porche en fibre de verre au dessus,
+  // [...] les fenêtres tombent juste après. à droite du panneau, c'est aussi des fenêtres pas des portes fenêtres ») : le
+  // tour du bâtiment par la route, depuis la rue, la grille passée, en voiture empruntée, en van et en tracteur (sur sa
+  // file, sans choc, revenu au départ) ; le tour à pied ; la clôture arrête, de dedans comme de dehors ; la route dans le
+  // réseau ; la porte d'entrée proposée ; la place où Romane fume, libre, et le cendrier ; aucune voiture garée sur la
+  // route ; la devanture dans l'ordre voulu ; la nuit, les lumières ; des captures.
+  const r = await ev(async () => {
+    const J = CL.jeu, LS = J.lieux.solumatic, SI = LS.site, log = [];
+    const angleDe = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+    const ecart = (P, x, z) => { let d = 1e9; for (let i = 1; i < P.length; i++) { const [ax, az] = P[i - 1], [bx, bz] = P[i], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); d = Math.min(d, Math.hypot(x - ax - dx * t, z - az - dz * t)); } return d; };
+    // des points tous les mètres le long d'une ligne
+    const echantillons = P => { const o = [P[0]]; for (let i = 1; i < P.length; i++) { const [ax, az] = P[i - 1], [bx, bz] = P[i], n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az))); for (let k = 1; k <= n; k++) o.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); } return o; };
+    const axe = LS.tour(0, 12), file = LS.tour(1.5, 12);
+    // le chemin : la rue, la grille, puis la file de droite tout autour, jusqu'au raccord
+    const chemin = echantillons([[SI.rue + 1.5, -36], [SI.rue + 1.5, SI.s + 3], ...file.slice(1)]);
+    // suivre des points de près (comme le banc chateau) : 7 m devant, à vmax au plus ; m : mesures (chocs : images de
+    // frottement ; hors : la plus grande distance à l'axe de la route, une fois sur elle)
+    const suivre = (P, vmax, maxT, m) => {
+      let i = 0, T = 0;
+      while (T < maxT) {
+        const p = CL.tr.pos;
+        let best = i, bd = 1e9;
+        for (let k = Math.max(0, i - 5); k < Math.min(P.length, i + 30); k++) { const d = Math.hypot(P[k][0] - p.x, P[k][1] - p.z); if (d < bd) { bd = d; best = k; } }
+        i = best;
+        if (i >= P.length - 3) { CL.ctrl.kx = 0; CL.ctrl.ky = 0; return true; }
+        // (plus lentement dans les virages : la direction du chemin, 12 m plus loin)
+        const t = P[Math.min(P.length - 1, i + 7)], u = P[Math.min(P.length - 1, i + 12)], err = angleDe(Math.atan2(t[0] - p.x, t[1] - p.z) - CL.tr.h);
+        const vire = Math.abs(angleDe(Math.atan2(u[0] - t[0], u[1] - t[1]) - Math.atan2(t[0] - P[i][0], t[1] - P[i][1]))) > 0.3, vm = vire ? Math.min(vmax, 4.5) : vmax;
+        CL.ctrl.kx = -Math.max(-1, Math.min(1, err * 2.5)); CL.ctrl.ky = CL.tr.v < vm ? -1 : CL.tr.v > vm + 1 ? 1 : 0;
+        CL.step(1); T += 1 / 60;
+        if (CL.tr.frotte > 0.5) { m.chocs++; if (!m.ou) m.ou = p.x.toFixed(1) + ', ' + p.z.toFixed(1); }
+        if (p.z < SI.s) { const h = ecart(axe, p.x, p.z); if (h > m.hors) { m.hors = h; m.loin = p.x.toFixed(1) + ', ' + p.z.toFixed(1); } }
+      }
+      CL.ctrl.kx = 0; CL.ctrl.ky = 0;
+      return false;
+    };
+    const arreter = () => { CL.ctrl.kx = 0; CL.ctrl.ky = 1; for (let k = 0; k < 600 && Math.abs(CL.tr.v) > 0.3; k++) CL.step(1); CL.ctrl.ky = 0; CL.step(20); };
+    const monter = genre => {
+      const v = CL.vehicule(genre);
+      for (let k = 0; k < 40 && !(J.auVolant && J.veh === v); k++) { const a = k * 0.5; J.joueur.placer(v.p.pos.x + Math.cos(a) * 2.6, v.p.pos.z + Math.sin(a) * 2.6, 0); CL.step(2); CL.agir(); CL.finirGeste(); CL.step(2); }
+      return J.auVolant && J.veh === v;
+    };
+    const descendre = () => { arreter(); CL.agir(); CL.finirGeste(); CL.step(5); return !J.auVolant; };
+    const tour = (nom, vmax) => {
+      CL.teleporter(SI.rue + 1.5, -36, Math.PI); CL.step(20);
+      const m = { chocs: 0, hors: 0 }, fini = suivre(chemin, vmax, 90, m), p = CL.tr.pos, d = Math.hypot(p.x - file[file.length - 1][0], p.z - file[file.length - 1][1]);
+      log.push([nom + ' : de la rue, par la grille, le tour du bâtiment par la route, sur sa file (' + m.hors.toFixed(1) + ' m de l\'axe au plus' + (m.hors > 2.6 ? ', en ' + m.loin : '') + '), sans choc (' + m.chocs + (m.ou ? ', en ' + m.ou : '') + '), revenu au départ (à ' + d.toFixed(1) + ' m)', fini && m.chocs === 0 && m.hors < 2.6 && d < 6]);
+      arreter();
+    };
+    try {
+      CL.jouer(); CL.step(60); J.minutes = 11 * 60; CL.step(2);
+      // en voiture : celle d'un conducteur de la départementale, qu'il nous prête
+      {
+        const v = CL.voitures().find(x => x.sens > 0);
+        CL.teleporter(v.x + 30, v.zVoie, -Math.PI / 2);
+        for (let i = 0; i < 900 && Math.abs(v.v) > 0.3; i++) CL.step(1);
+        CL.step(30); J.joueur.placer(v.x + 0.5, v.z - 2.3, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+        if (J.auVolant && J.veh.genre === 'voiture') tour('en voiture', 9); else log.push(['en voiture : empruntée', false]);
+        descendre();
+      }
+      // à pied : le tour par la route (à 1 m du trottoir), en courant ; la direction voulue, d'après la caméra (main.js : marcher)
+      {
+        const P = echantillons(LS.tour(-SI.L / 2 + 1, 12));
+        J.joueur.placer(P[0][0], P[0][1], Math.PI / 2); CL.step(10);
+        let i = 0, T = 0, bloque = 0;
+        while (T < 120 && i < P.length - 2) {
+          const p = J.joueur.pos;
+          while (i < P.length - 2 && Math.hypot(P[i][0] - p.x, P[i][1] - p.z) < 1.2) i++;
+          const t = P[Math.min(P.length - 1, i + 1)], l = Math.hypot(t[0] - p.x, t[1] - p.z) || 1, wx = (t[0] - p.x) / l, wz = (t[1] - p.z) / l, fx = Math.sin(CL.cam.yaw), fz = Math.cos(CL.cam.yaw);
+          CL.ctrl.kx = -fz * wx + fx * wz; CL.ctrl.ky = -fx * wx - fz * wz;
+          CL.step(1); T += 1 / 60;
+          if (T > 1 && J.joueur.v < 0.3) bloque++;
+        }
+        CL.ctrl.kx = 0; CL.ctrl.ky = 0; CL.step(10);
+        const d = Math.hypot(J.joueur.pos.x - P[P.length - 1][0], J.joueur.pos.z - P[P.length - 1][1]);
+        log.push(['à pied : le tour du bâtiment (' + T.toFixed(0) + ' s), jamais arrêté (' + bloque + ' images), revenu au départ (à ' + d.toFixed(1) + ' m)', d < 2.5 && bloque < 20 && T < 120]);
+      }
+      // la clôture arrête : de dedans vers dehors (à l'ouest), de dehors vers dedans (au nord)
+      {
+        const marche = (x, z, wx, wz, s) => { J.joueur.placer(x, z, Math.atan2(wx, wz)); CL.step(5); for (let k = 0; k < s * 60; k++) { const fx = Math.sin(CL.cam.yaw), fz = Math.cos(CL.cam.yaw); CL.ctrl.kx = -fz * wx + fx * wz; CL.ctrl.ky = -fx * wx - fz * wz; CL.step(1); } CL.ctrl.kx = 0; CL.ctrl.ky = 0; CL.step(5); return J.joueur.pos; };
+        const a = marche(SI.cl.o + 1.2, -74, -1, 0, 3).x, b = marche(212, SI.cl.n - 1.2, 0, 1, 3).z;
+        log.push(['la clôture arrête, de dedans (x = ' + a.toFixed(2) + ') comme de dehors (z = ' + b.toFixed(2) + ')', a > SI.cl.o + 0.2 && b < SI.cl.n - 0.2]);
+        const c = marche(SI.rue, -40, 0, -1, 8).z;
+        log.push(['la grille est ouverte : de la rue, on entre à pied (z = ' + c.toFixed(1) + ')', c < SI.park[1] - 1]);
+      }
+      // (le van et le tracteur, après : chacun finit son tour au raccord de la rue)
+      for (const [g, v] of [['van', 8], ['tracteur', 6.5]]) { if (monter(g)) { tour('en ' + g, v); descendre(); } else log.push(['en ' + g + ' : monté', false]); }
+      // la route est dans le réseau : de la rue à l'arrière du bâtiment, l'itinéraire passe par elle
+      {
+        const it = J.reseau.itineraire({ x: SI.rue, z: -20 }, { x: (SI.o + SI.e) / 2, z: SI.n }), l = it.reduce((s, p, k) => s + (k ? Math.hypot(p[0] - it[k - 1][0], p[1] - it[k - 1][1]) : 0), 0);
+        log.push(['dans le réseau : de la rue à l\'arrière du bâtiment, ' + l.toFixed(0) + ' m par la route du tour', it.length > 4 && l < 125 && it.every(([x, z]) => z > -20.5 || ecart(axe, x, z) < 0.5 || Math.abs(x - SI.rue) < 0.5)]);
+      }
+      // devant l'entrée : « Entrer chez Solumatic » ; la place où Romane fume, libre (0,6 m), le cendrier à côté
+      {
+        CL.teleporter(LS.dehors.x + 0.6, LS.dehors.z, -Math.PI / 2); CL.step(20);
+        const etq = [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith('Entrer chez Solumatic'));
+        const F = LS.fumeur, libre = !CL.col.resoudre({ x: F.x, z: F.z }, 0.6), cendrier = CL.col.resoudre({ x: LS.cendrier.x, z: LS.cendrier.z }, 0.05);
+        log.push(['devant l\'entrée : « Entrer chez Solumatic » (' + etq + ') ; la place où Romane fume, libre (' + libre + '), le cendrier à côté (' + cendrier + ')', etq && libre && cendrier]);
+      }
+      // aucune voiture garée sur la route (quinze points de son emprise, à plus d'un demi-chaussée de l'axe), ni dans le bâtiment
+      {
+        const G = CL.GAREES.filter(g => g.x > SI.o - 10 && g.x < SI.e + 10 && g.z > SI.n - 10 && g.z < -40);
+        const sur = G.filter(g => { const co = Math.cos(g.h), si = Math.sin(g.h); return [-0.9, 0, 0.9].some(lx => [-2.1, -1, 0, 1, 2.1].some(lz => { const x = g.x + lx * co + lz * si, z = g.z + lz * co - lx * si; return ecart(axe, x, z) < SI.L / 2 + 0.1 || CL.col.dedans(x, z); })); });
+        log.push([G.length + ' voitures garées chez Solumatic, aucune sur la route', G.length >= 3 && !sur.length]);
+      }
+      // la devanture, d'ouest en est : la baie, juste après elle des fenêtres, puis des fenêtres sous la bâche, puis des
+      // fenêtres à sa droite ; plus de vitrine
+      {
+        const D = LS.devanture, F = D.fenetres, apres = F.filter(f => f[0] > D.baie[1] && f[1] < D.bache[0]), sous = F.filter(f => (f[0] + f[1]) / 2 > D.bache[0] && (f[0] + f[1]) / 2 < D.bache[1]), droite = F.filter(f => f[0] > D.bache[1]);
+        log.push(['la devanture : la baie, ' + apres.length + ' fenêtres juste après (la première à ' + (F[0][0] - D.baie[1]).toFixed(2) + ' m), ' + sous.length + ' sous la bâche, ' + droite.length + ' à sa droite, ' + D.vitrines + ' vitrine',
+          D.vitrines === 0 && F[0][0] > D.baie[1] && F[0][0] - D.baie[1] < 1.0 && apres.length >= 1 && sous.length >= 2 && droite.length >= 2 && F.every((f, k) => !k || f[0] > F[k - 1][1])]);
+      }
+      // la nuit : les lumières (lampadaires, appliques) s'allument ; le jour, elles sont éteintes
+      {
+        const M = CL.scene.getObjectByName('lumières Solumatic');
+        const jour = M && !M.visible;
+        J.minutes = 21 * 60; CL.step(5);
+        log.push(['les lumières de Solumatic : éteintes le jour, allumées la nuit', jour && M.visible && M.material.opacity > 0.5]);
+        J.minutes = 11 * 60; CL.step(5);
+      }
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    CL.ctrl.kx = 0; CL.ctrl.ky = 0;
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  // les captures : la devanture de face et de trois quarts, la route, de dessus, la nuit
+  for (const [nom, v, h] of [['devanture', [212, 3.2, -45.5, 212, 2.0, -62], 11], ['trois-quarts', [234, 4.5, -47, 214, 1.5, -66], 11], ['route', [189, 2.5, -56, 194, 1.2, -80], 11],
+    ['dessus', [212, 120, -75, 212, 0, -75.1], 11], ['nuit', [234, 4.5, -47, 214, 1.5, -66], 21.5]]) {
+    await ev((v, h) => { CL.jeu.minutes = h * 60; CL.teleporter(208.5, -40, Math.PI); CL.step(20); CL.photo(...v); CL.step(3); }, v, h);
+    await capture(nom);
+  }
+  await ev(() => CL.photo());
 }
 
 if (scenario === 'poids') {
