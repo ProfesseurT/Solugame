@@ -1191,11 +1191,12 @@ if (scenario === 'abords') {
       return J.auVolant && J.veh === v;
     };
     const descendre = () => { arreter(); CL.agir(); CL.finirGeste(); CL.step(5); return !J.auVolant; };
-    const tour = (nom, vmax) => {
+    // (fini, le véhicule est reposé hors du site, en retour : la suite et les captures ont la route libre)
+    const tour = (nom, vmax, retour) => {
       CL.teleporter(SI.rue + 1.5, -36, Math.PI); CL.step(20);
       const m = { chocs: 0, hors: 0 }, fini = suivre(chemin, vmax, 90, m), p = CL.tr.pos, d = Math.hypot(p.x - file[file.length - 1][0], p.z - file[file.length - 1][1]);
       log.push([nom + ' : de la rue, par la grille, le tour du bâtiment par la route, sur sa file (' + m.hors.toFixed(1) + ' m de l\'axe au plus' + (m.hors > 2.6 ? ', en ' + m.loin : '') + '), sans choc (' + m.chocs + (m.ou ? ', en ' + m.ou : '') + '), revenu au départ (à ' + d.toFixed(1) + ' m)', fini && m.chocs === 0 && m.hors < 2.6 && d < 6]);
-      arreter();
+      arreter(); CL.teleporter(...retour); CL.step(10);
     };
     try {
       CL.jouer(); CL.step(60); J.minutes = 11 * 60; CL.step(2);
@@ -1205,7 +1206,7 @@ if (scenario === 'abords') {
         CL.teleporter(v.x + 30, v.zVoie, -Math.PI / 2);
         for (let i = 0; i < 900 && Math.abs(v.v) > 0.3; i++) CL.step(1);
         CL.step(30); J.joueur.placer(v.x + 0.5, v.z - 2.3, Math.PI); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
-        if (J.auVolant && J.veh.genre === 'voiture') tour('en voiture', 9); else log.push(['en voiture : empruntée', false]);
+        if (J.auVolant && J.veh.genre === 'voiture') tour('en voiture', 9, [196, -24, 0]); else log.push(['en voiture : empruntée', false]);
         descendre();
       }
       // à pied : le tour par la route (à 1 m du trottoir), en courant ; la direction voulue, d'après la caméra (main.js : marcher)
@@ -1234,7 +1235,7 @@ if (scenario === 'abords') {
         log.push(['la grille est ouverte : de la rue, on entre à pied (z = ' + c.toFixed(1) + ')', c < SI.park[1] - 1]);
       }
       // (le van et le tracteur, après : chacun finit son tour au raccord de la rue)
-      for (const [g, v] of [['van', 8], ['tracteur', 6.5]]) { if (monter(g)) { tour('en ' + g, v); descendre(); } else log.push(['en ' + g + ' : monté', false]); }
+      for (const [g, v] of [['van', 8], ['tracteur', 6.5]]) { if (monter(g)) { const l = J.lieux[g]; tour('en ' + g, v, [l.x, l.z, l.h]); descendre(); } else log.push(['en ' + g + ' : monté', false]); }
       // la route est dans le réseau : de la rue à l'arrière du bâtiment, l'itinéraire passe par elle
       {
         const it = J.reseau.itineraire({ x: SI.rue, z: -20 }, { x: (SI.o + SI.e) / 2, z: SI.n }), l = it.reduce((s, p, k) => s + (k ? Math.hypot(p[0] - it[k - 1][0], p[1] - it[k - 1][1]) : 0), 0);

@@ -378,7 +378,7 @@ const GLSL_EMISSIF = `
     totalEmissiveRadiance += (ciel * (0.035 + 0.42 * c2 * c2 * c) + vec3(1.0, 0.85, 0.6) * (s16 * s16 * 0.55)) * mix(1.0, 0.15, uNuit);
   } else if (me == 29) {
     // (Solumatic) le polyester ondulé : le jour passe au travers, il luit
-    if (abs(normaleMonde().y) > 0.5) totalEmissiveRadiance += diffuseColor.rgb * 0.32 * (1.0 - 0.9 * uNuit);
+    if (abs(normaleMonde().y) > 0.5) totalEmissiveRadiance += diffuseColor.rgb * 0.5 * (1.0 - 0.9 * uNuit);
   }
 }`;
 // Vitres qu'on traverse du regard (matière MAT_VITRE) : plus opaques en incidence rasante, comme une vraie vitre

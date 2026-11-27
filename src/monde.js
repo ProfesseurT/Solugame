@@ -3757,13 +3757,14 @@ void main() {
       atlas.poser(256, 64, (c, W, H) => { c.fillStyle = '#2c3e66'; c.fillRect(0, 0, W, H); c.fillStyle = '#f6f1e8'; c.font = 'bold 34px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Livraisons', W / 2, H / 2 + 2); }, 0.48, 0.12, X1 + 0.014, 1.75, PT.z + PT.l / 2 + 0.42, Math.PI / 2);
       // la bâche au logo, au-dessus des fenêtres de Soleil : sa propre texture, sur un cadre d'aluminium (dans le toit)
       {
-        const bx = uX(10.05), by = 3.62, bw = 5.6, bh = 1.28, cv = document.createElement('canvas');
+        // (7,4 m : au-dessus des quatre fenêtres de Soleil ; le logo au milieu, des marges blanches, les œillets)
+        const bx = uX(10.05), by = 3.62, bw = 7.4, bh = 1.3, cv = document.createElement('canvas');
         Su(bw + 0.08, bh + 0.08, 0.03, '#d8d9d6', by, 0.02, bx, toitS);
-        cv.width = 1024; cv.height = 234;
-        const c = cv.getContext('2d'), W = cv.width, H2 = cv.height, w = W * 0.86;
+        cv.width = 1024; cv.height = Math.round(1024 * bh / bw);
+        const c = cv.getContext('2d'), W = cv.width, H2 = cv.height, w = Math.min(W * 0.86, H2 * 0.78 * 1602 / 378);
         c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H2);
         logoSolumatic(c, (W - w) / 2, (H2 - w * 378 / 1602) / 2, w);
-        c.fillStyle = '#c8cac6'; for (const [x, y] of [[10, 10], [W - 10, 10], [10, H2 - 10], [W - 10, H2 - 10], [W / 2, 10], [W / 2, H2 - 10]]) { c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill(); }
+        c.fillStyle = '#c8cac6'; for (let k = 0; k <= 6; k++) for (const y of [8, H2 - 8]) { c.beginPath(); c.arc(8 + k * (W - 16) / 6, y, 3.5, 0, 7); c.fill(); }
         const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
         bache = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh).translate(bx, by, Z1 + 0.04), new THREE.MeshLambertMaterial({ map: tex }));
         bache.name = 'bâche Solumatic'; bache.matrixAutoUpdate = false; bache.renderOrder = ORDRE.bati;
@@ -3947,6 +3948,14 @@ void main() {
         }, 1.3, 1.3, 0, 0, 0, 0);
         k.g.rotateX(-Math.PI / 2); k.g.rotateY(Math.PI); k.g.translate(xh, 0.038, zp);
         for (const [a, b] of [[198.8, 205.5], [211.5, 229.6]]) L.push(B(b - a, 0.12, 0.15, BORDURE, (a + b) / 2, 0, park[1] + 0.075));
+        // sur l'accès, en venant de la grille : la flèche (à gauche ou à droite : la route fait le tour) et la ligne du cédez-le-passage
+        const fl = atlas.poser(96, 176, (c, W, H) => {
+          c.clearRect(0, 0, W, H); c.fillStyle = '#f2efe6';
+          c.fillRect(W * 0.42, H * 0.36, W * 0.16, H * 0.64);
+          c.beginPath(); c.moveTo(W * 0.42, H * 0.36); c.lineTo(W * 0.14, H * 0.22); c.lineTo(W * 0.14, H * 0.3); c.lineTo(W * 0.0, H * 0.14); c.lineTo(W * 0.22, H * 0.04); c.lineTo(W * 0.2, H * 0.12); c.lineTo(W * 0.5, H * 0.27); c.lineTo(W * 0.8, H * 0.12); c.lineTo(W * 0.78, H * 0.04); c.lineTo(W, H * 0.14); c.lineTo(W * 0.86, H * 0.3); c.lineTo(W * 0.86, H * 0.22); c.lineTo(W * 0.58, H * 0.36); c.closePath(); c.fill();
+        }, 1.1, 2.0, 0, 0, 0, 0);
+        fl.g.rotateX(-Math.PI / 2); fl.g.translate(SITE.rue + 1.5, 0.038, park[1] - 2.2);
+        for (let k = 0; k < 5; k++) L.push(B(0.5, 0.012, 0.15, LIGNE, SITE.rue + 0.3 + k * 0.6, 0.03, park[0] + 0.2));
         L.push(B(0.34, 1.45, 0.24, BLANC, 223.5, 0.725, park[1] + 0.35), B(0.3, 0.3, 0.012, '#3d5f8e', 223.5, 1.15, park[1] + 0.225), B(0.26, 0.05, 0.012, '#2e9e4f', 223.5, 0.92, park[1] + 0.225), C(0.02, 0.02, 0.9, 5, NOIR, 223.75, 0.55, park[1] + 0.32));
         boites.push([223.3, park[1] + 0.2, 223.7, park[1] + 0.5]);
       }
@@ -3979,8 +3988,8 @@ void main() {
       panneau((c, W, H) => {
         c.fillStyle = '#fff'; c.beginPath(); c.moveTo(W, H / 2); c.lineTo(W - H / 2, 0); c.lineTo(0, 0); c.lineTo(0, H); c.lineTo(W - H / 2, H); c.closePath(); c.fill();
         c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
-        c.fillStyle = '#1d1d1d'; c.font = 'bold 27px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Accueil, livraisons', W / 2 - 16, H / 2 + 2);
-      }, 1.3, 0.26, uX(13.62), 1.9, s - LR / 2 - 0.45, 0);
+        c.fillStyle = '#1d1d1d'; c.font = 'bold 28px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Accueil, livraisons', W / 2 - 14, H / 2 + 2);
+      }, 1.1, 0.24, uX(13.62), 1.9, s - LR / 2 - 0.45, 0);
       // de l'autre côté de la route, tout autour : des arbres plantés là (pas tirés au sort), d'essences variées, en couleurs
       // d'automne : tilleuls et bouleaux à l'ouest, pins, chênes et érables au nord, érables, tilleuls et un chêne à l'est,
       // des charmes en colonne derrière le parking (le feuillage bouge au vent ; la taille varie d'après le rang). Tous à plus
@@ -4072,7 +4081,7 @@ void main() {
     // ce qu'on voit au travers (modeles.js, T.translucide) : le grillage de la clôture et le fond de l'abri, le polyester du
     // porche, le toit de l'abri. Un maillage à part, de la matière des vitrines (rien de plus à compiler), élagué hors champ
     {
-      const m = new THREE.Mesh(fusion(trans), MAT_VITRINE);
+      const m = new THREE.Mesh(indexer(fusion(trans), true), MAT_VITRINE);
       m.renderOrder = 3; m.matrixAutoUpdate = false; m.name = 'translucides Solumatic';
       m.geometry.computeBoundingSphere(); proches.maillages.push(m); // (de près seulement, comme les petits détails : maj)
       scene.add(m);
