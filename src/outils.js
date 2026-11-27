@@ -83,6 +83,9 @@ export const HORAIRES = {
   labo: [7 * 60, 18 * 60 + 30],
   imprimerie: [7 * 60, 19 * 60 + 30],
   domaine: [7 * 60, 19 * 60 + 30],
+  // les bureaux de Solumatic (solumatic.js : les horaires de chacun) : de l'arrivée de Romane, la première, au départ du
+  // dernier ; fermés le samedi et le dimanche
+  solumatic: [7 * 60 + 40, 18 * 60 + 45],
 };
 // les appels du bureau aux clients (téléphone : Ma journée, les rappels), de 8 h à 20 h
 export const APPELS = [8 * 60, 20 * 60];

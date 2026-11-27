@@ -33,6 +33,11 @@
 //             cycliste et le double de loin, bloqué par le joueur il sonne, met pied à terre et le contourne, un véhicule
 //             lancé sur lui (mode WTF compris) : il s'écarte ou saute, jamais touché, et repart ; la conduite assistée le
 //             double sans choc ; les vélos garés ; le phare la nuit
+//   solumatic les bureaux de Solumatic : les horaires (la nuit personne et la porte fermée, Romane seule qui fume devant
+//             l'entrée à 7 h 50, tout le monde à son poste à 10 h, Vanessa les jours pairs, les derniers qui partent le soir),
+//             entrer (l'extérieur retiré, la caméra sous le plafond), les 21 et Vanessa à leur pièce, leurs noms, les casques
+//             des deux plateaux, quelqu'un qui part au café et revient se rasseoir, le baby-foot, chaque pièce atteignable à
+//             pied, ressortir ; captures de chaque pièce (de jour, le soir), de Romane qui fume ; ce que ça coûte
 //   photo     captures en jeu à des endroits fixes (domaine, route, bourg, place, personnage de près)
 //   restaurateurs les restaurateurs du coin : rien avant d'aller les voir, « Présenter nos vins », la dégustation, le bureau,
 //             la relance (jamais pendant un appel de mission), l'appel, une commande signée, une autre pas, la sauvegarde
@@ -1021,7 +1026,7 @@ if (scenario === 'nuit') {
       log.push(['17 h 40 : la lumière dorée', nuit() === 0]);
       // la zone d'activités : la tonnellerie vit (le feu, le cercleur, la rouleuse) ; on entre chez Solumatic par la façade
       // est (l'extérieur est retiré de la scène, la caméra à hauteur d'homme, ceux qui y travaillent), les cloisons et les
-      // meubles arrêtent, un développeur va chercher un café, le baby-foot joue ; on ressort, tout revient
+      // meubles arrêtent, quelqu'un de l'équipe va chercher un café, le baby-foot joue ; on ressort, tout revient
       {
         const T = CL.tonnellerie, S = CL.solu, M = CL.monde, LS = M.lieux.solumatic, etq = t => [...document.querySelectorAll('.etiquette.action')].some(e => !e.hidden && e.textContent.startsWith(t));
         CL.teleporter(222.5, -30.5, 0.9); CL.step(60 * 20);
@@ -1029,23 +1034,26 @@ if (scenario === 'nuit') {
         CL.teleporter(LS.dehors.x + 0.6, LS.dehors.z, -Math.PI / 2); CL.step(20);
         const propose = etq('Entrer chez Solumatic'), n0 = CL.scene.children.length;
         CL.agir(); CL.finirGeste(); CL.step(10);
-        const n1 = CL.scene.children.length, c = CL.camera.position, j = CL.joueur.pos;
-        log.push(['chez Solumatic : « Entrer », dedans, l\'extérieur retiré de la scène (' + n0 + ' -> ' + n1 + ' objets), ' + S.gens.length + ' personnes', propose && J.dedans === 'solumatic' && CL.isoles && n1 < 60 && M.interieurSolu.visible && S.gens.length >= 30 && S.gens.every(g => g.p.m.groupe.visible)]);
-        log.push(['la caméra suit à hauteur d\'homme, sous le plafond (y = ' + c.y.toFixed(2) + ', à ' + Math.hypot(c.x - j.x, c.z - j.z).toFixed(2) + ' m)', c.y > 1.5 && c.y < 2.45 && Math.hypot(c.x - j.x, c.z - j.z) > 0.4]);
-        CL.teleporter(219.3, -61.3, Math.PI); CL.step(3);
+        const n1 = CL.scene.children.length, c = CL.camera.position, j = CL.joueur.pos, la = S.gens.filter(g => g.etat !== 'absent');
+        log.push(['chez Solumatic : « Entrer », dedans, l\'extérieur retiré de la scène (' + n0 + ' -> ' + n1 + ' objets), ' + S.gens.length + ' de l\'équipe, ' + la.length + ' encore là', propose && J.dedans === 'solumatic' && CL.isoles && n1 < 60 && M.interieurSolu.visible && S.gens.length === 22 && la.length >= 4 && la.every(g => g.p.m.groupe.visible || g.dehors)]);
+        log.push(['la caméra suit à hauteur d\'homme, sous le plafond (y = ' + c.y.toFixed(2) + ', à ' + Math.hypot(c.x - j.x, c.z - j.z).toFixed(2) + ' m)', c.y > 1.5 && c.y < 2.75 && Math.hypot(c.x - j.x, c.z - j.z) > 0.4]);
+        const H = S.P.hall; CL.teleporter((H.x0 + H.x1) / 2, H.z0 + 2.2, Math.PI); CL.step(3);
         touche('keydown', 'ArrowUp'); CL.step(60 * 4); touche('keyup', 'ArrowUp'); CL.step(10);
         const zN = CL.joueur.pos.z;
-        log.push(['dedans, on marche dans l\'entrée jusqu\'au banc, qui arrête (z = ' + zN.toFixed(2) + ')', zN > -62.5 && zN < -62.0]);
-        const m = S.marcheur, x0 = m.p.pos.x, b0 = S.balle.position.z;
-        m.marche.t = 0; CL.teleporter(215.9, -66.0, Math.PI); CL.step(60 * 26);
-        const loin = Math.hypot(m.p.pos.x - x0, m.p.pos.z - m.marche.z0);
-        log.push(['un développeur se lève et va jusqu\'à la cuisine (' + loin.toFixed(1) + ' m de sa place)', loin > 9 && !m.p.assis]);
-        CL.teleporter(206.3, -61.6, 0.15); CL.step(30);
+        log.push(['dedans, on marche dans l\'entrée jusqu\'au banc, qui arrête (z = ' + zN.toFixed(2) + ')', zN > H.z0 + 0.5 && zN < H.z0 + 1.15]);
+        const m = la.find(g => g.etat === 'poste' && g.mode === 'assis' && !g.tache), x0 = m && m.home.x, z0 = m && m.home.z;
+        if (m) S.envoyer(m.id, 'cafe');
+        CL.teleporter(S.V.cibles.atlas[0], S.V.cibles.atlas[1], Math.PI); CL.step(60 * 26);
+        const loin = m ? Math.hypot(m.p.pos.x - x0, m.p.pos.z - z0) : 0;
+        log.push([(m ? m.e.prenom : 'personne') + ' se lève et va jusqu\'à la cuisine (' + loin.toFixed(1) + ' m de sa place)', m && loin > 6 && !m.p.assis]);
+        const deux = S.gens.filter(g => g.etat === 'poste' && g.mode === 'assis' && !g.tache && g !== m), b0 = S.balle.position.z;
+        if (deux.length >= 2) S.envoyer(deux[0].id, 'babyfoot', deux[1].id);
+        CL.step(60 * 22);
         log.push(['au baby-foot, la balle roule', S.balle.visible && Math.abs(S.balle.position.z - b0) > 0.01]);
         CL.teleporter(LS.dedans.x - 0.3, LS.dedans.z, Math.PI / 2); CL.step(10);
         const sortir = etq('Sortir');
         CL.agir(); CL.finirGeste(); CL.step(5);
-        log.push(['on ressort : dehors, l\'extérieur revenu (' + CL.scene.children.length + ' objets), le toit, l\'intérieur plus dessiné', sortir && !J.dedans && !CL.isoles && CL.scene.children.length === n0 && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.x > 221.9 && CL.joueur.m.groupe.visible]);
+        log.push(['on ressort : dehors, l\'extérieur revenu (' + CL.scene.children.length + ' objets), le toit, l\'intérieur plus dessiné', sortir && !J.dedans && !CL.isoles && CL.scene.children.length === n0 && M.toitSolu.visible && !M.interieurSolu.visible && CL.joueur.pos.x > LS.seuil.x - 0.2 && CL.joueur.m.groupe.visible]);
         CL.teleporter(-93, -58, 0); CL.step(5);
       }
       J.minutes = 19 * 60 + 15; CL.step(5);
@@ -2007,6 +2015,156 @@ if (scenario === 'ecole') {
   for (const [m, okk] of r) ok(okk, m);
   await ev(() => { CL.photo(124, 26, -12, 124, 0, -24); CL.jeu.minutes = 10 * 60 + 5; CL.step(300); });
   await capture('ecole-recreation');
+}
+
+if (scenario === 'solumatic') {
+  // Les bureaux de Solumatic (solumatic.js) : les horaires, puis dedans, pièce par pièce
+  const etat = () => ev(() => { const S = CL.solu; return { gens: S.etats(), ouverte: S.ouverte }; });
+  await ev(() => { CL.jouer(); CL.step(60); });
+  // 1. la nuit (mardi, 23 h) : personne, la porte fermée, l'étiquette dit pourquoi et quand l'équipe arrive
+  let r = await ev(() => {
+    const S = CL.solu, LS = CL.monde.lieux.solumatic, J = CL.jeu;
+    J.minutes = 23 * 60; CL.teleporter(LS.dehors.x + 0.6, LS.dehors.z, -Math.PI / 2); CL.step(40);
+    const etq = [...document.querySelectorAll('.etiquette.action')].filter(e => !e.hidden).map(e => e.textContent).join(' | ');
+    CL.agir(); CL.step(2);
+    const H = J.hud, st = [H.ligne, ...H.file].filter(Boolean).map(l => l.txt).find(t => /Solumatic/.test(t)) || '';
+    return { etq, st, ouverte: S.ouverte, dedans: J.dedans, la: S.gens.filter(g => g.etat !== 'absent').length };
+  });
+  ok(!r.ouverte && !r.dedans && r.la === 0 && /Fermé · l'équipe arrive demain à 7 h \d\d/.test(r.etq) && /fermé à cette heure-ci/.test(r.st), `la nuit, personne ; la porte reste fermée (« ${r.etq} » ; « ${r.st} »)`);
+  await capture('solu-nuit-porte');
+  // 2. le lendemain, mercredi, 7 h 52 : Romane seule, dehors, qui fume devant l'entrée ; la porte est ouverte
+  r = await ev(() => {
+    const S = CL.solu, LS = CL.monde.lieux.solumatic, J = CL.jeu;
+    J.minutes = 1440 + 7 * 60 + 52; CL.teleporter(LS.dehors.x + 1.6, LS.dehors.z - 0.8, -2.2); CL.step(240);
+    const ro = S.romane, autres = S.gens.filter(g => g !== ro && g.etat !== 'absent').length;
+    CL.photo(LS.dehors.x + 4.6, 2.2, LS.dehors.z + 5.0, ro.p.pos.x, 1.3, ro.p.pos.z); CL.step(2);
+    return { ro: ro && ro.etat, dehors: ro && ro.dehors, vu: ro && ro.p.m.groupe.visible, fume: ro && ro.p.fume, autres, ouverte: S.ouverte, x: ro.p.pos.x, z: ro.p.pos.z, part: CL.monde && document.querySelectorAll ? 1 : 0, bulle: ro.etq.el.textContent };
+  });
+  ok(r.ro === 'fume' && r.dehors && r.vu && r.fume && r.autres === 0 && r.ouverte, `7 h 52 : Romane seule, dehors, fume devant l'entrée (${r.x.toFixed(1)}, ${r.z.toFixed(1)}) ; la porte est ouverte`);
+  ok(/^Romane : /.test(r.bulle), `elle salue qui passe, avec son prénom (« ${r.bulle} »)`);
+  await capture('solu-romane-fume');
+  await ev(() => CL.photo());
+  // 3. 10 h : tout le monde à son poste, dans sa pièce ; Vanessa pas là (mercredi, jour impair), son poste rangé
+  r = await ev(() => {
+    const S = CL.solu, J = CL.jeu; J.minutes = 1440 + 10 * 60; S.horaires(true); CL.step(2);
+    return { gens: S.etats().map(e => ({ ...e, piece: S.piece(e.x, e.z), voulue: S.gens.find(g => g.id === e.id).e.piece })), range: S.vPas && S.vPas.visible };
+  });
+  {
+    const sauf = r.gens.filter(g => g.id !== 'vanessa');
+    ok(sauf.length === 21 && sauf.every(g => g.etat === 'poste' && g.piece === g.voulue), `mercredi, 10 h : les 21 à leur poste, dans leur pièce (${sauf.filter(g => g.piece !== g.voulue || g.etat !== 'poste').map(g => g.id + ' ' + g.etat + ' ' + g.piece).join(', ') || 'tous'})`);
+    const v = r.gens.find(g => g.id === 'vanessa');
+    ok(v.etat === 'absent' && !v.visible && r.range, 'Vanessa n\'est pas là le mercredi : son poste est rangé, le portable fermé');
+  }
+  // 4. le jeudi (jour pair), Vanessa est là ; on entre : l'extérieur retiré, la caméra sous le plafond
+  r = await ev(() => {
+    const S = CL.solu, LS = CL.monde.lieux.solumatic, J = CL.jeu;
+    J.minutes = 2 * 1440 + 10 * 60; CL.teleporter(LS.dehors.x + 0.6, LS.dehors.z, -Math.PI / 2); CL.step(30);
+    const n0 = CL.scene.children.length; CL.agir(); CL.finirGeste(); CL.step(30);
+    const c = CL.camera.position, v = S.gens.find(g => g.id === 'vanessa');
+    return { dedans: J.dedans, n0, n1: CL.scene.children.length, isoles: !!CL.isoles, cy: c.y, va: v.etat, vapiece: S.piece(v.p.m.groupe.position.x, v.p.m.groupe.position.z), vu: v.p.m.groupe.visible, la: S.vLa.visible,
+      casques: S.gens.filter(g => g.casque).map(g => g.id), plateaux: S.gens.filter(g => ['atelier', 'soleil'].includes(g.e.piece)).length };
+  });
+  ok(r.dedans === 'solumatic' && r.isoles && r.n1 < 70, `jeudi, 10 h : on entre, l'extérieur retiré de la scène (${r.n0} -> ${r.n1} objets)`);
+  ok(r.cy > 1.4 && r.cy < 2.75, `la caméra à hauteur d'homme, sous le plafond de 3 m (y = ${r.cy.toFixed(2)})`);
+  ok(r.va === 'poste' && r.vapiece === 'saturne' && r.vu && r.la, 'Vanessa est là le jeudi, à Saturne, son portable ouvert');
+  ok(r.casques.length === 8 && r.plateaux === 8, `les casques-micros des deux plateaux (${r.casques.join(', ')})`);
+  // 5. leurs noms : en passant près de chacun, une bulle qui commence par son prénom ; ceux qui sont en ligne
+  r = await ev(() => {
+    const S = CL.solu, noms = new Set(), parle = new Set();
+    for (const g of S.gens) {
+      if (g.etat !== 'poste') continue;
+      const q = g.p.m.groupe.position, lv = (g.home.lever || []).find(([a, b]) => S.grille.libre(a, b));
+      if (lv) CL.teleporter(lv[0], lv[1], 0); else continue;
+      S.tBulle = 0; g.tParle = 0; CL.step(8);
+      if (g.etq.el.textContent.startsWith(g.e.prenom + ' : ')) noms.add(g.id);
+      void q;
+    }
+    for (let i = 0; i < 60 * 40; i++) { CL.step(1); for (const g of S.gens) if (g.parle) parle.add(g.id); }
+    return { noms: [...noms], parle: [...parle] };
+  });
+  ok(r.noms.length >= 20, `en passant près d'eux, chacun salue avec son prénom (${r.noms.length} sur 22)`);
+  ok(r.parle.filter(id => ['clement', 'cindy', 'hugo', 'lorette', 'raphael', 'ophelie', 'emma', 'emilie'].includes(id)).length >= 5, `sur les plateaux, on parle au casque, pas tous à la fois (${r.parle.join(', ')})`);
+  // 6. quelqu'un part au café et revient se rasseoir ; deux autres jouent au baby-foot
+  r = await ev(() => {
+    const S = CL.solu, g = S.gens.find(o => o.id === 'nathan'), h = g.home;
+    S.envoyer('nathan', 'cafe'); S.envoyer('dylan', 'babyfoot', 'kevin');
+    let loin = 0, auCafe = false, b0 = S.balle.position.z, balle = false;
+    const P = S.P.atlas; CL.teleporter(S.V.cibles.atlas[0], S.V.cibles.atlas[1] + 1.5, Math.PI);
+    for (let i = 0; i < 60 * 90; i++) { CL.step(1); const q = g.p.pos; loin = Math.max(loin, Math.hypot(q.x - h.x, q.z - h.z)); if (g.tache && g.tache.type === 'cafe' && g.tache.arrive) auCafe = true; if (Math.abs(S.balle.position.z - b0) > 0.05) balle = true; if (auCafe && g.mode === 'assis' && g.siege === h && i > 600) break; }
+    void P;
+    return { loin, auCafe, rassis: g.mode === 'assis' && g.siege === h, piece: S.piece(g.p.m.groupe.position.x, g.p.m.groupe.position.z), balle };
+  });
+  ok(r.auCafe && r.loin > 8 && r.rassis && r.piece === 'jupiter', `Nathan va au café de Mars (jusqu'à ${r.loin.toFixed(1)} m de sa place) et revient se rasseoir à Jupiter`);
+  ok(r.balle, 'deux autres jouent au baby-foot d\'Atlas : la balle roule');
+  // 7. chaque pièce atteignable à pied : le joueur, mené depuis l'entrée par les couloirs et les portes, sans se coincer
+  // (le chemin cherché parmi tout ce qui arrête dans le bâtiment, collisions.js ; rien du dehors ne doit y être resté :
+  // signalé à part, et mis de côté le temps de la marche, qui ne juge que l'intérieur)
+  r = await ev(() => {
+    const S = CL.solu, LS = CL.monde.lieux.solumatic, res = {}, Q = { x0: S.P.atelier.x0, x1: S.P.atelier.x1 };
+    const B = S.V.boites, dans = b => b.x1 > S.bords.x0 && b.x0 < S.bords.x1 && b.z1 > S.bords.z0 && b.z0 < S.bords.z1;
+    const bs = CL.col.boites.filter(b => !b.fantome && dans(b));
+    const miennes = new Set(B.map(b => b.map(v => v.toFixed(3)).join())), mT = new Set(S.V.tournees.map(t => t[0].toFixed(3) + ',' + t[1].toFixed(3)));
+    const etrangeres = bs.filter(b => b.o ? !mT.has(b.o.cx.toFixed(3) + ',' + b.o.cz.toFixed(3)) : !miennes.has([b.x0, b.z0, b.x1, b.z1].map(v => v.toFixed(3)).join()) && !(b.x1 - b.x0 > 0.25 && b.z1 - b.z0 > 0.25 && (b.x0 <= S.bords.x0 + 0.01 || b.x1 >= S.bords.x1 - 0.01 || b.z0 <= S.bords.z0 + 0.01 || b.z1 >= S.bords.z1 - 0.01) && (b.x1 - b.x0 < 0.31 || b.z1 - b.z0 < 0.31)));
+    for (const b of etrangeres) b.fantome = true;
+    const G = S.grilleDe(bs.filter(b => !b.o && !b.fantome).map(b => [b.x0, b.z0, b.x1, b.z1]), bs.filter(b => b.o && !b.fantome).map(b => [b.o.cx, b.o.cz, 2 * b.o.hw, 2 * b.o.hd, Math.atan2(b.o.si, b.o.co)]), 0.36, 0.1);
+    for (const [k, [bx, bz]] of Object.entries(S.V.cibles)) {
+      CL.teleporter(LS.dedans.x, LS.dedans.z, -Math.PI / 2);
+      const ch = G.chemin(LS.dedans.x, LS.dedans.z, bx, bz), j = CL.joueur;
+      if (!ch) { res[k] = 'pas de chemin'; continue; }
+      let i = 0, n = 0;
+      for (; n < 60 * 60 && i < ch.length; n++) {
+        const [tx, tz] = ch[i], dx = tx - j.pos.x, dz = tz - j.pos.z, d = Math.hypot(dx, dz);
+        if (d < (i === ch.length - 1 ? 0.3 : 0.4)) { i++; continue; }
+        j.update(1 / 60, dx / d, dz / d, 0.3, false, CL.col, n / 60);
+      }
+      res[k] = i >= ch.length ? 'ok' : `coincé en (${j.pos.x.toFixed(1)}, ${j.pos.z.toFixed(1)})`;
+    }
+    for (const b of etrangeres) b.fantome = false;
+    CL.teleporter(LS.dedans.x, LS.dedans.z, -Math.PI / 2); CL.step(5);
+    void Q;
+    return { res, etrangeres: etrangeres.map(b => [b.x0, b.z0, b.x1, b.z1].map(v => v.toFixed(1)).join(', ')) };
+  });
+  ok(r.etrangeres.length === 0, `rien du dehors n'arrête dans le bâtiment (${r.etrangeres.length} : ${r.etrangeres.join(' | ')})`);
+  ok(Object.values(r.res).every(v => v === 'ok') && Object.keys(r.res).length >= 15, 'chaque pièce atteignable à pied depuis l\'entrée : ' + Object.entries(r.res).map(([k, v]) => k + ' ' + v).join(', '));
+  // 8. les captures de chaque pièce, à hauteur d'homme ; ce que ça coûte
+  const pieces = {
+    entree: ['hall', 0.5, 0.5, -1.9], support: ['atelier', 0.18, 0.15, 2.4], soleil: ['soleil', 0.75, 0.82, -2.2], atlas: ['atlas', 0.15, 0.85, 1.6],
+    atlas2: ['atlas', 0.85, 0.82, -2.4], mars: ['mars', 0.85, 0.15, 3.0], terre: ['terre', 0.2, 0.45, 1.57], venus: ['venus', 0.2, 0.5, 1.57],
+    mercure: ['mercure', 0.9, 0.8, -1.6], neptune: ['neptune', 0.8, 0.85, -2.8], uranus: ['uranus', 0.18, 0.85, 2.6], saturne: ['saturne', 0.85, 0.88, -2.4],
+    jupiter: ['jupiter', 0.82, 0.88, -2.0], jupiter2: ['jupiter', 0.8, 0.22, 3.0], moyens: ['moyens', 0.45, 0.85, -1.9],
+  };
+  const couts = {};
+  for (const [nom, [k, u, v, h]] of Object.entries(pieces)) {
+    couts[nom] = await ev((k, u, v, h) => { const q = CL.solu.P[k]; CL.teleporter(q.x0 + u * (q.x1 - q.x0), q.z0 + v * (q.z1 - q.z0), h); CL.step(60); return CL.bench(30); }, k, u, v, h);
+    await capture('solu-' + nom);
+  }
+  for (const [k, b] of Object.entries(couts)) console.log('     ' + k + ' : ' + b);
+  {
+    const m = Object.values(couts).map(b => +b.match(/(\d+) appels/)[1]), t = Object.values(couts).map(b => +b.match(/(\d+) triangles/)[1]);
+    ok(Math.max(...m) <= 34 && Math.max(...t) < 250000, `dedans, au plus ${Math.max(...m)} appels de dessin et ${Math.max(...t)} triangles (ombres comprises)`);
+  }
+  // 9. le soir : les derniers s'en vont par la porte d'entrée (on les voit marcher jusqu'à elle), puis plus personne
+  r = await ev(() => {
+    const S = CL.solu, J = CL.jeu;
+    J.minutes = 2 * 1440 + 18 * 60 + 25; S.horaires(true); CL.step(2);
+    const avant = S.gens.filter(g => g.etat !== 'absent').map(g => g.id);
+    const H = S.P.hall; CL.teleporter(H.x0 + 1.0, (H.z0 + H.z1) / 2, -Math.PI / 2);
+    let vus = new Set();
+    for (let i = 0; i < 60 * 70; i++) { CL.step(1); for (const g of S.gens) if (g.tache && g.tache.type === 'sortir' && g.mode === 'marche' && g.p.m.groupe.visible) vus.add(g.id); }
+    J.minutes = 2 * 1440 + 18 * 60 + 50; CL.step(60 * 30);
+    return { avant, vus: [...vus], apres: S.gens.filter(g => g.etat !== 'absent').length, ouverte: S.ouverte };
+  });
+  ok(r.avant.length >= 1 && r.vus.length >= 1, `18 h 25 : encore là ${r.avant.join(', ')} ; on voit partir vers la porte : ${r.vus.join(', ')}`);
+  ok(r.apres === 0 && !r.ouverte, '18 h 50 : plus personne, le bureau ferme');
+  await capture('solu-soir-vide');
+  // 10. on ressort : les objets du dehors reviennent
+  r = await ev(() => {
+    const LS = CL.monde.lieux.solumatic, J = CL.jeu; CL.teleporter(LS.dedans.x - 0.3, LS.dedans.z, Math.PI / 2); CL.step(10);
+    CL.agir(); CL.finirGeste(); CL.step(10);
+    return { dedans: J.dedans, isoles: !!CL.isoles, n: CL.scene.children.length, toit: CL.monde.toitSolu.visible };
+  });
+  ok(!r.dedans && !r.isoles && r.toit, `on ressort même fermé : dehors, les objets du dehors revenus (${r.n} objets)`);
+  void etat;
 }
 
 if (scenario === 'photo') {
