@@ -7,7 +7,7 @@ import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, def
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
 import { Atelier, camion, figer } from './engins.js';
 import { chariot } from './remorque.js';
-import { SOLU, ENTREE, FENETRES, VITRINES, VITRINE, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
+import { SOLU, K as K_SOLU, ENTREE, FEN, FENETRES, PORTE_ATELIER, PORTE_ATLAS, interieurSolumatic, panneauxSolumatic } from './solumatic.js';
 import { logoSolumatic } from './logo.js';
 import { rangeVelos, veloSeul } from './velos.js';
 import { naturelle, forme, sol, terrain, dalle, activerDalles, avantRoute, procheRoute, ZONE, GRILLE, FIN, ROUTE as TRACE, CHATEAU, COUR, DEMI, VERGE, reserve, dansZA, ZA } from './relief.js';
@@ -18,6 +18,26 @@ export const ECH = 1.5; // pixels par mètre sur le fond de la mini-carte
 export const CARTE0 = 380, CARTE1 = 260; // le fond de la mini-carte va de -380 à 260 m (x et z) : la zone de jeu, la route du château, la zone d'activités
 const TUF = '#ebe0c6', ARD = '#5d626e', ARD2 = '#686d78';
 const FEUILLES_VIGNE = ['#b8642c', '#c9a23a', '#a6823a', '#8a8f3a'], VIGNE_VIERGE = ['#b0402c', '#c2562e', '#8e2a3b', '#d0702f', '#a8452f'];
+
+/* Le site de Solumatic, au fond de la zone d'activités (Teddy, 27/11/2026 : « y'a une route qui fait le tour du bureau avec
+   des arbres de l'autre côté de la route et une clôture ») : autour du bâtiment (X0..X1, Z0..Z1 : SOLU, murs compris), le
+   trottoir (2,5 m ; 3 m à l'est, devant l'entrée), une route de L mètres qui en fait le tour (o, e, n, s : les axes de ses
+   côtés ; R : le rayon de ses virages, à l'axe), de l'autre côté les arbres, puis la clôture (cl) ; au sud, entre la route et
+   la clôture, le parking (z de park[0] à park[1]) ; la grille au bout de la rue de la zone (son axe : rue). */
+const SITE = (() => {
+  const { x0, x1, z0, z1, ep } = SOLU, X0 = x0 - ep, X1 = x1 + ep, Z0 = z0 - ep, Z1 = z1 + ep, L = 6, R = 6;
+  const o = X0 - 2.5 - L / 2, e = X1 + 3 + L / 2, n = Z0 - 2.5 - L / 2, s = Z1 + 2.5 + L / 2;
+  return { X0, X1, Z0, Z1, L, R, o, e, n, s, rue: 208.5, grille: { x0: 205.25, x1: 211.75, z: -44.6 }, park: [s + L / 2, s + L / 2 + 5], cl: { o: o - L / 2 - 4, n: n - L / 2 - 4, e: 247, s: -44.6 } };
+})();
+// Le tour de la route, décalé de d vers l'extérieur (0 : son axe) : du raccord avec la rue, au sud, vers l'est, les quatre
+// virages (q segments par quart de tour), jusqu'au raccord ; des points [x, z]
+function tourSolu(d = 0, q = 6) {
+  const { o, e, n, s, R } = SITE, P = [[SITE.rue, s + d]];
+  const arc = (cx, cz, a0, a1) => { for (let k = 0; k <= q; k++) { const a = (a0 + (a1 - a0) * k / q) * Math.PI / 180; P.push([cx + (R + d) * Math.cos(a), cz + (R + d) * Math.sin(a)]); } };
+  arc(e - R, s - R, 90, 0); arc(e - R, n + R, 360, 270); arc(o + R, n + R, 270, 180); arc(o + R, s - R, 180, 90);
+  P.push([SITE.rue, s + d]);
+  return P;
+}
 
 // Relief : relief.js (plat dans la zone de jeu, collines autour, la colline du château et sa route)
 export const hauteur = sol;
@@ -279,8 +299,10 @@ void main() {
      et l'ambiance reste assez claire pour jouer ; fenêtres et réverbères brillent plus fort (modeles.js, uNuit). */
   const JOUR = { brume: new THREE.Color(BRUME), milieu: new THREE.Color('#e38a78'), zenith: new THREE.Color('#2b4888'), ciel: new THREE.Color('#d3cfe6'), sol: new THREE.Color('#9a6a45'), soleil: new THREE.Color('#ffb46e'), nuages: new THREE.Color('#ffffff') };
   const NUIT = { brume: new THREE.Color('#2b3452'), milieu: new THREE.Color('#2a3354'), zenith: new THREE.Color('#0a1130'), ciel: new THREE.Color('#a3aed6'), sol: new THREE.Color('#45404c'), soleil: new THREE.Color('#9fb3ea'), nuages: new THREE.Color('#3a4262') };
+  let lumieresSolu = null; // (les lumières de la nuit chez Solumatic : zoneActivites)
   function nuit(n) {
     UNI.uNuit.value = n;
+    if (lumieresSolu) { lumieresSolu.visible = n > 0.02; lumieresSolu.material.opacity = 0.75 * lisse(n); }
     const D = ciel.userData.dome.material.uniforms, m = (k, c) => c.copy(JOUR[k]).lerp(NUIT[k], n);
     D.uNuit.value = n; m('brume', D.uBrume.value); m('milieu', D.uMilieu.value); m('zenith', D.uZenith.value);
     if (scene.fog) scene.fog.color.copy(D.uBrume.value);
@@ -434,6 +456,15 @@ void main() {
 
   /* ------------------------------------------------------------ routes, place, cour, parcelles */
   const surf = [];
+  // une dalle à quatre coins [x, z] (dans l'ordre du tour, convexe), son dessus à y1, ses flancs jusqu'à y0 : un virage de
+  // route, un coin de trottoir (dallesDe la reconnaît : les pieds et les roues s'y posent)
+  const dalle4 = (P, y1, c, y0 = -0.03) => {
+    const at = new Atelier(), cx = (P[0][0] + P[1][0] + P[2][0] + P[3][0]) / 4, cz = (P[0][1] + P[1][1] + P[2][1] + P[3][1]) / 4;
+    const H = P.map(([x, z]) => [x, y1, z]), D = P.map(([x, z]) => [x, y0, z]);
+    at.quad(H[0], H[1], H[2], H[3], c, undefined, [0, 1, 0]);
+    for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; at.quad(D[i], D[j], H[j], H[i], c, undefined, [(P[i][0] + P[j][0]) / 2 - cx, 0, (P[i][1] + P[j][1]) / 2 - cz]); }
+    return fusion(at.geos());
+  };
   const ROUTE = '#55575f', VIEILLE = '#78736b', LIGNE = '#ece6d4', TROTT = '#bdb19b', PAVES = '#a89c88', BORDURE = '#d9cdb2';
   // la départementale ; dans le bourg (x de 22 à 158) une vieille chaussée plus claire, sans bandes blanches, entre deux
   // caniveaux pavés ; au cœur du bourg (x de 70 à 120, carrefour de la rue de la place), elle est pavée
@@ -505,13 +536,27 @@ void main() {
     for (const [x0, z0, x1, z1] of [[171.5, 19.4, 175.2, 19.6], [183.2, 19.4, 186, 19.6], [173.4, 32.5, 173.6, 47], [173.5, 46.9, 186, 47.1]]) surf.push(B(x1 - x0, 0.14, z1 - z0, BORDURE, (x0 + x1) / 2, 0, (z0 + z1) / 2));
     for (let i = S0; i < surf.length; i++) deplacer(surf[i], DX_EN, 0, 0); // (dessiné à sa première place)
     // la zone d'activités, au nord de la route (zoneActivites) : la rue de la zone, de la départementale à la grille de
-    // Solumatic ; le parvis de Solumatic (son parking : cinq places, la première pour les personnes handicapées), la
-    // terrasse au nord, l'allée de la pelouse ; la cour de la tonnellerie (gravier et terre battue)
+    // Solumatic ; le site de Solumatic (SITE) : la route qui fait le tour du bâtiment, en enrobé (un quadrilatère par côté
+    // et par quinzième de virage), le trottoir de pavés gris autour du bâtiment (un quadrilatère par côté, un éventail
+    // depuis l'angle du mur dans chaque coin), le parking au sud, entre la route et la clôture (ses places : zoneActivites),
+    // le bout de la rue jusqu'à lui ; la cour de la tonnellerie (gravier et terre battue)
     surf.push(B(6, 0.06, 51.2, ENR, 208.5, 0, -19.0)); rect(205.5, -44.6, 211.5, 6.6, '#5d6068');
-    surf.push(B(41.5, 0.06, 8.9, ENR, 216.45, 0, -49.25)); rect(195.7, -53.7, 237.2, -44.8, '#5d6068');
-    surf.push(B(2.5, 0.064, 5.0, '#2e5fa8', 214.25, 0, -47.3));
-    for (let x = 213; x <= 225.6; x += 2.5) surf.push(B(0.1, 0.066, 5.0, '#ece6d4', x, 0, -47.3));
-    surf.push(B(9.2, 0.07, 4.3, '#bdb19b', 207.6, 0, -82.45), B(2.6, 0.07, 9.4, '#bdb19b', 223.2, 0, -58.4), B(1.4, 0.07, 12.0, '#bdb19b', 222.7, 0, -69.1)); rect(203.0, -84.6, 212.2, -80.3, '#bdb19b'); rect(221.9, -63.1, 224.5, -53.7, '#bdb19b');
+    {
+      const { X0, X1, Z0, Z1, L, R, o, e, n, s, park } = SITE, P0 = tourSolu(-L / 2), P1 = tourSolu(L / 2), TR = '#b4b0a7', ri = R - L / 2, yT = 0.07;
+      for (let i = 1; i < P0.length; i++) surf.push(dalle4([P0[i - 1], P0[i], P1[i], P1[i - 1]], 0.03, ENR));
+      surf.push(dalle4([[X0, Z1], [X1, Z1], [e - R, s - L / 2], [o + R, s - L / 2]], yT, TR), dalle4([[X0, Z0], [o + R, n + L / 2], [e - R, n + L / 2], [X1, Z0]], yT, TR));
+      surf.push(dalle4([[X0, Z1], [o + L / 2, s - R], [o + L / 2, n + R], [X0, Z0]], yT, TR), dalle4([[X1, Z1], [X1, Z0], [e - L / 2, n + R], [e - L / 2, s - R]], yT, TR));
+      for (const [ax, az, cx, cz, a0] of [[X0, Z1, o + R, s - R, 90], [X1, Z1, e - R, s - R, 0], [X1, Z0, e - R, n + R, 270], [X0, Z0, o + R, n + R, 180]]) for (let k = 0; k < 3; k++) {
+        const p = j => { const a = (a0 + k * 30 + j * 15) * Math.PI / 180; return [cx + ri * Math.cos(a), cz + ri * Math.sin(a)]; };
+        surf.push(dalle4([[ax, az], p(0), p(1), p(2)], yT + 0.0005, TR));
+      }
+      // le parking (de x = 198,8 à 229,6 ; le coin qui touche le virage, au sud-est), le bout de la rue entre la grille et lui
+      const xp1 = 229.6, zv = (e - R) - xp1, zc = s - R + Math.sqrt((R + L / 2) ** 2 - zv * zv);
+      surf.push(B(xp1 - 198.8, 0.06, park[1] - park[0], ENR, (198.8 + xp1) / 2, 0, (park[0] + park[1]) / 2), B(6, 0.06, SITE.grille.z - park[1], ENR, SITE.rue, 0, (park[1] + SITE.grille.z) / 2));
+      surf.push(dalle4([[e - R, park[0]], [xp1, park[0]], [xp1, zc], [(e - R + xp1) / 2, (park[0] + zc) / 2]], 0.03, ENR));
+      rect(o + L / 2, n + L / 2, e - L / 2, s - L / 2, '#c9c3b6'); rect(198.8, park[0], xp1, park[1], '#5d6068'); rect(205.5, park[1], 211.5, SITE.grille.z, '#5d6068');
+      plan.push({ t: 'l', pts: tourSolu(0, 4), c: '#5d6068', w: L });
+    }
     surf.push(B(37.5, 0.05, 44.4, '#b5aa94', 230.75, 0, -19.8)); rect(212, -42, 249.5, 2.4, '#c9bea6');
     surf.push(B(7.2, 0.062, 9.0, '#8f8778', 229.8, 0, -36.1)); // (la terre noircie autour de la chauffe)
   }
@@ -3546,20 +3591,6 @@ void main() {
       L.push(feuille(S(1, '#2c4a2c', x, h * 0.55, z, 0.95, h * 0.46, 0.95, 1), '#2c4a2c', 0.6));
       boites.push([x - 0.35, z - 0.35, x + 0.35, z + 0.35]); plan.push({ t: 'a', x, z, r: 1 });
     };
-    // une haie taillée (charmille), d'un point à l'autre : des tronçons d'un mètre et demi, le dessus arrondi, un peu inégale
-    const HAIE = ['#3f5a2c', '#4a6632', '#56723a'];
-    let nH = 0;
-    const haie = (xa, za, xb, zb, h = 1.85, ep = 0.9) => {
-      const l = Math.hypot(xb - xa, zb - za), n = Math.max(1, Math.round(l / 1.5)), a = Math.atan2(xb - xa, zb - za), s = l / n;
-      for (let i = 0; i < n; i++) {
-        const t = (i + 0.5) / n, x = xa + (xb - xa) * t, z = za + (zb - za) * t, c = HAIE[nH % 3], hh = h + ((nH * 37) % 7) / 7 * 0.16 - 0.08;
-        nH++;
-        L.push(feuille(B(ep, hh - 0.2, s + 0.04, c, x, (hh - 0.2) / 2, z, a), c, 0.2), feuille(B(ep * 0.78, 0.22, s + 0.02, HAIE[(nH + 1) % 3], x, hh - 0.11, z, a), HAIE[(nH + 1) % 3], 0.35));
-      }
-      if (Math.abs(xb - xa) < 0.01 || Math.abs(zb - za) < 0.01) boites.push([Math.min(xa, xb) - ep / 2, Math.min(za, zb) - ep / 2, Math.max(xa, xb) + ep / 2, Math.max(za, zb) + ep / 2]);
-      else plusTard.push(() => { col.boiteO((xa + xb) / 2, (za + zb) / 2, ep, l, a).haut = false; });
-      plan.push({ t: 'l', pts: [[xa, za], [xb, zb]], c: '#4a6632', w: ep });
-    };
     // une table de pique-nique en bois : le plateau, deux bancs, les pieds
     const pique = (x, z, rot = 0) => {
       const r = (lx, lz) => [x + lx * Math.cos(rot) + lz * Math.sin(rot), z - lx * Math.sin(rot) + lz * Math.cos(rot)];
@@ -3588,77 +3619,144 @@ void main() {
       c.font = '22px Arial, sans-serif'; c.fillText('à vendre', W / 2, H * 0.82);
     }, 1.8, 1.2, 196, 1.6, -14, 0);
 
-    /* -- Solumatic, au fond : un rez-de-chaussée de 21,95 x 26,2 m à toit plat (les photos de Teddy ; le plan des bureaux,
-       redressé : solumatic.js). La devanture, au sud, sur le parvis et la grille (Teddy, 26/11/2026 : l'atelier, Soleil et
-       Atlas y donnent) : les deux vitrines de l'atelier sous un auvent, leurs rideaux métalliques levés, deux projecteurs ;
-       les fenêtres de Soleil sous la bâche au logo ; la fenêtre et la double porte vitrée d'Atlas (une sortie de secours).
-       La façade est, sur l'allée : la double porte de l'atelier, l'entrée (parement de pierre, porte vitrée, marquise), les
-       fenêtres de Mars, Terre, Vénus et Mercure. Au nord et à l'ouest, les fenêtres des bureaux, le groupe de clim. Toutes
-       ont leur volet roulant à moitié baissé. Le toit : bac acier clair au-dessus du rang de la devanture, membrane sombre
-       et six lanterneaux ailleurs. Autour, une haie de charmille, la grille coulissante, le parvis et le parking, l'allée de
-       l'entrée, une terrasse au nord, la pelouse à l'est, des tables de pique-nique, de grands sapins. Dedans, l'extérieur
-       n'est plus dessiné : l'intérieur (un maillage à part, son plafond, ses écrans) se suffit à lui-même. */
+    /* -- Solumatic, au fond, et son site clos (SITE). Le bâtiment : un rez-de-chaussée à toit plat de 27,75 x 33,3 m dedans
+       (le plan des bureaux agrandi de 30 % : solumatic.js), l'enduit blanc (Teddy, 27/11/2026 : « améliorer grandement la
+       texture des murs (ça reste blancs) » ; modeles.js, T.crepi : son grain, ses éclaboussures en pied de mur, ses coulures
+       sous la couvertine) sur un socle de béton, l'acrotère et sa couvertine d'aluminium, des joints de dilatation, les
+       descentes d'eaux pluviales et leurs boîtes à eau. La devanture, au sud (Teddy : « à gauche il y a effectivement la baie
+       vitrée avec un porche en fibre de verre au dessus, tu fais en sorte que les fenêtres tombent juste après. à droite du
+       panneau, c'est aussi des fenêtres pas des portes fenêtres ») : à l'ouest, la baie d'Atlas (une sortie de secours) sous
+       son porche de polyester ondulé ; juste après, une suite régulière de fenêtres ; la bâche au logo au-dessus de celles
+       de Soleil ; à sa droite, celles du plateau téléphonique (l'ancien atelier) et deux projecteurs. La façade est : la
+       double porte de service, l'entrée (parement de pierre, porte vitrée et son imposte, marquise et son spot, plaque au
+       logo, visiophone, lecteur de badge, paillasson ; sur le trottoir, le cendrier, la corbeille, deux jardinières), les
+       fenêtres. Au nord, le mur aveugle de Saturne, sa clim, les conteneurs. Partout : les fenêtres dans leur encadrement
+       d'enduit, leur volet roulant plus ou moins baissé, leur appui et ses coulures ; appliques, caméras, boîtier d'alarme,
+       grilles de ventilation. Le toit (à part : il disparaît quand on est dedans) : le bac acier au-dessus du rang de la
+       devanture, la membrane et ses lés, six lanterneaux, la clim, les ventilations, la trappe, le relevé contre l'acrotère.
+       Dedans, l'extérieur n'est plus dessiné : l'intérieur (un maillage à part, son plafond, ses écrans) se suffit à
+       lui-même. La nuit, les lampadaires, les appliques, les projecteurs, le spot de la marquise, le porche et les bornes
+       allument leurs flaques au sol et leurs halos sur les murs (lumieres : plus bas). */
     const I = interieurSolumatic();
-    const toitS = [];
+    const toitS = [], sols = [], nuitSol = [], nuitMur = []; // le toit (à part) ; des dalles ; la nuit : [x, z, rayon], [mur, le long, y, largeur, hauteur, vers le haut]
+    const ANTH = GRIS_F, CREPI = '#e9ecef', JOINT_D = '#cdd0d3', SOCLE = '#aaa69e', BETON = '#a9a399', APPUI = '#4a4e55', VOLET = '#dde0e3', LAME = '#a3a8ad';
+    const GRILLAGE = '#3c3f45', POLY = '#efe6cc', LAMPE = '#ffe1a0', GALVA = '#9aa0a6', PIERRE = '#cbbf9f', BLANC = '#e9ebe8', NOIR = '#2b2b30';
     let porteSolu, bache;
+    const { x0: sx0, x1: sx1, z1: sz1 } = SOLU, uX = u => sx1 - K_SOLU * u, vZ = v => sz1 - K_SOLU * v; // (le plan en mètres, comme solumatic.js)
+    // une façade vue de dehors ('s', 'e', 'n', 'o') : P(w, h, d, c, y, av, le) pose un pavé de largeur w le long du mur, haut
+    // de h, épais de d, son milieu à av mètres devant le mur, à la position le (x au sud et au nord, z à l'est et à l'ouest)
+    const face = m => {
+      const { X0, X1, Z0, Z1 } = SITE, ns = m === 's' || m === 'n', o = m === 's' || m === 'e' ? 1 : -1, f = ns ? (m === 's' ? Z1 : Z0) : m === 'e' ? X1 : X0;
+      const P = (w, h, d, c, y, av, le, dest = L) => { const g = ns ? B(w, h, d, c, le, y, f + o * av) : B(d, h, w, c, f + o * av, y, le); dest.push(g); return g; };
+      P.pt = (av, le) => (ns ? [le, f + o * av] : [f + o * av, le]); P.m = m; P.ns = ns; P.o = o;
+      return P;
+    };
+    const F = { s: face('s'), e: face('e'), n: face('n'), o: face('o') };
     {
-      const { x0, x1, z0, z1, ep, H } = SOLU, X0 = x0 - ep, X1 = x1 + ep, Z0 = z0 - ep, Z1 = z1 + ep, HT = H + 0.35;
-      const ENDUIT = '#e3ddcf', JOINT = '#cbc4b4', SOCLE = '#a8a49b', BLANC = '#f2f3f1', PIERRE = '#d3c4a3';
-      const e0 = ENTREE.z - ENTREE.l / 2, e1 = ENTREE.z + ENTREE.l / 2, PIER0 = -63.35, PIER1 = -60.15; // (le parement de l'entrée, en z)
-      const PT = PORTE_ATELIER, PA = PORTE_ATLAS, XA = x1 - 6.55; // (l'auvent, au-dessus de l'atelier)
-      // les murs (creux : on entre), percés à la porte d'entrée ; le socle ; la couvertine de l'acrotère
-      const mur = (w, d, x, z, y0 = 0) => L.push(B(w, HT - y0, d, ENDUIT, x, (y0 + HT) / 2, z));
-      mur(ep, Z1 - Z0, x0 - ep / 2, (Z0 + Z1) / 2); mur(x1 - x0, ep, (x0 + x1) / 2, z0 - ep / 2); mur(x1 - x0, ep, (x0 + x1) / 2, z1 + ep / 2);
-      mur(ep, e0 - Z0, x1 + ep / 2, (Z0 + e0) / 2); mur(ep, Z1 - e1, x1 + ep / 2, (e1 + Z1) / 2); mur(ep, ENTREE.l, x1 + ep / 2, ENTREE.z, ENTREE.h);
-      L.push(B(X1 - X0 + 0.04, 0.32, 0.04, SOCLE, (X0 + X1) / 2, 0.16, Z0 - 0.02), B(0.04, 0.32, Z1 - Z0, SOCLE, X0 - 0.02, 0.16, (Z0 + Z1) / 2));
-      for (const [a, b] of [[X0, PA.x - PA.l / 2 - 0.1], [PA.x + PA.l / 2 + 0.1, X1]]) L.push(B(b - a, 0.32, 0.04, SOCLE, (a + b) / 2, 0.16, Z1 + 0.02));
-      for (const [a, b] of [[Z0, e0 - 0.1], [e1 + 0.1, PT.z - PT.l / 2 - 0.1], [PT.z + PT.l / 2 + 0.1, Z1]]) L.push(B(0.04, 0.32, b - a, SOCLE, X1 + 0.02, 0.16, (a + b) / 2));
-      toitS.push(B(X1 - X0 + 0.1, 0.05, 0.42, ALU, (X0 + X1) / 2, HT + 0.02, Z0 + 0.15), B(X1 - X0 + 0.1, 0.05, 0.42, ALU, (X0 + X1) / 2, HT + 0.02, Z1 - 0.15));
-      toitS.push(B(0.42, 0.05, Z1 - Z0, ALU, X0 + 0.15, HT + 0.02, (Z0 + Z1) / 2), B(0.42, 0.05, Z1 - Z0, ALU, X1 - 0.15, HT + 0.02, (Z0 + Z1) / 2));
-      // les joints des panneaux d'enduit (tous les 2,4 m), hors du parement de pierre
-      for (let x = X0 + 2.4; x < X1 - 0.5; x += 2.4) L.push(B(0.03, HT - 0.4, 0.02, JOINT, x, HT / 2 + 0.15, Z0 - 0.01), B(0.03, HT - 0.4, 0.02, JOINT, x, HT / 2 + 0.15, Z1 + 0.01));
-      for (let z = Z0 + 2.4; z < Z1 - 0.5; z += 2.4) { L.push(B(0.02, HT - 0.4, 0.03, JOINT, X0 - 0.01, HT / 2 + 0.15, z)); if (z < PIER0 - 0.1 || z > PIER1 + 0.1) L.push(B(0.02, HT - 0.4, 0.03, JOINT, X1 + 0.01, HT / 2 + 0.15, z)); }
-      // le parement de pierre de l'entrée, autour de la porte
-      const parement = (d, z, y0) => L.push(B(0.06, HT - 0.13 - y0, d, PIERRE, X1 + 0.03, (y0 + HT - 0.13) / 2, z));
-      parement(e0 - PIER0, (PIER0 + e0) / 2, 0.32); parement(PIER1 - e1, (e1 + PIER1) / 2, 0.32); parement(ENTREE.l + 0.02, ENTREE.z, ENTREE.h + 0.12);
-      // une fenêtre (ou une vitrine) vue de dehors : le cadre blanc, la vitre, le volet roulant à moitié baissé (ses lames),
-      // son coffre, l'appui ; m : le mur, p : la position le long, l : la largeur
-      const fenetre = (m, p, l, y0 = 0.95, y1 = 2.25, volet = true) => {
-        const ns = m === 's' || m === 'n', o = m === 's' || m === 'e' ? 1 : -1, hy = y1 - y0, ym = (y0 + y1) / 2;
-        const fx = ns ? p : m === 'e' ? X1 : X0, fz = ns ? (m === 's' ? Z1 : Z0) : p;
-        const pose = (w, h, d, c, y, av, le = 0) => L.push(ns ? B(w, h, d, c, fx + le, y, fz + o * av) : B(d, h, w, c, fx + o * av, y, fz + le));
-        pose(l + 0.12, hy + 0.12, 0.05, volet ? BLANC : GRIS_F, ym, 0.02); pose(l - 0.06, hy - 0.04, 0.03, VERRE, ym, 0.045);
-        const n = Math.ceil(l / 1.35); for (let i = 1; i < n; i++) pose(0.05, hy, 0.04, volet ? BLANC : GRIS_F, ym, 0.05, -l / 2 + i * l / n);
-        if (volet) { pose(l - 0.06, hy * 0.48, 0.035, '#e9ebe8', y1 - hy * 0.24, 0.05); for (let y = y1 - hy * 0.48 + 0.08; y < y1; y += 0.09) pose(l - 0.06, 0.012, 0.04, '#cfd2cf', y, 0.055); }
-        pose(l + 0.16, 0.22, 0.2, BLANC, y1 + 0.17, 0.08); if (y0 > 0.5) pose(l + 0.2, 0.05, 0.16, '#b9b6ae', y0 - 0.05, 0.08);
-      };
-      for (const [m, p, l] of FENETRES) fenetre(m, p, l);
-      // les vitrines de l'atelier : l'alu sombre, leur rideau métallique levé (le coffre, les coulisses), l'auvent blanc
-      // au-dessus de l'atelier, deux projecteurs
-      for (const x of VITRINES) {
-        fenetre('s', x, VITRINE.l, VITRINE.y0, VITRINE.y1, false);
-        L.push(B(VITRINE.l + 0.3, 0.3, 0.3, BLANC, x, 2.62, Z1 + 0.15), B(0.08, VITRINE.y1, 0.1, '#9aa0a6', x - VITRINE.l / 2 - 0.12, VITRINE.y1 / 2, Z1 + 0.05), B(0.08, VITRINE.y1, 0.1, '#9aa0a6', x + VITRINE.l / 2 + 0.12, VITRINE.y1 / 2, Z1 + 0.05));
-        toitS.push(B(0.3, 0.22, 0.12, GRIS_F, x, 3.62, Z1 + 0.1), B(0.26, 0.16, 0.02, '#fff6d8', x, 3.6, Z1 + 0.17));
+      const { x0, x1, z0, z1, ep, H } = SOLU, { X0, X1, Z0, Z1 } = SITE, HT = H + 0.35, zm = (Z0 + Z1) / 2;
+      const PT = PORTE_ATELIER, PA = PORTE_ATLAS, e0 = ENTREE.z - ENTREE.l / 2, e1 = ENTREE.z + ENTREE.l / 2, Su = F.s, E = F.e, N = F.n, O = F.o;
+      // les murs (creux : on entre), percés à la porte d'entrée ; le socle de béton, en saillie ; la couvertine de l'acrotère,
+      // pliée sur ses deux faces ; les joints de dilatation
+      const paroi = (w, d, x, z, y0 = 0) => L.push(B(w, HT - y0, d, CREPI, x, (y0 + HT) / 2, z));
+      paroi(ep, Z1 - Z0, x0 - ep / 2, zm); paroi(x1 - x0, ep, (x0 + x1) / 2, z0 - ep / 2); paroi(x1 - x0, ep, (x0 + x1) / 2, z1 + ep / 2);
+      paroi(ep, e0 - Z0, x1 + ep / 2, (Z0 + e0) / 2); paroi(ep, Z1 - e1, x1 + ep / 2, (e1 + Z1) / 2); paroi(ep, ENTREE.l, x1 + ep / 2, ENTREE.z, ENTREE.h);
+      const socle = (P, a, b) => P(b - a, 0.35, 0.05, SOCLE, 0.175, 0, (a + b) / 2);
+      socle(N, X0 - 0.025, X1 + 0.025); socle(O, Z0, Z1);
+      for (const [a, b] of [[X0 - 0.025, PA.x - PA.l / 2 - 0.1], [PA.x + PA.l / 2 + 0.1, X1 + 0.025]]) socle(Su, a, b);
+      for (const [a, b] of [[Z0, e0 - 0.1], [e1 + 0.1, PT.z - PT.l / 2 - 0.1], [PT.z + PT.l / 2 + 0.1, Z1]]) socle(E, a, b);
+      for (const [P, a, b] of [[Su, X0 - 0.06, X1 + 0.06], [N, X0 - 0.06, X1 + 0.06], [E, Z0 - 0.06, Z1 + 0.06], [O, Z0 - 0.06, Z1 + 0.06]]) {
+        P(b - a, 0.05, ep + 0.12, ALU, HT + 0.025, -ep / 2, (a + b) / 2, toitS); P(b - a, 0.11, 0.012, ALU, HT - 0.035, 0.06, (a + b) / 2, toitS);
       }
-      toitS.push(B(X1 - XA + 0.2, 0.14, 1.15, BLANC, (XA + X1) / 2, 3.32, Z1 + 0.57), B(X1 - XA + 0.2, 0.22, 0.04, '#dcdedb', (XA + X1) / 2, 3.25, Z1 + 1.15));
-      // la double porte vitrée d'Atlas, la sortie de secours (son pictogramme vert)
-      L.push(B(PA.l + 0.16, PA.h + 0.08, 0.1, GRIS_F, PA.x, (PA.h + 0.08) / 2, Z1 + 0.02), B(PA.l - 0.1, PA.h - 0.1, 0.03, VERRE, PA.x, PA.h / 2, Z1 + 0.07), B(0.07, PA.h - 0.05, 0.05, GRIS_F, PA.x, PA.h / 2, Z1 + 0.08));
-      L.push(B(PA.l + 0.3, 0.03, 0.5, '#8f8a80', PA.x, 0.015, Z1 + 0.25), B(0.4, 0.15, 0.03, '#2e9e4f', PA.x, PA.h + 0.25, Z1 + 0.03));
-      // la double porte de l'atelier (tôle laquée, ses poignées), la petite marquise au-dessus
-      L.push(B(0.1, PT.h + 0.08, PT.l + 0.16, GRIS_F, X1 + 0.02, (PT.h + 0.08) / 2, PT.z), B(0.03, PT.h - 0.05, PT.l - 0.06, '#d6d8da', X1 + 0.07, PT.h / 2, PT.z), B(0.04, PT.h - 0.05, 0.04, '#b9bcbf', X1 + 0.08, PT.h / 2, PT.z));
-      for (const d of [-1, 1]) L.push(B(0.06, 0.03, 0.18, '#7d8288', X1 + 0.1, 1.05, PT.z + d * 0.12));
-      L.push(B(0.9, 0.08, PT.l + 0.4, GRIS_F, X1 + 0.45, PT.h + 0.35, PT.z));
-      toitS.push(B(0.12, 0.22, 0.3, GRIS_F, X1 + 0.1, 3.62, PT.z), B(0.02, 0.16, 0.26, '#fff6d8', X1 + 0.17, 3.6, PT.z));
-      // l'entrée : l'encadrement d'aluminium, la marquise, l'applique, le paillasson, la plaque au logo
-      L.push(B(0.12, ENTREE.h + 0.08, 0.08, GRIS_F, X1 + 0.02, (ENTREE.h + 0.08) / 2, e0 - 0.04), B(0.12, ENTREE.h + 0.08, 0.08, GRIS_F, X1 + 0.02, (ENTREE.h + 0.08) / 2, e1 + 0.04), B(0.12, 0.08, ENTREE.l + 0.16, GRIS_F, X1 + 0.02, ENTREE.h + 0.04, ENTREE.z));
-      L.push(B(1.2, 0.08, 2.0, GRIS_F, X1 + 0.6, 2.72, ENTREE.z), B(1.1, 0.02, 1.9, '#b8c8d4', X1 + 0.6, 2.77, ENTREE.z));
-      L.push(B(0.12, 0.22, 0.14, GRIS_F, X1 + 0.08, 2.3, e0 - 0.45), B(0.02, 0.1, 0.1, '#ffe1a0', X1 + 0.15, 2.26, e0 - 0.45));
-      L.push(B(0.7, 0.02, 1.2, '#3a3a3a', X1 + 0.45, 0.075, ENTREE.z));
-      atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.56, 0.132, X1 + 0.065, 1.55, e0 - 0.45, Math.PI / 2);
-      // la bâche au logo, au-dessus des fenêtres de Soleil : sa propre texture, accrochée au toit
+      for (const [P, le] of [[Su, uX(6.5) - 0.1], [N, uX(9.4)], [E, vZ(15.65)], [O, vZ(14.5)]]) P(0.022, HT - 0.52, 0.01, JOINT_D, 0.35 + (HT - 0.52) / 2, 0.005, le);
+      // les fenêtres (solumatic.js : FENETRES, FEN) : l'encadrement d'enduit en saillie (le tableau), le coffre du volet, le
+      // dormant et le meneau d'aluminium anthracite, la vitre (trois allumées : Mars, Neptune, Jupiter), le volet roulant plus
+      // ou moins baissé d'une fenêtre à l'autre (coulisses, tablier, lames, lame finale), l'appui et sa goutte d'eau ; sous
+      // l'appui, des coulures : des traînées dégradées de longueur inégale (sommets colorés : rien dans le shader)
+      const KV = [0.45, 0.3, 0.55, 0.4, 0.62, 0.35, 0.5, 0, 0.45, 0.85, 0.3, 0.52, 0.4], ALLUMEES = new Set([9, 16, 21]);
+      const tra = { p: [], c: [] }, cT = new THREE.Color('#d3d1ca'), cB = new THREE.Color(CREPI);
+      const trainee = (P, le, w, yh, long) => {
+        const [ax, az] = P.pt(0.006, le - w / 2), [bx, bz] = P.pt(0.006, le + w / 2), yb = yh - long, nx = P.ns ? 0 : P.o, nz = P.ns ? P.o : 0;
+        const A = [ax, yh, az, 1], Bh = [bx, yh, bz, 1], Bb = [bx, yb, bz, 0], Ab = [ax, yb, az, 0];
+        const droit = nx * (bz - az) - nz * (bx - ax) > 0; // (la face tournée vers le dehors)
+        for (const q of droit ? [A, Bh, Bb, A, Bb, Ab] : [A, Bb, Bh, A, Ab, Bb]) { tra.p.push(q[0], q[1], q[2]); tra.c.push(q[3]); }
+      };
+      FENETRES.forEach(([m, p, l], i) => {
+        const P = F[m], y0 = FEN.y0, y1 = FEN.y1, hy = y1 - y0, ym = (y0 + y1) / 2, eS = 0.12, sa = 0.1, yc = y1 + 0.22, yt = yc + eS, lt = l + 2 * eS;
+        const allumee = ALLUMEES.has(i), kv = allumee ? Math.min(0.4, KV[i % KV.length]) : KV[i % KV.length], yv = y1 - kv * (hy - 0.05);
+        P(lt, eS, sa, CREPI, yt - eS / 2, sa / 2, p);
+        for (const s of [-1, 1]) P(eS, yt - y0, sa, CREPI, (y0 + yt) / 2, sa / 2, p + s * (l / 2 + eS / 2));
+        P(l, yc - y1, 0.07, ANTH, (y1 + yc) / 2, 0.035, p);
+        P(l, 0.06, 0.05, ANTH, y0 + 0.03, 0.025, p); P(0.06, hy - 0.1, 0.04, ANTH, ym, 0.022, p);
+        P(l - 0.06, hy - 0.06, 0.02, allumee ? '#4a3a2a' : VERRE, ym, 0.012, p);
+        for (const s of [-1, 1]) P(0.045, hy, 0.05, ANTH, ym, 0.027, p + s * (l / 2 - 0.0225));
+        if (kv > 0.02) { P(l - 0.08, y1 - yv, 0.025, VOLET, (y1 + yv) / 2, 0.04, p); for (let y = yv + 0.075; y < y1 - 0.03; y += 0.075) P(l - 0.08, 0.012, 0.03, LAME, y, 0.044, p); }
+        P(l - 0.07, 0.045, 0.045, ANTH, yv + 0.022, 0.042, p);
+        P(lt + 0.05, 0.045, sa + 0.07, APPUI, y0 - 0.0225, (sa + 0.07) / 2, p); P(lt + 0.05, 0.04, 0.012, APPUI, y0 - 0.06, sa + 0.064, p);
+        for (let k = 0, u = -lt / 2 + 0.04; k < 7 && u < lt / 2 - 0.08; k++) { const h = ((i * 7 + k * 5) % 9) / 9, w = 0.06 + 0.16 * (((i + k * 3) % 5) / 4); trainee(P, p + u + w / 2, w, y0 - 0.08, 0.12 + 0.55 * h * h); u += w + 0.04 + 0.14 * (((i * 3 + k) % 4) / 3); }
+      });
+      // la baie d'Atlas (une sortie de secours) : double porte vitrée, son imposte, la vignette verte, le seuil
+      Su(PA.l + 0.16, PA.h + 0.08, 0.1, ANTH, (PA.h + 0.08) / 2, 0.02, PA.x); Su(PA.l - 0.1, PA.h - 0.1, 0.03, VERRE, PA.h / 2, 0.07, PA.x); Su(0.07, PA.h - 0.05, 0.05, ANTH, PA.h / 2, 0.08, PA.x);
+      Su(PA.l + 0.16, 0.5, 0.1, ANTH, PA.h + 0.33, 0.02, PA.x); Su(PA.l - 0.1, 0.38, 0.03, VERRE, PA.h + 0.33, 0.07, PA.x); Su(0.34, 0.15, 0.01, '#2e9e4f', PA.h + 0.33, 0.09, PA.x);
+      for (const s of [-1, 1]) Su(1.0, 0.04, 0.05, '#b9bcbf', 1.0, 0.1, PA.x + s * 0.65);
+      L.push(B(PA.l + 0.3, 0.02, 0.5, BETON, PA.x, 0.08, Z1 + 0.25));
+      // le porche de la baie (Teddy : « un porche en fibre de verre au dessus ») : des plaques ondulées de polyester armé de
+      // fibre de verre, translucides et laiteuses (dans les vitres : modeles.js, T.translucide), sur une ossature légère
+      // d'acier laqué (la lisse contre le mur, quatre chevrons, la poutre et son chéneau, deux poteaux fins) ; 1,5 m de
+      // débord, la pente vers le parvis, la descente le long d'un poteau ; un spot dessous
       {
-        const bx = (x1 - 6.55 + x1 - 13.67) / 2, by = 3.2, bw = 5.6, bh = 1.28, cv = document.createElement('canvas');
-        toitS.push(B(bw + 0.06, bh + 0.06, 0.03, '#d8d9d6', bx, by, Z1 + 0.02));
+        const xa = PA.x - PA.l / 2 - 0.45, xb = PA.x + PA.l / 2 + 0.45, xc = (xa + xb) / 2, zF = Z1 + 1.5, yM = 3.05, yF = 2.82;
+        L.push(B(xb - xa, 0.12, 0.08, ANTH, xc, yM - 0.08, Z1 + 0.04), B(xb - xa + 0.06, 0.14, 0.1, ANTH, xc, yF - 0.07, zF - 0.06));
+        L.push(C(0.06, 0.06, xb - xa + 0.1, 8, GALVA, xc, yF - 0.03, zF + 0.03, 'x'), C(0.035, 0.035, yF - 0.12, 8, GALVA, xa + 0.06, (yF - 0.12) / 2 + 0.07, zF + 0.06));
+        for (const x of [xa + 0.06, xb - 0.06]) { L.push(B(0.08, yF - 0.21, 0.08, ANTH, x, (yF - 0.21) / 2 + 0.07, zF - 0.06), B(0.2, 0.012, 0.2, ANTH, x, 0.077, zF - 0.06)); boites.push([x - 0.08, zF - 0.14, x + 0.08, zF + 0.02]); }
+        const pente = Math.atan2(yM - yF, zF - Z1);
+        for (let k = 0; k < 4; k++) { const x = xa + 0.06 + k * (xb - xa - 0.12) / 3, g = B(0.05, 0.08, zF - Z1, ANTH).rotateX(pente); L.push(deplacer(g, x, (yM + yF) / 2 - 0.08, (Z1 + zF) / 2)); }
+        const at = new Atelier(), pas = 0.177 / 4, A = 0.022, n = Math.round((xb - xa + 0.12) / pas);
+        for (let k = 0; k < n; k++) {
+          const u0 = xa - 0.06 + k * pas, h0 = A * Math.sin(k * Math.PI / 2), h1 = A * Math.sin((k + 1) * Math.PI / 2);
+          at.quad([u0, yM + 0.01 + h0, Z1 + 0.02], [u0 + pas, yM + 0.01 + h1, Z1 + 0.02], [u0 + pas, yF + 0.03 + h1, zF + 0.1], [u0, yF + 0.03 + h0, zF + 0.1], POLY, undefined, [0, 1, 0]);
+        }
+        vitresB.push(...at.geos());
+        L.push(B(0.18, 0.02, 0.18, LAMPE, PA.x, yM - 0.16, Z1 + 0.6)); nuitSol.push([PA.x, Z1 + 1.0, 2.4]);
+      }
+      // l'entrée (façade est) : le parement de pierre autour d'elle, l'encadrement d'aluminium et l'imposte, la marquise (ses
+      // tirants, son spot), la plaque au logo, le visiophone et le lecteur de badge, le paillasson encastré ; sur le trottoir,
+      // le cendrier et la corbeille ; deux jardinières ; une caméra au-dessus
+      {
+        const P0 = ENTREE.z - 3.0, P1 = PT.z - PT.l / 2 - 0.23, hp = HT - 0.12;
+        const pierre = (a, b, ya) => E(b - a, hp - ya, 0.06, PIERRE, (ya + hp) / 2, 0.03, (a + b) / 2);
+        pierre(P0, e0 - 0.07, 0.35); pierre(e1 + 0.07, P1, 0.35); pierre(e0 - 0.07, e1 + 0.07, ENTREE.h + 0.62);
+        for (const z of [e0 - 0.035, e1 + 0.035]) E(0.07, ENTREE.h + 0.62, 0.12, ANTH, (ENTREE.h + 0.62) / 2, 0.06, z);
+        E(ENTREE.l + 0.14, 0.06, 0.12, ANTH, ENTREE.h + 0.03, 0.06, ENTREE.z); E(ENTREE.l + 0.14, 0.06, 0.12, ANTH, ENTREE.h + 0.59, 0.06, ENTREE.z);
+        E(ENTREE.l, 0.5, 0.02, VERRE, ENTREE.h + 0.31, 0.06, ENTREE.z);
+        E(2.6, 0.1, 1.35, ANTH, 3.08, 0.675, ENTREE.z); E(2.5, 0.02, 1.25, '#55595f', 3.02, 0.68, ENTREE.z); E(0.2, 0.02, 0.2, LAMPE, 3.01, 0.8, ENTREE.z);
+        for (const s of [-1, 1]) L.push(manche([X1 + 0.05, 3.95, ENTREE.z + s * 1.15], [X1 + 1.28, 3.12, ENTREE.z + s * 1.15], 0.014, ANTH));
+        nuitSol.push([X1 + 1.0, ENTREE.z, 2.6]);
+        atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, X1 + 0.066, 1.62, e0 - 0.8, Math.PI / 2);
+        E(0.66, 0.19, 0.012, '#c9ccd1', 1.62, 0.06, e0 - 0.8);
+        E(0.15, 0.26, 0.04, NOIR, 1.4, 0.08, e1 + 0.34); E(0.09, 0.07, 0.01, '#3d5f8e', 1.46, 0.105, e1 + 0.34); E(0.03, 0.03, 0.01, '#c9ccd1', 1.33, 0.105, e1 + 0.34); E(0.07, 0.11, 0.03, NOIR, 1.12, 0.075, e1 + 0.34);
+        L.push(B(0.95, 0.012, 1.4, '#3a3a3a', X1 + 0.55, 0.076, ENTREE.z));
+        // (Teddy, 27/11/2026 : « y'a toujours Romane qui arrive avant et qui fume devant le bureau » : le cendrier sur pied en
+        // (x1 + 1,3, ENTREE.z - 2,4), convenu avec solumatic.js ; autour de (x1 + 1,9, ENTREE.z - 2,0), sa place, rien à
+        // moins de 0,6 m)
+        const xc = X1 + 0.45, xr = x1 + 1.3, zr = ENTREE.z - 2.4;
+        L.push(C(0.16, 0.18, 0.03, 12, '#7d8288', xr, 0.085, zr), C(0.11, 0.11, 0.86, 12, '#c4c8cc', xr, 0.53, zr), C(0.125, 0.125, 0.05, 12, '#9aa0a6', xr, 0.985, zr), C(0.1, 0.1, 0.012, 12, NOIR, xr, 1.012, zr));
+        for (let k = -2; k <= 2; k++) L.push(B(0.018, 0.012, 0.2 - Math.abs(k) * 0.035, '#c4c8cc', xr + k * 0.04, 1.018, zr));
+        L.push(C(0.21, 0.19, 0.8, 10, ANTH, xc, 0.47, ENTREE.z - 1.75), C(0.22, 0.22, 0.05, 10, '#5b5f66', xc, 0.895, ENTREE.z - 1.75));
+        boites.push([xr - 0.15, zr - 0.15, xr + 0.15, zr + 0.15], [xc - 0.24, ENTREE.z - 2.0, xc + 0.24, ENTREE.z - 1.5]);
+        for (const z of [P0 - 0.6, vZ(2.85)]) { L.push(B(0.7, 0.55, 0.7, BETON, xc + 0.05, 0.345, z), B(0.62, 0.04, 0.62, '#5a4a38', xc + 0.05, 0.6, z), feuille(S(0.42, '#4d6a36', xc + 0.05, 0.86, z, 1, 0.85, 1, 1), '#4d6a36', 0.4)); boites.push([xc - 0.32, z - 0.37, xc + 0.42, z + 0.37]); }
+        E(0.07, 0.07, 0.24, BLANC, 3.5, 0.13, e0 - 0.35); E(0.05, 0.12, 0.05, BLANC, 3.6, 0.03, e0 - 0.35);
+      }
+      // la double porte de service (le plateau téléphonique, l'ancien atelier) : tôle laquée, ses poignées, sa marquise, le
+      // seuil, la plaque « Livraisons »
+      E(PT.l + 0.16, PT.h + 0.08, 0.1, ANTH, (PT.h + 0.08) / 2, 0.02, PT.z); E(PT.l - 0.06, PT.h - 0.05, 0.03, '#d6d8da', PT.h / 2, 0.07, PT.z); E(0.04, PT.h - 0.05, 0.04, '#b9bcbf', PT.h / 2, 0.08, PT.z);
+      for (const d of [-1, 1]) E(0.18, 0.03, 0.06, '#7d8288', 1.05, 0.1, PT.z + d * 0.12);
+      E(PT.l + 0.5, 0.08, 0.9, ANTH, PT.h + 0.4, 0.45, PT.z);
+      L.push(B(0.6, 0.02, PT.l + 0.3, BETON, X1 + 0.3, 0.08, PT.z));
+      atlas.poser(256, 64, (c, W, H) => { c.fillStyle = '#2c3e66'; c.fillRect(0, 0, W, H); c.fillStyle = '#f6f1e8'; c.font = 'bold 34px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Livraisons', W / 2, H / 2 + 2); }, 0.48, 0.12, X1 + 0.014, 1.75, PT.z + PT.l / 2 + 0.42, Math.PI / 2);
+      // la bâche au logo, au-dessus des fenêtres de Soleil : sa propre texture, sur un cadre d'aluminium (dans le toit)
+      {
+        const bx = uX(10.05), by = 3.62, bw = 5.6, bh = 1.28, cv = document.createElement('canvas');
+        Su(bw + 0.08, bh + 0.08, 0.03, '#d8d9d6', by, 0.02, bx, toitS);
         cv.width = 1024; cv.height = 234;
         const c = cv.getContext('2d'), W = cv.width, H2 = cv.height, w = W * 0.86;
         c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H2);
@@ -3668,11 +3766,61 @@ void main() {
         bache = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh).translate(bx, by, Z1 + 0.04), new THREE.MeshLambertMaterial({ map: tex }));
         bache.name = 'bâche Solumatic'; bache.matrixAutoUpdate = false; bache.renderOrder = ORDRE.bati;
       }
-      // les descentes d'eaux pluviales, aux angles ; le groupe de clim, au nord, sous le mur aveugle de Saturne
-      for (const [x, z] of [[X0 + 0.15, Z0 - 0.12], [X1 - 0.15, Z0 - 0.12], [X1 + 0.12, Z1 - 0.15], [X0 - 0.12, Z1 - 0.15]]) toitS.push(C(0.05, 0.05, HT, 6, '#9aa0a6', x, HT / 2, z));
-      L.push(B(1.0, 0.75, 0.38, '#d8dadc', x0 + 2.2, 0.6, Z0 - 0.3), C(0.28, 0.28, 0.02, 12, '#55585e', x0 + 2.2, 0.62, Z0 - 0.5, 'z'), B(0.05, 0.05, 0.5, '#9aa0a6', x0 + 1.8, 0.2, Z0 - 0.25), B(0.05, 0.05, 0.5, '#9aa0a6', x0 + 2.6, 0.2, Z0 - 0.25));
-      boites.push([x0 + 1.65, Z0 - 0.55, x0 + 2.75, Z0]);
-      bat(X0, Z0, X1, Z1);
+      // les deux projecteurs, au-dessus des fenêtres du plateau ; leur halo sur le mur, la nuit
+      for (const x of [uX(4.15), uX(2.45)]) { Su(0.3, 0.2, 0.16, ANTH, 4.06, 0.13, x); Su(0.06, 0.06, 0.12, ANTH, 4.06, 0.03, x); Su(0.26, 0.02, 0.1, LAMPE, 3.95, 0.15, x); nuitMur.push([Su, x, 3.95, 3.2, 3.5, false]); }
+      // les descentes d'eaux pluviales : la boîte à eau sous la couvertine, le tuyau et ses colliers, le dauphin, le regard
+      for (const [P, le] of [[Su, uX(21.0)], [Su, uX(0.2)], [N, uX(21.0)], [N, uX(0.2)], [O, vZ(15.2)], [E, vZ(25.3)]]) {
+        P(0.25, 0.32, 0.2, GALVA, HT - 0.34, 0.1, le); P(0.12, 0.12, 0.12, GALVA, HT - 0.56, 0.09, le);
+        const [x, z] = P.pt(0.09, le), [rx, rz] = P.pt(0.32, le);
+        toitS.push(C(0.05, 0.05, HT - 0.95, 8, GALVA, x, (HT - 0.95) / 2 + 0.33, z));
+        for (const y of [0.95, 2.05, 3.15]) P(0.13, 0.035, 0.12, GALVA, y, 0.07, le);
+        P(0.11, 0.3, 0.11, '#7d8288', 0.22, 0.09, le); L.push(B(0.36, 0.02, 0.36, '#7d8288', rx, 0.08, rz));
+      }
+      // les appliques (haut et bas) ; leur halo sur le mur et leur flaque au sol, la nuit
+      const applique = (P, le) => {
+        P(0.12, 0.26, 0.12, ANTH, 3.1, 0.07, le); P(0.08, 0.015, 0.08, LAMPE, 2.965, 0.07, le); P(0.08, 0.015, 0.08, LAMPE, 3.235, 0.07, le);
+        nuitMur.push([P, le, 2.96, 2.0, 2.6, false], [P, le, 3.24, 1.2, 1.0, true]);
+        const [x, z] = P.pt(0.9, le); nuitSol.push([x, z, 1.9]);
+      };
+      for (const le of [uX(20.6), uX(13.62), uX(6.5) + 0.55, uX(0.6)]) applique(Su, le);
+      for (const le of [vZ(1.6), vZ(12.7), vZ(18.36), vZ(21.2), vZ(25.0)]) applique(E, le);
+      for (const le of [uX(17.0), uX(12.38), uX(6.46), uX(2.0)]) applique(N, le);
+      for (const le of [vZ(1.8), vZ(8.9), vZ(17.75), vZ(23.2)]) applique(O, le);
+      // les caméras (deux dômes aux angles, sous la couvertine), le boîtier d'alarme et son flash, les grilles de ventilation
+      for (const [P, le] of [[Su, X1 - 0.45], [N, X0 + 0.45]]) { P(0.06, 0.06, 0.22, BLANC, HT - 0.5, 0.11, le); P(0.16, 0.05, 0.16, BLANC, HT - 0.55, 0.22, le); const [x, z] = P.pt(0.22, le); L.push(S(0.075, NOIR, x, HT - 0.6, z, 1, 0.8, 1, 1)); }
+      E(0.3, 0.38, 0.1, BLANC, 3.6, 0.05, vZ(0.9)); E(0.12, 0.06, 0.04, '#e07a1f', 3.84, 0.1, vZ(0.9));
+      for (const [P, le, y] of [[N, uX(20.2), 3.4], [N, uX(17.6), 3.4], [E, vZ(9.85), 3.3]]) { P(0.34, 0.24, 0.03, '#c9ccd1', y, 0.015, le); for (let k = 0; k < 4; k++) P(0.3, 0.012, 0.035, GALVA, y - 0.075 + k * 0.05, 0.022, le); }
+      // au nord, contre le mur aveugle de Saturne : les deux groupes de clim sur leur dalle, leurs liaisons et la goulotte
+      // qui monte au toit ; les conteneurs (ordures, tri)
+      {
+        const xa = uX(19.5), xb = uX(17.9), zc = Z0 - 0.45;
+        L.push(B(xb - xa + 0.5, 0.08, 0.8, BETON, (xa + xb) / 2, 0.11, zc));
+        for (const x of [xa + 0.05, xb - 0.05]) {
+          L.push(B(1.0, 0.72, 0.36, '#e3e5e6', x, 0.51, zc + 0.05), C(0.27, 0.27, 0.02, 12, '#55585e', x - 0.13, 0.52, zc - 0.135, 'z'), C(0.05, 0.05, 0.03, 8, '#9aa0a6', x - 0.13, 0.52, zc - 0.15, 'z'));
+          L.push(C(0.022, 0.022, 0.5, 6, '#c9ccd1', x + 0.36, 0.62, Z0 - 0.16), B(0.3, 0.05, 0.05, '#c9ccd1', x + 0.36, 0.87, Z0 - 0.12));
+        }
+        N(0.12, HT - 1.0, 0.08, BLANC, (HT - 1.0) / 2 + 0.85, 0.04, (xa + xb) / 2 + 0.6);
+        boites.push([xa - 0.55, Z0 - 0.9, xb + 0.55, Z0]);
+        for (const [x, c] of [[uX(16.45), '#e0b13a'], [uX(15.8), '#5b5f66']]) {
+          L.push(B(0.58, 0.92, 0.7, '#5b5f66', x, 0.53, Z0 - 0.43), B(0.62, 0.05, 0.76, c, x, 1.015, Z0 - 0.43), B(0.5, 0.04, 0.04, NOIR, x, 0.95, Z0 - 0.82));
+          for (const s of [-1, 1]) L.push(C(0.1, 0.1, 0.05, 8, NOIR, x + s * 0.25, 0.17, Z0 - 0.74, 'x'));
+          boites.push([x - 0.32, Z0 - 0.84, x + 0.32, Z0]);
+        }
+      }
+      // les coulures : un seul morceau, dégradé du gris de la pluie à l'enduit
+      {
+        const g = new THREE.BufferGeometry(), n = tra.c.length, col = new Float32Array(n * 3), nor = new Float32Array(n * 3), mat = new Float32Array(n).fill(T.crepi), p = tra.p;
+        for (let k = 0; k < n; k++) { const q = tra.c[k] ? cT : cB; col[k * 3] = q.r; col[k * 3 + 1] = q.g; col[k * 3 + 2] = q.b; }
+        for (let k = 0; k < n; k += 3) {
+          const a = k * 3, ux = p[a + 3] - p[a], uy = p[a + 4] - p[a + 1], uz = p[a + 5] - p[a + 2], wx = p[a + 6] - p[a], wy = p[a + 7] - p[a + 1], wz = p[a + 8] - p[a + 2];
+          let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+          for (let j = 0; j < 3; j++) { nor[a + j * 3] = nx; nor[a + j * 3 + 1] = ny; nor[a + j * 3 + 2] = nz; }
+        }
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(p), 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aMat', new THREE.BufferAttribute(mat, 1));
+        L.push(g);
+      }
+      plan.push({ t: 'b', x0: X0, z0: Z0, x1: X1, z1: Z1 }); contact.jupe(X0 - 0.03, Z0 - 0.03, X1 + 0.03, Z1 + 0.03, 1.4, 0.42, 0.085);
       // les murs arrêtent ; la porte d'entrée fermée aussi (gestes.js passe sans s'arrêter) ; dedans, ce qui est meublé
       // arrête (solumatic.js) ; le bâtiment compte pour la caméra du dehors sans arrêter personne (fantome)
       boites.push([X0, Z0, x0, Z1], [x0, Z0, x1, z0], [x0, z1, x1, Z1], [x1, Z0, X1, e0], [x1, e1, X1, Z1]);
@@ -3691,14 +3839,18 @@ void main() {
         cadre.position.set(x1 + ep / 2, 0, e1 - 0.01); cadre.rotation.y = Math.PI / 2; cadre.add(g); scene.add(cadre);
         porteSolu = g;
       }
-      // le toit (à part) : la dalle, le bac acier nervuré au-dessus de la devanture, la membrane et ses lanterneaux, la
-      // clim, les ventilations
-      const ZB = z1 - 8.15;
-      toitS.push(B(x1 - x0, 0.12, z1 - ZB, '#c5c9cd', (x0 + x1) / 2, H - 0.04, (ZB + z1) / 2), B(x1 - x0, 0.1, ZB - z0, '#4a4f58', (x0 + x1) / 2, H - 0.05, (z0 + ZB) / 2));
+      // le toit (à part) : la dalle ; au-dessus du rang de la devanture (Atlas, Soleil, le plateau : 8,15 m du plan), le bac
+      // acier nervuré ; ailleurs, la membrane et ses lés ; le relevé d'étanchéité contre l'acrotère ; six lanterneaux, deux
+      // groupes de clim, des ventilations, la trappe d'accès
+      const ZB = z1 - K_SOLU * 8.15, xmT = (x0 + x1) / 2, lx = x1 - x0;
+      toitS.push(B(lx, 0.12, z1 - ZB, '#c5c9cd', xmT, H - 0.04, (ZB + z1) / 2), B(lx, 0.1, ZB - z0, '#4a4f58', xmT, H - 0.05, (z0 + ZB) / 2));
       for (let x = x0 + 0.25; x < x1; x += 0.33) toitS.push(B(0.05, 0.05, z1 - ZB, '#b4b8bd', x, H + 0.04, (ZB + z1) / 2));
-      for (const x of [204.0, 210.9, 217.8]) for (const z of [-67.0, -74.5]) toitS.push(B(1.3, 0.3, 1.3, '#e8eaec', x, H + 0.1, z), S(0.62, '#eef3f6', x, H + 0.25, z, 1, 0.42, 1, 1));
-      toitS.push(B(1.5, 0.85, 0.95, ALU, 210.9, H + 0.42, -70.6), C(0.32, 0.32, 0.04, 12, '#55585e', 210.9, H + 0.86, -70.6), B(1.2, 0.7, 0.8, ALU, 203.2, H + 0.35, -77.6));
-      for (const [x, z] of [[213.6, -65.2], [208.4, -64.6], [212.2, -72.0]]) toitS.push(C(0.08, 0.08, 0.6, 6, '#9aa0a6', x, H + 0.3, z), C(0.13, 0.13, 0.08, 6, '#9aa0a6', x, H + 0.62, z));
+      for (let z = z0 + 1.0; z < ZB - 0.4; z += 1.0) toitS.push(B(lx, 0.012, 0.05, '#40454d', xmT, H + 0.002, z));
+      toitS.push(B(lx, HT - H, 0.02, '#4a4f58', xmT, (H + HT) / 2 - 0.02, z0 + 0.01), B(0.02, HT - H, z1 - z0, '#4a4f58', x0 + 0.01, (H + HT) / 2 - 0.02, (z0 + z1) / 2), B(0.02, HT - H, z1 - z0, '#4a4f58', x1 - 0.01, (H + HT) / 2 - 0.02, (z0 + z1) / 2));
+      for (const fx of [0.2, 0.5, 0.8]) for (const fz of [0.28, 0.7]) { const x = x0 + lx * fx, z = z0 + (ZB - z0) * fz; toitS.push(B(1.3, 0.3, 1.3, '#e8eaec', x, H + 0.1, z), S(0.62, '#eef3f6', x, H + 0.25, z, 1, 0.42, 1, 1)); }
+      for (const [x, z, s] of [[x0 + lx * 0.5, ZB - 1.6, 1], [x0 + lx * 0.12, z0 + 2.6, 0.8]]) toitS.push(B(1.5 * s, 0.85 * s, 0.95 * s, ALU, x, H + 0.42 * s, z), C(0.32 * s, 0.32 * s, 0.04, 12, '#55585e', x, H + 0.86 * s, z), B(1.7 * s, 0.1, 1.1 * s, '#8f8a80', x, H + 0.04, z));
+      for (const [fx, fz] of [[0.36, 0.45], [0.64, 0.2], [0.58, 0.82]]) { const x = x0 + lx * fx, z = z0 + (ZB - z0) * fz; toitS.push(C(0.08, 0.08, 0.6, 6, GALVA, x, H + 0.3, z), C(0.13, 0.13, 0.08, 6, GALVA, x, H + 0.62, z)); }
+      toitS.push(B(0.95, 0.28, 0.95, '#9aa0a6', x1 - 2.6, H + 0.12, z0 + 2.4), B(1.0, 0.04, 1.0, '#7d8288', x1 - 2.6, H + 0.28, z0 + 2.4));
     }
     const toitSolu = new THREE.Mesh(indexer(fusion(toitS), true), MAT);
     toitSolu.castShadow = true; toitSolu.receiveShadow = true; toitSolu.renderOrder = ORDRE.bati; toitSolu.name = 'toit Solumatic';
@@ -3712,25 +3864,199 @@ void main() {
     vitresSolu.name = 'vitres Solumatic'; vitresSolu.matrixAutoUpdate = false;
     interieurSolu.matrixAutoUpdate = false; interieurSolu.add(...panneauxSolumatic(I.affiches, I.ecrans), vitresSolu); scene.add(interieurSolu);
     interieurs.push({ min: [SOLU.x0 - 0.12, -1, SOLU.z0 - 0.12], max: [SOLU.x1 + 0.12, SOLU.HP + 0.06, SOLU.z1 + 0.12], pieces: I.pieces, lampes: I.lampes, couleur: [1.0, 0.97, 0.92], force: 1.4, portee: 0.2, fond: [0.62, 0.62, 0.6], relief: true });
-    // le parvis : la grille coulissante (ouverte, rangée le long de la haie), ses poteaux, la boîte aux lettres, l'interphone
+
+    /* -- les abords (SITE ; Teddy, 27/11/2026 : « y'a une route qui fait le tour du bureau avec des arbres de l'autre côté de
+       la route et une clôture ») : la route (son enrobé : plus haut, avec les sols), ses bordures, ses lignes de rive, le
+       passage piéton devant l'entrée, ses avaloirs et ses regards ; le parking au sud (ses places marquées, celle des
+       personnes handicapées, les butées, la borne de recharge) ; la clôture de panneaux rigides tout autour et la grille
+       coulissante au bout de la rue ; de l'autre côté de la route, un alignement d'arbres plantés, d'essences variées ; les
+       lampadaires, les bornes lumineuses, les potelets ; les panneaux (zone 20, parking visiteurs, accueil) ; sur la pelouse
+       à l'est, les tables de pique-nique et leur allée, l'abri à vélos (les vélos : garerVelos). Rien n'est tiré au sort. */
     {
-      for (const x of [205.25, 211.75]) L.push(B(0.22, 1.9, 0.22, GRIS_F, x, 0.95, -44.6), B(0.26, 0.05, 0.26, GRIS_F, x, 1.92, -44.6));
-      L.push(B(6.2, 0.05, 0.05, GRIS_F, 202.15, 1.65, -45.25), B(6.2, 0.06, 0.06, GRIS_F, 202.15, 0.12, -45.25), B(6.6, 0.02, 0.1, '#7d8288', 208.5, 0.07, -44.6));
-      for (let x = 199.15; x <= 205.15; x += 0.12) L.push(B(0.025, 1.55, 0.025, GRIS_F, x, 0.88, -45.25));
-      for (const x of [199.2, 202.15, 205.1]) L.push(C(0.07, 0.07, 0.04, 8, '#2b2b30', x, 0.07, -45.25, 'x'));
-      L.push(B(0.36, 0.42, 0.22, '#e9ebe8', 212.05, 1.15, -44.35), B(0.3, 0.03, 0.02, '#2b2b30', 212.05, 1.28, -44.23), B(0.12, 0.2, 0.04, '#2b2b30', 211.6, 1.35, -44.45));
-      boites.push([199.0, -45.4, 205.3, -45.1]);
-      atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, 211.75, 1.5, -44.475, 0);
+      const { X0, X1, Z1, L: LR, o, e, n, s, park, cl, grille } = SITE, clotures = [], zp = (park[0] + park[1]) / 2;
+      // la clôture : des panneaux rigides de grillage soudé à plis, gris anthracite, sur un soubassement de béton, leurs
+      // poteaux tous les 2,5 m ; le grillage lui-même est dans les vitres (modeles.js, T.translucide : un seul quadrilatère par
+      // côté, les fils dessinés dans le shader), ses plis sont de longues barres. D'un bout [x, z] à l'autre, droit.
+      const cloture = (xa, za, xb, zb) => {
+        const lg = Math.hypot(xb - xa, zb - za), le = Math.abs(xb - xa) > Math.abs(zb - za), cx = (xa + xb) / 2, cz = (za + zb) / 2;
+        const bx = (w, h, d, c, y, dl = 0) => L.push(le ? B(w, h, d, c, cx + dl, y, cz) : B(d, h, w, c, cx, y, cz + dl));
+        bx(lg, 0.25, 0.07, BETON, 0.125); bx(lg, 0.02, 0.09, BETON, 0.25);
+        for (const y of [0.56, 1.1, 1.64]) bx(lg, 0.045, 0.03, ANTH, y);
+        bx(lg, 0.014, 0.014, ANTH, 1.975);
+        const np = Math.max(1, Math.round(lg / 2.5));
+        for (let k = 0; k <= np; k++) { const d = -lg / 2 + k * lg / np; bx(0.06, 2.02, 0.045, ANTH, 1.01, d); bx(0.075, 0.03, 0.06, ANTH, 2.035, d); }
+        const g = teinter(new THREE.PlaneGeometry(lg, 1.73), GRILLAGE); if (!le) tournerY(g, Math.PI / 2); vitresB.push(deplacer(g, cx, 0.25 + 0.865, cz));
+        clotures.push(le ? [Math.min(xa, xb), cz - 0.1, Math.max(xa, xb), cz + 0.1] : [cx - 0.1, Math.min(za, zb), cx + 0.1, Math.max(za, zb)]);
+        plan.push({ t: 'l', pts: [[xa, za], [xb, zb]], c: '#3b3f46', w: 0.4 });
+      };
+      cloture(cl.o, cl.s, grille.x0, cl.s); cloture(grille.x1, cl.s, cl.e, cl.s); cloture(cl.o, cl.s, cl.o, cl.n); cloture(cl.o, cl.n, cl.e, cl.n); cloture(cl.e, cl.n, cl.e, cl.s);
+      plusTard.push(() => { for (const [a, b, c, d] of clotures) col.boite(a, b, c, d).haut = false; });
+      // la grille coulissante, ouverte (rangée le long de la clôture, dedans), son rail, ses piliers, son moteur et son feu ;
+      // au pilier est, côté rue, la boîte aux lettres, le visiophone, la plaque au logo
+      {
+        const gz = grille.z, gx0 = grille.x0 - 6.1, gx1 = grille.x0 - 0.1, gzv = gz - 0.65, gm = (gx0 + gx1) / 2;
+        for (const x of [grille.x0, grille.x1]) { L.push(B(0.24, 2.0, 0.24, ANTH, x, 1.0, gz), B(0.28, 0.05, 0.28, ANTH, x, 2.025, gz)); boites.push([x - 0.13, gz - 0.13, x + 0.13, gz + 0.13]); }
+        L.push(B(gx1 - gx0, 0.07, 0.07, ANTH, gm, 1.68, gzv), B(gx1 - gx0, 0.1, 0.08, ANTH, gm, 0.17, gzv), B(grille.x1 - grille.x0 + 0.4, 0.02, 0.1, '#7d8288', SITE.rue, 0.04, gz));
+        for (let x = gx0 + 0.06; x <= gx1; x += 0.12) L.push(B(0.025, 1.52, 0.025, ANTH, x, 0.93, gzv));
+        for (const x of [gx0 + 0.15, gm, gx1 - 0.15]) L.push(C(0.07, 0.07, 0.04, 8, NOIR, x, 0.07, gzv, 'x'));
+        L.push(B(0.3, 0.4, 0.24, '#5b5f66', grille.x0 - 0.5, 0.27, gz - 1.05), B(0.34, 0.05, 0.28, '#4a4e55', grille.x0 - 0.5, 0.49, gz - 1.05), C(0.06, 0.07, 0.12, 8, '#e07a1f', grille.x0, 2.11, gz));
+        L.push(B(0.36, 0.42, 0.22, BLANC, grille.x1 + 0.3, 1.15, gz + 0.25), B(0.3, 0.03, 0.02, NOIR, grille.x1 + 0.3, 1.28, gz + 0.37), B(0.12, 0.2, 0.04, NOIR, grille.x1 - 0.15, 1.35, gz + 0.15));
+        boites.push([gx0 - 0.05, gzv - 0.1, gx1 + 0.05, gzv + 0.1], [grille.x0 - 0.68, gz - 1.2, grille.x0 - 0.32, gz - 0.9], [grille.x1 + 0.1, gz + 0.12, grille.x1 + 0.5, gz + 0.38]);
+        atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, grille.x1, 1.55, gz + 0.125, 0);
+      }
+      // la route : ses bordures (hautes du côté du trottoir, basses du côté de l'herbe ; rien le long du parking, de plain-pied
+      // avec elle), ses lignes de rive (à 30 cm des bords), le long du tour (tourSolu : chaque morceau, un pavé tourné)
+      const longer = (d, larg, h, c, y, sansParking) => {
+        const P = tourSolu(d, 6);
+        for (let i = 1; i < P.length; i++) {
+          const [ax, az] = P[i - 1], [bx, bz] = P[i], lg = Math.hypot(bx - ax, bz - az);
+          if (sansParking && (az + bz) / 2 > park[0] - 0.9 && (ax + bx) / 2 > 197.5 && (ax + bx) / 2 < 230.5) continue;
+          if (lg > 0.01) L.push(B(larg, h, lg + larg * 0.6, c, (ax + bx) / 2, y, (az + bz) / 2, Math.atan2(bx - ax, bz - az)));
+        }
+      };
+      longer(-LR / 2 - 0.075, 0.15, 0.18, BORDURE, 0, false); longer(LR / 2 + 0.075, 0.15, 0.1, BORDURE, 0, true);
+      longer(-LR / 2 + 0.3, 0.12, 0.012, LIGNE, 0.03, false); longer(LR / 2 - 0.3, 0.12, 0.012, LIGNE, 0.03, true);
+      // le passage piéton, devant l'entrée ; les avaloirs (au pied des bordures) et les regards
+      for (let k = 0; k < 6; k++) L.push(B(0.5, 0.012, 2.5, LIGNE, e - LR / 2 + 0.5 + k, 0.03, ENTREE.z));
+      for (const [x, z, r] of [[213.0, s - LR / 2 + 0.25, 0], [e - LR / 2 + 0.25, -80.0, Math.PI / 2], [212.0, n + LR / 2 - 0.25, 0], [o + LR / 2 - 0.25, -78.0, Math.PI / 2]]) {
+        L.push(B(0.6, 0.012, 0.32, NOIR, x, 0.031, z, r));
+        for (let k = -2; k <= 2; k++) L.push(B(0.035, 0.014, 0.26, '#55595f', x + (r ? 0 : k * 0.11), 0.032, z + (r ? k * 0.11 : 0), r));
+      }
+      for (const [x, z] of [[220.0, s + 0.6], [e - 0.4, -84.0], [205.0, n], [o + 0.5, -72.0]]) L.push(C(0.33, 0.33, 0.012, 12, '#5d6066', x, 0.034, z), C(0.25, 0.25, 0.013, 12, '#6b6f75', x, 0.035, z));
+      // le parking : les places (deux à l'ouest de l'accès, cinq à l'est, et celle des personnes handicapées, la plus proche
+      // de l'entrée), leurs lignes, les butées, la bordure du fond ; la borne de recharge
+      {
+        const lignes = [199.3, 201.8, 204.3, 213.5, 216.0, 218.5, 221.0, 223.5, 226.0, 229.3];
+        for (const x of lignes) L.push(B(0.1, 0.012, park[1] - park[0] - 0.1, LIGNE, x, 0.03, zp));
+        for (let k = 0; k < lignes.length - 1; k++) if (lignes[k] !== 204.3) L.push(B(1.5, 0.1, 0.14, BETON, (lignes[k] + lignes[k + 1]) / 2, 0.08, park[1] - 0.55));
+        const xh = (226.0 + 229.3) / 2;
+        L.push(B(3.15, 0.008, park[1] - park[0] - 0.1, '#2e5fa8', xh, 0.031, zp));
+        const k = atlas.poser(128, 128, (c, W, H) => {
+          c.clearRect(0, 0, W, H); c.strokeStyle = c.fillStyle = '#f4f4f2'; c.lineWidth = 9; c.lineCap = 'round';
+          c.beginPath(); c.arc(W * 0.5, H * 0.17, 9, 0, 7); c.fill();
+          c.beginPath(); c.moveTo(W * 0.46, H * 0.3); c.lineTo(W * 0.46, H * 0.56); c.lineTo(W * 0.7, H * 0.56); c.lineTo(W * 0.78, H * 0.82); c.stroke();
+          c.beginPath(); c.moveTo(W * 0.46, H * 0.4); c.lineTo(W * 0.66, H * 0.4); c.stroke();
+          c.lineWidth = 7; c.beginPath(); c.arc(W * 0.45, H * 0.66, H * 0.2, -0.9, 3.6); c.stroke();
+        }, 1.3, 1.3, 0, 0, 0, 0);
+        k.g.rotateX(-Math.PI / 2); k.g.rotateY(Math.PI); k.g.translate(xh, 0.038, zp);
+        for (const [a, b] of [[198.8, 205.5], [211.5, 229.6]]) L.push(B(b - a, 0.12, 0.15, BORDURE, (a + b) / 2, 0, park[1] + 0.075));
+        L.push(B(0.34, 1.45, 0.24, BLANC, 223.5, 0.725, park[1] + 0.35), B(0.3, 0.3, 0.012, '#3d5f8e', 223.5, 1.15, park[1] + 0.225), B(0.26, 0.05, 0.012, '#2e9e4f', 223.5, 0.92, park[1] + 0.225), C(0.02, 0.02, 0.9, 5, NOIR, 223.75, 0.55, park[1] + 0.32));
+        boites.push([223.3, park[1] + 0.2, 223.7, park[1] + 0.5]);
+      }
+      // les lampadaires (mât anthracite, tête plate à diodes, le bras vers la route) ; leur flaque de lumière, la nuit
+      const lampadaire = (x, z, dx, dz) => {
+        const r = Math.atan2(dx, dz), hx = x + dx * 0.78, hz = z + dz * 0.78;
+        L.push(C(0.13, 0.15, 0.36, 8, BETON, x, 0.18, z), C(0.045, 0.065, 5.0, 8, ANTH, x, 2.7, z));
+        L.push(B(0.06, 0.06, 0.85, ANTH, x + dx * 0.4, 5.14, z + dz * 0.4, r), B(0.3, 0.07, 0.64, ANTH, hx, 5.14, hz, r), B(0.24, 0.015, 0.54, LAMPE, hx, 5.1, hz, r));
+        boites.push([x - 0.16, z - 0.16, x + 0.16, z + 0.16]);
+        nuitSol.push([x + dx * 1.0, z + dz * 1.0, 6.5]);
+      };
+      for (const z of [-67.75, -82.75, -97.75]) lampadaire(o - LR / 2 - 0.7, z, 1, 0);
+      for (const x of [201.75, 216.75, 231.75]) lampadaire(x, n - LR / 2 - 0.7, 0, 1);
+      for (const z of [ENTREE.z - 1.6, -88.25]) lampadaire(e + LR / 2 + 0.7, z, -1, 0);
+      for (const x of [198.4, 230.2]) lampadaire(x, park[1] + 0.35, 0, -1);
+      // les bornes lumineuses, au bord du trottoir de l'est ; les potelets, de part et d'autre du passage piéton
+      for (const z of [vZ(1.2), vZ(10.0), vZ(14.9), vZ(19.4), vZ(24.2)]) {
+        const x = X1 + 2.72;
+        L.push(C(0.09, 0.09, 0.82, 10, ANTH, x, 0.48, z), C(0.092, 0.092, 0.1, 10, LAMPE, x, 0.79, z), C(0.1, 0.1, 0.035, 10, ANTH, x, 0.86, z));
+        boites.push([x - 0.13, z - 0.13, x + 0.13, z + 0.13]); nuitSol.push([x, z, 1.5]);
+      }
+      for (const d of [-1.65, 1.65]) { const x = X1 + 2.75, z = ENTREE.z + d; L.push(C(0.055, 0.055, 0.9, 8, ANTH, x, 0.52, z), C(0.057, 0.057, 0.06, 8, '#e9e3cf', x, 0.82, z)); boites.push([x - 0.09, z - 0.09, x + 0.09, z + 0.09]); }
+      // les panneaux : à l'entrée, dans l'enceinte, la zone 20 et le parking des visiteurs ; au bout de l'accès, l'accueil
+      panneau((c, W, H) => { c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.fillStyle = '#c8202a'; c.fill(); c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 30, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#111'; c.font = 'bold 110px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('20', W / 2, H / 2 + 6); }, 0.55, 0.55, grille.x1 + 0.85, 2.3, grille.z - 0.85, 0);
+      panneau((c, W, H) => {
+        c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.fillStyle = '#1f5bb0'; c.fillRect(6, 6, W - 12, H - 12);
+        c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = 'bold 120px Arial, sans-serif'; c.fillText('P', W / 2, H * 0.4);
+        c.font = 'bold 30px Arial, sans-serif'; c.fillText('Visiteurs', W / 2, H * 0.82);
+      }, 0.5, 0.56, grille.x1 + 0.85, 1.68, grille.z - 0.85, 0, false);
+      panneau((c, W, H) => {
+        c.fillStyle = '#fff'; c.beginPath(); c.moveTo(W, H / 2); c.lineTo(W - H / 2, 0); c.lineTo(0, 0); c.lineTo(0, H); c.lineTo(W - H / 2, H); c.closePath(); c.fill();
+        c.strokeStyle = '#1d1d1d'; c.lineWidth = 5; c.stroke();
+        c.fillStyle = '#1d1d1d'; c.font = 'bold 27px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Accueil, livraisons', W / 2 - 16, H / 2 + 2);
+      }, 1.3, 0.26, uX(13.62), 1.9, s - LR / 2 - 0.45, 0);
+      // de l'autre côté de la route, tout autour : des arbres plantés là (pas tirés au sort), d'essences variées, en couleurs
+      // d'automne : tilleuls et bouleaux à l'ouest, pins, chênes et érables au nord, érables, tilleuls et un chêne à l'est,
+      // des charmes en colonne derrière le parking (le feuillage bouge au vent ; la taille varie d'après le rang)
+      const ESS = {
+        tilleul: ['#c9a43a', '#b8922f', '#6a5441'], erable: ['#c8602c', '#d98a36', '#5e4a3c'], chene: ['#7f7a3a', '#8e8a42', '#594634'],
+        bouleau: ['#dcb84a', '#e8cc62', '#e6e2d8'], pin: ['#3d5636', '#47603c', '#8a5a3a'], charme: ['#a8923c', '#b9a24a', '#6f6a5e'],
+      };
+      const arbre = (x, z, genre, h0, i) => {
+        const [c1, c2, ct] = ESS[genre], h = h0 * (0.9 + 0.2 * ((i * 37) % 11) / 10), a = i * 2.39, ca = Math.cos(a), sa = Math.sin(a);
+        const boule = (r, c, dx, y, dz, sx, sy, sz, k = 0.8) => L.push(feuille(S(r, c, x + dx * ca - dz * sa, y, z + dx * sa + dz * ca, sx, sy, sz, 1), c, k));
+        const branche = (y0, y1, dx, dz, r) => L.push(teinter(manche([x, y0, z], [x + dx * ca - dz * sa, y1, z + dx * sa + dz * ca], r, ct), ct, T.bois));
+        let rc;
+        if (genre === 'pin') {
+          L.push(teinter(C(0.12, 0.2, h * 0.76, 7, ct, x, h * 0.38, z), ct, T.bois)); branche(h * 0.6, h * 0.74, h * 0.15, 0.4, 0.06); branche(h * 0.55, h * 0.7, -h * 0.13, -0.3, 0.06);
+          boule(h * 0.2, c1, 0, h * 0.82, 0, 1.4, 0.45, 1.3, 0.5); boule(h * 0.14, c2, h * 0.17, h * 0.74, h * 0.06, 1.3, 0.5, 1.2, 0.5); boule(h * 0.13, c1, -h * 0.15, h * 0.76, -h * 0.08, 1.3, 0.5, 1.2, 0.5);
+          rc = h * 0.3;
+        } else if (genre === 'bouleau') {
+          L.push(teinter(C(0.08, 0.13, h * 0.8, 6, ct, x, h * 0.4, z), ct, T.bois));
+          for (let k = 0; k < 4; k++) L.push(B(0.2 - k * 0.02, 0.035, 0.2 - k * 0.02, '#2e2a26', x, 0.9 + k * h * 0.13, z, k));
+          boule(h * 0.2, c1, 0, h * 0.62, 0, 0.85, 1.6, 0.85); boule(h * 0.14, c2, 0.45, h * 0.78, 0.2, 0.9, 1.3, 0.9);
+          rc = h * 0.2;
+        } else if (genre === 'charme') {
+          L.push(teinter(C(0.1, 0.17, h * 0.34, 7, ct, x, h * 0.17, z), ct, T.bois));
+          boule(h * 0.2, c1, 0, h * 0.58, 0, 0.8, 2.0, 0.8, 0.6); boule(h * 0.13, c2, 0.3, h * 0.76, 0.2, 0.9, 1.6, 0.9, 0.6);
+          rc = h * 0.17;
+        } else {
+          const large = genre === 'chene' ? 1.3 : genre === 'erable' ? 1.1 : 1;
+          L.push(teinter(C(0.15 * large, 0.26 * large, h * 0.52, 7, ct, x, h * 0.26, z), ct, T.bois));
+          branche(h * 0.4, h * 0.62, h * 0.2 * large, 0.3, 0.075); branche(h * 0.42, h * 0.6, -h * 0.17 * large, -0.4, 0.07); branche(h * 0.45, h * 0.7, 0.2, h * 0.16, 0.06);
+          boule(h * 0.3, c1, 0, h * 0.66, 0, large, 1.0, large);
+          boule(h * 0.19, c2, h * 0.17 * large, h * 0.56, h * 0.08, 1, 0.9, 1); boule(h * 0.18, c1, -h * 0.15 * large, h * 0.6, -h * 0.1, 1, 1, 1); boule(h * 0.15, c2, h * 0.02, h * 0.86, -h * 0.04, 1, 1, 1);
+          rc = h * 0.32 * large;
+        }
+        boites.push([x - 0.3, z - 0.3, x + 0.3, z + 0.3]); plan.push({ t: 'a', x, z, r: rc }); contact.tache(x, z, rc * 0.85, rc * 0.85, 0.3);
+      };
+      let ia = 0;
+      const xO = o - LR / 2 - 2, zN = n - LR / 2 - 2, xE = e + LR / 2 + 2, zS = park[1] + 0.8;
+      [-49.0, -56.5, -64.0, -71.5, -79.0, -86.5, -94.0, -101.5].forEach((z, k) => arbre(xO, z, k % 2 ? 'bouleau' : 'tilleul', k % 2 ? 9.5 : 9, ia++));
+      [190.5, 198.0, 205.5, 213.0, 220.5, 228.0, 235.5, 243.0].forEach((x, k) => arbre(x, zN, ['pin', 'chene', 'erable', 'pin'][k % 4], [11, 9, 8.5, 12][k % 4], ia++));
+      [-55.5, -62.5, -77.0, -84.5, -92.0, -99.5].forEach((z, k) => arbre(xE, z, ['erable', 'tilleul', 'chene'][k % 3], [8.5, 9, 9.5][k % 3], ia++));
+      for (const x of [190.0, 195.0, 216.0, 221.0, 226.0, 231.5, 245.0]) arbre(x, zS, 'charme', 8, ia++);
+      sapin(244.2, -103.0, 12.5); cypres(244.5, -58.0, 9); cypres(245.2, -95.5, 10);
+      // sur la pelouse à l'est : les tables de pique-nique et l'allée qui les relie au passage piéton
+      pique(241.8, -66.0, Math.PI / 2); pique(242.3, -74.5, Math.PI / 2 + 0.12); pique(241.8, -83.0, Math.PI / 2);
+      sols.push(B(4.2, 0.08, 1.5, '#b4b0a7', e + LR / 2 + 2.1, 0, ENTREE.z), B(1.5, 0.08, 18.5, '#b4b0a7', e + LR / 2 + 4.95, 0, -74.0));
+      // l'abri à vélos, sur la pelouse au sud-est : ossature d'acier, toit de polycarbonate et fond grillagé (dans les vitres :
+      // T.translucide), sa dalle ; ses arceaux et les vélos du personnel (garerVelos)
+      {
+        const ax0 = 238.6, ax1 = 242.6, az0 = -48.9, az1 = -46.1, am = (ax0 + ax1) / 2, azm = (az0 + az1) / 2;
+        sols.push(B(ax1 - ax0 + 0.4, 0.04, az1 - az0 + 0.5, BETON, am, 0, azm));
+        for (const x of [ax0 + 0.05, ax1 - 0.05]) {
+          L.push(B(0.07, 2.32, 0.07, ANTH, x, 1.16, az1 - 0.05), B(0.07, 2.12, 0.07, ANTH, x, 1.06, az0 + 0.05), manche([x, 2.32, az1 - 0.05], [x, 2.12, az0 + 0.05], 0.035, ANTH));
+          boites.push([x - 0.06, az1 - 0.11, x + 0.06, az1 + 0.01], [x - 0.06, az0 - 0.01, x + 0.06, az0 + 0.11]);
+        }
+        L.push(B(ax1 - ax0, 0.08, 0.06, ANTH, am, 2.3, az1 - 0.05), B(ax1 - ax0, 0.08, 0.06, ANTH, am, 2.1, az0 + 0.05));
+        const at = new Atelier(); at.quad([ax0 - 0.1, 2.36, az1 + 0.12], [ax1 + 0.1, 2.36, az1 + 0.12], [ax1 + 0.1, 2.14, az0 - 0.15], [ax0 - 0.1, 2.14, az0 - 0.15], POLY, undefined, [0, 1, 0]);
+        vitresB.push(...at.geos(), deplacer(teinter(new THREE.PlaneGeometry(ax1 - ax0, 1.9), GRILLAGE), am, 1.15, az1 - 0.03));
+        contact.tache(am, azm, 2.4, 1.6, 0.22);
+      }
+      dallesDe(sols); L.push(...sols);
     }
-    // la haie (au sud, la grille ; à l'est, la pelouse ; au nord-est, un arrondi) ; les arbres ; les tables de pique-nique
-    haie(188.4, -44.6, 205.1, -44.6); haie(211.9, -44.6, 237.4, -44.6); haie(237.4, -44.6, 237.4, -80.5);
-    { let px = 237.4, pz = -80.5; for (let k = 1; k <= 4; k++) { const a = k / 4 * Math.PI / 2, x = 230.3 + Math.cos(a) * 7.1, z = -80.5 - Math.sin(a) * 7.1; haie(px, pz, x, z); px = x; pz = z; } }
-    haie(230.3, -87.6, 188.4, -87.6); haie(188.4, -87.6, 188.4, -44.6);
-    sapin(191.0, -49.5, 12); sapin(190.6, -61.5, 13.5); sapin(191.2, -73.5, 11.5); cypres(192.8, -84.5, 10); cypres(195.2, -85.0, 9);
-    sapin(234.0, -84.0, 12.5); feuillu(232.2, -58.5, 8.5); feuillu(229.0, -76.5, 7.5, '#5d7a36', '#6f8a3a'); feuillu(214.5, -83.5, 7, '#8a8f3a', '#a6823a');
-    pique(227.4, -61.5, Math.PI / 2); pique(231.0, -66.0, Math.PI / 2 + 0.2); pique(227.4, -71.0, Math.PI / 2); pique(205.4, -82.4); pique(209.8, -82.4);
-    // deux bornes lumineuses le long de l'allée de la pelouse
-    for (const [x, z] of [[224.8, -55.5], [224.8, -61.5], [223.9, -69]]) { L.push(C(0.08, 0.08, 0.8, 8, GRIS_F, x, 0.4, z), C(0.085, 0.085, 0.1, 8, '#ffe1a0', x, 0.72, z)); boites.push([x - 0.15, z - 0.15, x + 0.15, z + 0.15]); }
+    // les lumières de la nuit (nuit : leur éclat) : une flaque au sol sous chaque lampadaire, applique et borne, sous la
+    // marquise et le porche ; un halo sur le mur sous chaque applique et chaque projecteur. Un seul maillage additif (la
+    // matière et son programme sont ceux des flaques des phares : rien de plus à compiler), caché le jour.
+    let lumieres;
+    {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      const c = cv.getContext('2d'), img = c.createImageData(64, 64);
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) { const u = (x + 0.5) / 32 - 1, v = (y + 0.5) / 32 - 1, d = Math.min(1, u * u + v * v), i = (y * 64 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 * (1 - d) * (1 - d); img.data[i + 3] = 255; }
+      c.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const G = [];
+      for (const [x, z, r] of nuitSol) G.push(new THREE.PlaneGeometry(2 * r, 2 * r).rotateX(-Math.PI / 2).translate(x, 0.1, z));
+      for (const [P, le, y, w, h, haut] of nuitMur) {
+        const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setY(i, haut ? 0.5 + uv.getY(i) * 0.5 : uv.getY(i) * 0.5);
+        if (P.m === 'n') g.rotateY(Math.PI); else if (P.m === 'e') g.rotateY(Math.PI / 2); else if (P.m === 'o') g.rotateY(-Math.PI / 2);
+        const [px, pz] = P.pt(0.03, le); g.translate(px, haut ? y + h / 2 : y - h / 2, pz); G.push(g);
+      }
+      lumieres = new THREE.Mesh(fusion(G), new THREE.MeshBasicMaterial({ map: tex, color: '#ffd49a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+      lumieres.renderOrder = 4; lumieres.visible = false; lumieres.matrixAutoUpdate = false; lumieres.name = 'lumières Solumatic';
+      scene.add(lumieres);
+    }
 
     /* -- la tonnellerie du Coteau, à l'est de la rue (x de 212 à 249,5, z de -42 à 2,4). L'atelier, une vieille bâtisse
        de moellons (chaînes de tuffeau, toit d'ardoise, sa cheminée), la grande porte coulissante ouverte sur la cour (la
@@ -3899,9 +4225,10 @@ void main() {
     }
     bati.push(...L);
     plusTard.push(() => { for (const [a, b, c, d] of boites) col.boite(a, b, c, d).haut = d - b > 4 || c - a > 4; });
-    return { porteSolu, toitSolu, interieurSolu, vitresSolu, gens: I.gens, murs: I.murs, portes: I.portes, babyfoot: I.babyfoot };
+    return { porteSolu, toitSolu, interieurSolu, vitresSolu, lumieres, gens: I.gens, murs: I.murs, portes: I.portes, babyfoot: I.babyfoot };
   }
   const za = zoneActivites();
+  lumieresSolu = za.lumieres;
   /* ------------------------------------------------------------ les vélos garés (velos.js : rangeVelos, veloSeul ; Teddy,
      26/11/2026 : « on doit pouvoir voir des vélos dans la rue aussi »). Fondus dans le décor de leur quartier (aucun appel de
      dessin de plus), une boîte de collision chacun, leur propre tirage au sort (rien ne bouge ailleurs). Un range-vélos (des
@@ -3919,7 +4246,7 @@ void main() {
     S(130, 17.77, -Math.PI / 2, 'ville', '#33343a', { contre: 1, selle2: '#1d1e21' });
     R(89.4, -62.3, 0, { n: 2, garnis: 3, graine: 23 });
     { const a = 0.45, r = 36.7; R(CHATEAU.x + Math.cos(a) * r, CHATEAU.z + Math.sin(a) * r, Math.PI / 2 - a, { n: 3, garnis: 4, graine: 37, genres: ['vae', 'vae', 'course', 'ville'] }); }
-    R(226.8, -50.5, 0, { n: 3, garnis: 3, graine: 41, genres: ['vae', 'course', 'vtt'] });
+    R(240.6, -47.5, 0, { n: 3, garnis: 3, graine: 41, genres: ['vae', 'course', 'vtt'] }); // (chez Solumatic : sous l'abri, sur la pelouse au sud-est)
     // devant l'école des Tilleuls, contre la grille, au nord des barrières (la place gardée par ecole) : un râtelier, des
     // vélos d'enfant, la roue avant dans la fente, tournés vers la place
     R(113.7, -37.2, -Math.PI / 2, { type: 'ratelier', genres: ['enfant'], n: 6, garnis: 4, graine: 53 });
@@ -4071,7 +4398,10 @@ void main() {
       c.beginPath(); P.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.closePath(); c.fill(); c.stroke();
     }
     // la zone d'activités, hors de la zone de jeu, reste claire
-    c.save(); c.beginPath(); c.rect(X(ZA.x0), Z(ZA.z0), (ZA.x1 - ZA.x0) * ECH, (ZA.z1 - ZA.z0) * ECH); c.clip(); fond(); c.restore();
+    c.save(); c.beginPath(); c.rect(X(ZA.x0), Z(ZA.z0), (ZA.x1 - ZA.x0) * ECH, (ZA.z1 - ZA.z0) * ECH); c.clip(); fond();
+    // (la route qui fait le tour de Solumatic, sa clôture)
+    for (const e of plan) if (e.t === 'l') { c.strokeStyle = e.c; c.lineWidth = e.w * ECH; c.beginPath(); e.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.stroke(); }
+    c.restore();
   }
 
   const lieux = {
@@ -4113,8 +4443,10 @@ void main() {
       [[-90, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],              // la cour, jusqu'à la grande porte du chai
       [[-90, 10], [-80, 10], [-55, 10], [95, 10], [110.5, 9.4]],           // la départementale (l'épicerie, La Treille)
       [[110.5, 9.4], [176, 10], [205, 10], [212, 10], [176 + DX_EN, 10]], // vers l'est : le laboratoire, la zone d'activités
-      // la rue de la zone d'activités, jusqu'au parvis de Solumatic : on y entre en biais, d'un côté ou de l'autre
-      [[205, 10], [208.5, 4.5], [208.5, -42], [208.5, -48]], [[212, 10], [208.5, 4.5]],
+      // la rue de la zone d'activités, jusqu'à la route qui fait le tour de Solumatic : on y entre en biais, d'un côté ou de
+      // l'autre
+      [[205, 10], [208.5, 4.5], [208.5, -42], [SITE.rue, SITE.s]], [[212, 10], [208.5, 4.5]],
+      tourSolu(0, 3),                                                       // la route qui fait le tour de Solumatic
       // l'accès de l'entrepôt (lieux.entrepot.arret) : en biais depuis la départementale, sans angle droit (la conduite
       // assistée ne passe au tronçon suivant qu'une fois le bout du précédent dépassé : dans un angle droit coupé court,
       // elle croirait le point visé derrière elle et ferait demi-tour), puis tout droit vers le sud, au milieu de la cour :
@@ -4158,8 +4490,9 @@ void main() {
   // la maison de l'ouest (x de -72 à -64, z de 123 à 133), à côté de sa porte (elle était garée dedans) ; la voiture du
   // personnel de l'imprimerie, garée dans la cour de l'entrepôt, entre ses deux lignes blanches
   lieux.garees = [[-112.4, -49.4, -Math.PI / 2, '#e9e6de'], [-112.4, -54.6, -Math.PI / 2, '#5c6f8a'], [118.5, -59.5, 0, '#5c6f8a'], [123, -59.5, 0, '#8a3a32'], [100.5, -77.5, Math.PI / 2, '#d8cfa6'], [-61.4, 131.6, Math.PI - 0.06, '#6c8f4e'], [175.1 + DX_EN, 44.0, 0, '#2f4a6b'],
-    // le parking de Solumatic : trois places prises, le nez vers le bâtiment
-    [216.75, -47.3, Math.PI, '#c9cdd2'], [219.25, -47.3, Math.PI, '#1f2a3a'], [224.25, -47.3, Math.PI, '#f2efe6'],
+    // le parking de Solumatic (au sud de la route qui fait le tour) : trois places prises, garées en marche arrière, le nez
+    // vers le bâtiment, sur l'enrobé
+    [217.25, (SITE.park[0] + SITE.park[1]) / 2, Math.PI, '#c9cdd2', 0.03], [219.75, (SITE.park[0] + SITE.park[1]) / 2, Math.PI, '#1f2a3a', 0.03], [224.75, (SITE.park[0] + SITE.park[1]) / 2, Math.PI, '#f2efe6', 0.03],
     // le parking du Relais de la Croisée, sur la départementale : deux voitures, le nez vers le restaurant
     [-171.4, 21.2, 0, '#8a3a32'], [-168.2, 21.2, 0, '#e9e6de']];
   /* Mission 3, l'habillage. Le laboratoire d'œnologie (rangée sud du bourg, x = 128) : l'œnologue attend sur le trottoir,

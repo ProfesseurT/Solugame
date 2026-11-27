@@ -55,11 +55,13 @@ function echantillonner(P) {
 /* ---------------------------------------------------------------- la zone d'activités
    À l'est du bourg, de part et d'autre de la départementale (Teddy, 25/11/2026 : « plutôt dans une zone industrielle, une
    petite avec 2 ou 3 boîtes, à l'extérieur du village ») : l'imprimerie Saint-Vincent, le bureau de Solumatic, une
-   tonnellerie (monde.js : zoneActivites) ; au nord de la route, la rue de la zone monte jusqu'à Solumatic, au fond (z
-   jusqu'à -88). Ses bâtiments sont posés à y = 0 : le terrain y est à plat, raccordé aux collines sur 30 m (au nord-est,
-   un talus). Le rectangle à plat déborde d'une maille du grand terrain (15,5 m) autour de ce qui est bâti : les mailles
-   qui le touchent ont leurs quatre sommets à zéro. */
-export const ZA = { x0: 186, x1: 258, z0: -100, z1: 62, bati: { x0: 186, x1: 250, z0: -89, z1: 49 } };
+   tonnellerie (monde.js : zoneActivites) ; au nord de la route, la rue de la zone monte jusqu'à Solumatic, au fond, et
+   son site clos (Teddy, 27/11/2026 : « une route qui fait le tour du bureau, des arbres de l'autre côté de la route et une
+   clôture » ; la clôture jusqu'à z = -106). Ses bâtiments sont posés à y = 0 : le terrain y est à plat, raccordé aux
+   collines sur 30 m (au nord-est, un talus). Le rectangle à plat déborde d'une maille du grand terrain (15,5 m) autour de
+   ce qui est bâti : les mailles qui le touchent ont leurs quatre sommets à zéro (au nord, la rangée de sommets z = -123,6
+   est dans le rectangle ; à l'ouest, celle de x = 185,45 est à plat à un millième près). */
+export const ZA = { x0: 186, x1: 258, z0: -124, z1: 62, bati: { x0: 186, x1: 250, z0: -110, z1: 49 } };
 const plat = (x, z) => { const dx = Math.max(ZA.x0 - x, 0, x - ZA.x1), dz = Math.max(ZA.z0 - z, 0, z - ZA.z1); return 1 - lisse(Math.hypot(dx, dz) / 30); };
 // un point (à m mètres près) de ce qui est bâti dans la zone : ni arbre des collines, ni balle de foin, ni herbe haute
 export const dansZA = (x, z, m = 0) => x > ZA.bati.x0 - m && x < ZA.bati.x1 + m && z > ZA.bati.z0 - m && z < ZA.bati.z1 + m;
