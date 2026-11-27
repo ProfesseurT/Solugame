@@ -50,6 +50,12 @@ const TYPES = new Map(Object.entries({
   '#4f6a7a': T.tissu, '#8f9a82': T.tissu, '#c96f3b': T.tissu, '#3d4652': T.tissu, '#b9b4aa': T.tissu, '#7d8a99': T.tissu, '#e8e6df': T.tissu,
   '#cfd1cf': T.gres, '#c9cbc7': T.gres,
 }));
+/* -- Solumatic, dehors (types 28 et 29, leurs couleurs réservées ; monde.js : zoneActivites). crepi : l'enduit blanc des
+   murs, taloché fin, sali en pied de mur et coulé sous la couvertine ; translucide : dans les vitres traversées du regard
+   (MAT_VITRINE), debout le grillage des panneaux rigides de la clôture, couché le polyester ondulé du porche et de l'abri
+   à vélos (laiteux, le jour passe au travers). Le trottoir autour du bâtiment : des pavés gris. */
+T.crepi = 28; T.translucide = 29;
+for (const [c, t] of [['#e9ecef', T.crepi], ['#cdd0d3', T.crepi], ['#aaa69e', T.crepi], ['#3c3f45', T.translucide], ['#efe6cc', T.translucide], ['#b4b0a7', T.paves]]) TYPES.set(c, t);
 
 // Uniformes partagés par toutes les matières du décor : le temps (vent, eau) et la distance
 // au-delà de laquelle le détail procédural passe en version allégée (réglée par la qualité).
@@ -281,6 +287,7 @@ vec3 cl_detail(vec3 col) {
   // fausse occlusion ambiante : le pied de tout ce qui est vertical s'assombrit près du sol
   float pied = sol ? 1.0 : mix(m == 1 ? 0.7 : 0.8, 1.0, smoothstep(0.0, m == 1 ? 1.6 : 1.1, vPosM.y));
   if (distance(vPosM, cameraPosition) > uLoin) {
+    if (m >= 28) return col * (0.96 + 0.06 * g) * pied; // (Solumatic : types 28 et 29, hors de la table KLOIN)
     if (m == 4) col *= mix(vec3(0.8, 0.92, 0.73), vec3(1.16, 1.06, 0.8), g);
     return col * KLOIN[m] * (0.93 + 0.14 * g) * pied;
   }
@@ -373,8 +380,34 @@ vec3 cl_detail(vec3 col) {
     k = (0.8 + 0.3 * h21(c)) * mix(0.84, 1.0, smoothstep(0.0, 0.05, bord)) * (0.93 + 0.12 * f) * (0.9 + 0.16 * g);
     k = mix(k, 0.55, 1.0 - smoothstep(0.006, 0.02, bord));
     col *= mix(vec3(1.0), vec3(1.05, 0.98, 0.9), h21(c + 3.0));
+  } else if (m == 28) {
+    // (Solumatic) l'enduit blanc taloché fin : son grain serré, des nuances douces d'une passe à l'autre ; en pied de mur,
+    // les éclaboussures de la pluie, à la lisière irrégulière ; sous la couvertine (le mur fait 4,35 m), des coulures
+    // grises de longueur inégale
+    float s = texture(tBruit, uv * 5.3).b, r = texture(tBruit, uv * 1.3 + 0.21).r;
+    k = (0.965 + 0.05 * r + 0.035 * (s - 0.5)) * (0.975 + 0.05 * g);
+    if (!sol) {
+      float e = 1.0 - smoothstep(0.08, 0.42 + 0.3 * f + 0.2 * g, vPosM.y);
+      col = mix(col, col * vec3(0.84, 0.8, 0.74), e * 0.6);
+      float lc = 0.4 + 1.5 * texture(tBruit, vec2(uv.x * 0.37, 0.31)).g;
+      col *= 1.0 - 0.1 * smoothstep(4.32 - lc, 4.3, vPosM.y) * smoothstep(0.52, 0.7, texture(tBruit, vec2(uv.x * 1.1, uv.y * 0.035)).r);
+    }
+  } else if (m == 29) {
+    // (Solumatic) le grillage ; le polyester, couché : ses fibres, en nuages (leur opacité est dans GLSL_ALPHA)
+    k = sol ? 0.9 + 0.16 * texture(tBruit, uv * 2.3).r * (0.7 + 0.3 * g) : 0.97 + 0.06 * f;
   }
   return col * k * pied;
+}
+// (Solumatic, type 29) debout, le grillage des panneaux rigides : fils verticaux tous les 5,5 cm, horizontaux tous les
+// 20 cm, plus serrés vus de biais, leur moyenne au loin (pas de moiré) ; couché, le polyester ondulé, laiteux
+float cl_fil(float u, float pas, float ep) {
+  float fw = max(fwidth(u), 1e-4), d = abs(fract(u / pas + 0.5) - 0.5) * pas;
+  return mix(clamp((0.5 * ep - d) / fw + 0.5, 0.0, 1.0), min(ep / pas, 1.0), smoothstep(0.25 * pas, pas, fw));
+}
+float cl_translucide(vec3 n, vec3 v) {
+  if (abs(n.y) > 0.5) return 0.87;
+  float b = 1.0 / max(abs(dot(n, v)), 0.12), u = abs(n.x) > abs(n.z) ? vPosM.z : vPosM.x;
+  return 1.0 - (1.0 - cl_fil(u, 0.055, min(0.006 * b, 0.05))) * (1.0 - cl_fil(vPosM.y, 0.2, 0.008 * min(b, 3.0)));
 }`;
 // Lumières propres : vitres et eau qui reflètent le ciel, fenêtres allumées, réverbères
 const GLSL_EMISSIF = `
@@ -407,6 +440,9 @@ const GLSL_EMISSIF = `
     float c = 1.0 - max(dot(nW, vd), 0.0), c2 = c * c;
     float s = max(dot(r, ${V3(SOLEIL)}), 0.0), s2 = s * s, s4 = s2 * s2, s8 = s4 * s4, s16 = s8 * s8;
     totalEmissiveRadiance += (ciel * (0.035 + 0.42 * c2 * c2 * c) + vec3(1.0, 0.85, 0.6) * (s16 * s16 * 0.55)) * mix(1.0, 0.15, uNuit);
+  } else if (me == 29) {
+    // (Solumatic) le polyester ondulé : le jour passe au travers, il luit
+    if (abs(normaleMonde().y) > 0.5) totalEmissiveRadiance += diffuseColor.rgb * 0.5 * (1.0 - 0.9 * uNuit);
   }
 }`;
 // Vitres qu'on traverse du regard (matière MAT_VITRE) : plus opaques en incidence rasante, comme une vraie vitre
@@ -416,6 +452,7 @@ const GLSL_ALPHA = a0 => `
   vec3 nT = normaleMonde(), vT = normalize(cameraPosition - vPosM);
   float cT = 1.0 - abs(dot(nT, vT));
   diffuseColor.a = ${a0.toFixed(2)} + ${(0.95 - a0).toFixed(2)} * cT * cT;
+  if (int(vMat + 0.5) == 29) diffuseColor.a = cl_translucide(nT, vT); // (Solumatic : grillage, polyester)
 }`;
 // Vent : balancement doux et rafales qui traversent le paysage (position dans le monde, temps)
 const GLSL_VENT = `

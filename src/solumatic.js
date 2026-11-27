@@ -48,15 +48,18 @@ export const PORTE_ATELIER = { z: Z(5.0), l: 2.0, h: 2.3 };
 export const PORTE_ATLAS = { x: X(18.55), l: 2.7, h: 2.3 };
 // la hauteur des fenêtres (appui, linteau), la même dehors (monde.js) et dedans
 export const FEN = { y0: 0.9, y1: 2.55 };
-// les deux vitrines de l'atelier, dans la devanture (rideaux métalliques levés le jour)
-export const VITRINES = [X(1.9), X(4.7)], VITRINE = { l: 1.8, y0: 0.45, y1: 2.4 };
-// les fenêtres des murs extérieurs : [mur, position le long, largeur] (sud et nord : x ; est et ouest : z)
+// plus de vitrines dans la devanture (Teddy, 27/11/2026 : « à droite du panneau, c'est aussi des fenêtres pas des portes
+// fenêtres ») : l'atelier, devenu un plateau téléphonique, a ses fenêtres comme les autres (VITRINE reste pour mémoire)
+export const VITRINES = [], VITRINE = { l: 1.8, y0: 0.45, y1: 2.4 };
+// les fenêtres des murs extérieurs : [mur, position le long, largeur] (sud et nord : x ; est et ouest : z). Au sud, la
+// devanture : juste après la baie d'Atlas, une suite régulière (2,2 m d'axe en axe, sauf aux cloisons), celles de Soleil
+// sous la bâche, puis celles du plateau téléphonique. Toutes à 25 cm au moins des cloisons qui touchent le mur.
 export const FENETRES = [
-  ['s', X(7.68), 1.85], ['s', X(10.68), 1.85], ['s', X(16.57), 1.15],
-  ['e', Z(11.2), 1.6], ['e', Z(14.22), 1.85], ['e', Z(17.05), 1.8], ['e', Z(19.67), 1.95], ['e', Z(22.75), 2.0],
-  ['n', X(4.98), 1.95], ['n', X(7.92), 1.95], ['n', X(10.9), 2.0], ['n', X(13.85), 1.9],
-  ['o', Z(4.8), 2.0], ['o', Z(7.08), 2.05], ['o', Z(10.6), 2.7], ['o', Z(13.4), 2.5], ['o', Z(16.45), 3.0], ['o', Z(19.08), 1.75],
-  ['o', Z(21.88), 2.75], ['o', Z(24.5), 1.9],
+  ...[16.35, 14.65, 12.6, 10.9, 9.2, 7.5, 5.0, 3.3, 1.6].map(u => ['s', X(u), 1.6]),
+  ['e', Z(11.2), 2.0], ['e', Z(14.22), 2.0], ['e', Z(17.05), 2.0], ['e', Z(19.67), 2.0], ['e', Z(22.75), 2.0],
+  ['n', X(4.98), 2.0], ['n', X(7.92), 2.0], ['n', X(10.9), 2.0], ['n', X(13.85), 2.0],
+  ['o', Z(4.8), 2.0], ['o', Z(7.08), 2.0], ['o', Z(10.6), 2.0], ['o', Z(13.4), 2.0], ['o', Z(16.45), 2.0], ['o', Z(19.08), 2.0],
+  ['o', Z(21.88), 2.0], ['o', Z(24.5), 2.0],
 ];
 
 /* Les cloisons du plan, en mètres (axes) : ['u', u, v0, v1, portes] (le long de v) ou ['v', v, u0, u1, portes] (le long
@@ -621,7 +624,8 @@ export function interieurSolumatic() {
      le battant (bois clair, poignées, plaque de propreté) ouvert ou fermé ; la plaque de la pièce côté couloir ;
      l'interrupteur et le bloc de secours côté pièce */
   for (const [o, cc, a, b, ps] of CLOISONS) {
-    const U = o === 'u', fixe = U ? X(cc) : Z(cc), S_ = U ? Z : X, s0 = Math.min(S_(a), S_(b)), s1 = Math.max(S_(a), S_(b));
+    // (bornées aux murs extérieurs : le plan les fait parfois dépasser de quelques centimètres)
+    const U = o === 'u', fixe = U ? X(cc) : Z(cc), S_ = U ? Z : X, s0 = Math.max(Math.min(S_(a), S_(b)), U ? z0 : x0), s1 = Math.min(Math.max(S_(a), S_(b)), U ? z1 : x1);
     // une boîte le long du mur, de sa à sb, épaisse de ep, décalée de n, de y0 à y1
     const le = (sa, sb, ep, n, y0, y1, c) => G.push(U ? B(ep, y1 - y0, sb - sa, c, fixe + n, (y0 + y1) / 2, (sa + sb) / 2) : B(sb - sa, y1 - y0, ep, c, (sa + sb) / 2, (y0 + y1) / 2, fixe + n));
     const rect = (sa, sb, ep = e) => (U ? [fixe - ep / 2, sa, fixe + ep / 2, sb] : [sa, fixe - ep / 2, sb, fixe + ep / 2]);
@@ -1296,7 +1300,8 @@ const LIBRE = { resoudre: () => false, rangs: () => false }, NUIT_VITRE = new TH
 // ceux qui parlent au casque ou au téléphone : la part du temps où ils sont en ligne, et combien au plus à la fois par pièce
 const APPELS = { support: 0.62, manager: 0.35, formation: 0.72, commerciale: 0.4, freelance: 0.4, partenariats: 0.3, formatrice: 0.2, associe: 0.15, patron: 0.12 };
 const CLAVIER = { dev: 1, donnees: 1, devweb: 1, support: 0.6, manager: 0.5, commerciale: 0.4, freelance: 0.4, partenariats: 0.5, formatrice: 0.6, formation: 0.3, associe: 0.4, patron: 0.3 };
-// devant l'entrée, là où Romane fume (le cendrier sur pied est dans monde.js)
+// devant l'entrée, là où Romane fume, à côté du cendrier sur pied (monde.js : lieux.solumatic.fumeur, cendrier), tournée
+// vers l'est et le parvis
 const FUME = { x: SOLU.x1 + 1.9, z: ENTREE.z - 2.0, h: 1.0 };
 
 export class Solumatic {
@@ -1304,6 +1309,7 @@ export class Solumatic {
   // loin), isoler(oui), garder(objet) : un objet de la scène qui reste quand l'extérieur est retiré } (main.js)
   constructor(c) {
     this.c = c; this.L = c.monde.lieux.solumatic; this.gens = []; this.vu = false; this.n = 0; this.img = 0; this.tc = 0; this.tBulle = 0;
+    if (this.L.fumeur) Object.assign(FUME, { x: this.L.fumeur.x, z: this.L.fumeur.z });
     this.P = P; this.V = VIE; this.tAct = 15; this.tVoix = 0; this.mPrec = null; this.tH = 0; this.tFume = 0; this.tBouffee = 4;
     const h = c.hud;
     this.etq = { entrer: h.action('Entrer chez Solumatic'), sortir: h.action('Sortir') };

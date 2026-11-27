@@ -3,10 +3,12 @@
 // la longueur des jambes (foulee) : au sol pendant l'appui, le pied roule du talon à la pointe sans glisser ; le bassin
 // descend quand les deux pieds sont au sol et remonte au passage, d'après ce que les jambes atteignent (cinématique
 // inverse : pied jamais en l'air pendant l'appui). Au repos : respiration,
-// transfert de poids, coups d'œil, parfois un regard au téléphone. Regard vers un point, téléphone en main,
-// signe de la main, pose assise, mains sur le volant, saut de côté, recul contre un mur.
+// transfert de poids, coups d'œil, parfois un regard au téléphone, de temps en temps une attitude (les mains jointes,
+// dans le dos, les bras croisés, une main sur la hanche), le clignement des yeux. Regard vers un point, téléphone en main,
+// signe de la main, pose assise, au bureau (taper, la souris, lire, s'adosser : p.clavier), parler (p.parle), fumer
+// (p.fume), mains sur le volant, saut de côté, recul contre un mur.
 import * as THREE from 'three';
-import { OS, DIM, accessoires } from './perso.js';
+import { OS, DIM, accessoires, cigarette, CIG } from './perso.js';
 import { angle, borne, entre, mix, lisse, amortir } from './outils.js';
 
 const PI = Math.PI, TAU = 2 * Math.PI;
@@ -30,6 +32,8 @@ const BRAS = [OS.brasG, OS.coudeG, OS.mainG, OS.brasD, OS.coudeD, OS.mainD];
 // axes des pédales gauche et droite (x, y, z, repère du vélo penché, en mètres) ; l'angle du pédalier ; danseuse et pied à
 // terre (0 à 1) ; le sol sous le pied gauche ; les doigts et la paume de la main gauche (des directions) ; le roulis du vélo
 export const VL = { selle: 0, mainG: 3, mainD: 6, pedG: 9, pedD: 12, mani: 15, danseuse: 16, pied: 17, sol: 18, doigts: 21, paume: 24, roulis: 27, N: 28 };
+// fumer : la bouche, le filtre, la main (temporaires)
+const vBouche = new THREE.Vector3(), qMain = new THREE.Quaternion();
 // pose debout gardée le temps de la mélanger à la pose au volant (monter, descendre)
 const MEMO = Array.from({ length: 32 }, () => new THREE.Quaternion()), vMemo = new THREE.Vector3();
 // la pose de l'image d'avant, le temps qu'un enfant passe d'un jeu à l'autre (poser : lisse)
@@ -119,11 +123,15 @@ export class Anim {
     this.meche = 0; this.mecheV = 0; this.telVu = false; this.vt = 0;
     this.wServ = 0; this.wVerre = 0;
     this.wPorte = 0; this.wOutil = 0; this.accroupi = 0; this.pile = new THREE.Vector3(0, 0.95, 0.36); this.pileL = 0.2;
+    this.F = new Float64Array(4);
+    this.wFume = 0; this.tFume = 2 + r() * 6; this.uFume = -1; this.fRepos = r() < 0.6 ? 1 : 0; this.fAutre = r() < 0.5 ? 1 : 0;
+    this.wParle = 0; this.att = 0; this.tAtt = 4 + r() * 10; this.wAtt = 0; this.tCligne = 0.5 + r() * 4; this.cligne = 0;
   }
 
   // dt = 0 : tout se place d'un coup (placement, changement de personnage)
   poser(dt, p, t) {
     const o = this.o, m = this.m, g = m.groupe;
+    this.F[0] = dt; this.F[1] = t; // (lus par vivre, cligner, poseClavier, poseFume : sans nombre à virgule en argument)
     const conduite = p.assis && p.conduite;
     const r = Math.random;
 
@@ -183,6 +191,9 @@ export class Anim {
     else if (p.assis) this.poseAssise(br, p);
     else this.poseDebout(dt, p, va, sens, br);
     this.conduite = conduite;
+    this.vivre(p, conduite, immobile, pile);
+    // fumer (p.fume), debout ou assis
+    if (p.fume || (this.wFume > 0.01)) this.poseFume(p, conduite);
     if (p.appuis) this.poseAppuis(p.appuis);
     if (p.caresse && p.caresse.w > 0.01 && !p.assis) this.poseCaresse(p.caresse);
     if (lisse) this.lisserJeu(dt);
@@ -250,6 +261,57 @@ export class Anim {
       if (dt === 0) { this.meche = vise; this.mecheV = 0; }
       o[OS.meche].rotation.set(this.meche, 0, 0.25 * Math.sin(TAU * this.ph) * Math.min(1, va) - tete.z - tete.y * 0.3);
     }
+    if (m.paupieres) this.cligner();
+  }
+
+  // Parler (hors du bureau), les attitudes au repos (méthode à part : poser reste assez court pour que le moteur
+  // JavaScript y garde ses petites fonctions en ligne, sans mettre de nombres en boîte)
+  vivre(p, conduite, immobile, pile) {
+    const o = this.o, r = Math.random, dt = this.F[0], t = this.F[1];
+    // parler (p.parle, vrai ou de 0 à 1 ; au bureau, poseClavier s'en charge) : la tête hoche et tourne, une main accompagne
+    const pa = p.parle === true ? 1 : +p.parle || 0;
+    // (sans appel inutile à kl : le nombre qu'elle rend serait mis en boîte, à chaque image)
+    if (pa || this.wParle) { this.wParle += (pa - this.wParle) * kl(dt, 4); if (!pa && this.wParle < 0.002) this.wParle = 0; }
+    const libres = !p.fume && !pile && !p.outil && this.wTel < 0.05 && this.wSalut < 0.05 && !p.service && !(p.verre > 0) && !p.appuis && !p.saisir && !(p.caresse && p.caresse.w > 0.01) && !p.jeu && !p.velo;
+    if (this.wParle > 0.01 && !(p.assis && p.clavier) && !conduite) {
+      const w = this.wParle;
+      o[OS.tete].rotation.x += w * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
+      o[OS.tete].rotation.y += w * 0.14 * Math.sin(t * 0.8 + this.resp);
+      o[OS.tete].rotation.z += w * 0.04 * Math.sin(t * 1.3);
+      if (libres) {
+        const yb = o[OS.bassin].position.y, gs = w * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2));
+        this.brasIK(0, 0.15 + 0.05 * Math.sin(t * 1.7), yb + 0.2 + 0.05 * Math.sin(t * 2.9), 0.26 + 0.03 * Math.sin(t * 2.3), 0.7, -0.5, -0.6, gs);
+        o[OS.mainG].rotation.x -= 0.6 * gs; o[OS.mainG].rotation.y += 0.9 * gs;
+      }
+    }
+    // Une attitude, à l'arrêt, de temps en temps (un adulte debout, les mains libres) : les mains jointes devant, dans le
+    // dos, les bras croisés (pas en manteau ni en doudoune), une main sur la hanche. Fondue en 0,6 s.
+    const tr = this.m.traits, debout = immobile && !p.assis && libres && !this.m.enfant && this.wParle < 0.05 && !(tr && tr.canne);
+    if ((this.tAtt -= dt) <= 0) {
+      this.tAtt = 6 + r() * 12;
+      const x = r(), epais = tr && (tr.tenue === 'manteau' || tr.tenue === 'doudoune');
+      this.att = x < 0.5 ? 0 : x < 0.65 ? 1 : x < 0.8 ? 2 : x < 0.9 && !epais ? 3 : 4;
+    }
+    const vAtt = debout && this.repos > 2 && this.att ? 1 : 0;
+    if (vAtt || this.wAtt) { this.wAtt += (vAtt - this.wAtt) * kl(dt, 3); if (!vAtt && this.wAtt < 0.002) this.wAtt = 0; }
+    if (this.wAtt > 0.01 && this.att && !p.assis && !p.jeu && !p.velo) {
+      const w = this.wAtt, yb = o[OS.bassin].position.y, dm = this.m.dim;
+      if (this.att === 1) { this.brasIK(0, 0.035, yb - 0.07, 0.15, 0.8, -0.3, 0.2, w); this.brasIK(3, -0.035, yb - 0.06, 0.16, -0.8, -0.3, 0.2, w); }
+      else if (this.att === 2) { this.brasIK(0, 0.05, yb + 0.03, -0.17, 1, -0.2, -0.6, w); this.brasIK(3, -0.05, yb + 0.05, -0.18, -1, -0.2, -0.6, w); }
+      else if (this.att === 3) { this.brasIK(0, -0.11, yb + 0.37, 0.17, 1, -0.4, 0.2, w); this.brasIK(3, 0.11, yb + 0.35, 0.2, -1, -0.4, 0.2, w); }
+      else this.brasIK(0, dm.xh + 0.12, yb + 0.08, 0.01, 1, -0.1, -0.4, w);
+    }
+  }
+
+  // Le clignement (perso.js : les paupières fermées, sur l'os de la mèche de qui n'a pas de queue de cheval ; l'œil ouvert,
+  // l'os les écrase dans le pli de la paupière et les recule) : toutes les 2 à 6,5 s, fermé en 80 ms, rouvert en 80 ms ;
+  // parfois deux fois de suite
+  cligner() {
+    const dt = this.F[0];
+    if ((this.tCligne -= dt) <= 0) { this.tCligne = Math.random() < 0.15 ? 0.3 : 2 + Math.random() * 4.5; this.cligne = 0.16; }
+    this.cligne = Math.max(0, this.cligne - dt);
+    const c = this.cligne > 0 ? Math.sin(PI * this.cligne / 0.16) : 0, b = this.o[OS.meche];
+    b.scale.y = 0.03 + 0.97 * c; b.position.z = this.m.mecheZ - 0.004 * (1 - c);
   }
 
   // Bras par cinématique inverse, mélangé à la pose déjà posée. c : 0 gauche, 3 droit ; cible et pôle dans le repère du personnage.
@@ -532,18 +594,64 @@ export class Anim {
     o[OS.tete].rotation.set(-0.02 + this.rp * 0.85, this.ry * 0.66, 0);
     this.reperes();
     for (let j = 0; j < 2; j++) { const sg = JAMBES[j][1]; this.jambe(JAMBES[j][0], sg, sg * (dm.xh + 0.04), yP, 0.42 + (sg * this.poids > 0 ? 0.06 : 0), 0, sg * 0.12, 0.6); }
-    // mains posées sur les cuisses ; au portable (p.clavier), un peu penché, les mains sur le clavier
-    if (p && p.clavier) {
-      o[OS.ventre].rotation.x += 0.12; o[OS.poitrine].rotation.x += 0.1; this.reperes();
-      const yC = (y0 + 0.82 - g.position.y) / s;
-      this.brasIK(0, 0.15, yC, 0.62, 0.7, -0.5, -0.6, 1);
-      this.brasIK(3, -0.15, yC, 0.62, -0.7, -0.5, -0.6, 1);
-      o[OS.mainG].rotation.set(0.25, 0, 0.2); o[OS.mainD].rotation.set(0.25, 0, -0.2);
-      return;
-    }
+    // mains posées sur les cuisses ; au bureau (p.clavier), au travail : poseClavier
+    if (p && p.clavier) { this.F[2] = (y0 + 0.82 - g.position.y) / s; this.F[3] = yB; this.poseClavier(p); return; }
     this.brasIK(0, dm.xh + 0.03, yB + 0.06, 0.24, 0.6, -0.4, -1, 1);
     this.brasIK(3, -dm.xh - 0.03, yB + 0.06, 0.24, -0.6, -0.4, -1, 1);
     o[OS.mainG].rotation.set(-0.5, 0, 0.3); o[OS.mainD].rotation.set(-0.5, 0, -0.3);
+  }
+
+  /* ---------------------------------------------------------------- au bureau (p.clavier : assis devant un clavier)
+     On travaille : on tape (penché vers l'écran, les mains qui sautillent sur les touches, par rafales), on prend la
+     souris (la main droite à droite du clavier, qui glisse), on lit (plus penché, les mains posées), on s'adosse un moment
+     (pas le héros, au portable : le joueur s'en sert). Un état tiré au hasard toutes les 3 à 11 s, les poses fondues l'une
+     dans l'autre. p.parle (vrai, ou de 0 à 1) : on parle au casque ou au téléphone, la tête hoche et tourne, la main
+     gauche fait des gestes, la droite reste sur la souris. Le clavier : à 0,82 m du sol, à p.clavierZ (m) devant soi (par
+     défaut : les poignets à 0,44 m, le clavier des postes de Solumatic à 0,5 m ; le portable du héros, plus loin). yC : sa hauteur, repère du personnage. */
+  poseClavier(p) {
+    const dt = this.F[0], t = this.F[1], yC = this.F[2], yB = this.F[3], s = this.m.echelle;
+    const o = this.o, dm = this.m.dim, heros = !!(this.m.traits && this.m.traits.heros), B = this.bur || (this.bur = new Float64Array(16));
+    const kz = p.clavierZ != null ? p.clavierZ / s : heros ? 0.62 : 0.46;
+    // B : [état, minuteur, poids de taper, de la souris, de lire, d'adossé, de parler, phase de la rafale, rafale]
+    if (dt === 0 || (B[1] -= dt) <= 0) {
+      const r = Math.random();
+      B[0] = r < 0.46 ? 0 : r < 0.72 ? 1 : r < 0.88 || heros ? 2 : 3; B[1] = 3 + Math.random() * 8;
+      if (dt === 0) for (let k = 2; k < 6; k++) B[k] = k - 2 === B[0] ? 1 : 0;
+    }
+    const pa = p.parle === true ? 1 : +p.parle || 0, kk = kl(dt, 3);
+    for (let k = 0; k < 4; k++) B[2 + k] += ((B[0] === k ? 1 : 0) - B[2 + k]) * kk;
+    B[6] += (pa - B[6]) * kl(dt, 4);
+    const wT = B[2], wS = B[3], wL = B[4], wA = B[5], wP = B[6];
+    // la rafale : on tape par à-coups (une enveloppe lente), chaque main à son rythme
+    B[7] += dt * (0.6 + 0.5 * Math.sin(t * 0.37 + this.resp));
+    const raf = wT * Math.max(0, Math.sin(B[7] * 2.1) * 1.3 - 0.2);
+    // le buste : penché vers l'écran pour taper, davantage pour lire, en arrière adossé
+    const pen = 0.12 * wT + 0.1 * wS + 0.2 * wL - 0.1 * wA, penP = 0.1 * wT + 0.08 * wS + 0.15 * wL - 0.12 * wA;
+    o[OS.ventre].rotation.x += pen; o[OS.poitrine].rotation.x += penP;
+    o[OS.tete].rotation.x += 0.06 * wL - 0.06 * wA - 0.6 * this.rp * (1 - wA); // (le regard reste sur l'écran)
+    o[OS.tete].rotation.y -= this.ry * 0.45 * (1 - wA);
+    if (wP > 0.01) {
+      // parler : la tête hoche et tourne un peu, le buste suit
+      o[OS.tete].rotation.x += wP * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
+      o[OS.tete].rotation.y += wP * 0.16 * Math.sin(t * 0.8 + this.resp);
+      o[OS.tete].rotation.z += wP * 0.05 * Math.sin(t * 1.3);
+      o[OS.poitrine].rotation.y += wP * 0.05 * Math.sin(t * 0.8 + this.resp);
+    }
+    this.reperes();
+    // la main droite : sur le clavier, ou sur la souris (aussi en parlant et adossé)
+    const surSouris = Math.min(1, wS + wA + wP);
+    const tapD = raf * 0.012 * Math.max(0, Math.sin(t * 19.3 + 1.1)), tapG = raf * 0.012 * Math.max(0, Math.sin(t * 17.1 + 2.7));
+    const xd = mix(-0.13 + 0.012 * Math.sin(t * 4.1) * wT, -0.33 + 0.02 * Math.sin(t * 1.3), surSouris);
+    const yd = mix(yC + tapD, yC - 0.015, surSouris), zd = mix(kz, kz - 0.03 + 0.015 * Math.sin(t * 1.7), surSouris);
+    this.brasIK(3, xd, yd, zd, -0.7, -0.5, -0.6, 1);
+    o[OS.mainD].rotation.set(0.25, 0, -0.2 + 0.15 * surSouris);
+    // la main gauche : sur le clavier ; posée sur la cuisse, adossé ; des gestes, en parlant (par moments)
+    const geste = wP * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2)), cuisse = wA * (1 - geste);
+    let xg = 0.13 + 0.012 * Math.sin(t * 3.7) * wT, yg = yC + tapG, zg = kz;
+    xg = mix(xg, dm.xh + 0.05, cuisse); yg = mix(yg, yB + 0.07, cuisse); zg = mix(zg, 0.3, cuisse);
+    xg = mix(xg, 0.12 + 0.05 * Math.sin(t * 1.7), geste); yg = mix(yg, yC + 0.12 + 0.05 * Math.sin(t * 2.9), geste); zg = mix(zg, kz - 0.14 + 0.03 * Math.sin(t * 2.3), geste);
+    this.brasIK(0, xg, yg, zg, 0.7, -0.5, -0.6, 1);
+    o[OS.mainG].rotation.set(mix(0.25, -0.5, cuisse) - 0.6 * geste, 0.9 * geste, mix(0.2, 0.3, cuisse) + 0.2 * geste);
   }
 
   /* ---------------------------------------------------------------- au volant (tracteur ou van) */
@@ -760,6 +868,61 @@ export class Anim {
       this.brasIK(c, v1.x, v1.y, v1.z, sg * 0.8, -0.6, -0.3, 1);
       this.mainVers(c, qTel, 1);
     }
+  }
+
+  /* ---------------------------------------------------------------- fumer (p.fume : debout, ou assis)
+     La cigarette (perso.js : cigarette, CIG) entre l'index et le majeur de la main droite ; le bras le long du corps ou le
+     coude plié (la cigarette à hauteur de poitrine), selon les gens ; l'autre main dans la poche, ou le bras croisé sous le
+     coude. Toutes les 8 à 15 s, une bouffée : la main monte, le filtre aux lèvres (la paume vers le visage), on tire, la
+     main redescend, on souffle la fumée la tête un peu relevée. Le transfert du poids, les coups d'œil : ceux du repos.
+     Rend, pour la fumée (particules.js) : p.bout, le bout allumé en coordonnées du monde, et p.bouffee, vrai à l'image où
+     la fumée sort de la bouche (p.bouche : où). */
+  poseFume(p, conduite) {
+    const dt = this.F[0], t = this.F[1];
+    const o = this.o, m = this.m, dm = m.dim, fume = !!p.fume && !conduite && !(p.assis && p.clavier) && !p.velo && !p.jeu;
+    this.wFume += ((fume ? 1 : 0) - this.wFume) * kl(dt, 4);
+    const cig = cigarette(m), w = this.wFume;
+    cig.visible = w > 0.3;
+    p.bouffee = false;
+    if (w <= 0.01) return;
+    // la bouffée : u de 0 à 3,6 s ; la prochaine dans 8 à 15 s
+    if (this.uFume < 0 && (this.tFume -= dt) <= 0 && fume) { this.uFume = 0; this.tFume = 8 + Math.random() * 7; }
+    const u0 = this.uFume;
+    if (this.uFume >= 0) { this.uFume += dt; if (this.uFume > 3.6) this.uFume = -1; }
+    const u = this.uFume, levee = u >= 0 ? entre(0, 0.85, u) * (1 - entre(1.7, 2.5, u)) : 0, souffle = u >= 0 ? entre(2.1, 2.5, u) * (1 - entre(3.0, 3.6, u)) : 0;
+    p.bouffee = fume && u0 >= 0 && u0 < 2.2 && u >= 2.2;
+    this.reperes();
+    const yb = o[OS.bassin].position.y, assis = p.assis;
+    // la bouche (repère du personnage) : de la tête (son échelle comprise), par la poitrine
+    const te = o[OS.tete], k = te.scale.x;
+    vBouche.set(0, 0.126 * k, 0.116 * k).applyQuaternion(te.quaternion).add(te.position).applyMatrix4(mP);
+    // au repos : la main droite le long du corps, ou le coude plié (assis : sur la cuisse, la cigarette levée)
+    const coude = assis || this.fRepos;
+    let x = assis ? -0.1 : -0.16, y = assis ? yb + 0.13 : yb + 0.2, z = assis ? 0.3 : 0.17;
+    const wr = coude ? w * (1 - levee) : 0;
+    if (wr > 0.01) this.brasIK(3, x, y, z, -0.8, -0.6, -0.2, wr);
+    if (coude) o[OS.mainD].rotation.set(-0.2, -0.3, -0.5);
+    // la bouffée : la paume vers le visage, les doigts vers le haut et vers l'autre épaule, le filtre aux lèvres
+    if (levee > 0.01) {
+      ex.set(0.3, 0, -1).normalize(); ey.set(-0.45, -0.85, -0.1); ey.addScaledVector(ex, -ey.dot(ex)).normalize(); ez.crossVectors(ex, ey);
+      qMain.setFromRotationMatrix(mR.makeBasis(ex, ey, ez));
+      v1.copy(vBouche).addScaledVector(ex, -CIG.filtre[0]).addScaledVector(ey, -CIG.filtre[1]).addScaledVector(ez, -CIG.filtre[2]);
+      const lx = v1.x, ly = v1.y, lz = v1.z, wl = w * levee;
+      this.brasIK(3, lx, ly, lz, -0.8, -0.7, -0.4, wl);
+      this.mainVers(3, qMain, wl);
+    }
+    // l'autre main : dans la poche, ou le bras croisé sous le coude (le coude plié, debout)
+    if (!assis) {
+      if (this.fAutre && coude) this.brasIK(0, -0.07, yb + 0.16, 0.15, 0.8, -0.6, 0.3, w * (1 - 0.6 * levee));
+      else this.brasIK(0, dm.xh + 0.1, yb - 0.05, 0.05, 0.8, -0.2, -0.3, w);
+    }
+    // souffler : la tête se relève un peu
+    te.rotation.x -= 0.16 * souffle * w; te.rotation.y += 0.1 * souffle * w;
+    // le bout allumé, en coordonnées du monde
+    if (!p.bout) p.bout = new THREE.Vector3();
+    cig.updateWorldMatrix(true, false);
+    p.bout.set(CIG.bout[0] - CIG.pos[0], CIG.bout[1] - CIG.pos[1], CIG.bout[2] - CIG.pos[2]).applyMatrix4(cig.matrixWorld);
+    if (p.bouffee) { if (!p.bouche) p.bouche = new THREE.Vector3(); p.bouche.copy(vBouche).applyMatrix4(m.maillage.matrixWorld); }
   }
 
   // Oriente la main (c : 0 gauche, 3 droite) selon q, exprimé dans le repère du personnage
