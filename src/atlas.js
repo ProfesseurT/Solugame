@@ -50,7 +50,7 @@ const vec4 ZONES[${ZONE.length}] = vec4[${ZONE.length}](${ZONE.map(z => `vec4(${
 export const FX = 0.1, FY = 0.14;
 // Contour de l'œil (en largeurs et hauteurs d'œil) : coin intérieur, paupière haute, coin extérieur, paupière basse.
 // Le même sert à la géométrie (perso.js) et au dessin, pour que le trait des cils suive le bord.
-export const OEIL = { w: 0.03, h: 0.012, haut: [[-1, 0], [-0.55, 0.44], [-0.05, 0.52], [0.45, 0.43], [1, 0.08]], bas: [[-1, 0], [-0.55, -0.3], [0, -0.38], [0.55, -0.3], [1, 0.08]], a: 1.04, b: 0.6 };
+export const OEIL = { w: 0.031, h: 0.0125, haut: [[-1, 0], [-0.55, 0.44], [-0.05, 0.52], [0.45, 0.43], [1, 0.08]], bas: [[-1, 0], [-0.55, -0.3], [0, -0.38], [0.55, -0.3], [1, 0.08]], a: 1.16, b: 0.66 };
 
 /* ---------------------------------------------------------------- bruits périodiques */
 
@@ -407,14 +407,18 @@ function visageCommun(buf) {
     for (let i = py * NV * 3; i < (py + 1) * NV * 3; i += 3) { buf[i] *= 1 - a * 0.2; buf[i + 1] *= 1 - a * 0.26; buf[i + 2] *= 1 - a * 0.26; }
   }
   for (const s of [1, -1]) tache(s * 0.085, 0.03, 0.02, 0.05, 0.92, 0.88, 0.88, 0.6);
+  // Les yeux : la géométrie porte le globe et les paupières (perso.js) ; ici, peints sur les paupières (même projection),
+  // l'ombre de l'orbite sous l'arcade, le coin intérieur, le pli de la paupière, le trait des cils (épais, étiré au coin
+  // extérieur), les cils du bas, le cerne
   for (const s of [1, -1]) {
     const x = s * 0.0315;
-    // orbite, coin intérieur, pli de la paupière, cerne, fond sombre derrière l'œil (s'il bâille un peu)
-    tache(x, 0.003, 0.025, 0.017, 0.86, 0.79, 0.8, 0.7);
-    tache(s * 0.012, 0.004, 0.008, 0.012, 0.88, 0.8, 0.8, 0.5);
-    trait([s * 0.016, 0.006, x, 0.0125, s * 0.048, 0.008], 0.0011, 0.7, 0.58, 0.56, 0.55);
-    trait([s * 0.018, -0.0045, x, -0.0085, s * 0.045, -0.002], 0.0016, 0.86, 0.77, 0.77, 0.4);
-    tache(x, 0.0005, 0.016, 0.0068, 0.4, 0.3, 0.28, 0.9);
+    tache(x, 0.0115, 0.027, 0.012, 0.86, 0.8, 0.8, 0.55);
+    tache(s * 0.0135, 0.003, 0.0065, 0.008, 0.82, 0.72, 0.72, 0.5);
+    trait(bordOeil2(s, OEIL.haut, 0.3, 0.13, -0.95, 1.12), 0.0016, 0.76, 0.66, 0.64, 0.55);
+    trait(bordOeil2(s, OEIL.bas, -0.3, -0.05, -0.75, 0.9), 0.0022, 0.88, 0.8, 0.8, 0.35);
+    trait(bordOeil2(s, OEIL.bas, -0.06, 0, -0.85, 1), 0.0007, 0.62, 0.52, 0.5, 0.55);
+    trait(bordOeil2(s, OEIL.haut, 0.07, 0, -1.02, 1.02), 0.0012, 0.22, 0.17, 0.15, 0.95);
+    trait([...bordOeil2(s, OEIL.haut, 0.08, 0, 0.15, 1.02), s * 0.0315 + s * 1.22 * OEIL.w / 2, 0.26 * OEIL.h], 0.0017, 0.2, 0.15, 0.13, 0.95);
     // sourcil : la géométrie le porte ; ici une ombre douce pour l'asseoir
     trait([s * 0.012, 0.019, s * 0.034, 0.027, s * 0.053, 0.019], 0.005, 0.88, 0.84, 0.84, 0.45);
   }
@@ -441,8 +445,8 @@ function visagePropre(buf, femme) {
     forme(LEVRE_H, 0.97, 0.8, 0.82, 1); forme(LEVRE_B, 0.97, 0.82, 0.84, 1);
     for (const s of [1, -1]) {
       tache(s * 0.046, -0.026, 0.022, 0.016, 1, 0.88, 0.87, 0.55);
-      tache(s * 0.033, 0.009, 0.015, 0.006, 0.9, 0.84, 0.86, 0.5);
-      trait([s * 0.016, 0.006, s * 0.0315, 0.0125, s * 0.048, 0.008], 0.0009, 0.72, 0.62, 0.6, 0.5);
+      tache(s * 0.033, 0.0095, 0.016, 0.0055, 0.9, 0.82, 0.86, 0.5);
+      trait([...bordOeil2(s, OEIL.haut, 0.08, 0, -0.6, 1.02), s * 0.0315 + s * 1.3 * OEIL.w / 2, 0.36 * OEIL.h], 0.0015, 0.5, 0.42, 0.42, 0.8);
     }
   } else for (const s of [1, -1]) {
     trait([s * 0.02, -0.042, s * 0.028, -0.056, s * 0.03, -0.073], 0.0026, 0.9, 0.83, 0.83, 0.35);
@@ -480,6 +484,12 @@ function bordOeil(pts, a) {
   for (let i = 1; i < pts.length; i++) if (a <= pts[i][0]) { const p = pts[i - 1], q = pts[i], t = (a - p[0]) / (q[0] - p[0]); return p[1] + (q[1] - p[1]) * t; }
   return pts[pts.length - 1][1];
 }
+// Ce bord, décalé (d, plus dc au milieu, en hauteurs d'œil), de a0 à a1, en mètres sur le visage (côté s) : une ligne brisée
+function bordOeil2(s, pts, d, dc, a0, a1) {
+  const q = [];
+  for (let i = 0; i <= 14; i++) { const a = a0 + (a1 - a0) * i / 14, b = Math.max(-1, Math.min(1, a)); q.push(s * 0.0315 + s * a * OEIL.w / 2, (bordOeil(pts, b) + d + dc * (1 - b * b)) * OEIL.h); }
+  return q;
+}
 // sens : +1 œil gauche du personnage (à droite sur l'image vue de face), -1 œil droit ; le reflet est du même côté pour les deux.
 // Texel visé = part teintée (iris, multiplicateur de la couleur du sommet) + part non teintée (blanc, pupille, cils, reflet).
 function peindreOeil(px, z, sens) {
@@ -516,48 +526,71 @@ function peindreOeil(px, z, sens) {
     }
   }
 }
-// Main (paume et doigts d'un seul tenant) : u autour (angle de la section, 8 côtés), v du poignet (0) au bout des doigts (1).
-// Côté dos (sin > 0) : jointures, rainures entre les doigts, ongles ; côté paume : plis, paume plus claire.
-// Ce qui ne dépend que de u (position autour) est calculé une fois par colonne.
+// Main (perso.js : main) : la paume en bas de la zone (v de 0, le poignet, à 0,5, les jointures ; u autour, 8 côtés), un
+// doigt en haut (v de 0,5, sa base, à 1, le bout ; u autour, 6 côtés) : tous les doigts la partagent. Le dos (sin > 0) :
+// tendons et jointures sur la paume ; plis des phalanges, ongles sur les doigts. Le dedans : plus clair, un peu rosé, les
+// plis de la paume (cœur, tête, vie), ceux des phalanges, la pulpe. Ce qui ne dépend que de u est calculé une fois par
+// colonne.
 const cloche = d => { const q = 1 - d * d; return q > 0 ? q * q : 0; };
 function peindreMain(px, z) {
-  const N = z.w, g = bruit(N, 16), DOIGTS = [0.72, 0.24, -0.24, -0.72], col = () => new Float32Array(N);
-  // par colonne (autour de la main) : côté dos ou paume, rainures, distance au doigt le plus proche
-  const dos = col(), zn = col(), rain = col(), paume = col(), cJ = col(), cJ2 = col(), cOng = col(), cBord = col();
+  const N = z.w, g = bruit(N, 16), col = () => new Float32Array(N);
+  const dosP = col(), zP = col(), dosD = col();
   for (let x = 0; x < N; x++) {
-    const a = Math.PI / 8 + 2 * Math.PI * (x + 0.5) / N, w = Math.cos(a);
-    let e = 9; for (const c of DOIGTS) e = Math.min(e, Math.abs(w - c));
-    dos[x] = Math.sin(a); zn[x] = w; paume[x] = entre(0.1, 0.6, -dos[x]);
-    rain[x] = Math.max(cloche((w - 0.48) / 0.08), cloche(w / 0.08), cloche((w + 0.48) / 0.08));
-    cJ[x] = 0.12 * cloche(e / 0.18); cJ2[x] = 0.08 * cloche(e / 0.15); cOng[x] = entre(0.15, 0.11, e) * entre(0.4, 0.6, dos[x]); cBord[x] = entre(0.11, 0.07, e);
+    const u = (x + 0.5) / N, a8 = Math.PI / 8 + 2 * Math.PI * u, a6 = Math.PI / 6 + 2 * Math.PI * u;
+    dosP[x] = Math.sin(a8); zP[x] = Math.cos(a8); dosD[x] = Math.sin(a6);
   }
   for (let y = 0; y < N; y++) {
-    const v = (y + 0.5) / N, doigts = 0.5 * entre(0.5, 0.58, v), ong = entre(0.86, 0.89, v), ongB = entre(0.89, 0.92, v);
-    const j1 = cloche((v - 0.5) / 0.03), j2 = cloche((v - 0.72) / 0.022), plis = (1 - 0.14 * cloche((v - 0.53) / 0.018)) * (1 - 0.1 * cloche((v - 0.7) / 0.015)) * (1 - 0.1 * cloche((v - 0.84) / 0.015));
+    const v = (y + 0.5) / N;
     for (let x = 0, i = y * N, d = ((z.y + y) * LA + z.x) * 4; x < N; x++, i++, d += 4) {
-      const m = 1 + 0.04 * (g[i] - 0.5), p = paume[x];
-      let r = m * (1 + 0.07 * p), gg = m * (1 + 0.01 * p), b = m * (1 - 0.01 * p), k = 1 - doigts * rain[x];
-      if (dos[x] > 0.3) {
-        // jointures, ongles
-        k *= (1 - cJ[x] * j1) * (1 - cJ2[x] * j2);
-        const o = cOng[x] * ong;
-        if (o > 0) { const bd = cBord[x] * ongB; r += o * (0.9 + 0.22 * bd - r); gg += o * (0.84 + 0.18 * bd - gg); b += o * (0.84 + 0.18 * bd - b); }
-      } else if (dos[x] < -0.3) {
-        // plis de la paume et des phalanges
-        const w = zn[x];
-        k *= plis * (1 - 0.12 * cloche((v - 0.36 - 0.06 * w) / 0.018) * entre(0.9, 0.5, w)) * (1 - 0.12 * cloche((v - 0.44 + 0.04 * w) / 0.018) * entre(-0.9, -0.3, w));
+      const m = 1 + 0.035 * (g[i] - 0.5);
+      let r = m, gg = m, b = m;
+      if (v < 0.5) {
+        // la paume : t de 0 (poignet) à 1 (jointures)
+        const t = v / 0.5, ds = dosP[x], w = zP[x], dedans = entre(0.0, -0.5, ds);
+        r *= 1 + 0.07 * dedans; gg *= 1 + 0.015 * dedans; b *= 1 - 0.01 * dedans;
+        if (ds > 0.2) {
+          // tendons vers chaque doigt, qui se rejoignent au poignet ; les jointures, en bosses claires
+          let k = 1;
+          for (const c of [0.66, 0.22, -0.22, -0.64]) { const cw = c * (0.45 + 0.55 * t); k -= 0.06 * cloche((w - cw) / 0.07) * entre(0.2, 0.7, t) * (1 - entre(0.86, 0.95, t)); k += 0.07 * cloche((w - c) / 0.12) * cloche((t - 0.95) / 0.08); }
+          r *= k; gg *= k; b *= k;
+        } else if (ds < -0.2) {
+          // les plis : cœur (sous les doigts), tête (en travers), vie (autour du pouce)
+          const l1 = cloche((t - 0.8 + 0.05 * w) / 0.025), l2 = cloche((t - 0.62 - 0.08 * w) / 0.025) * entre(-0.9, -0.2, w), l3 = cloche((w - 0.5 + 0.5 * (1 - t)) / 0.06) * entre(0.1, 0.4, t) * entre(0.95, 0.7, t);
+          const k = 1 - 0.14 * Math.max(l1 * entre(0.95, 0.4, w), l2, l3);
+          r *= k; gg *= k * 0.99; b *= k * 0.98;
+        }
+      } else {
+        // un doigt : f de 0 (base) à 1 (bout)
+        const f = (v - 0.5) / 0.5, ds = dosD[x], dedans = entre(0.0, -0.5, ds);
+        r *= 1 + 0.07 * dedans; gg *= 1 + 0.015 * dedans; b *= 1 - 0.01 * dedans;
+        if (ds > 0.25) {
+          const k = 1 - 0.1 * cloche((f - 0.36) / 0.035) - 0.08 * cloche((f - 0.68) / 0.03);
+          r *= k; gg *= k; b *= k;
+          // l'ongle : rosé, son bord libre plus clair, la lunule ; une ombre fine autour
+          const o = entre(0.5, 0.7, ds) * entre(0.76, 0.8, f);
+          if (o > 0) {
+            const bord = entre(0.95, 0.985, f), lun = cloche((f - 0.8) / 0.03);
+            r += o * (1.02 + 0.12 * bord + 0.04 * lun - r); gg += o * (0.9 + 0.16 * bord + 0.05 * lun - gg); b += o * (0.9 + 0.16 * bord + 0.05 * lun - b);
+          }
+          const tour = cloche((f - 0.765) / 0.012) * entre(0.45, 0.6, ds) + cloche((ds - 0.55) / 0.06) * entre(0.77, 0.82, f);
+          r *= 1 - 0.12 * tour; gg *= 1 - 0.14 * tour; b *= 1 - 0.14 * tour;
+        } else if (ds < -0.25) {
+          const k = 1 - 0.13 * Math.max(cloche((f - 0.03) / 0.03), cloche((f - 0.38) / 0.025), cloche((f - 0.7) / 0.025));
+          r *= k; gg *= k * 0.99; b *= k * 0.98;
+        }
+        if (f > 0.97) { const k = 1 - 0.1 * entre(0.97, 1, f); r *= k; gg *= k; b *= k; } // le bout, à l'ombre
       }
-      px[d] = NEUTRE * r * k; px[d + 1] = NEUTRE * gg * k; px[d + 2] = NEUTRE * b * k; px[d + 3] = 255;
+      px[d] = NEUTRE * r; px[d + 1] = NEUTRE * gg; px[d + 2] = NEUTRE * b; px[d + 3] = 255;
     }
   }
 }
-// Pouce : u autour (6 côtés), v de la base (0) au bout (1) ; ongle du côté de l'angle 0
+// Pouce : u autour (6 côtés ; le dos, l'ongle, du côté sin > 0), v de la base (0) au bout (1)
 function peindrePouce(px, z) {
   peindre(px, z, (u, v, o) => {
-    const a = Math.PI / 6 + 2 * Math.PI * u, f = Math.cos(a);
-    const ong = entre(0.55, 0.75, f) * entre(0.68, 0.74, v);
-    let k = 1 - 0.1 * Math.exp(-(((v - 0.5) / 0.03) ** 2));
-    o[0] = k * (1 + 0.1 * ong); o[1] = k * (1 + 0.02 * ong); o[2] = k * (1 + 0.02 * ong);
+    const ds = Math.sin(Math.PI / 6 + 2 * Math.PI * u), dedans = entre(0.0, -0.5, ds);
+    let k = 1 - (ds > 0.2 ? 0.1 * Math.exp(-(((v - 0.5) / 0.03) ** 2)) : 0.12 * Math.exp(-(((v - 0.48) / 0.025) ** 2)));
+    const ong = entre(0.45, 0.65, ds) * entre(0.7, 0.74, v), bord = entre(0.94, 0.98, v);
+    o[0] = k * (1 + 0.07 * dedans) * (1 + 0.06 * ong + 0.1 * ong * bord); o[1] = k * (1 + 0.015 * dedans) * (1 - 0.05 * ong + 0.12 * ong * bord); o[2] = k * (1 - 0.01 * dedans) * (1 - 0.05 * ong + 0.12 * ong * bord);
   });
 }
 // Poche plaquée : piqûres le long des bords, rabat en haut
