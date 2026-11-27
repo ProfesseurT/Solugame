@@ -39,12 +39,15 @@ const persos = () => ev(() => { const sc = CL.joueur.m.groupe.parent; return sc.
 console.log('personnages dans la scène :', await persos());
 const saut = await ev(async () => {
   const sc = CL.joueur.m.groupe.parent;
-  const gens = sc.children.filter(c => c.isGroup && c.children[0]?.isSkinnedMesh && c !== CL.joueur.m.groupe);
+  const gens = CL.passants().map(p => p.m.groupe); // (les passants seuls : les enfants de l'école sautent à la marelle)
   { const p = CL.vehicule('tracteur').p.pos; CL.teleporter(p.x + 2.2, p.z, 0); } CL.step(3); CL.agir(); CL.finirGeste();
-  let max = 0, vus = 0;
+  let max = 0, vus = 0, dmin = 99, vises = 0;
+  // (les passants marchent sur les dalles, quelques centimètres au-dessus du terrain : la hauteur d'un saut se compte
+  // depuis le sol sous eux, relief.js)
+  const haut = c => c.position.y - CL.relief.sol(c.position.x, c.position.z);
   // on vise trois passants l'un après l'autre : le tracteur part à 14 m et fonce droit sur eux
   for (let k = 0; k < 3; k++) {
-    const g = gens.filter(c => c.position.y === 0 && c.position.x > 80 && c.position.x < 110 && c.position.z > -58 && c.position.z < -34)[k];
+    const g = gens.filter(c => Math.abs(haut(c)) < 0.02 && c.position.x > 80 && c.position.x < 110 && c.position.z > -58 && c.position.z < -34)[k];
     if (!g) break;
     // approche sur une ligne libre (la fontaine est en (95 ; -46))
     const gx = g.position.x, gz = g.position.z;
@@ -54,12 +57,17 @@ const saut = await ev(async () => {
     // le tracteur accélère en douceur (conduite repensée le 22/11) : on le laisse arriver, jusqu'à 5 s, et on s'arrête
     // une fois le passant dépassé
     const x0 = CL.tr.pos.x, z0 = CL.tr.pos.z;
-    for (let i = 0; i < 300 && Math.hypot(CL.tr.pos.x - x0, CL.tr.pos.z - z0) < 17; i++) { CL.step(1); for (const c of gens) { if (c.position.y > 0.05) vus++; max = Math.max(max, c.position.y); } }
+    for (let i = 0; i < 300 && Math.hypot(CL.tr.pos.x - x0, CL.tr.pos.z - z0) < 17; i++) {
+      CL.step(1); for (const c of gens) { const y = haut(c); if (y > 0.05) vus++; max = Math.max(max, y); }
+      dmin = Math.min(dmin, Math.hypot(g.position.x - CL.tr.pos.x, g.position.z - CL.tr.pos.z)); vises++;
+    }
     CL.ctrl.ky = 0; CL.step(90);
   }
-  return { max, vus };
+  return { max, vus, dmin, vises };
 });
-ok(saut.max > 0.2, `un passant a sauté de côté (hauteur ${saut.max.toFixed(2)} m, ${saut.vus} images en l'air)`);
+// (depuis la conduite repensée, le passant s'enfuit en marchant dès que le tracteur approche, et ne saute qu'au dernier
+// moment : il s'écarte, d'un saut ou en s'enfuyant, sans jamais être touché)
+ok(saut.vises > 0 && (saut.max > 0.2 || saut.dmin > 1.2), `un passant s'est écarté du tracteur (saut : ${saut.max.toFixed(2)} m, ${saut.vus} images en l'air ; au plus près : ${saut.dmin.toFixed(2)} m)`);
 await ev(() => { CL.photo(92, 2.2, -38, 95, 1, -48); CL.step(2); });
 await capture('place-apres');
 

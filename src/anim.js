@@ -3,8 +3,10 @@
 // la longueur des jambes (foulee) : au sol pendant l'appui, le pied roule du talon à la pointe sans glisser ; le bassin
 // descend quand les deux pieds sont au sol et remonte au passage, d'après ce que les jambes atteignent (cinématique
 // inverse : pied jamais en l'air pendant l'appui). Au repos : respiration,
-// transfert de poids, coups d'œil, parfois un regard au téléphone. Regard vers un point, téléphone en main,
-// signe de la main, pose assise, mains sur le volant, saut de côté, recul contre un mur.
+// transfert de poids, coups d'œil, parfois un regard au téléphone, de temps en temps une attitude (les mains jointes,
+// dans le dos, les bras croisés, une main sur la hanche), le clignement des yeux. Regard vers un point, téléphone en main,
+// signe de la main, pose assise, au bureau (taper, la souris, lire, s'adosser : p.clavier), parler (p.parle), fumer
+// (p.fume), mains sur le volant, saut de côté, recul contre un mur.
 import * as THREE from 'three';
 import { OS, DIM, accessoires, cigarette, CIG } from './perso.js';
 import { angle, borne, entre, mix, lisse, amortir } from './outils.js';

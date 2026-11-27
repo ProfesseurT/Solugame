@@ -1,6 +1,9 @@
-// Les personnages : un seul maillage par personnage (peau rigide : chaque pièce suit un os avec un poids de 1),
-// donc un seul appel de dessin (plus un pour l'ombre). Visage, mains, cheveux, tenues de travail ou de ville.
-// L'animation (marche, course, repos, conduite, téléphone, salut) est dans anim.js.
+// Les personnages : un seul maillage par personnage (chaque pièce suit son os ; près d'une jointure, aussi l'os voisin :
+// liens), donc un seul appel de dessin (plus un pour l'ombre). Une tête sculptée (une grille serrée sur le visage, son
+// relief : reliefVisage), des yeux (globe, paupières, cils, le clignement), un nez, des oreilles, des mains à cinq doigts
+// (main), des cheveux qui ont du volume et dont la lisière se fond dans la peau, des mèches, des tenues de travail ou de
+// ville ; un casque-micro (o.casque), un badge (o.badge), une cigarette (cigarette). L'animation (marche, course, repos,
+// conduite, téléphone, salut, bureau, parler, fumer) est dans anim.js.
 //
 // Matière : une seule pour tous les personnages, avec une seule texture (l'atlas de atlas.js : visages, yeux, main,
 // toile, jean, maille, matelassé, cuir, cheveux...). Chaque pièce porte des coordonnées de texture calculées dans le
@@ -948,7 +951,9 @@ function oreille(s, c, rx, yb, zb, k) {
   return finir(g, c, Z.peau, uvBoite(g, Z.peau));
 }
 
-// Renvoie { groupe, maillage, os, dim, ... } : groupe est l'objet à ajouter à la scène (ou au tracteur).
+// Renvoie { groupe, maillage, os, dim, ... } : groupe est l'objet à ajouter à la scène (ou au tracteur). Options nouvelles
+// (27/11/2026) : casque (vrai, ou sa couleur : le casque-micro de bureau, par-dessus la coiffure), badge (vrai, ou la
+// couleur du cordon). Rend aussi paupieres (le clignement : pas de queue de cheval) et mecheZ (anim.js).
 export function perso(o0) {
   if (!MAT_PERSO.map) { MAT_PERSO.map = texturePersos(); MAT_PERSO.map.repeat.set(UVK, UVK); }
   const o = completer(o0);
