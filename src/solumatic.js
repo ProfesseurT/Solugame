@@ -47,15 +47,18 @@ export const PORTE_ATELIER = { z: Z(5.0), l: 2.0, h: 2.3 };
 export const PORTE_ATLAS = { x: X(18.55), l: 2.7, h: 2.3 };
 // la hauteur des fenêtres (appui, linteau), la même dehors (monde.js) et dedans
 export const FEN = { y0: 0.9, y1: 2.55 };
-// les deux vitrines de l'atelier, dans la devanture (rideaux métalliques levés le jour)
-export const VITRINES = [X(1.9), X(4.7)], VITRINE = { l: 1.8, y0: 0.45, y1: 2.4 };
-// les fenêtres des murs extérieurs : [mur, position le long, largeur] (sud et nord : x ; est et ouest : z)
+// plus de vitrines dans la devanture (Teddy, 27/11/2026 : « à droite du panneau, c'est aussi des fenêtres pas des portes
+// fenêtres ») : l'atelier, devenu un plateau téléphonique, a ses fenêtres comme les autres (VITRINE reste pour mémoire)
+export const VITRINES = [], VITRINE = { l: 1.8, y0: 0.45, y1: 2.4 };
+// les fenêtres des murs extérieurs : [mur, position le long, largeur] (sud et nord : x ; est et ouest : z). Au sud, la
+// devanture : juste après la baie d'Atlas, une suite régulière (2,2 m d'axe en axe, sauf aux cloisons), celles de Soleil
+// sous la bâche, puis celles du plateau téléphonique. Toutes à 25 cm au moins des cloisons qui touchent le mur.
 export const FENETRES = [
-  ['s', X(7.68), 1.85], ['s', X(10.68), 1.85], ['s', X(16.57), 1.15],
-  ['e', Z(11.2), 1.6], ['e', Z(14.22), 1.85], ['e', Z(17.05), 1.8], ['e', Z(19.67), 1.95], ['e', Z(22.75), 2.0],
-  ['n', X(4.98), 1.95], ['n', X(7.92), 1.95], ['n', X(10.9), 2.0], ['n', X(13.85), 1.9],
-  ['o', Z(4.8), 2.0], ['o', Z(7.08), 2.05], ['o', Z(10.6), 2.7], ['o', Z(13.4), 2.5], ['o', Z(16.45), 3.0], ['o', Z(19.08), 1.75],
-  ['o', Z(21.88), 2.75], ['o', Z(24.5), 1.9],
+  ...[16.35, 14.65, 12.6, 10.9, 9.2, 7.5, 5.0, 3.3, 1.6].map(u => ['s', X(u), 1.6]),
+  ['e', Z(11.2), 2.0], ['e', Z(14.22), 2.0], ['e', Z(17.05), 2.0], ['e', Z(19.67), 2.0], ['e', Z(22.75), 2.0],
+  ['n', X(4.98), 2.0], ['n', X(7.92), 2.0], ['n', X(10.9), 2.0], ['n', X(13.85), 2.0],
+  ['o', Z(4.8), 2.0], ['o', Z(7.08), 2.0], ['o', Z(10.6), 2.0], ['o', Z(13.4), 2.0], ['o', Z(16.45), 2.0], ['o', Z(19.08), 2.0],
+  ['o', Z(21.88), 2.0], ['o', Z(24.5), 2.0],
 ];
 
 /* Les cloisons du plan, en mètres (axes) : ['u', u, v0, v1, portes] (le long de v) ou ['v', v, u0, u1, portes] (le long
