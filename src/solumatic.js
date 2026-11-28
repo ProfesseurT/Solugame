@@ -1392,8 +1392,9 @@ export class Solumatic {
      chaque écran de bureau va au poste qu'il regarde. */
   eteints() {
     const it = this.c.monde.interieurSolu, ecr = it.children.find(o => o.name === 'écrans Solumatic'), aff = it.children.find(o => o.name === 'affiches Solumatic');
-    // (les matières éclairées dedans prennent l'interrupteur des lampes ; les autres le liraient à zéro)
-    for (const m of [aff && aff.material, this.balle.material, this.aig.material]) if (m) { m.onBeforeCompile = sh => { sh.uniforms.uLampes = UNI.uLampes; }; m.needsUpdate = true; }
+    // (les matières éclairées dedans prennent l'interrupteur des lampes ; les autres le liraient à zéro. La clé du programme
+    // est fixe : sinon three.js prend le texte de la fonction, qui change d'une construction à l'autre)
+    for (const m of [aff && aff.material, this.balle.material, this.aig.material]) if (m) { m.onBeforeCompile = sh => { sh.uniforms.uLampes = UNI.uLampes; }; m.customProgramCacheKey = () => 'lampes'; m.needsUpdate = true; }
     this.lum = 1; this.ecransDe = {}; this.voileOk = false;
     if (!ecr) return;
     const P = ecr.geometry.attributes.position.array, U = ecr.geometry.attributes.uv.array, nq = P.length / 12, postes = Object.entries(VIE.postes).map(([id, q]) => ({ id, x: q.x + Math.sin(q.h) * 0.75, z: q.z + Math.cos(q.h) * 0.75, px: q.x, pz: q.z }));
