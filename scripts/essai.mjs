@@ -2586,6 +2586,216 @@ if (scenario === 'ordinateur') {
   await capture('ordi-bureau');
 }
 
+if (scenario === 'visiteurs') {
+  // Les visiteurs des portes ouvertes (mission 4, portes.js), sans le reste de la mission : la cour telle qu'elle est (le
+  // décor de l'événement est posé par la mission). Avant 10 h personne ; les portes ouvertes, la cour se remplit (une
+  // vingtaine au plus, des voitures garées sur le parking, des enfants, des apparences variées) ; personne dans un mur ni
+  // sous un véhicule ; la caisse : les dix clients dans l'ordre, chacun repart avec ses achats ; la relève, chez Marc ;
+  // cinq invités servis au bar (leur réplique) ; un tracteur qui fonce dans la cour (ils s'écartent) ; fermer, ils
+  // repartent tous ; la nuit, personne ; ce que ça coûte.
+  const PO = await ev(() => {
+    // (la base commune, 5fa68dd : monde.js pose lieux.portes puis le remplace par les portes des boutiques ; tant que la
+    // mission ne l'a pas renommé, l'implantation est remise ici sous un autre nom, portes.js la trouve)
+    const L = CL.monde.lieux;
+    if (!(L.portes && L.portes.caisse)) L.portesOuvertes = {
+      caisse: { x: -80.4, z: -57.2, h: Math.PI / 2, vendeur: { x: -79.5, z: -57.2, h: -Math.PI / 2 }, file: [[-81.6, -57.2], [-82.6, -57.3], [-83.6, -57.5], [-84.6, -57.8], [-85.6, -58.2], [-86.6, -58.6]] },
+      bar: { x: -92.6, z: -51.4, h: 0, places: [[-91.2, -50.2], [-91.0, -52.6], [-92.6, -53.4], [-94.2, -52.8], [-94.4, -50.0], [-92.8, -49.4]] },
+      buffet: { x: -97.0, z: -40.6, h: 0, places: [[-95.6, -41.8], [-97.0, -42.0], [-98.4, -41.8]] },
+      sono: { x: -104.6, z: -41.2, h: Math.PI / 4 }, entree: { x: -90.6, z: -35.2 },
+      parking: [[-94.4, -26.5, 0], [-94.4, -20.5, 0], [-94.4, -14.5, 0], [-86.8, -26.5, Math.PI], [-86.8, -20.5, Math.PI], [-86.8, -14.5, Math.PI], [-112.4, -52.0, -Math.PI / 2]],
+      mairie: { x: 95, z: -77, h: Math.PI }, traiteur: 'clemence',
+    };
+    return !(L.portes && L.portes.caisse);
+  });
+  if (PO) console.log('note : lieux.portes (monde.js) est remplacé par les portes des boutiques ; implantation remise sous lieux.portesOuvertes pour l\'essai');
+  // (window.VI : quelques mesures partagées entre les étapes)
+  const r1 = await ev(() => {
+    const log = [], V = CL.visiteurs, J = CL.jeu, col = CL.col;
+    // personne dans un mur (le centre, à 70 % de son rayon d'une boîte du décor), personne sous un véhicule (son emprise)
+    window.VI = {
+      mur() { let n = 0; for (const v of V.gens) if (v.present && v.p.sautT <= 0) { const q = { x: v.p.pos.x, z: v.p.pos.z }; col.resoudre(q, v.r * 0.7); if (Math.hypot(q.x - v.p.pos.x, q.z - v.p.pos.z) > 0.01) n++; } return n; },
+      sous() {
+        let n = 0;
+        for (const ve of J.vehicules) {
+          const h = ve.p.h, c = Math.cos(h), s = Math.sin(h);
+          for (const v of V.gens) if (v.present) {
+            const dx = v.p.pos.x - ve.p.pos.x, dz = v.p.pos.z - ve.p.pos.z, x = dx * c - dz * s, z = dx * s + dz * c;
+            for (const [x0, x1, z0, z1] of ve.m.dims.emprise) if (x > x0 && x < x1 && z > z0 && z < z1) n++;
+          }
+        }
+        return n;
+      },
+      // tant de secondes de jeu, en comptant les visiteurs dans un mur ou sous un véhicule
+      // (tMax : l'image de jeu la plus longue, sans le rendu)
+      jouer(s) {
+        let m = 0, so = 0;
+        for (let i = 0; i < 60 * s; i++) { const a = performance.now(); CL.step(1); this.tMax = Math.max(this.tMax || 0, performance.now() - a); if (i % 10 === 0) { m = Math.max(m, this.mur()); so = Math.max(so, this.sous()); } }
+        this.m = Math.max(this.m || 0, m); this.so = Math.max(this.so || 0, so);
+      },
+    };
+    CL.jouer(); CL.step(30);
+    J.minutes = 4 * 1440 + 9 * 60 + 40; CL.step(2); // (samedi 12 décembre, 9 h 40)
+    CL.teleporter(-86, -47, -Math.PI / 2); CL.step(10);
+    // ce que coûte une image dans la cour, sans visiteurs (au palier haut, au palier faible ; jeu : la part du processeur
+    // pour le jeu, sans le rendu)
+    VI.mesurer = () => { const o = {}; for (const q of ['haut', 'faible']) { CL.palier(q); CL.step(30); CL.bench(30); o[q] = CL.bench(150) + ', jeu ' + CL.profil(120).jeu + ' ms'; } return o; };
+    VI.sans = VI.mesurer();
+    // (le décor de l'événement, posé par la mission : s'il n'est pas là, des boîtes à sa place, pour vérifier qu'on ne
+    // traverse pas les tables : le bar, le buffet, la table de la caisse, la sono)
+    const PL = (() => { const L = CL.monde.lieux; return L.portes && L.portes.caisse ? L.portes : L.portesOuvertes; })();
+    const q = { x: PL.bar.x, z: PL.bar.z };
+    if (!col.resoudre(q, 0.05)) {
+      col.boiteC(PL.bar.x, PL.bar.z, 1.6, 1.0); col.boiteC(PL.buffet.x, PL.buffet.z, 2.6, 0.9);
+      col.boiteC(PL.caisse.x, PL.caisse.z, 0.7, 1.3); col.boiteC(PL.sono.x, PL.sono.z, 0.9, 0.9);
+      log.push(['(le décor de l\'événement absent : quatre boîtes à la place du bar, du buffet, de la caisse et de la sono)', true]);
+    }
+    V.ouvrir(); VI.jouer(10);
+    log.push(['portes ouvertes à 9 h 40 : personne avant 10 h', V.actif && V.presents === 0]);
+    J.minutes = 4 * 1440 + 10 * 60; CL.step(2);
+    let pic = 0, enfants = 0; const voitures = new Set(), vus = new Set();
+    for (let k = 0; k < 9; k++) { VI.jouer(5); pic = Math.max(pic, V.presents); enfants = Math.max(enfants, V.gens.filter(v => v.present && v.enfant).length); for (const p of V.places) if (p.m?.visible) voitures.add(p.k); for (const v of V.gens) if (v.present) vus.add(v); }
+    const okBoites = V.places.every(p => p.boite.fantome === !p.m?.visible);
+    log.push([`10 h : la cour se remplit, ${V.presents} visiteurs au bout de 45 s (au plus ${pic}), ${enfants} enfants, ${voitures.size} voitures garées sur le parking (leur boîte de collision avec elles)`, V.presents >= 12 && pic <= 22 && enfants >= 1 && voitures.size >= 1 && okBoites]);
+    const A = [...vus].map(v => v.ap), teints = new Set(A.map(a => a.teint)), coif = new Set(A.map(a => a.coiffure)), ages = new Set(A.map(a => a.age)), f = A.filter(a => a.femme).length;
+    log.push([`des visiteurs variés : ${A.length} vus, ${teints.size} teints, ${coif.size} coiffures, âges ${[...ages].join(', ')}, ${f} femmes`, teints.size >= 6 && coif.size >= 5 && ages.size >= 3 && f >= 3 && A.length - f >= 3]);
+    log.push([`ils vont au bar (${V.bar.filter(s => s.pris).length} places prises), au buffet, au chêne, flânent`, V.groupes.some(g => g.act === 'bar') && V.groupes.some(g => g.act && g.act !== 'bar')]);
+    log.push(['personne dans un mur, personne sous un véhicule', VI.m === 0 && VI.so === 0]);
+    log.push([`l'image de jeu la plus longue pendant que la cour se remplit (créations en étapes, arrivées, champs de distance ; sans le rendu) : ${VI.tMax.toFixed(1)} ms`, true]);
+    CL.teleporter(-86, -47, -Math.PI / 2); VI.jouer(1);
+    const avec = VI.mesurer(), n = V.presents;
+    log.push([`ce que ça coûte, au même endroit de la cour : sans visiteurs, haut ${VI.sans.haut} ; faible ${VI.sans.faible}`, true]);
+    log.push([`avec ${n} visiteurs : haut ${avec.haut} ; faible ${avec.faible}`, true]);
+    CL.palier('haut');
+    return log;
+  });
+  for (const [msg, c] of r1) ok(c, msg);
+  await ev(() => { CL.photo(-80, 17, -25, -96, 0, -47); CL.step(3); });
+  await capture('portes-cour');
+  await ev(() => { CL.photo(-83, 4.5, -10, -91, 0.5, -24); CL.step(3); });
+  await capture('portes-parking');
+  await ev(() => { CL.photo(-88.4, 2.6, -47.6, -93.5, 0.9, -52.2); CL.step(3); });
+  await capture('portes-bar');
+  // la caisse : les dix clients dans l'ordre ; chacun repart avec ses achats (la file capturée au troisième)
+  const caisse = (k0, k1) => ev((k0, k1) => {
+    const log = [], V = CL.visiteurs, P = V.clients.map(g => g.def);
+    CL.photo(-89.5, 3.2, -52.5, -82.5, 0.9, -57.8); CL.step(2);
+    if (!k0) { V.ouvrirCaisse(); VI.ordre = []; VI.attentes = []; VI.emporte = []; }
+    const { ordre, attentes, emporte } = VI;
+    for (let k = k0; k < k1; k++) {
+      let t = 0;
+      while (!V.comptoir && t < 90 * 60) { CL.step(1); t++; }
+      attentes.push(+(t / 60).toFixed(1));
+      if (!V.comptoir) {
+        // (ce qui bloque : la file, le client attendu)
+        const g = V.clients[V.iCaisse], f = v => `${v.g.def ? v.g.def.id : 'v' + v.i} ${v.etat} (${v.p.pos.x.toFixed(1)}, ${v.p.pos.z.toFixed(1)}) vers (${v.tx.toFixed(1)}, ${v.tz.toFixed(1)})`;
+        log.push([`bloqué au client ${V.iCaisse} (${g.def.id}, ${g.etat}, prochain ${V.prochain}) ; file : ${V.file.map(f).join(' ; ')} ; lui : ${g.membres.map(f).join(' ; ')}`, false]);
+        break;
+      }
+      if (k === 2) window.VI.fileVue = V.file.length;
+      ordre.push(V.comptoir.def.id);
+      const v = V.comptoir;
+      VI.jouer(1.5);
+      V.servi({});
+      CL.step(2);
+      emporte.push(!!(v.accessoire?.visible || (v.pile?.visible && v.p.porte)));
+    }
+    if (k1 < 10) { VI.jouer(4); return log; }
+    const bon = ordre.join(',') === P.map(d => d.id).join(',');
+    log.push([`les dix clients au comptoir, dans l'ordre de PORTES.clients (${ordre.join(', ')}) ; attente avant chacun : ${attentes.join(', ')} s`, bon && Math.max(...attentes) < 45]);
+    log.push([`chacun repart avec ses achats (sac, coffret ou cartons) : ${emporte.filter(Boolean).length} sur 10`, emporte.every(Boolean)]);
+    log.push(['la file se forme (' + (VI.fileVue || 0) + ' personnes derrière le comptoir au troisième client)', (VI.fileVue || 0) >= 2]);
+    log.push(['après le dixième : plus personne au comptoir', !V.comptoir && V.iCaisse === 10]);
+    return log;
+  }, k0, k1);
+  // (le premier client arrivé au comptoir : il dit bonjour)
+  const bonjour = await ev(() => {
+    const V = CL.visiteurs;
+    CL.photo(-85.5, 2.4, -54.5, -81.2, 1.2, -57.4); CL.step(2);
+    V.ouvrirCaisse();
+    for (let t = 0; t < 90 * 60 && !V.comptoir; t++) CL.step(1);
+    CL.step(10);
+    return [...document.querySelectorAll('.etiquette.bulle')].filter(e => !e.hidden).map(e => e.textContent).join(' | ');
+  });
+  ok(bonjour.includes('Bonjour'), `le premier client au comptoir dit bonjour (« ${bonjour} »)`);
+  await capture('portes-comptoir');
+  for (const [msg, c] of await caisse(0, 2)) ok(c, msg);
+  await capture('portes-file');
+  for (const [msg, c] of await caisse(2, 10)) ok(c, msg);
+  // une capture de la file pendant qu'elle est là : on la reforme avec la relève (chez Marc)
+  const r3 = await ev(() => {
+    const log = [], V = CL.visiteurs;
+    V.releve();
+    let file = 0;
+    for (let i = 0; i < 240 && V.nMarc < 2; i++) { VI.jouer(1); file = Math.max(file, V.file.length); }
+    log.push([`après la relève, des visiteurs passent chez Marc, attendent et repartent servis (${V.nMarc} servis, file de ${file} au plus)`, V.marc && V.nMarc >= 2 && V.nServis === 0]);
+    return log;
+  });
+  for (const [msg, c] of r3) ok(c, msg);
+  // la dégustation : cinq invités servis au bar (verres.js), chacun sa réplique
+  const r4 = await ev(() => {
+    const log = [], V = CL.visiteurs, J = CL.jeu, TX = new Set(), bulles = [];
+    J.portes.etape = 'degustation';
+    CL.photo();
+    const L = V.L.bar;
+    CL.teleporter(L.x - 3, L.z + 3, Math.PI); CL.step(30);
+    let essais = 0;
+    while (V.nServis < 5 && essais < 40) {
+      essais++;
+      // un invité au bar qu'on peut servir (pas un enfant)
+      let cible = null;
+      for (const v of V.gens) if (v.present && v.p.servable && !v.enfant) { cible = v; break; }
+      if (!cible) { VI.jouer(2); continue; }
+      const p = cible.p, a = Math.atan2(p.pos.x - L.x, p.pos.z - L.z);
+      CL.teleporter(p.pos.x + Math.sin(a) * 1.1, p.pos.z + Math.cos(a) * 1.1, a + Math.PI); CL.step(3);
+      const n0 = V.nServis;
+      CL.agir();
+      for (let i = 0; i < 400 && (J.joueur.service || p.verre > 0); i++) { CL.step(1); for (const e of document.querySelectorAll('.etiquette.bulle')) if (!e.hidden && e.textContent) TX.add(e.textContent); }
+      if (V.nServis > n0) bulles.push(cible.enfant);
+    }
+    const repliques = [...TX];
+    log.push([`cinq invités servis au bar de dégustation (${V.nServis}) ; jamais un enfant ; leurs répliques : « ${repliques.slice(0, 4).join(' » « ')} »`, V.nServis === 5 && bulles.every(e => !e) && repliques.length >= 2]);
+    log.push(['le personnage ne boit jamais (le verre est chez l\'invité)', !J.joueur.verre]);
+    return log;
+  });
+  for (const [msg, c] of r4) ok(c, msg);
+  // un tracteur qui fonce dans la cour pleine : ils s'écartent, personne sous ses roues
+  const r5 = await ev(() => {
+    const log = [], V = CL.visiteurs, J = CL.jeu;
+    const t = CL.vehicule('tracteur').p.pos; CL.teleporter(t.x + 2.2, t.z, 0); CL.step(3); CL.agir(); CL.finirGeste();
+    VI.m = 0; VI.so = 0;
+    let sauts = 0;
+    for (const [x, z, h] of [[-90, -37, Math.PI], [-86, -40, -2.6], [-99, -38.5, Math.PI * 0.95]]) {
+      CL.teleporter(x, z, h); CL.step(2); CL.ctrl.ky = -1;
+      for (let i = 0; i < 200; i++) { CL.step(1); if (i % 4 === 0) { VI.so = Math.max(VI.so, VI.sous()); sauts += V.gens.filter(v => v.present && v.p.sautT > 0).length ? 1 : 0; } }
+      CL.ctrl.ky = 0; CL.step(40);
+    }
+    log.push([`en tracteur, à fond dans la cour pleine (trois passages) : ${sauts > 0 ? 'ils sautent de côté' : 'personne sur le chemin'}, personne sous ses roues`, J.auVolant && VI.so === 0]);
+    CL.agir(); CL.finirGeste();
+    return log;
+  });
+  for (const [msg, c] of r5) ok(c, msg);
+  // fermer : ils repartent tous ; la nuit, personne
+  const r6 = await ev(() => {
+    const log = [], V = CL.visiteurs, J = CL.jeu;
+    CL.teleporter(-86, -47, -Math.PI / 2); CL.step(30);
+    // fermer : ils repartent tous (hors de la vue, ils disparaissent avec leur voiture)
+    V.fermer();
+    CL.photo(-60, 30, 40, -40, 0, 80); // (la caméra regarde ailleurs)
+    for (let i = 0; i < 150 && V.presents > 0; i++) CL.step(60);
+    const reste = V.presents, voit = V.places.filter(p => p.m?.visible || !p.boite.fantome).length;
+    log.push([`fermer : ils repartent tous (${reste} encore là), les voitures avec eux (${voit})`, reste === 0 && voit === 0 && !V.actif]);
+    CL.photo(); CL.teleporter(-86, -47, -Math.PI / 2); CL.step(30);
+    // la nuit : personne (même portes ouvertes)
+    V.ouvrir(); J.minutes = 4 * 1440 + 15 * 60; CL.step(2); for (let i = 0; i < 20; i++) CL.step(60);
+    const jour = V.presents;
+    J.minutes = 4 * 1440 + 21 * 60; CL.step(3);
+    log.push([`ouvertes à 15 h (${jour} visiteurs), la nuit à 21 h : personne`, jour > 0 && V.presents === 0 && V.places.every(p => !p.m?.visible)]);
+    V.fermer();
+    return log;
+  });
+  for (const [msg, c] of r6) ok(c, msg);
+}
+
 if (scenario === 'ecole') {
   // L'école des Tilleuls et ses enfants (ecole.js) : l'école existe ; on n'y entre jamais (à pied, en tracteur, en mode
   // WTF) ; la récréation (des enfants qui jouent, qui bougent : balançoires, toboggan, corde, ronde, ballon) ; personne dans
