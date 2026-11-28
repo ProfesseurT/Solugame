@@ -4,7 +4,8 @@
 //     (390 x 844), le clavier, la nuit et le matin (1280 x 800), la route du château et la glisse (900 x 600), la diversité
 //     des personnages, le chien du domaine, les vélos et les cyclistes, l'école et ses enfants (1280 x 800), la mission 2,
 //     la mission 3, la sauvegarde, la nuit et les professionnels fermés, les restaurateurs du coin (390 x 844), les abords
-//     et l'intérieur de Solumatic, le vélo du joueur, Viticode et le registre sur l'ordinateur (1280 x 800), en même temps ;
+//     et l'intérieur de Solumatic, le vélo du joueur, Viticode et le registre sur l'ordinateur, la mission 4 (1280 x 800),
+//     en même temps ;
 //  3. regarde git : index.html doit aller avec src/ dans le même commit.
 // Code 1 si le build ou un parcours échoue, ou si le dernier commit a un index.html en retard sur src/.
 import { spawn, execFileSync } from 'node:child_process';
@@ -58,6 +59,9 @@ const parcours = await Promise.all([
   lancer(['scripts/essai.mjs', 'solumatic', '1280x800', 'solumatic']).then(r => ({ ...r, nom: 'Solumatic dedans (l\'équipe, ses horaires, la nuit)' })),
   lancer(['scripts/essai.mjs', 'velo', '1280x800', 'velo']).then(r => ({ ...r, nom: 'À vélo (prendre, rouler, descendre, emprunter ; un vélo tombé se pousse)' })),
   lancer(['scripts/essai.mjs', 'ordinateur', '1280x800', 'ordinateur']).then(r => ({ ...r, nom: 'l\'ordinateur du bureau du chai (Viticode et le registre, dans les trois missions)' })),
+  lancer(['scripts/essai.mjs', 'portes', '1280x800', 'portes']).then(r => ({ ...r, nom: 'mission 4, les portes ouvertes (de bout en bout)' })),
+  lancer(['scripts/essai.mjs', 'portesordi', '1280x800', 'portesordi']).then(r => ({ ...r, nom: 'mission 4 : l\'ordinateur (Vitisoft, Brevo, le courrier, la caisse, les statistiques)' })),
+  lancer(['scripts/essai.mjs', 'visiteurs', '1280x800', 'visiteurs']).then(r => ({ ...r, nom: 'mission 4 : les visiteurs (la cour, la file de la caisse, la dégustation)' })),
 ]);
 for (const r of parcours) {
   if (r.code !== 0 || !r.sortie.includes('Aucune erreur.')) echec(r.nom, r.sortie);

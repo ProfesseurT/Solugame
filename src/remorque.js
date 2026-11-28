@@ -99,7 +99,7 @@ export const MATERIEL = { n: 4, z: [-2.3, -1.35, -0.3, 1.3], sol: [1.2, 0.35, -0
 const BOIS_M = '#9a7b55', BANC_M = '#8d7c66', FER_M = '#3b3d44';
 function pieceMateriel(k) {
   const L = [];
-  if (k < 2) for (let i = 0; i < 3; i++) { // trois tables pliantes l'une sur l'autre
+  if (k < 2) for (let i = 0; i < 5; i++) { // cinq tables pliantes l'une sur l'autre (une pile qui se voit de loin)
     const y = i * 0.065;
     L.push(bois(B(1.8, 0.04, 0.75, BOIS_M, 0, y + 0.02, 0), BOIS_M));
     for (const sz of [-0.27, 0.27]) L.push(B(1.56, 0.02, 0.03, FER_M, 0, y + 0.05, sz));
@@ -108,7 +108,8 @@ function pieceMateriel(k) {
     const y = Math.floor(i / 2) * 0.075, z = i % 2 ? 0.18 : -0.18;
     L.push(bois(B(1.8, 0.045, 0.3, BANC_M, 0, y + 0.0225, z), BANC_M), B(1.4, 0.02, 0.03, FER_M, 0, y + 0.055, z));
   } else { // la sono
-    for (const sx of [-0.55, 0.55]) L.push(B(0.36, 0.58, 0.32, '#1e1e22', sx, 0.29, 0), C(0.12, 0.12, 0.012, 12, FER_M, sx, 0.22, 0.162, 'z'));
+    // deux enceintes debout : la grille grise devant, le haut-parleur et le tweeter, la poignée dessus
+    for (const sx of [-0.55, 0.55]) L.push(B(0.4, 0.76, 0.34, '#1e1e22', sx, 0.38, 0), B(0.34, 0.66, 0.012, '#5a5d64', sx, 0.39, 0.176), C(0.13, 0.13, 0.014, 12, '#2a2b30', sx, 0.3, 0.186, 'z'), C(0.05, 0.05, 0.014, 8, '#2a2b30', sx, 0.6, 0.186, 'z'), B(0.16, 0.03, 0.05, FER_M, sx, 0.775, 0));
     L.push(B(0.56, 0.32, 0.42, '#2b2d33', 0, 0.16, 0.05), B(0.58, 0.03, 0.44, '#9a9da3', 0, 0.335, 0.05)); // la caisse de la table de mixage
     for (const sz of [-0.3, -0.36]) L.push(C(0.03, 0.03, 1.2, 6, FER_M, 0, 0.03, sz, 'x')); // les pieds des enceintes, repliés
     L.push(C(0.13, 0.13, 0.12, 10, '#c0392b', 0.95, 0.13, 0.05, 'z'), C(0.06, 0.06, 0.13, 8, '#1e1e22', 0.95, 0.13, 0.05, 'z')); // l'enrouleur de câble

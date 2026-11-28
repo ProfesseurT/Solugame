@@ -52,6 +52,10 @@
 //             nuit)
 //   velo      le vélo du joueur : prendre un vélo garé, le chèque à vélo, pédaler, tourner, freiner, descendre, le reprendre,
 //             un vélo couché poussé par le van, la conduite assistée pas bloquée, emprunter le vélo d'un cycliste, la nuit
+//   portes    la mission 4 de bout en bout : les invitations, la semaine, la veille (tracteur, mairie, installation), le
+//             traiteur, le portable, la caisse avec les visiteurs, Marc, la dégustation, la carte de fin, le supplément
+//   portesordi les écrans de l'ordinateur de la mission 4 : ciblage guidé, Brevo, courrier, relances, caisse, statistiques
+//   visiteurs les visiteurs des portes ouvertes : la cour, la file de la caisse, la dégustation, la fermeture
 //   ordinateur Viticode et le Registre phyto sur le portable du bureau du chai : quatre icônes, la mission 1 (annonces),
 //             une parcelle notée depuis l'ordinateur (mission 2), la fiche Viticode jusqu'à l'imprimerie (mission 3)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
@@ -2216,7 +2220,7 @@ if (scenario === 'portes') {
       for (let n = 0; n < 600 && (J.gestes.actif || Q.etape !== 'caisse'); n++) CL.step(1);
       CL.step(10);
       log.push([`posé (le portable ouvert sur la table) ; en avance (${Math.floor(h0 / 60)} h ${Math.floor(h0 % 60)}), le temps saute à 10 h : les portes ouvrent, la caisse aussi`, Q.portable === 'pose' && CL.monde.decorPortes.portable.visible && !J.joueur.porte && J.minutes % 1440 >= 600 && J.minutes % 1440 < 610 && Q.etape === 'caisse' && Q.caisse.ouverte && Q.ouvert && V.actif]);
-      log.push(['« Tenir la caisse » : l\'ordinateur s\'ouvre sur la caisse, debout à la place du vendeur', T.vu('Tenir la caisse') && (() => { CL.agir(); CL.finirGeste(); CL.step(3); return J.pc.ouvert && J.pc.conseil === 'caisse' && Q.aLaCaisse && Math.hypot(J.joueur.pos.x - V0.x, J.joueur.pos.z - V0.z) < 0.3; })()]);
+      log.push(['« Tenir la caisse » : l\'ordinateur s\'ouvre sur la caisse, debout à la place du vendeur', T.vu('Tenir la caisse') && (() => { CL.agir(); CL.finirGeste(); CL.step(3); return J.pc.ouvert && J.pc.ecran === 'caisse' && Q.aLaCaisse && Math.hypot(J.joueur.pos.x - V0.x, J.joueur.pos.z - V0.z) < 0.3; })()]);
     } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
     return log;
   });
@@ -2227,16 +2231,22 @@ if (scenario === 'portes') {
     const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, V = CL.visiteurs;
     try {
       CL.photo(); J.pc.ouvrir('caisse');
-      // les dix clients (portes.js est vide ici : le client au comptoir réglé à la main) ; un refus, puis les bons tickets
-      let refus = '', bons = 0;
+      // les dix clients, de vrais visiteurs (portes.js) : chacun attendu jusqu'au comptoir, dans l'ordre ; un refus, puis les
+      // bons tickets (la saisie à l'écran est vérifiée par le banc portesordi)
+      let refus = '', bons = 0, ordre = [], attenteMax = 0;
       for (let i = 0; i < 10; i++) {
-        V.comptoir = {};
+        let n = 0;
+        for (; n < 60 * 90 && !Q.clientCaisse; n++) CL.step(1);
+        attenteMax = Math.max(attenteMax, n / 60);
         const C = Q.clientCaisse;
+        if (!C) break;
+        ordre.push(V.comptoir && V.comptoir.def ? V.comptoir.def.id : '?');
         if (i === 0) refus = Q.encaisser({ lignes: [[C.achats[0][0], C.achats[0][1] + 1]], remise: 0, paiement: C.paiement, ticket: C.ticket }) || '';
         if (Q.encaisser({ lignes: C.achats.map(l => l.slice()), remise: C.remise || 0, paiement: C.paiement, percu: C.percu, ticket: C.ticket }) === null) bons++;
         CL.step(20);
       }
-      log.push([`la caisse : un ticket faux refusé (« ${refus} »), les dix bons tickets ; la relève`, refus.length > 0 && bons === 10 && Q.caisse.tickets.length === 10 && Q.etape === 'releve']);
+      const voulu = CL.PORTES_CLIENTS.join();
+      log.push([`la caisse : les dix clients arrivent au comptoir dans l'ordre (${ordre.join(', ')} ; ${attenteMax.toFixed(0)} s d'attente au plus), un ticket faux refusé (« ${refus} »), les dix bons tickets ; la relève`, ordre.join() === voulu && refus.length > 0 && bons === 10 && Q.caisse.tickets.length === 10 && Q.etape === 'releve']);
       const marc = CL.gens3.liste[2];
       for (let n = 0; n < 60 * 40 && Q.etape === 'releve'; n++) CL.step(1);
       CL.step(10);
@@ -2252,10 +2262,24 @@ if (scenario === 'portes') {
   r = await ev(async () => {
     const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, V = CL.visiteurs;
     try {
-      V.nServis = 3; CL.step(30);
-      log.push([`trois invités servis : pas encore (objectif : ${T.obj()})`, Q.etape === 'degustation' && T.obj().includes('3 sur 5')]);
-      V.nServis = 5; CL.step(30);
-      log.push(['cinq invités servis : la mission 4 est gagnée', Q.etape === 'fin' && CL.SAUVE.gagnees.portes === true]);
+      // de vrais invités au bar de dégustation (portes.js), servis un par un (verres.js)
+      const B = P4.bar;
+      CL.teleporter(B.x - 3, B.z + 3, Math.PI); CL.step(30);
+      let essais = 0, objTrois = '';
+      while (V.nServis < 5 && essais < 60) {
+        essais++;
+        let cible = null;
+        for (const v of V.gens) if (v.present && v.p.servable && !v.enfant) { cible = v; break; }
+        if (!cible) { CL.step(120); continue; }
+        const p = cible.p, a = Math.atan2(p.pos.x - B.x, p.pos.z - B.z);
+        CL.teleporter(p.pos.x + Math.sin(a) * 1.1, p.pos.z + Math.cos(a) * 1.1, a + Math.PI); CL.step(3);
+        CL.agir();
+        for (let i = 0; i < 400 && (J.joueur.service || p.verre > 0); i++) CL.step(1);
+        if (V.nServis === 3 && !objTrois) { CL.step(15); objTrois = T.obj(); }
+      }
+      log.push([`trois invités servis : pas encore (objectif : ${objTrois})`, objTrois.includes('3 sur 5')]);
+      CL.step(30);
+      log.push([`cinq invités servis (${V.nServis}) : la mission 4 est gagnée`, Q.etape === 'fin' && CL.SAUVE.gagnees.portes === true]);
       CL.step(60 * 6);
       const cta = document.querySelector('#fin-cta');
       log.push(['la carte de fin : la caisse de Vitisoft, le lien vers la page de la caisse (source du jeu)', J.finVue && document.querySelector('#fin-titre').textContent.includes('caisse') && !cta.hidden && cta.href === 'https://vitisoft.fr/fonctionnalites/caisse-caveau/?source=jeu-tournee-generale' && Q.etape === 'stats']);
@@ -2263,7 +2287,7 @@ if (scenario === 'portes') {
       log.push([`le supplément : les statistiques, à la caisse (objectif : ${T.obj()})`, !J.finVue && T.obj().includes('statistiques') && Q.cible === P4.caisse]);
       const V0 = P4.caisse.vendeur, marc = CL.gens3.liste[2];
       CL.teleporter(V0.x - 0.4, V0.z + 1.4, Math.PI); CL.step(5);
-      log.push(['« Voir les statistiques » : Marc laisse la place, l\'ordinateur s\'ouvre (sur les Statistiques de Vitisoft, pc.js)', T.vu('Voir les statistiques') && (() => { CL.agir(); CL.finirGeste(); CL.step(60); return J.pc.ouvert && J.pc.conseil === 'caisse' && Q.aLaCaisse && Math.hypot(marc.p.pos.x - V0.x, marc.p.pos.z - V0.z) > 1; })()]);
+      log.push(['« Voir les statistiques » : Marc laisse la place, l\'ordinateur s\'ouvre (sur les Statistiques de Vitisoft, pc.js)', T.vu('Voir les statistiques') && (() => { CL.agir(); CL.finirGeste(); CL.step(60); return J.pc.ouvert && J.pc.fenetre === 'vitisoft' && J.pc.vue === 'statistiques' && Q.aLaCaisse && Math.hypot(marc.p.pos.x - V0.x, marc.p.pos.z - V0.z) > 1; })()]);
       const st = Q.stats;
       log.push([`les statistiques : ${st.tickets} tickets, ${st.ca} €, panier moyen ${st.panier} €`, st.tickets === 10 && st.ca > 0 && st.panier > 0]);
       Q.signal('statsVues'); CL.step(5);

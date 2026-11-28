@@ -187,7 +187,11 @@ export class Pilote {
     if (bord > -1.5 && bord < 40 && Math.sign(10 - pos.z) * cz > 0.5) {
       let arrive = false;
       for (let k = 0; k < voitures.length; k++) {
-        const v = voitures[k], ex = (pos.x - v.x) * v.sens; // > 0 : elle vient vers nous
+        const v = voitures[k];
+        // (seulement ce qui roule sur la départementale : un enfant de l'école sur le trottoir de la rue de la place, un
+        // cycliste, une voiture du château n'y sont pas, et bloquaient le bas de la rue)
+        if (!v.sens || Math.abs(v.z - 10) > 5) continue;
+        const ex = (pos.x - v.x) * v.sens; // > 0 : elle vient vers nous
         if (ex > -7 && ex < 7 + v.v * 3.6) { arrive = true; break; }
       }
       const vs = Math.sqrt(2 * 2.4 * Math.max(0, bord));

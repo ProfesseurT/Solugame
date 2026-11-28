@@ -1606,7 +1606,9 @@ function reperes(dt, ego, cible) {
 }
 
 function miseAJour(dt) {
-  const dtm = tel.ouvert || pc.ouvert ? dt * 0.3 : dt; // derrière le téléphone ou le portable, le monde ralentit
+  // derrière le téléphone ou le portable, le monde ralentit ; pas à la caisse des portes ouvertes (mission 4) : les clients
+  // avancent dans la file pendant qu'on encaisse
+  const dtm = tel.ouvert || (pc.ouvert && pc.ecran !== 'caisse') ? dt * 0.3 : dt;
   lireEntrees();
   joueur.telephone = tel.ouvert; // le personnage lève son téléphone quand on l'ouvre
   bureau.avant(); // assis au portable : les mains sur le clavier ; après un appel passé depuis le portable, on y revient
@@ -2037,7 +2039,7 @@ window.CL = {
   get voitureProche() { return voitureProche(); },
   // les vélos (essais : banc velo) : celui qu'on peut prendre ici, le prendre, ceux qu'on a pris
   get veloProche() { return veloProche(); }, prendreVelo, velosJ: VELOS_J, gares: GARES,
-  portes: portesOuvertes, visiteurs, // (la mission 4 : mission4.js, portes.js)
+  portes: portesOuvertes, visiteurs, PORTES_CLIENTS: PORTES.clients.map(c => c.id), // (la mission 4 : mission4.js, portes.js)
   sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
   // l'accueil : le plan i figé à la fraction u (captures), ou qui reprend son cours (u omis)
   plan(i, u) { allerPlan(i); planFige = u == null ? null : { u }; }, PLANS,
