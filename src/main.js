@@ -754,7 +754,7 @@ jeu.portesMonde = {
           portesOuvertes.materiel = 'installe'; voirPortes();
           jeu.minutes += 60; horloge(0);
           const J = { x: -89.6, z: -48.6 }, M = { x: -91.0, z: -47.4 };
-          joueur.placer(J.x, J.z, Math.atan2(M.x - J.x, M.z - J.z)); cam.yaw = joueur.h + Math.PI * 0.8; cam.pret = false;
+          joueur.placer(J.x, J.z, Math.atan2(M.x - J.x, M.z - J.z)); cam.yaw = joueur.h; cam.pret = false; // (la caméra derrière nous : Marc, le bar, la cour)
           if (marcLa) {
             const f = gens3.liste[2], G = f.gestes;
             f.gestes.g = null; f.p.placer(M.x, M.z, Math.atan2(J.x - M.x, J.z - M.z)); f.p.m.groupe.visible = true; f.etat = 'range'; f.ferme = false;

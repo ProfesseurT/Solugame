@@ -230,7 +230,7 @@ export class PortesOuvertes {
     if (e === 'materiel') { if (jour >= this.jourJ) this.jourJ = jour + 1; return null; }
     if (JOUR_J.includes(e)) {
       if (this.ouvert && this.V) this.V.fermer();
-      this.jourJ = jour; this.ouvert = false; this.ferme = false; this.dit = true;
+      this.jourJ = jour; this.ouvert = false; this.ferme = false; this.dit = true; this.caisseLancee = false;
       if (e === 'releve') { this.releve = true; this.aller('degustation'); }
       return 'reprise';
     }
@@ -535,6 +535,11 @@ export class PortesOuvertes {
   tenirCaisse() {
     if (!this.caisseTenable) return;
     this.occupe = true;
+    // (les portes ouvertes reprises un autre matin, tout prêt avant 10 h : le temps saute à 10 h, les portes ouvrent)
+    if (this.etape === 'caisse' && !this.ouvert && jourDe(this.j.minutes) === this.jourJ && heureDe(this.j.minutes) < P.ouverture) {
+      this.M.sauterA(this.jourJ * 1440 + P.ouverture, () => { this.occupe = false; if (!this.ouvert) this.ouvrirPortes(); this.tenirCaisse(); });
+      return;
+    }
     const stats = this.etape === 'stats';
     this.M.tenirCaisse(stats, () => {
       this.occupe = false; this.aLaCaisse = true; this.tObj = 0;
