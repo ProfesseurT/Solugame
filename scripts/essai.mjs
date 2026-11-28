@@ -608,6 +608,10 @@ if (scenario === 'chateau') {
       // une voiture (mode WTF : celle d'en face) : frein à main dans un virage, puis on tient la glisse au volant
       { J.basculerWtf(); const g = CL.GAREES[0]; J.joueur.placer(g.x + 2.2, g.z, -Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
         // (départ assez à l'ouest : la glisse finit dans l'herbe, avant les rangs du Clos qui la freineraient)
+        // (la route dégagée : c'est la tenue de route qu'on mesure, pas la circulation ; une voiture ou un cycliste au point de
+        // départ, selon le moment, empêchait de prendre de la vitesse)
+        for (const w of CL.voitures()) w.x = w.sens > 0 ? 330 : -330;
+        for (const c of CL.velos.cyclistes) if (c.etat === 'roule' && Math.abs(c.z - 10) < 8 && c.x > -260 && c.x < 0) { c.actif = c.present = false; c.x = c.z = 1e5; if (c.m) c.m.groupe.visible = false; }
         CL.teleporter(-185, 11.7, Math.PI / 2); CL.step(5);
         CL.ctrl.ky = -1; for (let k = 0; k < 400 && CL.tr.v < 17; k++) CL.step(1);
         let tenue = 0, bmax = 0, vmin = 99;
