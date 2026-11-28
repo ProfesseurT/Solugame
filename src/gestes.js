@@ -317,6 +317,41 @@ export class Gestes {
     if (!m.pile) { m.pile = pileCartons(0); m.pile.scale.setScalar(1 / m.echelle); m.pile.visible = false; m.groupe.add(m.pile); }
     return m.pile;
   }
+  // Un objet qu'on porte à deux mains (mission 4 : le portable du bureau, une pièce du matériel du comité des fêtes),
+  // créé une fois par personnage et par nom, à l'échelle du monde (geo : sa géométrie, l'origine sous son milieu ; demi :
+  // la demi-largeur où se posent les mains)
+  objet(nom, geo, demi) {
+    const m = this.j.m, k = 'objet_' + nom;
+    if (!m[k]) { const o = new THREE.Mesh(geo, MAT); o.scale.setScalar(1 / m.echelle); o.userData.demi = demi; o.visible = false; o.castShadow = true; m.groupe.add(o); m[k] = o; }
+    return m[k];
+  }
+  // prendre l'objet o posé en src() (monde) : on se baisse (selon sa hauteur), on le soulève jusqu'à tenir (sa place dans
+  // les bras, repère du personnage) ; avant() le cache là où il était. On le garde dans les bras (j.porte) en marchant.
+  prendreObjet(o, src, tenir, avant, duree = 0.9) {
+    return {
+      duree,
+      debut: () => { avant(); o.visible = true; this.j.porte = o; son.jouer('tap'); },
+      maj: (dt, t, u, T) => {
+        const s = this.local(src(vA), vT);
+        o.position.copy(s).lerp(tenir, lisse(T / duree * 1.25));
+        this.immobile(dt, t);
+      },
+    };
+  }
+  // poser l'objet porté o en dst() (monde) ; apres() le montre posé (il quitte les bras)
+  poserObjet(o, dst, apres, duree = 0.8) {
+    const de = new THREE.Vector3();
+    return {
+      duree,
+      debut: () => { de.copy(o.position); },
+      maj: (dt, t, u, T) => {
+        const d = this.local(dst(vA), vT);
+        o.position.copy(de).lerp(d, lisse(T / duree * 1.2));
+        this.immobile(dt, t);
+        if (T + dt >= duree && o.visible) { o.visible = false; this.j.porte = null; apres(); son.jouer('tap'); }
+      },
+    };
+  }
   // point du monde dans le repère du personnage
   local(w, out) { const g = this.j.m.groupe; g.updateMatrixWorld(); return g.worldToLocal(out.copy(w)); }
   // prendre n cartons dont le carton du bas est en src() (monde) ; avant() cache ceux qu'on prend. Trop loin, on tire

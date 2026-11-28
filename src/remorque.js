@@ -86,6 +86,66 @@ function ombrePalox(m) {
   return m;
 }
 
+/* ---------------------------------------------------------------- le matériel du comité des fêtes (mission 4)
+   Les portes ouvertes (Teddy, 28/11/2026 : « avec le tracteur aller chercher du matériel genre des tables, de la sono ») :
+   quatre pièces, chargées une à une par l'agent municipal : deux piles de tables pliantes (plateaux de bois, pieds
+   repliés), les bancs (deux colonnes), la sono (deux enceintes debout, la caisse de la table de mixage, les pieds
+   repliés couchés, l'enrouleur de câble, le bac des nappes). Repère d'une pièce : origine au sol sous son milieu, le long
+   de x (en travers de la remorque, en travers des bras de qui la porte). La même géométrie sert sur le plateau (MATERIEL.z
+   : le milieu de chaque pièce le long de la remorque) et au sol, sur la place (MATERIEL.sol : le milieu de chaque pièce
+   dans le repère du tas, la première du côté de la remorque, vers +z) : on montre les pièces 0 à k-1 sur la remorque et
+   les suivantes au sol par la plage de dessin (montrerMateriel), sans appel de dessin de plus. */
+export const MATERIEL = { n: 4, z: [-2.3, -1.35, -0.3, 1.3], sol: [1.2, 0.35, -0.45, -1.3] };
+const BOIS_M = '#9a7b55', BANC_M = '#8d7c66', FER_M = '#3b3d44';
+function pieceMateriel(k) {
+  const L = [];
+  if (k < 2) for (let i = 0; i < 3; i++) { // trois tables pliantes l'une sur l'autre
+    const y = i * 0.065;
+    L.push(bois(B(1.8, 0.04, 0.75, BOIS_M, 0, y + 0.02, 0), BOIS_M));
+    for (const sz of [-0.27, 0.27]) L.push(B(1.56, 0.02, 0.03, FER_M, 0, y + 0.05, sz));
+    for (const sx of [-0.78, 0.78]) L.push(B(0.03, 0.02, 0.5, FER_M, sx, y + 0.05, 0));
+  } else if (k === 2) for (let i = 0; i < 6; i++) { // six bancs, en deux colonnes de trois
+    const y = Math.floor(i / 2) * 0.075, z = i % 2 ? 0.18 : -0.18;
+    L.push(bois(B(1.8, 0.045, 0.3, BANC_M, 0, y + 0.0225, z), BANC_M), B(1.4, 0.02, 0.03, FER_M, 0, y + 0.055, z));
+  } else { // la sono
+    for (const sx of [-0.55, 0.55]) L.push(B(0.36, 0.58, 0.32, '#1e1e22', sx, 0.29, 0), C(0.12, 0.12, 0.012, 12, FER_M, sx, 0.22, 0.162, 'z'));
+    L.push(B(0.56, 0.32, 0.42, '#2b2d33', 0, 0.16, 0.05), B(0.58, 0.03, 0.44, '#9a9da3', 0, 0.335, 0.05)); // la caisse de la table de mixage
+    for (const sz of [-0.3, -0.36]) L.push(C(0.03, 0.03, 1.2, 6, FER_M, 0, 0.03, sz, 'x')); // les pieds des enceintes, repliés
+    L.push(C(0.13, 0.13, 0.12, 10, '#c0392b', 0.95, 0.13, 0.05, 'z'), C(0.06, 0.06, 0.13, 8, '#1e1e22', 0.95, 0.13, 0.05, 'z')); // l'enrouleur de câble
+    L.push(peint(B(0.5, 0.3, 0.38, '#3b6ea5', -0.98, 0.15, 0.04), '#3b6ea5'), B(0.46, 0.04, 0.34, '#f4f1ea', -0.98, 0.31, 0.04)); // le bac des nappes
+  }
+  return L;
+}
+// les quatre pièces fusionnées (sol : la disposition du tas sur la place) ; offs : où commence chaque pièce (sommets)
+function geoMateriel(sol) {
+  const L = [], offs = [0];
+  for (let k = 0; k < MATERIEL.n; k++) {
+    const P = pieceMateriel(k);
+    for (const g of P) {
+      g.translate(0, 0, (sol ? MATERIEL.sol : MATERIEL.z)[k]);
+      L.push(g);
+    }
+    offs.push(offs[k] + P.reduce((s, g) => s + g.attributes.position.count, 0));
+  }
+  const g = compacter(fusion(L));
+  g.setDrawRange(0, 0); // (une plage finie : main.js ne la réindexe pas, la plage reste comptée en sommets)
+  return { g, offs };
+}
+// le tas sur la place (un maillage, à poser) et une pièce seule (portée dans les bras : sa géométrie)
+export function materielSol() {
+  const { g, offs } = geoMateriel(true), m = new THREE.Mesh(g, MAT);
+  m.castShadow = true; m.receiveShadow = true; m.name = 'matériel du comité des fêtes'; m.userData.offs = offs;
+  return m;
+}
+export const pieceSeule = k => compacter(fusion(pieceMateriel(k)));
+// les pièces 0 à k-1 sur la remorque R ; au sol (le tas sol, s'il est donné), de kS à la fin (kS : k, ou k + 1 quand la
+// pièce k est dans les bras de l'agent municipal)
+export function montrerMateriel(R, k, sol = null, kS = k) {
+  const o = R.materiel.userData.offs, n = o[o.length - 1];
+  R.materiel.geometry.setDrawRange(0, o[k]); R.materiel.visible = k > 0;
+  if (sol) { sol.geometry.setDrawRange(o[kS], n - o[kS]); sol.visible = kS < MATERIEL.n; }
+}
+
 // deux roues d'un essieu (géométries de roue(), centrées) fusionnées en une, à ± voie
 function paire(gG, gD, voie) {
   const a = gG.clone(), b = gD.clone();
@@ -193,8 +253,13 @@ export function remorque() {
   REMORQUE.PZ.forEach((z, k) => palox.setMatrixAt(k, M4.makeTranslation(0, BY, z)));
   palox.computeBoundingSphere();
   groupe.add(palox);
+  // le matériel du comité des fêtes (mission 4), caché tant qu'il n'est pas chargé (montrerMateriel)
+  const mt = geoMateriel(false), materiel = new THREE.Mesh(mt.g, MAT);
+  materiel.position.y = BY; fixe(materiel); materiel.castShadow = true; materiel.receiveShadow = true; materiel.visible = false; materiel.name = 'matériel';
+  materiel.userData.offs = mt.offs;
+  groupe.add(materiel);
   return {
-    groupe, corps, roues, bequille, goupille, ridelles, feux, palox,
+    groupe, corps, roues, bequille, goupille, ridelles, feux, palox, materiel,
     // emprise au sol (repère de la remorque) : ce que le personnage contourne, attelée (gestes.js : contourner)
     dims: { emprise: [[-W / 2 - 0.05, W / 2 + 0.05, Z0 - 0.15, Z1 + 0.1], [-0.3, 0.3, Z1, RZ + 0.1]] },
   };
@@ -387,11 +452,13 @@ export class Attelage {
   // les palox remis sur la remorque (une partie qui repart de zéro ; ou, la nuit, rechargés à l'imprimerie)
   recharger() {
     for (let k = 0; k < 6; k++) montrerPalox(this.r, k, true);
+    montrerMateriel(this.r, 0);
     this.ridelleK[0] = this.ridelleK[1] = 0;
   }
-  // vide (rangée sous le hangar, hors de la mission 3)
+  // vide (rangée sous le hangar, hors de la mission 3 ; ni palox ni matériel du comité des fêtes)
   vider() {
     for (let k = 0; k < 6; k++) montrerPalox(this.r, k, false);
+    montrerMateriel(this.r, 0);
     this.ridelleK[0] = this.ridelleK[1] = 0;
   }
 }

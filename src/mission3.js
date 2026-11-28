@@ -24,7 +24,8 @@
 // d'ouverture (six heures de travail, ou une nuit dormie) ; ce qui se fait seul (l'échantillon, la fiche Viticode, le BAT
 // à valider) se fait encore, sinon l'objectif dit de rentrer dormir (nuit), et la mission reprend le matin.
 // La remorque, le chariot, le carton ouvert du chai passent par main.js (jeu.remorque, jeu.chariot, jeu.carton).
-import { HABILLAGE as HX, energie } from './textes.js';
+// Après la carte de fin, on rentre dormir (dodo) : la mission 4, les portes ouvertes, commence au réveil (main.js : dormir).
+import { HABILLAGE as HX, PORTES_MISSION as PM, energie } from './textes.js';
 import { son } from './audio.js';
 import { ecart } from './reseau.js';
 import { ouvert, minutesOuvertes, heureDe, dateJeu, jourDe, HORAIRES } from './outils.js';
@@ -107,16 +108,16 @@ export class Habillage {
   // La sauvegarde : où en est la journée, prise hors des gestes ; à la reprise, on est au domaine, à pied, la remorque
   // dételée là où elle doit être (cachée, à sa place au domaine, dans la cour de l'imprimerie, au chai) ; main.js remet
   // ce qui se voit
-  get stable() { return ['debut', 'message', 'jour', 'fin', 'libre'].includes(this.etape) && !this.occupe && !this.marc && !this.j.gestes.actif && (!this.livre || this.decharge); }
+  get stable() { return ['debut', 'message', 'jour', 'fin', 'dodo', 'libre'].includes(this.etape) && !this.occupe && !this.marc && !this.j.gestes.actif && (!this.livre || this.decharge); }
   instantane() {
     const F = this.fiche;
     return {
-      etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'libre' : this.etape, lu: this.lu,
+      etape: this.etape === 'debut' ? 'message' : this.etape === 'fin' ? 'dodo' : this.etape, lu: this.lu,
       echantillon: this.echantillon, bulletin: this.bulletin, tB: this.tBulletin,
       fiche: { ...F, ingr: [...F.ingr], labels: [...F.labels], perso: { ...F.perso } },
       publiee: this.publiee, testee: this.testee, telecharge: this.telecharge, envoye: this.envoye, bat: this.bat,
       annonce: this.annonce, livre: this.livre, decharge: this.decharge, minD: this.minDecharge, sms: this.sms, smsLu: this.smsLu,
-      rentree: this.rentree || this.etape === 'fin' || this.etape === 'libre',
+      rentree: this.rentree || ['fin', 'dodo', 'libre'].includes(this.etape),
     };
   }
   reprendre(o) {
@@ -128,7 +129,8 @@ export class Habillage {
     this.minDecharge = o.minD ?? this.j.minutes; this.sms = !!o.sms; this.smsLu = !!o.smsLu; this.rentree = !!o.rentree;
     this.dit = true;
     this.fil = this.sms ? 'imprimerie' : this.bulletin && !this.envoye ? 'labo' : 'imprimerie';
-    this.aller(o.etape === 'message' && this.lu ? 'jour' : o.etape);
+    // (une partie d'avant la mission 4, l'habillage fini : rentrer dormir, les portes ouvertes au réveil)
+    this.aller(o.etape === 'message' && this.lu ? 'jour' : o.etape === 'libre' ? 'dodo' : o.etape);
     if (this.etape === 'message') this.notifier('messages', HX.messages.imprimerie.apercu);
   }
   aider(lignes, cle) {
@@ -161,11 +163,12 @@ export class Habillage {
     return { lieu: L.entrepot.depot, nom: 'Imprimerie Saint-Vincent' };
   }
   get cible() {
+    if (this.etape === 'dodo') return this.j.lieux.maison; // (rentrer dormir : la mission 4 au réveil)
     if (this.etape !== 'jour' || this.occupe) return null;
     const p = this.prochain;
     return p ? p.lieu : null;
   }
-  get nomCible() { const p = this.prochain; return p ? p.nom : ''; }
+  get nomCible() { if (this.etape === 'dodo') return 'Maison'; const p = this.prochain; return p ? p.nom : ''; }
   // l'itinéraire jusqu'à la balise, refait si l'on s'en écarte (ou si la balise a bougé)
   get route() {
     const c = this.cible;
@@ -190,6 +193,7 @@ export class Habillage {
     if (e === 'avant') return null;
     if (e === 'debut' || e === 'message') return O.message;
     if (e === 'fin' || e === 'libre') return O.fin;
+    if (e === 'dodo') return PM.dodo3;
     if (this.marc) return O.marc;
     const nuit = this.nuit;
     if (nuit) return O.nuit[nuit];
@@ -260,7 +264,8 @@ export class Habillage {
         break;
       case 'jour': this.jour(); break;
       case 'fin':
-        if (this.t > 6) { this.aller('libre'); j.finMission3(); }
+        // la carte de fin, puis rentrer dormir : les portes ouvertes se préparent au réveil (main.js : dormir)
+        if (this.t > 6) { this.aller('dodo'); j.finMission3(); }
         break;
     }
     // l'objectif : dix fois par seconde (il fabrique des textes), tout de suite après un changement d'étape

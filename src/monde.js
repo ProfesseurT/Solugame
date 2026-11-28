@@ -1451,11 +1451,13 @@ void main() {
     // caisson à tiroirs : deux façades et leurs poignées, côté chaise
     I.push(B(0.6, 0.52, 0.42, SOMBRE, -71.6, 0.46, -63.1));
     for (const y of [0.6, 0.36]) I.push(B(0.02, 0.2, 0.38, '#4a3324', -71.91, y, -63.1), B(0.02, 0.03, 0.12, '#c9a86a', -71.925, y + 0.04, -63.1));
-    I.push(B(0.24, 0.018, 0.33, '#2b2d33', -71.86, 0.789, DZ)); // portable : socle (clavier côté chaise), écran levé
+    // le portable : socle (clavier côté chaise), écran levé ; un maillage à part, enfant de la pièce (le jour des portes
+    // ouvertes, on l'emporte sur le parvis : mission 4, main.js)
+    const PORTABLE = [B(0.24, 0.018, 0.33, '#2b2d33', -71.86, 0.789, DZ)];
     {
       const ecran = B(0.014, 0.22, 0.33, '#2b2d33'), dalle = B(0.004, 0.19, 0.3, '#dfeef8');
       for (const g of [ecran, dalle]) g.rotateZ(-0.26);
-      I.push(deplacer(ecran, -71.715, 0.9, DZ), deplacer(dalle, -71.725, 0.9, DZ));
+      PORTABLE.push(deplacer(ecran, -71.715, 0.9, DZ), deplacer(dalle, -71.725, 0.9, DZ));
     }
     I.push(C(0.07, 0.08, 0.03, 10, '#2b2b30', -71.45, 0.795, -61.95), C(0.012, 0.012, 0.38, 5, '#2b2b30', -71.45, 0.97, -61.95));
     I.push(C(0.05, 0.11, 0.12, 10, '#7d2333', -71.55, 1.14, -61.98), C(0.045, 0.045, 0.02, 8, '#ffe1a0', -71.55, 1.08, -61.98));
@@ -1500,6 +1502,8 @@ void main() {
     dedans.receiveShadow = false; dedans.castShadow = false; dedans.name = 'bureau du chai';
     scene.add(dedans);
     o.interieur = dedans; // dessiné seulement quand on le voit (main.js : dedans, ou porte ouverte)
+    const portable = new THREE.Mesh(fusion(PORTABLE), MAT); portable.castShadow = false; portable.receiveShadow = false; portable.name = 'portable du bureau';
+    dedans.add(portable); o.portable = portable;
 
     // la porte : un battant sur sa charnière (côté nord), qui s'ouvre vers l'intérieur (rotation.y négative)
     const porte = new THREE.Group(); porte.position.set(-75.85, 0, -60.12);
@@ -4482,6 +4486,8 @@ void main() {
       [[-80, 10], [-86.5, 6.2], [-90, -1]],
       [[-90, -38], [-84, -45], [-82.8, -54], [-81.4, -59.4]],              // la cour, jusqu'au bureau du chai
       [[-90, -38], [-87, -45], [-86.5, -50.6], [-82.5, -52]],              // la cour, jusqu'à la grande porte du chai
+      // derrière le portail, vers l'ouest : la place du van, le long du buffet des portes ouvertes (mission 4)
+      [[-90, -38], [-104, -38]],
       [[-90, 10], [-80, 10], [-55, 10], [95, 10], [110.5, 9.4]],           // la départementale (l'épicerie, La Treille)
       [[110.5, 9.4], [176, 10], [205, 10], [212, 10], [176 + DX_EN, 10]], // vers l'est : le laboratoire, la zone d'activités
       // la rue de la zone d'activités, jusqu'à la route qui fait le tour de Solumatic : on y entre en biais, d'un côté ou de
@@ -4520,16 +4526,166 @@ void main() {
   // places : où se tiennent les invités), le buffet du traiteur, la sono, l'entrée (le portail), le parking des visiteurs
   // (le long de l'allée, hors du portail, et sous le cèdre), la mairie (les tables et la sono du comité des fêtes) et le
   // traiteur (Clémence). Rien n'y est dessiné tant que la mission ne l'a pas installé.
-  lieux.portes = {
+  /* Le décor des portes ouvertes (mission 4 ; Teddy, 28/11/2026 : « aller chercher du matériel genre des tables, de la sono,
+     et de la nourriture chez un traiteur ») : les tables nappées et leurs bancs, la sono et ses deux enceintes sur pied, des
+     bottes de paille, les guirlandes (du chai au vieux chêne, du chêne à la maison, deux mâts le long du mur du portail),
+     le bar de dégustation (une planche sur deux barriques debout, le chemin de table, les bouteilles, les verres, le seau
+     et le crachoir, l'ardoise), le buffet (sa nappe jusqu'au sol), la table de la caisse. Caché tant que la mission ne l'a
+     pas installé (main.js : la veille, au retour de la mairie). Un seul maillage pour tout ; un pour les plateaux du
+     traiteur (le buffet garni) ; un pour le portable posé sur la table de la caisse. Les boîtes de collision (alignées) sont
+     posées à l'installation. Repère de chaque meuble : origine au sol sous son milieu, l'avant vers +z, tourné de son cap. */
+  function decorPortes(P) {
+    const G0 = 0.03, D = [], PL = [], PT = [], boites = [];
+    const NAPPE = '#f4f1ea', NAPPE2 = '#e9e3d6', BOIS_T = '#9a7b55', FER = '#3b3d44', NOIR = '#1e1e22', VERT = '#1f3b2a', ETIQ = '#efe4c8', VERRE = '#dfe8ec', FIL = '#2b2b30';
+    const poserL = (L, x, z, h, dest = D) => { for (const g of L) { if (h) tournerY(g, h); deplacer(g, x, G0, z); dest.push(g); } };
+    // un point du repère d'un meuble posé en (x, z), tourné de h
+    const vers = (x, z, h, lx, lz) => [x + lx * Math.cos(h) + lz * Math.sin(h), z - lx * Math.sin(h) + lz * Math.cos(h)];
+    // la boîte (alignée) d'un rectangle w x d tourné de h, centré en (x, z)
+    const boite = (x, z, w, d, h = 0) => { const c = Math.abs(Math.cos(h)), s = Math.abs(Math.sin(h)), hw = (w * c + d * s) / 2, hd = (w * s + d * c) / 2; boites.push([x - hw, z - hd, x + hw, z + hd]); };
+    // une table pliante (w le long de x, p de profondeur) et sa nappe, qui tombe de tomber sur les côtés (avant : sur le
+    // devant, -z ; arriere : sur l'arrière)
+    const table = (w, p, nappe = NAPPE, avant = 0.28, arriere = avant) => {
+      const L = [B(w, 0.04, p, BOIS_T, 0, 0.72, 0)];
+      for (const sx of [-1, 1]) L.push(B(0.04, 0.7, 0.04, FER, sx * (w / 2 - 0.12), 0.35, -p / 2 + 0.08), B(0.04, 0.7, 0.04, FER, sx * (w / 2 - 0.12), 0.35, p / 2 - 0.08), B(0.03, 0.03, p - 0.16, FER, sx * (w / 2 - 0.12), 0.12, 0));
+      L.push(B(w + 0.06, 0.012, p + 0.06, nappe, 0, 0.748, 0));
+      L.push(B(w + 0.06, avant, 0.01, nappe, 0, 0.754 - avant / 2, -p / 2 - 0.03), B(w + 0.06, arriere, 0.01, nappe, 0, 0.754 - arriere / 2, p / 2 + 0.03));
+      for (const sx of [-1, 1]) L.push(B(0.01, 0.28, p + 0.06, nappe, sx * (w / 2 + 0.03), 0.614, 0));
+      return L;
+    };
+    const banc = w => [B(w, 0.045, 0.3, '#8d7c66', 0, 0.44, 0), ...[-1, 1].map(s => B(0.04, 0.42, 0.26, FER, s * (w / 2 - 0.15), 0.21, 0))];
+    // une bouteille du domaine (verre sombre, capsule bordeaux, étiquette), un verre à pied (sur y)
+    const bouteille = (L, x, y, z) => L.push(C(0.037, 0.037, 0.2, 7, VERT, x, y + 0.1, z), C(0.015, 0.035, 0.06, 7, VERT, x, y + 0.23, z), C(0.015, 0.015, 0.07, 6, '#7d2333', x, y + 0.295, z), C(0.038, 0.038, 0.08, 7, ETIQ, x, y + 0.09, z, 'y', 0, 0));
+    const verre = (L, x, y, z) => L.push(C(0.032, 0.022, 0.07, 6, VERRE, x, y + 0.13, z), C(0.005, 0.005, 0.09, 4, VERRE, x, y + 0.05, z, 'y', 0, 0), C(0.03, 0.03, 0.006, 6, VERRE, x, y + 0.003, z));
+    // les tables des visiteurs, leurs bancs ; au milieu, une bouteille et deux verres
+    for (const [x, z, h] of P.tables) {
+      const L = table(1.8, 0.75);
+      for (const s of [-1, 1]) for (const g of banc(1.8)) L.push(deplacer(g, 0, 0, s * 0.72));
+      bouteille(L, -0.25, 0.754, 0); verre(L, 0.15, 0.754, 0.14); verre(L, 0.32, 0.754, -0.12);
+      poserL(L, x, z, h); boite(x, z, 1.8, 1.75, h);
+    }
+    // le bar de dégustation : une planche sur deux barriques debout, un chemin de table ; le Clos 2025 et les autres cuvées,
+    // les verres, le seau à glace, le crachoir ; l'ardoise des vins sur son chevalet, au bout
+    {
+      const Q = P.bar, L = [];
+      for (const sx of [-0.85, 0.85]) L.push(deplacer(geoBarrique('y'), sx, 0.475, 0));
+      L.push(B(2.6, 0.05, 0.62, '#6b4a30', 0, 0.975, 0), B(2.62, 0.008, 0.34, NAPPE, 0, 1.004, 0));
+      for (const sz of [-1, 1]) L.push(B(2.62, 0.18, 0.008, NAPPE, 0, 0.92, sz * 0.315));
+      for (let i = 0; i < 4; i++) bouteille(L, -0.95 + i * 0.17, 1.0, -0.1);
+      for (let i = 0; i < 8; i++) verre(L, 0.12 + (i % 4) * 0.15, 1.0, i < 4 ? 0.1 : -0.06);
+      L.push(C(0.11, 0.09, 0.2, 10, '#a3aab2', 0.95, 1.1, -0.04), C(0.08, 0.07, 0.15, 10, '#a3aab2', -1.12, 1.075, 0.14));
+      L.push(C(0.037, 0.037, 0.12, 7, VERT, 0.95, 1.26, -0.04), C(0.015, 0.015, 0.08, 6, '#7d2333', 0.95, 1.36, -0.04));
+      L.push(B(0.5, 0.62, 0.025, '#2b2b30', 1.62, 1.0, 0.18), B(0.56, 0.68, 0.02, '#6b4a30', 1.62, 1.0, 0.165), B(0.04, 1.3, 0.04, '#6b4a30', 1.62, 0.6, -0.12));
+      for (let i = 0; i < 4; i++) L.push(B(0.34 - (i % 2) * 0.08, 0.025, 0.004, '#efe7d6', 1.6 - (i % 2) * 0.04, 1.18 - i * 0.11, 0.194)); // (à la craie)
+      poserL(L, Q.x, Q.z, Q.h); boite(Q.x, Q.z, 2.7, 0.7, Q.h);
+    }
+    // le buffet du traiteur : sa nappe jusqu'au sol, du côté des visiteurs (-z)
+    {
+      const Q = P.buffet, L = table(2.4, 0.8, NAPPE, 0.7, 0.34);
+      L.push(B(2.46, 0.06, 0.012, '#7d2333', 0, 0.71, -0.435)); // (un galon bordeaux)
+      L.push(C(0.11, 0.11, 0.06, 14, '#f7f5ef', 1.05, 0.784, 0.2, 'y', 0, 1)); // la pile d'assiettes
+      L.push(B(0.2, 0.05, 0.2, '#efe7d6', -1.05, 0.78, 0.22)); // les serviettes
+      poserL(L, Q.x, Q.z, Q.h); boite(Q.x, Q.z, 2.5, 0.9, Q.h);
+      // les plateaux de Clémence (un maillage à part : le buffet garni) : rillettes et leurs toasts, fromages de chèvre,
+      // fouées, raisin, tartelettes ; sur des planches de bois et d'ardoise
+      const M = [];
+      for (let i = 0; i < 5; i++) {
+        const x = -0.88 + i * 0.44, ard = i % 2, y = 0.754;
+        M.push(C(0.18, 0.18, 0.025, 12, ard ? '#3a3a40' : '#6b4a30', x, y + 0.0125, -0.04));
+        for (let k = 0; k < 7; k++) {
+          const a = k / 7 * Math.PI * 2, r = k ? 0.1 : 0, px = x + Math.cos(a) * r, pz = -0.04 + Math.sin(a) * r, py = y + 0.025;
+          if (i === 0) M.push(k ? B(0.07, 0.014, 0.045, '#d9a55a', px, py + 0.007, pz, a) : C(0.045, 0.045, 0.06, 8, '#f2e8d8', px, py + 0.03, pz), k ? B(0.05, 0.008, 0.03, '#b07a4f', px, py + 0.018, pz, a) : C(0.04, 0.04, 0.012, 8, '#b07a4f', px, py + 0.062, pz));
+          else if (i === 1) M.push(C(0.034, 0.034, 0.045, 8, '#f4efe0', px, py + 0.022, pz));
+          else if (i === 2) M.push(S(0.045, '#e2b46a', px, py + 0.02, pz, 1, 0.45, 1));
+          else if (i === 3) for (let g = 0; g < 3; g++) M.push(S(0.022, '#5b2a4a', px + (g - 1) * 0.02, py + 0.02 + (g === 1 ? 0.02 : 0), pz));
+          else M.push(C(0.038, 0.032, 0.025, 8, '#c97a3a', px, py + 0.012, pz), C(0.03, 0.03, 0.008, 8, '#8e2a3b', px, py + 0.028, pz));
+        }
+      }
+      poserL(M, Q.x, Q.z, Q.h, PL);
+    }
+    // la sono : la table et la table de mixage, deux enceintes sur pied, les câbles ; deux bottes de paille à côté
+    {
+      const Q = P.sono, L = [B(0.9, 0.04, 0.5, FER, 0, 0.72, 0), B(0.46, 0.06, 0.32, '#2b2d33', 0, 0.77, 0)];
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) L.push(B(0.035, 0.7, 0.035, FER, sx * 0.4, 0.35, sz * 0.2));
+      for (let i = 0; i < 8; i++) L.push(C(0.012, 0.012, 0.025, 6, i % 3 ? '#9a9da3' : '#c0392b', -0.17 + (i % 4) * 0.11, 0.81, i < 4 ? -0.06 : 0.06));
+      for (const sx of [-1.45, 1.45]) {
+        L.push(C(0.022, 0.022, 1.42, 6, FER, sx, 0.71, 0), C(0.03, 0.03, 0.18, 6, FER, sx, 0.4, 0));
+        for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + 0.5; L.push(B(0.5, 0.025, 0.03, FER, sx + Math.cos(a) * 0.22, 0.13, Math.sin(a) * 0.22, -a)); }
+        L.push(B(0.36, 0.58, 0.32, NOIR, sx, 1.7, 0), C(0.12, 0.12, 0.012, 12, '#3b3d44', sx, 1.62, 0.162, 'z'), C(0.045, 0.045, 0.012, 8, '#3b3d44', sx, 1.88, 0.162, 'z'));
+        L.push(B(Math.abs(sx) - 0.2, 0.012, 0.018, NOIR, sx / 2, 0.012, 0.06)); // (le câble, au sol)
+      }
+      poserL(L, Q.x, Q.z, Q.h);
+      for (const lx of [-1.45, 0, 1.45]) { const [x, z] = vers(Q.x, Q.z, Q.h, lx, 0); boite(x, z, lx ? 0.5 : 0.95, lx ? 0.5 : 0.55, Q.h); }
+      for (const [x, z, h] of [[-103.4, -43.4, 0.4], [-101.7, -42.5, -0.3]]) {
+        poserL([B(0.95, 0.45, 0.48, '#d9c27a', 0, 0.225, 0), B(0.97, 0.03, 0.5, '#c4aa62', 0, 0.12, 0), B(0.97, 0.03, 0.5, '#c4aa62', 0, 0.33, 0)], x, z, h);
+        boite(x, z, 0.95, 0.48, h);
+      }
+    }
+    // la table de la caisse, contre la façade du chai : la nappe, un pan bordeaux côté clients (-z), le terminal de
+    // paiement, l'imprimante des tickets, les sacs du domaine ; derrière, deux cartons de six
+    {
+      const Q = P.caisse, L = table(1.6, 0.7, NAPPE2, 0.68, 0.24);
+      L.push(B(1.64, 0.5, 0.008, '#7d2333', 0, 0.42, -0.392));
+      L.push(B(0.08, 0.025, 0.15, NOIR, 0.58, 0.767, 0.05), B(0.06, 0.03, 0.04, '#2b2d33', 0.58, 0.79, -0.01));
+      L.push(B(0.16, 0.1, 0.16, '#e9e9e4', -0.6, 0.805, 0.1), B(0.08, 0.004, 0.06, '#f7f5ef', -0.6, 0.86, 0.08));
+      for (let i = 0; i < 3; i++) L.push(B(0.26, 0.32, 0.12, '#c9a46a', -0.58 + i * 0.03, 0.18, 0.62 + i * 0.13), B(0.12, 0.008, 0.02, '#7d2333', -0.58 + i * 0.03, 0.35, 0.62 + i * 0.13));
+      for (let i = 0; i < 2; i++) L.push(B(0.36, 0.28, 0.26, '#c8a978', 0.5, 0.14 + i * 0.285, 0.75));
+      poserL(L, Q.x, Q.z, Q.h); boite(Q.x, Q.z, 1.6, 0.72, Q.h);
+      // le portable posé (le clavier côté vendeur, +z ; l'écran levé, tourné vers lui)
+      const socle = B(0.33, 0.018, 0.24, '#2b2d33', 0, 0.763, 0.1), ecran = B(0.33, 0.22, 0.014, '#2b2d33'), dalle = B(0.3, 0.19, 0.004, '#dfeef8');
+      for (const g of [ecran, dalle]) g.rotateX(-0.26);
+      poserL([socle, deplacer(ecran, 0, 0.878, -0.05), deplacer(dalle, 0, 0.878, -0.04)], Q.x, Q.z, Q.h, PT);
+    }
+    // les guirlandes : un fil qui pend (flèche fl au milieu), une ampoule toutes les 0,85 m ; deux mâts contre le muret du
+    // portail
+    const fil = (p, q) => {
+      const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], l = Math.hypot(dx, dy, dz), g = new THREE.CylinderGeometry(0.009, 0.009, l, 3, 1, true);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / l, dy / l, dz / l)));
+      g.translate((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2);
+      return teinter(g, FIL);
+    };
+    const guirlande = (a, b, fl) => {
+      const pt = t => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - fl * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t];
+      let prev = pt(0);
+      for (let i = 1; i <= 14; i++) { const q = pt(i / 14); D.push(fil(prev, q)); prev = q; }
+      const n = Math.max(2, Math.round(Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.85));
+      for (let k = 1; k < n; k++) { const [x, y, z] = pt(k / n); D.push(C(0.012, 0.012, 0.05, 4, FIL, x, y - 0.03, z), S(0.045, '#ffe1a0', x, y - 0.085, z)); }
+    };
+    for (const x of [-96.5, -84.5]) { D.push(C(0.06, 0.07, 4.1, 6, '#6b4a30', x, 2.05, -33.95)); boite(x, -33.95, 0.3, 0.3); } // (contre le muret)
+    for (const [a, b, fl] of [
+      [[-75.9, 3.9, -44.0], [-96.6, 5.5, -45.6], 1.0], [[-75.9, 3.9, -47.6], [-96.8, 5.6, -47.2], 1.0], [[-75.9, 3.9, -56.6], [-97.0, 5.6, -48.4], 1.1],
+      [[-99.0, 5.4, -49.4], [-95.6, 4.1, -58.7], 0.5], [[-100.0, 5.4, -49.4], [-104.4, 4.1, -58.7], 0.5],
+      [[-98.8, 5.3, -43.6], [-96.5, 4.0, -33.95], 0.45], [[-75.9, 3.9, -40.6], [-84.5, 4.0, -33.95], 0.45], [[-96.5, 4.0, -33.95], [-84.5, 4.0, -33.95], 0.5],
+    ]) guirlande(a, b, fl);
+    const maillage = (L, ombre, nom) => { const m = new THREE.Mesh(fusion(L), MAT); m.castShadow = ombre; m.receiveShadow = true; m.visible = false; m.name = nom; scene.add(m); return m; };
+    return { boites, maillages: { decor: maillage(D, true, 'portes ouvertes'), plateaux: maillage(PL, true, 'buffet garni'), portable: maillage(PT, false, 'portable de la caisse') } };
+  }
+  // (la logistique, mission4.js et main.js : mairie, la balise sur la place du bourg, au pied de la rue de la mairie, où le
+  // tracteur s'arrête, sa remorque le long du matériel sorti par le comité des fêtes (materiel : ses tables pliantes, ses
+  // bancs, sa sono, au sol ; agent : l'agent municipal qui attend à côté, sa porte et son chemin jusqu'à elle) ;
+  // chezClemence, la balise de La Table de Clémence, rue de la place (le van s'arrête devant elle, sa porte coulissante de
+  // l'autre côté : on en fait le tour) ; plateaux, ses cartons sur le trottoir ; livraison, la balise du retour (le van
+  // s'arrête le long du buffet, sur le chemin du portail à la place du van, sa porte coulissante vers lui) ; depot, où l'on
+  // se tient pour poser les cartons au pied du buffet ; tables, les tables nappées et leurs bancs (x, z, cap : le long de
+  // x à 0), hors des chemins de la cour)
+  const PORTES4 = {
     caisse: { x: -80.4, z: -57.2, h: Math.PI / 2, vendeur: { x: -79.5, z: -57.2, h: -Math.PI / 2 }, file: [[-81.6, -57.2], [-82.6, -57.3], [-83.6, -57.5], [-84.6, -57.8], [-85.6, -58.2], [-86.6, -58.6]] },
     bar: { x: -92.6, z: -51.4, h: 0, places: [[-91.2, -50.2], [-91.0, -52.6], [-92.6, -53.4], [-94.2, -52.8], [-94.4, -50.0], [-92.8, -49.4]] },
     buffet: { x: -97.0, z: -40.6, h: 0, places: [[-95.6, -41.8], [-97.0, -42.0], [-98.4, -41.8]] },
     sono: { x: -104.6, z: -41.2, h: Math.PI / 4 },
     entree: { x: -90.6, z: -35.2 },
     parking: [[-94.4, -26.5, 0], [-94.4, -20.5, 0], [-94.4, -14.5, 0], [-86.8, -26.5, Math.PI], [-86.8, -20.5, Math.PI], [-86.8, -14.5, Math.PI], [-112.4, -52.0, -Math.PI / 2]],
-    mairie: { x: 95, z: -77, h: Math.PI },
+    mairie: { x: 100.4, z: -53.0 },
+    materiel: { x: 91, z: -57.4, h: 0 },
+    agent: { x: 93.7, z: -56.3, h: -2.3 }, porteMairie: { x: 95, z: -82.3, rot: 0 }, cheminMairie: [{ x: 95, z: -63.5 }, { x: 95, z: -73 }],
+    chezClemence: { x: 95, z: -28.6 },
+    plateaux: { x: 91.35, z: -22.9 },
+    livraison: { x: -101, z: -38 },
+    depot: { x: -97, z: -38.95, h: Math.PI },
+    tables: [[-93.5, -44.3, Math.PI / 2], [-86.0, -47.6, 0], [-85.0, -41.2, 0]],
     traiteur: 'clemence',
   };
+  const DECOR4 = decorPortes(PORTES4);
+  PORTES4.boites = DECOR4.boites; // (posées à l'installation, retirées au rangement : main.js)
   lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
   lieux.ecole = lieuxEcole; // l'école (ecole.js : les enfants, les adultes, le portail, la porte, les jeux, l'horloge, la cloche)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
@@ -4540,6 +4696,7 @@ void main() {
   // sablière à 4,84 m)
   lieux.toits = [{ x0: -76.5, z0: -94, x1: -60, z1: -80, y: 4.45 }];
   lieux.portes = portes; // la porte de chaque client (clients.js) : { x, z, rot } devant le seuil, la façade tournée de rot
+  lieux.portesOuvertes = PORTES4; // l'implantation des portes ouvertes (mission 4, plus haut)
   // les restaurateurs à découvrir (restaurateurs.js) : la place de chacun devant son restaurant, tourné vers la rue (ceux du
   // château : d'après lieux.chateau.restos)
   lieux.restaurateurs = RESTO_LIEUX;
@@ -4650,5 +4807,5 @@ void main() {
   }
 
   activerDalles(); // le monde est construit : les pieds et les roues se posent désormais sur les dalles (relief.js)
-  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter, ligne, porteSolu: za.porteSolu, toitSolu: za.toitSolu, interieurSolu: za.interieurSolu, vitresSolu: za.vitresSolu };
+  return { ciel, soleil: soleilL, hemi, carte, lieux, panneaux: [enseignes], nuages: ciel.children[1], regler, maj, ombres, nuit, porteBureau: chai.porte, interieurBureau: chai.interieur, portableBureau: chai.portable, decorPortes: DECOR4.maillages, porteChai: chai.porteChai, halleChai: chai.halle, moulin, vignes, traiter, retraiter, ligne, porteSolu: za.porteSolu, toitSolu: za.toitSolu, interieurSolu: za.interieurSolu, vitresSolu: za.vitresSolu };
 }
