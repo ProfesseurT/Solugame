@@ -33,6 +33,21 @@ export class Pieton {
     this.hv = 0; this.vr = 0; this.om = 0; this.acc = 0;
     this.choc = 0; this.saut = 0; this.sautT = 0; this.sx = 0; this.sz = 0; this.atterri = 0;
     this.conduite = false; this.maj = false; this.salutAvant = false;
+    // ce que les autres modules posent sur un personnage (anim.js les lit à chaque image) : tous déclarés ici, dans cet
+    // ordre, pour que tous les personnages aient la même forme. Une propriété ajoutée plus tard donne une autre forme à
+    // l'objet ; au-delà de quatre formes, V8 lit chaque nombre à virgule par un accès générique, qui le met en boîte : des
+    // dizaines de Ko jetés par image (mesuré le 28/11/2026 : sept formes de personnages, treize d'Anim)
+    this.parle = false;      // au casque, au téléphone (vrai, ou de 0 à 1 : anim.js, vivre et poseClavier)
+    this.fume = false;       // une cigarette (anim.js : poseFume rend bout, bouffee, bouche)
+    this.bout = null; this.bouffee = false; this.bouche = null;
+    this.clavierZ = null;    // le clavier à tant de mètres devant soi (anim.js : poseClavier)
+    this.siege = 0; this.y0 = 0; // assis : la hauteur du siège, celle du sol dessous (anim.js : poseAssise)
+    this.jeu = null;         // un enfant qui joue (ecole.js)
+    this.velo = null;        // à vélo (velos.js)
+    this.caresse = null;     // à genoux devant le chien (gestes.js)
+    this.appuis = null;      // monter, descendre, temps par temps (gestes.js)
+    this.baisse = undefined; // se baisser pour passer en montant (gestes.js)
+    this.etq = null; this.servable = false; this.surServi = null; // (main.js, restaurateurs.js, verres.js)
     this.anim = new Anim(modele);
   }
   placer(x, z, h) { this.pos.set(x, 0, z); this.h = h; this.hv = h; this.v = 0; this.vr = 0; this.sautT = 0; this.saut = 0; this.choc = 0; this.sync(0); }
@@ -151,6 +166,7 @@ export class Passant {
     if (modele.aine) this.allure = Math.min(this.allure * 0.62, 0.95); // les aînés, à petits pas (perso.js)
     this.vu = new THREE.Vector3(); this.tVu = 0; this.ux = 0; this.uz = 1; this.dx = NaN; this.dz = 0; this.fx = 0; this.fz = 0;
     this.ecrase = 0; // mode WTF : aplati par un véhicule, secondes qui restent avant d'être tout à fait relevé
+    this.cri = null; // son étiquette « Hé ! » (main.js)
     this.nouvelleCible();
     this.p.placer(this.cible.x, this.cible.z, rnd() * 6.28);
     this.nouvelleCible();

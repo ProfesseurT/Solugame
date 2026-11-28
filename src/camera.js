@@ -154,7 +154,9 @@ export class Camera {
   // cloisons la rapprochent (murs : des boîtes [x0, z0, x1, z1] ; elle reste à 25 cm de leur face) : elle rentre vite,
   // ressort lentement, et monte un peu quand elle est tout près. Rend sa distance au personnage (de tout près, main.js ne
   // le dessine plus).
-  interieur(dt, x, z, h, v, murs, plafond, portes = []) {
+  // (plantes : [x, z, rayon] du feuillage des grandes plantes, à la hauteur de la caméra : dans un angle, elle s'arrête
+  // devant au lieu d'entrer dans le feuillage et de ne plus montrer qu'un mur de feuilles ; Solumatic, 28/11/2026)
+  interieur(dt, x, z, h, v, murs, plafond, portes = [], plantes = []) {
     const ct = this.ctrl;
     if (ct) {
       const r = ct.cam;
@@ -188,6 +190,10 @@ export class Camera {
       let dedans = false;
       for (let i = 0; i < murs.length; i++) { const b = murs[i]; if (qx > b[0] - m && qx < b[2] + m && qz > b[1] - m && qz < b[3] + m) { dedans = true; break; } }
       if (dedans) { libre = Math.max(0.15, s - 0.08); break; }
+      // (une plante tout contre soi n'avance pas la caméra jusque dans la tête : 0,6 m au moins)
+      let plante = false;
+      if (s > 0.5) for (let i = 0; i < plantes.length; i++) { const p = plantes[i], ex = qx - p[0], ez = qz - p[1]; if (ex * ex + ez * ez < p[2] * p[2]) { plante = true; break; } }
+      if (plante) { libre = Math.max(0.6, s - 0.08); break; }
       if (!sP) for (let i = 0; i < portes.length; i++) { const b = portes[i]; if (qx > b[0] - 0.1 && qx < b[2] + 0.1 && qz > b[1] - 0.1 && qz < b[3] + 0.1) { sP = s; break; } }
     }
     if (!pret) this.dCol = libre;

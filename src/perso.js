@@ -11,7 +11,7 @@
 // de la pièce (teint, couleur de la veste) reste portée par les sommets : la texture la module.
 // Normales lissées (sauf aux arêtes vives : boîtes, bords des cheveux), pour des formes rondes sans plus de triangles.
 import * as THREE from 'three';
-import { B, C, S, MAT, T as TM, teinter, fusion, icosa, deplacer } from './modeles.js';
+import { B, C, S, MAT, T as TM, teinter, fusion, icosa, deplacer, UNI } from './modeles.js';
 import { Z, ZONE, GLSL_ZONES, FX, FY, OEIL, LA, HA, texturePersos } from './atlas.js';
 import { hasard, lisse, entre, assombrir } from './outils.js';
 
@@ -113,6 +113,7 @@ const GLSL_LUSTRE = `#include <lights_fragment_end>
 }
 #endif`;
 MAT_PERSO.onBeforeCompile = sh => {
+  sh.uniforms.uLampes = UNI.uLampes; // (les lampes d'un intérieur, éteintes ou non : modeles.js, definirInterieur)
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aMat;\nflat varying float vZone;')
     .replace('#include <uv_vertex>', '#include <uv_vertex>\nvZone = aMat;');
@@ -702,36 +703,38 @@ export function cigarette(m) {
 /* ---------------------------------------------------------------- peau souple
    Chaque pièce suit son os ; un sommet proche d'une jointure suit aussi l'os voisin, d'autant plus qu'il en est près
    (jusqu'à la moitié, à la jointure même). Coudes, genoux, épaules, hanches, taille et cou se plient en courbe au lieu
-   de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend [os voisin, poids]
-   ou null. */
+   de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend l'os voisin (son
+   poids dans LIEN[0]), ou -1 (sans tableau neuf par sommet : trois mille par personnage). */
+const LIEN = new Float64Array(1);
+const lien = (os, w) => { LIEN[0] = w; return os; };
 function liens(i, x, y) {
   switch (i) {
     case 0: // bassin : le ventre au-dessus ; en dessous, la cuisse de son côté (une jupe suit un peu les jambes)
-      if (y > 0.04) return [1, 0.45 * lisse((y - 0.04) / 0.07)];
-      if (y < -0.05 && Math.abs(x) > 0.015) return [x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * lisse((-0.05 - y) / 0.08)];
-      return null;
+      if (y > 0.04) return lien(1, 0.45 * lisse((y - 0.04) / 0.07));
+      if (y < -0.05 && Math.abs(x) > 0.015) return lien(x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * lisse((-0.05 - y) / 0.08));
+      return -1;
     case 1: // ventre : le bassin en bas, la poitrine en haut
-      if (y < 0.02) return [0, 0.5 * lisse((0.02 - y) / 0.07)];
-      if (y > 0.15) return [2, 0.45 * lisse((y - 0.15) / 0.07)];
-      return null;
-    case 2: return y < 0.03 ? [1, 0.5 * lisse((0.03 - y) / 0.07)] : null; // poitrine : le ventre en bas
-    case 3: return y < 0.05 ? [2, 0.6 * lisse((0.05 - y) / 0.08)] : null; // le bas du cou suit la poitrine
+      if (y < 0.02) return lien(0, 0.5 * lisse((0.02 - y) / 0.07));
+      if (y > 0.15) return lien(2, 0.45 * lisse((y - 0.15) / 0.07));
+      return -1;
+    case 2: return y < 0.03 ? lien(1, 0.5 * lisse((0.03 - y) / 0.07)) : -1; // poitrine : le ventre en bas
+    case 3: return y < 0.05 ? lien(2, 0.6 * lisse((0.05 - y) / 0.08)) : -1; // le bas du cou suit la poitrine
     case 4: case 7: // haut du bras : l'épaule suit la poitrine, le bas suit l'avant-bras
-      if (y > -0.07) return [2, 0.5 * lisse((y + 0.07) / 0.08)];
-      if (y < -0.23) return [i + 1, 0.5 * lisse((-0.23 - y) / 0.06)];
-      return null;
+      if (y > -0.07) return lien(2, 0.5 * lisse((y + 0.07) / 0.08));
+      if (y < -0.23) return lien(i + 1, 0.5 * lisse((-0.23 - y) / 0.06));
+      return -1;
     case 5: case 8: // avant-bras : le coude suit le bras, le poignet un peu la main
-      if (y > -0.06) return [i - 1, 0.5 * lisse((y + 0.06) / 0.06)];
-      if (y < -0.215) return [i + 1, 0.3 * lisse((-0.215 - y) / 0.035)];
-      return null;
-    case 6: case 9: return y > -0.025 ? [i - 1, 0.3 * lisse((y + 0.025) / 0.025)] : null;
+      if (y > -0.06) return lien(i - 1, 0.5 * lisse((y + 0.06) / 0.06));
+      if (y < -0.215) return lien(i + 1, 0.3 * lisse((-0.215 - y) / 0.035));
+      return -1;
+    case 6: case 9: return y > -0.025 ? lien(i - 1, 0.3 * lisse((y + 0.025) / 0.025)) : -1;
     case 10: case 13: // cuisse : la hanche suit le bassin, le bas suit le tibia
-      if (y > -0.1) return [0, 0.5 * lisse((y + 0.1) / 0.1)];
-      if (y < -0.37) return [i + 1, 0.5 * lisse((-0.37 - y) / 0.07)];
-      return null;
-    case 11: case 14: return y > -0.07 ? [i - 1, 0.5 * lisse((y + 0.07) / 0.07)] : null; // le genou suit la cuisse
+      if (y > -0.1) return lien(0, 0.5 * lisse((y + 0.1) / 0.1));
+      if (y < -0.37) return lien(i + 1, 0.5 * lisse((-0.37 - y) / 0.07));
+      return -1;
+    case 11: case 14: return y > -0.07 ? lien(i - 1, 0.5 * lisse((y + 0.07) / 0.07)) : -1; // le genou suit la cuisse
   }
-  return null;
+  return -1;
 }
 
 /* ---------------------------------------------------------------- mains
@@ -866,9 +869,9 @@ function assembler(G, W, kj, ka) {
           if (cs) { r = cs[k * 3]; gg = cs[k * 3 + 1]; b = cs[k * 3 + 2]; }
           if (pm) { const w = pm[1] * Math.max(0, Math.min(1, (-pm[0] * n[k * 3] - 0.35) * 2)); r += (PAUME[0] - r) * w; gg += (PAUME[1] - gg) * w; b += (PAUME[2] - b) * w; }
           COL[j * 3] = LIN[(r + 0.5) | 0]; COL[j * 3 + 1] = LIN[(gg + 0.5) | 0]; COL[j * 3 + 2] = LIN[(b + 0.5) | 0];
-          const l = liens(i, x - wx, (y - wy) / ky), w = l ? Math.round(l[1] * 255) : 0;
+          const l = liens(i, x - wx, (y - wy) / ky), w = l >= 0 ? Math.round(LIEN[0] * 255) : 0;
           SI[j * 4] = i; SW[j * 4] = 255 - w;
-          if (w) { SI[j * 4 + 1] = l[0]; SW[j * 4 + 1] = w; }
+          if (w) { SI[j * 4 + 1] = l; SW[j * 4 + 1] = w; }
         }
         IDX[ni++] = j;
       }
@@ -958,10 +961,57 @@ function oreille(s, c, rx, yb, zb, k) {
   return finir(g, c, Z.peau, uvBoite(g, Z.peau));
 }
 
+// Les os. L'angle d'un os (son Euler) n'est recalculé depuis son quaternion que quand on le lit : anim.js écrit souvent le
+// quaternion (la cinématique inverse, les mélanges de poses) et lit rarement l'angle ensuite ; three.js le recalculait à
+// chaque écriture (une matrice de rotation, des arcs tangentes : 10 % du temps de jeu sur la place, mesuré le 28/11/2026).
+// L'angle écrit refait le quaternion, comme avant.
+class EulerOs extends THREE.Euler {
+  constructor() { super(); this.q = null; this.perime = false; }
+  frais() { if (this.perime) { this.perime = false; this.setFromQuaternion(this.q, this._order, false); } }
+  get x() { this.frais(); return this._x; }
+  set x(v) { this.frais(); this._x = v; this._onChangeCallback(); }
+  get y() { this.frais(); return this._y; }
+  set y(v) { this.frais(); this._y = v; this._onChangeCallback(); }
+  get z() { this.frais(); return this._z; }
+  set z(v) { this.frais(); this._z = v; this._onChangeCallback(); }
+  get order() { return this._order; }
+  set order(v) { this.frais(); this._order = v; this._onChangeCallback(); }
+  // (écrit sur place plutôt que par super.set : un appel de plus, des nombres en boîte de plus)
+  set(x, y, z, order = this._order) { this.perime = false; this._x = x; this._y = y; this._z = z; this._order = order; this._onChangeCallback(); return this; }
+  copy(e) { this.perime = false; return super.copy(e); }
+}
+class OsPerso extends THREE.Bone {
+  constructor() {
+    super();
+    const q = this.quaternion, r = new EulerOs();
+    r.q = q;
+    r._onChange(() => q.setFromEuler(r, false));
+    q._onChange(() => { r.perime = true; });
+    Object.defineProperty(this, 'rotation', { configurable: true, enumerable: true, value: r });
+  }
+}
+// Le groupe d'un personnage : caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer
+// les matrices de ses 18 os à chaque image (three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai).
+// L'accesseur est sur la classe, pas posé sur chaque groupe (Object.defineProperty, une fonction par personnage) : tous les
+// groupes ont ainsi la même forme pour V8, et le parcours de la scène par three.js reste rapide.
+class GroupePerso extends THREE.Group {
+  constructor() { super(); this.maillage = null; }
+  get matrixWorldAutoUpdate() { return this.visible && (this.maillage === null || this.maillage.visible); }
+  set matrixWorldAutoUpdate(v) { /* (le constructeur de three.js l'écrit : on l'ignore) */ }
+}
 // Renvoie { groupe, maillage, os, dim, ... } : groupe est l'objet à ajouter à la scène (ou au tracteur). Options nouvelles
 // (27/11/2026) : casque (vrai, ou sa couleur : le casque-micro de bureau, par-dessus la coiffure), badge (vrai, ou la
 // couleur du cordon). Rend aussi paupieres (le clignement : pas de queue de cheval) et mecheZ (anim.js).
 export function perso(o0) {
+  const it = persoPas(o0);
+  let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+// Le même, en neuf étapes (une par appel de next ; la dernière rend le personnage) : créer quelqu'un coûte 2 ms (8 à
+// 10 ms sur un téléphone lent), en une seule image ça se voit ; en neuf, 0,25 ms chacune en moyenne (solumatic.js : creer).
+// Rien n'y est tiré au sort : le personnage est le même, d'un coup ou en plusieurs fois.
+export function* persoPas(o0) {
   if (!MAT_PERSO.map) { MAT_PERSO.map = texturePersos(); MAT_PERSO.map.repeat.set(UVK, UVK); }
   const o = completer(o0);
   const peau = o.peau || TEINTS[5], ch = o.cheveux || '#2b1d0e', haut = o.haut || '#5a6b7a', bas = o.bas || '#2c3e50', chau = o.chaussures || '#2a2420';
@@ -1090,6 +1140,7 @@ export function perso(o0) {
   }
   if (tenue0 === 'doudoune') add(2, loft([[0.25, 0.085, 0.045, -0.115 * f], [0.31, 0.096, 0.06, -0.106 * f], [0.36, 0.074, 0.048, -0.09 * f]], 10, haut, Z.matelasse));
 
+  yield; // (étape 2 : la tête)
   /* tête : cou, crâne, visage (projeté de face), yeux et paupières, sourcils, nez, oreilles, cheveux, couvre-chef */
   const T = 3, yc = YC, zc = ZC, rx = RX, ry = RY, rz = RZ, jaw = femme || PE ? 0.36 : 0.24;
   // surface du visage (sans ses facettes) : z en (x, y), y compté depuis le centre du crâne
@@ -1175,6 +1226,7 @@ export function perso(o0) {
   }
   // oreilles : du sourcil au bas du nez, juste derrière le milieu de la tête
   for (const s of [1, -1]) add(T, oreille(s, peau, rx, yc - 0.012, zc - 0.016, PE ? 0.9 : femme ? 0.92 : 1));
+  yield; // (étape 3 : les cheveux, la barbe, ce qu'on porte sur la tête)
   // cheveux : la forme du crâne agrandie de k. Un champ dit où il y en a (positif dedans, en unités de la sphère) :
   // l'épaisseur monte de zéro à k sur une bande de largeur w, et rentre sous la peau au-dehors. La lisière (épaisseur
   // nulle) suit ainsi une courbe douce au lieu des arêtes des facettes ; les facettes enfouies sont retirées. Même boule
@@ -1416,6 +1468,7 @@ export function perso(o0) {
   if (o.chapeau === 'tuque') add(T, cheveux(1.1, (x, y, z) => y - 0.36 + 0.12 * Math.max(0, -z), 1, 1.14, 1, 0.018, cc, Z.cotes), loft([[yc + 0.048, rx * 1.1, rz * 1.06, zc - 0.004], [yc + 0.09, rx * 1.08, rz * 1.04, zc - 0.004]], 10, fonce(cc, 0.8), Z.cotes, false, false));
   if ((o.chapeau === 'bonnet' || o.chapeau === 'tuque') && o.pompon) add(T, boulette(0.036, o.pompon, Z.cotes, 0, yc + 0.018 + ry * 1.254 + 0.02, zc - 0.006, 1, 0.92, 1, 1));
   if (o.capuche) add(2, boulette(0.105, haut, zHaut, 0, 0.29, -0.115, 1.05, 0.62, 0.55, 1));
+  yield; // (étape 4 : le crâne et le visage)
   // le crâne et le visage : la grille serrée sur le visage (gabarit 'tete'), sans les facettes cachées sous des cheveux
   // épais, un foulard, un bonnet
   {
@@ -1424,6 +1477,7 @@ export function perso(o0) {
     add(T, finir(face, peau, zVisage, uvVisage(face, yc)), finir(crane, peau, Z.peau, uvBoite(crane, Z.peau)));
   }
 
+  yield; // (étapes 5 et 6 : les bras et les mains ; 7 : les jambes)
   /* bras : épaule, coude, main (paume et doigts d'un seul tenant, pouce) */
   for (const [i, s] of [[4, 1], [7, -1]]) {
     // (le haut du bras : le biceps devant, le deltoïde qui arrondit l'épaule ; l'avant-bras : plus large près du coude, le
@@ -1437,6 +1491,7 @@ export function perso(o0) {
     if (avantBras === peau) add(i, bande(anH, -0.3 * ka, -0.24 * ka, 1.12, manche, zManche, NM));
     else add(i + 1, bande(anA, -0.245 * ka, -0.215 * ka, 1.08, fonce(manche, 0.8), zManche === Z.matelasse || zManche === Z.maille ? Z.cotes : zManche, NM));
     add(i + 2, ...main(s, femme ? 0.9 : 1, peau));
+    yield; // (une étape par bras : la main et ses cinq doigts, c'est le plus long)
   }
   if (f > 1) for (const i of [4, 5, 7, 8]) gonfler(G[i], tenue0 === 'doudoune' ? 1.13 : 1.05); // les manches du manteau, de la doudoune
   // le dedans des mains, plus clair sur une peau foncée (la paume, l'intérieur des doigts)
@@ -1512,6 +1567,7 @@ export function perso(o0) {
     for (const i of [OS.tete, OS.brasG, OS.brasD]) { const [x, y, z] = P[i]; P[i] = [x, y * ca - z * sa, y * sa + z * ca]; }
   }
 
+  yield; // (étape 8 : l'assemblage ; étape 9 : le squelette)
   /* assemblage : chaque pièce suit son os ; près d'une jointure, elle suit aussi l'os voisin (peau souple, voir liens) */
   const W = [], PAR = PE ? PARENT_ENFANT : PARENT;
   for (let i = 0; i < P.length; i++) {
@@ -1519,7 +1575,8 @@ export function perso(o0) {
     W.push([p[0] + P[i][0], p[1] + P[i][1], p[2] + P[i][2]]);
   }
   const geo = assembler(G, W, kj, ka);
-  const os = P.map(p => { const b = new THREE.Bone(); b.position.set(p[0], p[1], p[2]); return b; });
+  yield;
+  const os = P.map(p => { const b = new OsPerso(); b.position.set(p[0], p[1], p[2]); return b; });
   for (let i = 1; i < os.length; i++) os[PAR[i]].add(os[i]);
   const maillage = new THREE.SkinnedMesh(geo, MAT_PERSO);
   maillage.add(os[0]);
@@ -1532,13 +1589,11 @@ export function perso(o0) {
   if (!aQueue) { os[OS.meche].scale.y = 0.03; os[OS.meche].position.z -= 0.004; } // les yeux ouverts (anim.js : le clignement)
   os[OS.tete].scale.setScalar(TETE * kt); // après bind : la tête (cou, cheveux, couvre-chef compris) un peu plus grande
 
-  const groupe = new THREE.Group();
+  const groupe = new GroupePerso();
   const echelle = PE ? (o.hauteur ?? PE.hauteur) / PE.Hm : 0.96 * (o.taille ?? 1);
   groupe.scale.setScalar(echelle);
-  groupe.add(maillage);
-  // caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer les matrices de ses 18 os à
-  // chaque image : three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai
-  Object.defineProperty(groupe, 'matrixWorldAutoUpdate', { get: () => groupe.visible && maillage.visible, set() {}, configurable: true });
+  groupe.add(maillage); groupe.maillage = maillage;
   // (traits : l'apparence complète, pour les bancs ; aine : il marche plus lentement, pieton.js ; enfant : l'école)
-  return { groupe, maillage, os, echelle, femme, queue: aQueue, paupieres: !aQueue, mecheZ: P[17][2], enfant: !!PE, dim: { xh, xe, H, K, L1, L2, yB, bras: LB, avantBras: LA }, traits: o, aine: o.age === 'aine' };
+  // (acc, cig : les accessoires, créés à la demande ; déclarés ici, une seule forme d'objet pour tous : pieton.js)
+  return { groupe, maillage, os, echelle, femme, queue: aQueue, paupieres: !aQueue, mecheZ: P[17][2], enfant: !!PE, dim: { xh, xe, H, K, L1, L2, yB, bras: LB, avantBras: LA }, traits: o, aine: o.age === 'aine', acc: null, cig: null };
 }

@@ -15,11 +15,11 @@
 // est reprise du plan (ni l'adresse, ni le reste du document). Qui est où : textes.js, EQUIPE.
 import * as THREE from 'three';
 import { B, C, S, fusion, UNI } from './modeles.js';
-import { perso, tirerApparence, OS } from './perso.js';
+import { perso, persoPas, tirerApparence, OS } from './perso.js';
 import { Pieton } from './pieton.js';
 import { logoSolumatic } from './logo.js';
 import { SOLUMATIC as TXT, EQUIPE } from './textes.js';
-import { $, hasard, jourDe, heureDe, ouvert, dateJeu, HORAIRES } from './outils.js';
+import { $, hasard, jourDe, heureDe, ouvert, dateJeu, HORAIRES, angle, lisse } from './outils.js';
 
 // Le plan en mètres : u vers la droite du plan (l'ouest), v vers le bas (le nord), depuis l'angle intérieur en haut à
 // gauche (au sud-est). Agrandi de 30 % (Teddy, 27/11/2026 : « augmenter les proportions de 30 %, afin qu'on puisse se
@@ -437,7 +437,7 @@ export function panneauxSolumatic(affiches, ecrans) {
    babyfoot }. Tout en coordonnées du monde, déduites des pièces (P), du plan (X, Z) et de SOLU : rien n'est écrit en dur,
    le bâtiment peut encore bouger. Ce qui sert à ceux qui y vivent (les lieux du café, de l'imprimante, du baby-foot, de
    la réunion ; les horloges ; le poste de Vanessa) est rangé dans VIE. */
-const VIE = { postes: {}, cafe: [], repas: [], imprimante: [], reunion: [], horloges: [], cibles: {} };
+const VIE = { postes: {}, cafe: [], repas: [], imprimante: [], reunion: [], horloges: [], cibles: {}, plantes: [] };
 export function interieurSolumatic() {
   const G = [], V = [], boites = [], tournees = [], murs = [], portes = [], affiches = [], ecrans = [], gens = [];
   const e = 0.1, HP = SOLU.HP, HPO = 2.1, { x0, x1, z0, z1 } = SOLU;
@@ -728,6 +728,7 @@ export function interieurSolumatic() {
     else if (genre === 'petite') { for (let i = 0; i < 4; i++) G.push(S(0.035, F(), x + (rp() - 0.5) * 0.06, ph + 0.03, z + (rp() - 0.5) * 0.06, 1, 0.8, 1)); }
     else if (genre === 'pothos') { for (let i = 0; i < 12; i++) { const a = i * 1.3, dd = 0.08 + (i % 4) * 0.05; G.push(S(0.05, F(), x + Math.sin(a) * dd, ph - (i % 5) * 0.08 + 0.04, z + Math.cos(a) * dd, 1, 0.6, 1)); } }
     if (collision && genre !== 'petite' && genre !== 'pothos') col(x - pr - 0.03, z - pr - 0.03, x + pr + 0.03, z + pr + 0.03);
+    if (k >= 1 && (genre === 'ficus' || genre === 'kentia' || genre === 'strelitzia')) VIE.plantes.push([x, z, 0.5 * k]); // (son feuillage, à hauteur de la caméra : elle s'arrête devant, camera.js)
   };
   // un portemanteau sur pied, ses manteaux et une écharpe
   const portemanteau = (x, z, n = 3) => {
@@ -1155,7 +1156,7 @@ export function interieurSolumatic() {
   }
 
   VIE.babyfoot = babyfoot; VIE.boites = boites; VIE.tournees = tournees;
-  const lumiere = { couleur: [1.0, 0.97, 0.93], force: 1.25, portee: 0.17, fond: [0.6, 0.6, 0.59], relief: true };
+  const lumiere = { couleur: [1.0, 0.97, 0.93], force: 1.25, portee: 0.17, fond: [0.6, 0.6, 0.59], relief: true, allumage: true }; // (allumage : éteintes quand le bureau est vide, la classe Solumatic)
   return { geos: G, vitres: V, boites, tournees, murs, portes, pieces, lampes, lumiere, affiches, ecrans, gens, babyfoot };
 }
 
@@ -1180,66 +1181,122 @@ class Grille {
     for (const [a, c, d, f] of boites) marquer(a, c, d, f);
     for (const [cx, cz, w, , r] of tournees) { const ux = Math.cos(r), uz = -Math.sin(r); for (let s = -w / 2; s <= w / 2 + 1e-6; s += 0.08) marquer(cx + ux * s, cz + uz * s, cx + ux * s, cz + uz * s); }
     for (let j = 0; j < this.nz; j++) for (let i = 0; i < this.nx; i++) { const cx = x0 + (i + 0.5) * pas, cz = z0 + (j + 0.5) * pas; if (cx < x0 + marge || cx > x1 - marge || cz < z0 + marge || cz > z1 - marge) b[j * this.nx + i] = 1; }
-    this.g = new Float32Array(n); this.de = new Int32Array(n); this.vu = new Uint8Array(n); this.tas = []; this.evite = null;
+    // (la recherche : tableaux typés gardés d'une fois sur l'autre, rien d'alloué par case ; tour : le numéro de la
+    // recherche, qui dit si g et ferme sont de celle-ci, sans tout remettre à zéro ; ev : les cases autour de qui gêne)
+    this.g = new Float32Array(n); this.de = new Int32Array(n); this.tg = new Uint32Array(n); this.tf = new Uint32Array(n); this.tour = 0;
+    this.ev = new Uint8Array(n); this.evL = []; this.R = null;
+    this.tasF = new Float32Array(2 * n); this.tasK = new Int32Array(2 * n);
+    // les chemins déjà cherchés (sans personne à éviter), d'un point à un autre au centimètre près : les allers et retours
+    // du café, de l'imprimante, des réunions ne se cherchent qu'une fois
+    this.cache = new Map();
   }
   ij(x, z) { return [Math.floor((x - this.x0) / this.p), Math.floor((z - this.z0) / this.p)]; }
-  bloque(i, j) {
-    if (i < 0 || j < 0 || i >= this.nx || j >= this.nz || this.b[j * this.nx + i]) return true;
-    const e = this.evite; if (!e) return false;
-    const cx = this.x0 + (i + 0.5) * this.p, cz = this.z0 + (j + 0.5) * this.p; return (cx - e.x) ** 2 + (cz - e.z) ** 2 < e.r * e.r;
-  }
-  libre(x, z) { const [i, j] = this.ij(x, z); return !this.bloque(i, j); }
-  // la case libre la plus proche (en anneaux, jusqu'à 1,5 m)
+  bloque(i, j) { if (i < 0 || j < 0 || i >= this.nx || j >= this.nz) return true; const k = j * this.nx + i; return this.b[k] === 1 || this.ev[k] === 1; }
+  libre(x, z) { return !this.bloque(Math.floor((x - this.x0) / this.p), Math.floor((z - this.z0) / this.p)); }
+  // la case libre la plus proche (en anneaux, jusqu'à 1,5 m) : son numéro, ou -1
   proche(x, z) {
-    const [i0, j0] = this.ij(x, z);
+    const i0 = Math.floor((x - this.x0) / this.p), j0 = Math.floor((z - this.z0) / this.p);
     for (let k = 0; k < 10; k++) for (let dj = -k; dj <= k; dj++) for (let di = -k; di <= k; di++) {
       if (Math.max(Math.abs(di), Math.abs(dj)) !== k || this.bloque(i0 + di, j0 + dj)) continue;
-      return [i0 + di, j0 + dj];
+      return (j0 + dj) * this.nx + i0 + di;
     }
-    return null;
+    return -1;
   }
-  // rien ne gêne en ligne droite de a à b ?
+  // rien ne gêne en ligne droite de a à b ? Chaque case que traverse le segment (pas à pas d'une case à la suivante,
+  // Amanatides et Woo), plus sûr et dix fois moins de calculs qu'un point tous les 7 cm
   vue(ax, az, bx, bz) {
-    const d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / 0.07);
-    for (let k = 0; k <= n; k++) { const t = k / (n || 1); if (!this.libre(ax + (bx - ax) * t, az + (bz - az) * t)) return false; }
+    const p = this.p, fx = (ax - this.x0) / p, fz = (az - this.z0) / p, gx = (bx - this.x0) / p, gz = (bz - this.z0) / p;
+    let i = Math.floor(fx), j = Math.floor(fz);
+    const i1 = Math.floor(gx), j1 = Math.floor(gz), dx = gx - fx, dz = gz - fz, si = dx > 0 ? 1 : -1, sj = dz > 0 ? 1 : -1;
+    const ddx = dx ? Math.abs(1 / dx) : 1e30, ddz = dz ? Math.abs(1 / dz) : 1e30;
+    let tx = dx ? (dx > 0 ? i + 1 - fx : fx - i) * ddx : 1e30, tz = dz ? (dz > 0 ? j + 1 - fz : fz - j) * ddz : 1e30;
+    for (let n = Math.abs(i1 - i) + Math.abs(j1 - j) + 1; n > 0; n--) {
+      if (this.bloque(i, j)) return false;
+      if (tx < tz) { tx += ddx; i += si; } else { tz += ddz; j += sj; }
+    }
     return true;
   }
-  // le chemin de a à b : une liste de points [x, z] (le premier après a, le dernier b), ou null ; evite : { x, z, r }
-  chemin(ax, az, bx, bz, evite = null) {
-    this.evite = evite;
-    try {
-      if (this.vue(ax, az, bx, bz)) return [[bx, bz]];
-      const A_ = this.proche(ax, az), B_ = this.proche(bx, bz);
-      if (!A_ || !B_) return null;
-      const nx = this.nx, a = A_[1] * nx + A_[0], b = B_[1] * nx + B_[0], g = this.g, de = this.de, vu = this.vu, tas = this.tas;
-      g.fill(1e9); vu.fill(0); tas.length = 0; g[a] = 0; de[a] = -1;
-      const hf = k => { const di = Math.abs(k % nx - B_[0]), dj = Math.abs(Math.floor(k / nx) - B_[1]); return Math.max(di, dj) + 0.414 * Math.min(di, dj); };
-      const pousser = (k, f) => { tas.push([f, k]); let i = tas.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (tas[p][0] <= tas[i][0]) break; [tas[p], tas[i]] = [tas[i], tas[p]]; i = p; } };
-      const tirer = () => { const t = tas[0], l = tas.pop(); if (tas.length) { tas[0] = l; let i = 0; for (;;) { const a1 = 2 * i + 1, b1 = a1 + 1; let m = i; if (a1 < tas.length && tas[a1][0] < tas[m][0]) m = a1; if (b1 < tas.length && tas[b1][0] < tas[m][0]) m = b1; if (m === i) break; [tas[m], tas[i]] = [tas[i], tas[m]]; i = m; } } return t; };
-      pousser(a, hf(a));
-      let trouve = false;
-      while (tas.length) {
-        const [, k] = tirer();
-        if (vu[k]) continue; vu[k] = 1;
-        if (k === b) { trouve = true; break; }
-        const i = k % nx, j = Math.floor(k / nx);
-        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-          if (!di && !dj) continue;
-          const ii = i + di, jj = j + dj;
-          if (this.bloque(ii, jj) || (di && dj && (this.bloque(i + di, j) || this.bloque(i, j + dj)))) continue;
-          const kk = jj * nx + ii, ng = g[k] + (di && dj ? 1.414 : 1);
-          if (ng < g[kk]) { g[kk] = ng; de[kk] = k; pousser(kk, ng + hf(kk)); }
-        }
+  // les cases autour de qui gêne (evite : { x, z, r }), marquées le temps d'une recherche
+  marquer(e) {
+    const p = this.p, r = e.r, i0 = Math.max(0, Math.floor((e.x - r - this.x0) / p)), i1 = Math.min(this.nx - 1, Math.floor((e.x + r - this.x0) / p));
+    const j0 = Math.max(0, Math.floor((e.z - r - this.z0) / p)), j1 = Math.min(this.nz - 1, Math.floor((e.z + r - this.z0) / p));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const cx = this.x0 + (i + 0.5) * p, cz = this.z0 + (j + 0.5) * p;
+      if ((cx - e.x) ** 2 + (cz - e.z) ** 2 < r * r) { const k = j * this.nx + i; this.ev[k] = 1; this.evL.push(k); }
+    }
+  }
+  // le chemin de a à b : une liste de points [x, z] (le premier après a, le dernier b), ou null ; evite : { x, z, r }.
+  // Un chemin rendu peut être partagé (le cache) : on ne le modifie pas. D'un coup (les essais) ; dans le jeu, lancer
+  // puis avancer, quelques milliers de cases par image (solumatic : chemins)
+  chemin(ax, az, bx, bz, evite = null) { let r = this.lancer(ax, az, bx, bz, evite); while (r === undefined) r = this.avancer(1e9); return r; }
+  get occupee() { return this.R !== null && this.R !== undefined; }
+  // Lance une recherche (une seule à la fois) : rend le chemin s'il est déjà connu (le cache), direct (rien ne gêne) ou
+  // impossible (null) ; sinon undefined, et avancer le rendra.
+  lancer(ax, az, bx, bz, evite = null) {
+    const cle = evite ? null : Math.round(ax * 100) + ',' + Math.round(az * 100) + '>' + Math.round(bx * 100) + ',' + Math.round(bz * 100);
+    if (cle) { const c = this.cache.get(cle); if (c !== undefined) return c; }
+    if (evite) this.marquer(evite);
+    const R = this.R = { ax, az, bx, bz, cle, a: -1, b: -1, bi: 0, bj: 0, T: 0, n: 0 };
+    if (this.vue(ax, az, bx, bz)) return this.finir([[bx, bz]]);
+    R.a = this.proche(ax, az); R.b = this.proche(bx, bz);
+    if (R.a < 0 || R.b < 0) return this.finir(null);
+    R.bi = R.b % this.nx; R.bj = (R.b - R.bi) / this.nx; R.T = ++this.tour;
+    this.g[R.a] = 0; this.de[R.a] = -1; this.tg[R.a] = R.T; this.tasF[0] = 0; this.tasK[0] = R.a; R.n = 1;
+    return undefined;
+  }
+  // (abandonner la recherche en cours, sans rien retenir)
+  abandonner() { if (this.R) this.R.cle = null; this.finir(null); }
+  finir(res) {
+    const R = this.R; this.R = null;
+    for (const k of this.evL) this.ev[k] = 0;
+    this.evL.length = 0;
+    if (R && R.cle) { if (this.cache.size > 400) this.cache.clear(); this.cache.set(R.cle, res); }
+    return res;
+  }
+  // A* sur la grille, huit voisins, sans couper les coins ; tas binaire dans deux tableaux typés. Fouille au plus max
+  // cases ; rend le chemin (ou null) quand c'est fini, undefined sinon.
+  avancer(max) {
+    const R = this.R; if (!R) return null;
+    const nx = this.nx, nz = this.nz, g = this.g, de = this.de, tg = this.tg, tf = this.tf, T = R.T, B = this.b, EV = this.ev, F = this.tasF, K = this.tasK, cap = F.length;
+    const b = R.b, bi = R.bi, bj = R.bj;
+    let n = R.n, trouve = false;
+    // (la distance à vol d'oiseau sur la grille, un peu forcée : on fouille trois fois moins de cases pour un chemin à
+    // peine plus long, que le tendu redresse de toute façon)
+    const hf = k => { const i = k % nx, di = Math.abs(i - bi), dj = Math.abs((k - i) / nx - bj); return 1.5 * (di > dj ? di + 0.414 * dj : dj + 0.414 * di); };
+    const pousser = (k, f) => {
+      if (n >= cap) return;
+      let i = n++;
+      while (i > 0) { const q = (i - 1) >> 1; if (F[q] <= f) break; F[i] = F[q]; K[i] = K[q]; i = q; }
+      F[i] = f; K[i] = k;
+    };
+    while (n > 0 && max-- > 0) {
+      const k = K[0], fl = F[--n], kl = K[n];
+      // (le dernier remonte à la racine et redescend)
+      let i = 0;
+      for (;;) { const c1 = 2 * i + 1; if (c1 >= n) break; const c = c1 + 1 < n && F[c1 + 1] < F[c1] ? c1 + 1 : c1; if (F[c] >= fl) break; F[i] = F[c]; K[i] = K[c]; i = c; }
+      F[i] = fl; K[i] = kl;
+      if (tf[k] === T) continue; tf[k] = T;
+      if (k === b) { trouve = true; break; }
+      const ci = k % nx, cj = (k - ci) / nx, gk = g[k];
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const ii = ci + di, jj = cj + dj;
+        if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
+        const kk = jj * nx + ii;
+        if (B[kk] || EV[kk] || (di && dj && (B[k + di] || EV[k + di] || B[k + dj * nx] || EV[k + dj * nx]))) continue;
+        const ng = gk + (di && dj ? 1.414 : 1);
+        if (tg[kk] !== T || ng < g[kk]) { tg[kk] = T; g[kk] = ng; de[kk] = k; pousser(kk, ng + hf(kk)); }
       }
-      if (!trouve) return null;
-      const pts = []; for (let k = b; k !== -1; k = de[k]) pts.push([this.x0 + (k % nx + 0.5) * this.p, this.z0 + (Math.floor(k / nx) + 0.5) * this.p]);
-      pts.reverse(); pts.push([bx, bz]);
-      // tendu : de chaque point, on file au plus loin qu'on voit
-      const res = []; let cx = ax, cz = az, i = 0;
-      while (i < pts.length - 1) { let j = pts.length - 1; while (j > i + 1 && !this.vue(cx, cz, pts[j][0], pts[j][1])) j--; res.push(pts[j]); [cx, cz] = pts[j]; i = j; }
-      if (!res.length || res[res.length - 1] !== pts[pts.length - 1]) res.push(pts[pts.length - 1]);
-      return res;
-    } finally { this.evite = null; }
+    }
+    R.n = n;
+    if (!trouve) return n > 0 ? undefined : this.finir(null);
+    const pts = []; for (let k = b; k !== -1; k = de[k]) { const i = k % nx; pts.push([this.x0 + (i + 0.5) * this.p, this.z0 + ((k - i) / nx + 0.5) * this.p]); }
+    pts.reverse(); pts.push([R.bx, R.bz]);
+    // tendu : de chaque point, on file en ligne droite jusqu'au plus loin qu'on voit (pas seulement jusqu'au premier qu'on
+    // ne voit plus : moins de coudes, on ralentit moins)
+    const res = []; let cx = R.ax, cz = R.az, i = 0;
+    while (i < pts.length - 1) { let j = i + 1; for (let k = i + 2; k < pts.length; k++) if (this.vue(cx, cz, pts[k][0], pts[k][1])) j = k; res.push(pts[j]); cx = pts[j][0]; cz = pts[j][1]; i = j; }
+    return this.finir(res);
   }
 }
 
@@ -1310,7 +1367,8 @@ export class Solumatic {
   constructor(c) {
     this.c = c; this.L = c.monde.lieux.solumatic; this.gens = []; this.vu = false; this.n = 0; this.img = 0; this.tc = 0; this.tBulle = 0;
     if (this.L.fumeur) Object.assign(FUME, { x: this.L.fumeur.x, z: this.L.fumeur.z });
-    this.P = P; this.V = VIE; this.tAct = 15; this.tVoix = 0; this.mPrec = null; this.tH = 0; this.tFume = 0; this.tBouffee = 4;
+    this.P = P; this.V = VIE; this.tAct = 15; this.tVoix = 0; this.mPrec = null; this.tH = 0; this.tFume = 0;
+    this.enCreation = null; this.attenteCh = []; this.cherche = null; this.ligneFerme = null;
     const h = c.hud;
     this.etq = { entrer: h.action('Entrer chez Solumatic'), sortir: h.action('Sortir') };
     this.etiquettes = Object.values(this.etq);
@@ -1323,7 +1381,64 @@ export class Solumatic {
     this.balle.visible = false; c.scene.add(this.balle); c.garder(this.balle);
     this.bf = { s: 0, t: 0, vs: 0.9, vt: 0.4, tBut: 0, tToc: 0 };
     this.rnd = hasard(31);
-    this.aiguilles(); this.posteVanessa();
+    this.aiguilles(); this.posteVanessa(); this.eteints();
+  }
+  /* -- les écrans et les lampes (Teddy, 28/11/2026 : la nuit, le bureau vide restait allumé). L'écran d'un poste s'éteint
+     quand son occupant n'est pas dans le bâtiment : un voile sombre posé devant (un seul maillage pour tous ; replié, un
+     écran allumé ne se dessine pas). Les lampes s'éteignent quand il n'y a plus personne (modeles.js : UNI.uLampes, des
+     veilleuses dans les couloirs) et leurs dalles lumineuses avec ; les blocs de secours restent allumés. Les écrans et
+     les dalles sont lus dans le maillage des écrans (panneauxSolumatic : quatre sommets par panneau, dans l'ordre) :
+     chaque écran de bureau va au poste qu'il regarde. */
+  eteints() {
+    const it = this.c.monde.interieurSolu, ecr = it.children.find(o => o.name === 'écrans Solumatic'), aff = it.children.find(o => o.name === 'affiches Solumatic');
+    // (les matières éclairées dedans prennent l'interrupteur des lampes ; les autres le liraient à zéro)
+    for (const m of [aff && aff.material, this.balle.material, this.aig.material]) if (m) { m.onBeforeCompile = sh => { sh.uniforms.uLampes = UNI.uLampes; }; m.needsUpdate = true; }
+    this.lum = 1; this.ecransDe = {}; this.voileOk = false;
+    if (!ecr) return;
+    const P = ecr.geometry.attributes.position.array, U = ecr.geometry.attributes.uv.array, nq = P.length / 12, postes = Object.entries(VIE.postes).map(([id, q]) => ({ id, x: q.x + Math.sin(q.h) * 0.75, z: q.z + Math.cos(q.h) * 0.75, px: q.x, pz: q.z }));
+    // la case de la texture d'un panneau (CASES), d'après ses coordonnées de texture : ce qu'il montre
+    const zoneDe = i => { const u = (U[i * 8] + U[i * 8 + 6]) / 2 * TEX_L, v = (1 - (U[i * 8 + 1] + U[i * 8 + 7]) / 2) * TEX_H; for (const k in CASES) { const [x, y, w, h] = CASES[k]; if (u > x && u < x + w && v > y && v < y + h) return k; } return null; };
+    const COMMUNS = new Set(['tele', 'appels', 'bienvenue', 'teleMercure', 'enFormation']);
+    const E = [], D = [];
+    for (let i = 0; i < nq; i++) {
+      const o = i * 12, cx = (P[o] + P[o + 3] + P[o + 6] + P[o + 9]) / 4, cy = (P[o + 1] + P[o + 4] + P[o + 7] + P[o + 10]) / 4, cz = (P[o + 2] + P[o + 5] + P[o + 8] + P[o + 11]) / 4;
+      // la face avant : (v2 - v0) x (v1 - v0) (PlaneGeometry)
+      const ax = P[o + 6] - P[o], ay = P[o + 7] - P[o + 1], az = P[o + 8] - P[o + 2], bx = P[o + 3] - P[o], by = P[o + 4] - P[o + 1], bz = P[o + 5] - P[o + 2];
+      let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      const zone = zoneDe(i);
+      if (zone === 'led') { D.push([o, nx, ny, nz]); continue; } // une dalle lumineuse du faux plafond : avec les lampes
+      if (COMMUNS.has(zone)) { D.push([o, nx, ny, nz]); continue; } // les télés, la file d'appels, l'accueil : éteints avec les lampes
+      if (zone === 'baes' || zone === 'horloge' || cy < 0.7 || cy > 1.45 || Math.abs(ny) > 0.3) continue; // (les blocs de secours restent allumés)
+      let best = null, bd = 0.95;
+      for (const q of postes) { const d = Math.hypot(cx - q.x, cz - q.z); if (d < bd && (q.px - cx) * nx + (q.pz - cz) * nz > 0) { bd = d; best = q; } }
+      if (best) E.push([o, nx, ny, nz, best.id]);
+    }
+    // un maillage de voiles : les quadrilatères, avancés de 2 mm devant leur panneau
+    const voile = (L, couleur, nom) => {
+      const pos = new Float32Array(L.length * 12), idx = [];
+      L.forEach(([o, nx, ny, nz], k) => { for (let v = 0; v < 4; v++) { pos[k * 12 + v * 3] = P[o + v * 3] + nx * 0.002; pos[k * 12 + v * 3 + 1] = P[o + v * 3 + 1] + ny * 0.002; pos[k * 12 + v * 3 + 2] = P[o + v * 3 + 2] + nz * 0.002; } idx.push(k * 4, k * 4 + 2, k * 4 + 1, k * 4 + 2, k * 4 + 3, k * 4 + 1); });
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3)); g.setIndex(idx);
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: couleur, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+      m.name = nom; m.matrixAutoUpdate = false; m.frustumCulled = false; m.userData.vrai = pos; it.add(m); return m;
+    };
+    // (le voile des dalles et des écrans communs : une dalle éteinte, gris bleuté dans la pénombre ; l'écran, presque noir)
+    this.voileE = voile(E, '#0c0f14', 'écrans éteints'); this.voileD = voile(D, '#22252b', 'dalles et télés éteintes');
+    this.voileD.visible = false;
+    E.forEach((e, k) => (this.ecransDe[e[4]] = this.ecransDe[e[4]] || []).push(k));
+    this.allumes = {}; // (l'écran de chacun, allumé ou non : refait seulement quand ça change)
+  }
+  // les écrans de qui est là s'allument (leur voile replié), les autres s'éteignent ; les lampes, s'il y a quelqu'un
+  majEcrans() {
+    if (!this.voileE) return;
+    const pos = this.voileE.geometry.attributes.position, A = pos.array, V = this.voileE.userData.vrai;
+    let change = false;
+    for (const g of this.gens) {
+      const la = g.etat === 'poste' || g.etat === 'repas', Q = this.ecransDe[g.id];
+      if (!Q || this.allumes[g.id] === la) continue;
+      this.allumes[g.id] = la; change = true;
+      for (const k of Q) for (let v = 0; v < 4; v++) for (let c = 0; c < 3; c++) A[k * 12 + v * 3 + c] = la ? V[k * 12 + c] : V[k * 12 + v * 3 + c];
+    }
+    if (change) pos.needsUpdate = true;
   }
   get grille() { return this._g || (this._g = new Grille(VIE.boites, VIE.tournees)); }
   // (essais) une grille de marche faite d'autres boîtes (tout ce qui arrête dans le bâtiment : collisions.js), les bords
@@ -1377,13 +1492,26 @@ export class Solumatic {
   get quand() { const m = this.c.jeu.minutes, a = prochaineArrivee(m), ja = jourDe(a), j = jourDe(m); return (ja === j ? 'à ' : ja === j + 1 ? 'demain à ' : dateJeu(ja, 'semaine') + ' à ') + heureTxt(heureDe(a)); }
   agir() {
     if (this.porteDedans) { this.passer(false); return true; }
-    if (this.porteDehors) { if (this.ouverte) this.passer(true); else this.c.hud.dire([{ qui: '', txt: TXT.ferme(this.quand) }]); return true; }
+    if (this.porteDehors) {
+      if (this.ouverte) { this.taireFerme(); this.passer(true); }
+      else if (!this.ligneFerme) {
+        // (gardée, pour la taire si la porte s'ouvre pendant qu'on la lit ; une seule à la fois)
+        const H = this.c.hud; H.dire([{ qui: '', txt: TXT.ferme(this.quand) }]); this.ligneFerme = H.file.length ? H.file[H.file.length - 1] : H.ligne;
+      }
+      return true;
+    }
     return false;
+  }
+  taireFerme() {
+    const H = this.c.hud, l = this.ligneFerme; this.ligneFerme = null;
+    if (!l) return;
+    if (H.ligne === l) H.tLigne = Math.min(H.tLigne, 0.15); else { const i = H.file.indexOf(l); if (i >= 0) H.file.splice(i, 1); }
   }
   passer(entrer) {
     const c = this.c;
     c.ctrl.relacher();
     if (entrer) { while (this.n < this.ordre.length) this.creer(); this.horaires(true); }
+    this.oublierChemins();
     // la porte fermée arrête (on n'entre pas sans la passer) ; le temps de la passer, plus
     const pc = this.L.colPorte;
     if (pc) pc.fantome = true;
@@ -1407,51 +1535,163 @@ export class Solumatic {
     for (const g of this.gens) g.p.m.groupe.visible = g.mode !== 'cache' && (g.dehors ? !d : d);
     if (this.vLa) { const la = this.gens.some(g => g.id === 'vanessa' && g.etat !== 'absent'); this.vLa.visible = this.vEcran.visible = la; this.vPas.visible = !la; }
   }
-  // une personne de plus (dans l'ordre : Romane d'abord) ; son apparence, tirée d'après son nom (textes.js : EQUIPE)
-  creer() {
-    const s = this.ordre[this.n], e = EQ[s.id], ra = hasard(graine(e.id) ^ 0x502e); // (le sel : onze coiffures, treize teints)
-    const a = tirerApparence(ra, { femme: e.silhouette === 'femme', actif: true, couvreChef: false, chapeau: null });
-    // le casque-micro sur les deux plateaux ; le badge au cordon orange, pour tout le monde (perso.js)
-    const o = { ...a, tenue: e.tenue, haut: e.haut, bas: e.bas, casque: ['support', 'manager', 'formation'].includes(e.role), badge: ORANGE };
-    for (const k of ['col', 'lunettes', 'tissuBas', 'coiffure']) if (e[k] !== undefined) o[k] = e[k];
-    if (o.lunettes && !o.lunettesC) o.lunettesC = '#2b2d31';
-    const p = new Pieton(perso(o));
+  // Une personne de plus (dans l'ordre : Romane d'abord) ; son apparence, tirée d'après son nom (textes.js : EQUIPE). En
+  // approchant, une étape par image (perso.js : persoPas, neuf étapes de 0,25 ms en moyenne) ; d'un coup (fini) en entrant.
+  // Rend vrai quand la personne est là.
+  creer(fini = true) {
+    if (!this.enCreation) {
+      const s = this.ordre[this.n], e = EQ[s.id], ra = hasard(graine(e.id) ^ 0x502e); // (le sel : onze coiffures, treize teints)
+      const a = tirerApparence(ra, { femme: e.silhouette === 'femme', actif: true, couvreChef: false, chapeau: null });
+      // le casque-micro sur les deux plateaux ; le badge au cordon orange, pour tout le monde (perso.js)
+      const o = { ...a, tenue: e.tenue, haut: e.haut, bas: e.bas, casque: ['support', 'manager', 'formation'].includes(e.role), badge: ORANGE };
+      for (const k of ['col', 'lunettes', 'tissuBas', 'coiffure']) if (e[k] !== undefined) o[k] = e[k];
+      if (o.lunettes && !o.lunettesC) o.lunettesC = '#2b2d31';
+      this.enCreation = { s, e, o, it: persoPas(o) };
+    }
+    const C = this.enCreation;
+    let r = C.it.next();
+    while (fini && !r.done) r = C.it.next();
+    if (!r.done) return false;
+    this.enCreation = null;
+    const { s, e, o } = C, p = new Pieton(r.value);
     const g = { p, s, e, id: e.id, role: e.role, etq: this.c.hud.etiquette('', 'bulle'), tParle: 0, i: this.n, ph: this.n * 1.7, t: this.rnd() * 8, vu: true, dtA: 0,
-      mode: 'cache', etat: 'absent', dehors: false, casque: o.casque, home: { x: s.x, z: s.z, h: s.h, clavier: s.clavier, lever: VIE.postes[e.id].lever }, tApp: 5 + this.rnd() * 20, parle: false };
+      mode: 'cache', etat: 'absent', dehors: false, casque: o.casque, home: { x: s.x, z: s.z, h: s.h, clavier: s.clavier, lever: VIE.postes[e.id].lever }, tApp: 5 + this.rnd() * 20, parle: false,
+      siege: null, tache: null, trajet: null, tr: null, ecran: -1 };
     p.m.groupe.visible = false; this.c.scene.add(p.m.groupe); this.c.garder(p.m.groupe); this.gens.push(g); this.n++;
     if (e.id === 'romane') this.romane = g;
     this.placerSelon(g, etatVoulu(e, this.c.jeu.minutes));
+    return true;
   }
 
-  /* -- les poses : assis (à son poste, à table, en réunion), debout quelque part, caché (pas là) ; marcher */
-  asseoir(g, l) {
-    const p = g.p; p.assis = true; p.clavier = !!l.clavier; p.regard = l.regard || null; p.parle = false;
-    p.m.groupe.position.set(l.x, -0.34, l.z); p.m.groupe.rotation.y = l.h; p.h = l.h; p.sync(0, 0); p.pos.copy(p.m.groupe.position);
-    g.mode = 'assis'; g.siege = l; g.dehors = false; this.montrer(g);
+  /* -- les poses : assis (à son poste, à table, en réunion), debout quelque part, caché (pas là) ; marcher. S'asseoir et
+     se lever se jouent (0,6 s, anim.js : poseTransition) quand on les voit ; d'un coup sinon (un saut dans le temps, hors
+     de la vue). Teddy (28/11/2026) : debout à côté de sa chaise, on « sautait » dessus. */
+  // devant un siège : où l'on se tient avant de s'asseoir, et en se relevant (l'assise est derrière les mollets)
+  devant(l) { return { x: l.x + Math.sin(l.h) * 0.14, z: l.z + Math.cos(l.h) * 0.14 }; }
+  // où l'on passe pour aller s'asseoir et en revenant : à côté de la chaise de préférence (de derrière, on la traverserait)
+  cote(l) { const L = l.lever || []; for (const q of [L[1], L[2], L[0]]) if (q && this.grille.libre(q[0], q[1])) return q; return null; }
+  // la voit-on faire ? (dedans, devant la caméra)
+  doux(g) { return this.dedans && !g.dehors && g.vu && g.p.m.groupe.visible; }
+  asseoir(g, l, doux = false) {
+    const p = g.p, grp = p.m.groupe;
+    p.clavier = !!l.clavier; p.regard = l.regard || null; p.parle = false; p.outil = null; p.fume = false; p.assis = true;
+    g.siege = l; g.dehors = false;
+    if (doux && this.doux(g)) {
+      // on se tourne vers le bureau (ou la table), puis on se baisse en reculant sur l'assise
+      g.tr = { u: 0, d: 0.65, leve: false, x0: p.pos.x, z0: p.pos.z, h0: p.hv, x1: l.x, z1: l.z, h1: l.h, y: p.pos.y, suite: null };
+      p.transition = 0; grp.position.set(p.pos.x, p.pos.y, p.pos.z); grp.rotation.y = p.hv; g.mode = 'assoit';
+      this.montrer(g); return;
+    }
+    g.tr = null; p.transition = null;
+    grp.position.set(l.x, 0, l.z); grp.rotation.y = l.h; p.h = p.hv = l.h; p.sync(0, 0); p.pos.copy(grp.position);
+    g.mode = 'assis'; this.montrer(g);
   }
-  debout(g, l, dehors = false) { const p = g.p; p.assis = false; p.clavier = false; p.parle = false; p.outil = null; p.placer(l.x, l.z, l.h); p.regard = l.regard || null; g.mode = 'debout'; g.siege = null; g.dehors = dehors; this.montrer(g); }
-  cacher(g) { const p = g.p; p.assis = false; p.parle = false; p.fume = false; p.outil = null; g.mode = 'cache'; g.siege = null; g.dehors = false; g.tache = null; g.trajet = null; this.montrer(g); if (this.reserve) for (const k in this.reserve) if (this.reserve[k] === g) delete this.reserve[k]; }
+  // se lever de son siège (en se redressant, un pas en avant, 0,6 s ; d'un coup si on ne le voit pas), puis suite()
+  lever(g, suite) {
+    const p = g.p, grp = p.m.groupe, l = g.siege || { x: grp.position.x, z: grp.position.z, h: grp.rotation.y }, d = this.devant(l);
+    p.clavier = false; p.parle = false; p.regard = null;
+    if (this.doux(g) && g.mode === 'assis') {
+      g.tr = { u: 0, d: 0.6, leve: true, x0: grp.position.x, z0: grp.position.z, h0: grp.rotation.y, x1: d.x, z1: d.z, h1: grp.rotation.y, y: grp.position.y, suite };
+      p.transition = 1; g.mode = 'leve'; return;
+    }
+    p.assis = false; p.transition = null; g.tr = null; g.siege = null;
+    p.placer(d.x, d.z, l.h); suite();
+  }
+  // une image de la transition (vivre) ; à la fin, assis, ou debout et la suite
+  transition(g, dt, t) {
+    const p = g.p, T = g.tr, grp = p.m.groupe;
+    T.u = Math.min(1, T.u + dt / T.d);
+    if (T.leve) {
+      // le buste se redresse, le corps passe au-dessus des pieds
+      const kp = lisse((T.u - 0.2) / 0.8);
+      grp.position.set(T.x0 + (T.x1 - T.x0) * kp, T.y, T.z0 + (T.z1 - T.z0) * kp);
+      p.transition = 1 - lisse(T.u);
+    } else {
+      const kr = lisse(T.u / 0.55), kp = lisse((T.u - 0.25) / 0.75);
+      grp.position.set(T.x0 + (T.x1 - T.x0) * kp, T.y, T.z0 + (T.z1 - T.z0) * kp); grp.rotation.y = T.h0 + angle(T.h1 - T.h0) * kr;
+      p.transition = lisse((T.u - 0.15) / 0.85);
+    }
+    p.h = p.hv = grp.rotation.y; p.pos.set(grp.position.x, grp.position.y, grp.position.z);
+    p.sync(dt, t + g.ph);
+    if (T.u < 1) return;
+    g.tr = null; p.transition = null;
+    if (T.leve) { p.assis = false; g.siege = null; p.v = 0; p.vr = 0; g.mode = 'debout'; if (T.suite) T.suite(); }
+    else { grp.position.set(T.x1, 0, T.z1); grp.rotation.y = T.h1; p.h = p.hv = T.h1; p.pos.copy(grp.position); g.mode = 'assis'; }
+  }
+  // debout à un lieu ; doux : arrivé en marchant, on s'y tourne (sans sauter d'un coup vers son cap)
+  debout(g, l, dehors = false, doux = false) {
+    const p = g.p; p.assis = false; p.clavier = false; p.parle = false; p.outil = null; p.transition = null; g.tr = null;
+    if (doux) { p.h = l.h; p.v = 0; p.vr = 0; p.acc = 0; } else p.placer(l.x, l.z, l.h);
+    p.regard = l.regard || null; g.mode = 'debout'; g.siege = null; g.dehors = dehors; this.montrer(g);
+  }
+  cacher(g) { const p = g.p; p.assis = false; p.parle = false; p.fume = false; p.outil = null; p.transition = null; g.tr = null; g.mode = 'cache'; g.siege = null; g.dehors = false; g.tache = null; g.trajet = null; this.montrer(g); if (this.reserve) for (const k in this.reserve) if (this.reserve[k] === g) delete this.reserve[k]; }
   montrer(g) { g.p.m.groupe.visible = g.mode !== 'cache' && (g.dehors ? !this.dedans : this.dedans); g.p.fume = g.dehors && g.mode === 'debout'; }
-  // se lever (d'une chaise : à côté, là où c'est libre), puis marcher jusqu'à (x, z) ; apres() une fois arrivé
-  marcher(g, x, z, apres) {
+  // Marcher jusqu'à (x, z), puis fin (un dernier pas : devant un siège) s'il y en a un ; apres() une fois arrivé. Assis,
+  // on se lève d'abord, puis on passe à côté de sa chaise. Le chemin est demandé tout de suite (chemins : il arrive en
+  // une ou quelques images ; on attend debout).
+  marcher(g, x, z, apres, fin = null) {
     const p = g.p;
-    if (g.mode === 'assis') { const lv = (g.siege && g.siege.lever || []).find(([a, b]) => this.grille.libre(a, b)) || [p.pos.x, p.pos.z]; this.debout(g, { x: lv[0], z: lv[1], h: p.h }); }
-    else if (g.mode === 'cache') return;
-    const ch = this.grille.chemin(p.pos.x, p.pos.z, x, z);
-    if (!ch) { p.placer(x, z, p.h); g.mode = 'debout'; apres(); return; }
-    g.mode = 'marche'; g.trajet = { ch, k: 0, x, z, apres, attente: 0, tRefait: 0 }; p.regard = null;
+    if (g.mode === 'cache') return;
+    const T_ = g.trajet = { ch: null, k: 0, x, z, apres, fin, prem: null, ax: p.pos.x, az: p.pos.z, evite: null, attente: 0, tRefait: 0 };
+    p.regard = null;
+    if (g.mode === 'assis' || g.mode === 'assoit' || g.mode === 'leve') {
+      const l = g.siege || g.home, q = this.cote(l), d = this.devant(l);
+      if (q) { T_.prem = q; T_.ax = q[0]; T_.az = q[1]; } else { T_.ax = d.x; T_.az = d.z; }
+      if (g.mode === 'assoit') { g.tr = null; g.mode = 'assis'; }
+      if (g.mode === 'assis') this.lever(g, () => { if (g.trajet) g.mode = 'marche'; });
+    } else { g.mode = 'marche'; p.transition = null; g.tr = null; }
+    this.demander(g);
   }
   // aller à un lieu (assis ou debout), puis y rester t secondes, puis fin()
   aller(g, l, assis, t, fin, type) {
-    const lv = assis ? (l.lever || []).find(([a, b]) => this.grille.libre(a, b)) || [l.x, l.z] : [l.x, l.z];
     g.tache = { type, t, fin, l, arrive: false };
-    this.marcher(g, lv[0], lv[1], () => { if (assis) this.asseoir(g, l); else this.debout(g, l); if (g.tache) g.tache.arrive = true; });
+    if (assis) {
+      const q = this.cote(l) || [l.x, l.z], d = this.devant(l);
+      this.marcher(g, q[0], q[1], () => { this.asseoir(g, l, true); if (g.tache) g.tache.arrive = true; }, [d.x, d.z]);
+    } else this.marcher(g, l.x, l.z, () => { this.debout(g, l, false, true); if (g.tache) g.tache.arrive = true; });
   }
   // rentrer à son poste et s'y rasseoir
   rentrer(g) { g.tache = null; this.aller(g, g.home, true, 0, null, 'rentrer'); g.tache = null; }
+
+  /* -- les chemins demandés (marcher, contourner) : une recherche à la fois, au plus 2 500 cases fouillées par image (un
+     chemin à travers le bâtiment en fouille de quelques centaines à 15 000 : 0,3 ms en moyenne, jusqu'à 1,4 ms d'un
+     coup) ; un chemin déjà connu (le cache de la grille : les allers et retours) est rendu tout de suite. */
+  demander(g) { if (!this.attenteCh.includes(g)) this.attenteCh.push(g); }
+  chemins() {
+    const G = this.grille;
+    for (let n = 0; n < 6; n++) {
+      if (!this.cherche) {
+        const g = this.attenteCh.shift(); if (!g) return;
+        const T_ = g.trajet; if (!T_ || (T_.ch && !T_.evite) || g.mode === 'cache') continue;
+        const r = G.lancer(T_.ax, T_.az, T_.x, T_.z, T_.evite);
+        if (r === undefined) this.cherche = { g, T_, R: G.R };
+        else { this.livrer(g, T_, r); continue; }
+      }
+      const C = this.cherche;
+      if (G.R !== C.R) { this.cherche = null; this.attenteCh.unshift(C.g); continue; } // (une recherche d'essai l'a remplacée)
+      const r = G.avancer(2500);
+      if (r === undefined) return;
+      this.cherche = null; this.livrer(C.g, C.T_, r);
+      return;
+    }
+  }
+  livrer(g, T_, r) {
+    if (g.trajet !== T_) return; // (il a changé d'avis entre-temps)
+    const contourne = !!T_.evite; T_.evite = null;
+    if (!r) {
+      if (contourne) return; // (pas de détour : il attend que ça passe)
+      // pas de chemin (rare) : il y est d'un coup, quand on ne regarde pas
+      g.p.placer(T_.fin ? T_.fin[0] : T_.x, T_.fin ? T_.fin[1] : T_.z, g.p.h); g.trajet = null; g.mode = 'debout'; T_.apres(); return;
+    }
+    const ch = T_.prem || T_.fin ? [] : r;
+    if (ch !== r) { if (T_.prem) ch.push(T_.prem); ch.push(...r); if (T_.fin) ch.push(T_.fin); }
+    T_.prem = null; T_.ch = ch; T_.k = 0; T_.attente = 0;
+  }
+  // (une recherche en cours abandonnée : on entre ou l'on sort)
+  oublierChemins() { if (this.cherche && this.grille.R === this.cherche.R) this.grille.abandonner(); this.cherche = null; this.attenteCh.length = 0; }
   // pose selon l'état, d'un coup (un saut dans le temps, ou dehors : hors de la vue)
   placerSelon(g, etat) {
-    this.liberer(g); g.etat = etat; g.tache = null; g.trajet = null;
+    this.liberer(g); g.etat = etat; g.tache = null; g.trajet = null; g.tr = null; g.p.transition = null;
     if (etat === 'absent') this.cacher(g);
     else if (etat === 'fume') this.debout(g, FUME, true);
     else if (etat === 'repas') { const l = this.prendre('repas', VIE.repas, g); if (l) { this.asseoir(g, l); g.tache = { type: 'repas', t: 1e9, l, arrive: true }; } else this.asseoir(g, g.home); }
@@ -1485,7 +1725,7 @@ export class Solumatic {
       } else if (v === 'repas') { const l = this.prendre('repas', VIE.repas, g); if (l) this.aller(g, l, true, 1e9, null, 'repas'); }
       else this.rentrer(g);
     }
-    this.voir();
+    this.voir(); this.majEcrans();
   }
 
   /* -- la vie : qui part de son poste, pour faire quoi (trois ou quatre au plus loin de leur poste) */
@@ -1521,7 +1761,8 @@ export class Solumatic {
       const aSonPoste = g.mode === 'assis' && g.siege === g.home && !g.tache;
       if (g.parle && (!aSonPoste || g.tApp <= 0)) { g.parle = false; g.tApp = (1 - k) * (20 + this.rnd() * 40); }
       else if (!g.parle && aSonPoste && g.tApp <= 0) {
-        const piece = g.e.piece, enLigne = this.gens.filter(o => o.parle && o.e.piece === piece).length, tous = this.gens.filter(o => o.e.piece === piece && o.etat === 'poste').length;
+        const piece = g.e.piece; let enLigne = 0, tous = 0;
+        for (const o of this.gens) if (o.e.piece === piece) { if (o.parle) enLigne++; if (o.etat === 'poste') tous++; }
         if (enLigne < Math.max(1, Math.ceil(tous * 0.67))) { g.parle = true; g.tApp = k * (25 + this.rnd() * 50); if (this.dedans && g.vu && ['support', 'manager'].includes(g.role)) this.c.son.tonalite?.(this.prox(g, 10)); }
         else g.tApp = 4 + this.rnd() * 6;
       }
@@ -1541,11 +1782,17 @@ export class Solumatic {
     const vu = this.dedans || this.porte.rotation.y > 0.01;
     if (vu !== this.vu) { this.vu = vu; this.voir(); }
     if ((this.tH -= dt) <= 0) { this.tH = 0.5; this.horaires(); }
+    // les lampes : allumées tant que quelqu'un est dans le bâtiment (le dernier les éteint en partant), en une demi-seconde
+    let la = 0; for (const g of this.gens) if (g.mode !== 'cache' && !g.dehors) { la = 1; break; }
+    if (this.lum !== la) { this.lum = Math.abs(la - this.lum) < 0.02 ? la : this.lum + (la - this.lum) * Math.min(1, dt * 5); UNI.uLampes.value = this.lum; if (this.voileD) this.voileD.visible = this.lum < 0.5; }
     if (this.dedans && this.img % 60 === 0) this.voir(); // (la nuit qui tombe, derrière les vitres)
+    // la porte s'est ouverte (Romane est arrivée, elle a la clé) : le « fermé » qu'on venait d'entendre n'a plus cours
+    if (this.ligneFerme) { if (h.ligne !== this.ligneFerme && !h.file.includes(this.ligneFerme)) this.ligneFerme = null; else if (this.ouverte) this.taireFerme(); }
     if (!this.dedans) {
-      // (un personnage coûte 3 ms à créer : un toutes les trois images, en approchant à moins de 60 m)
+      // (un personnage coûte 2 ms à créer, 8 à 10 sur un téléphone lent : une étape par image, neuf par personne, en
+      // approchant à moins de 60 m ; persoPas)
       const e = c.jeu.auVolant ? c.jeu.tr.pos : c.jeu.joueur.pos;
-      if (this.n < this.ordre.length && ++this.tc % 3 === 0 && Math.hypot(e.x - (SOLU.x0 + SOLU.x1) / 2, e.z - (SOLU.z0 + SOLU.z1) / 2) < 60) this.creer();
+      if (this.n < this.ordre.length && Math.hypot(e.x - (SOLU.x0 + SOLU.x1) / 2, e.z - (SOLU.z0 + SOLU.z1) / 2) < 60) this.creer(false);
       this.fumer(dt, t);
       return dehors || dedans;
     }
@@ -1560,9 +1807,9 @@ export class Solumatic {
     const c = this.c, p = g.p, cam = c.camera.position, dc = Math.hypot(cam.x - p.pos.x, cam.z - p.pos.z);
     if (dc > 90) return;
     const j = c.jeu.auVolant ? c.jeu.tr.pos : c.jeu.joueur.pos, d = Math.hypot(j.x - p.pos.x, j.z - p.pos.z);
-    p.regard = d < 7 ? { x: j.x, y: 1.6, z: j.z } : null;
+    p.regard = d < 7 ? this.vers(g, j.x, 1.6, j.z) : null;
     g.tParle -= dt; this.tBulle -= dt;
-    if (d < 3.5 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !c.jeu.auVolant) { g.tParle = 40; this.tBulle = 3; p.saluer(); c.hud.bulle(g.etq, `${g.e.prenom} : ${TXT.fume[g.i++ % TXT.fume.length]}`, 3.2); }
+    if (d < 3.5 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !c.jeu.auVolant) { g.tParle = 40; this.tBulle = 3.7; p.saluer(); c.hud.bulle(g.etq, `${g.e.prenom} : ${TXT.fume[g.i++ % TXT.fume.length]}`, 3.2); }
     if (g.etq.vu) c.hud.placer(g.etq, p.pos.x, 2.25, p.pos.z, true);
     if (dc < 45) p.update(dt, 0, 0, 0, false, LIBRE, t + g.ph);
     if (dc > 40 || !c.emettre) return;
@@ -1572,21 +1819,35 @@ export class Solumatic {
     if (p.bout) VT.copy(p.bout); else if (main) main.getWorldPosition(VT); else VT.set(p.pos.x + Math.sin(p.h + 0.6) * 0.25, 1.0, p.pos.z + Math.cos(p.h + 0.6) * 0.25);
     this.tFume -= dt;
     if (this.tFume <= 0) { this.tFume = 0.34; c.emettre(VT.x, VT.y + 0.03, VT.z, 0.05 + (this.rnd() - 0.5) * 0.06, 0.16 + this.rnd() * 0.06, 0.03 + (this.rnd() - 0.5) * 0.06, 1.8, this.rnd() < 0.5 ? 0xc9c9c6 : 0xb9bab8, 0.11, -0.05, 0); }
-    this.tBouffee -= dt;
-    if (p.bouffee || (p.bouche === undefined && this.tBouffee <= 0)) {
-      this.tBouffee = 7 + this.rnd() * 5;
+    if (p.bouffee) {
       const hx = Math.sin(p.hv ?? p.h), hz = Math.cos(p.hv ?? p.h);
       if (p.bouche) VT2.copy(p.bouche); else { if (tete) tete.getWorldPosition(VT2); else VT2.set(p.pos.x, 1.6, p.pos.z); VT2.x += hx * 0.14; VT2.y -= 0.06; VT2.z += hz * 0.14; }
       for (let i = 0; i < 7; i++) c.emettre(VT2.x, VT2.y, VT2.z, hx * (0.35 + this.rnd() * 0.25) + (this.rnd() - 0.5) * 0.12, 0.12 + this.rnd() * 0.1, hz * (0.35 + this.rnd() * 0.25) + (this.rnd() - 0.5) * 0.12, 1.6 + this.rnd() * 0.6, 0xe6e6e2, 0.3 + this.rnd() * 0.12, -0.04, 0);
     }
   }
+  // le voit-on ? (tout près, ou aucun mur entre la caméra et lui : libre, écrit sur place, sans nombre en argument)
+  revoir(g, gp, cam) {
+    const ax = cam.x, az = cam.z, dx = gp.x - ax, dz = gp.z - az, M = this.L.murs;
+    let v = dx * dx + dz * dz < 6.25;
+    if (!v) {
+      v = true;
+      for (let i = 0; i < M.length && v; i++) {
+        const m = M[i]; let t0 = 0, t1 = 1;
+        if (Math.abs(dx) < 1e-6) { if (ax < m[0] || ax > m[2]) continue; } else { let a = (m[0] - ax) / dx, b = (m[2] - ax) / dx; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+        if (Math.abs(dz) < 1e-6) { if (az < m[1] || az > m[3]) continue; } else { let a = (m[1] - az) / dz, b = (m[3] - az) / dz; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+        v = false;
+      }
+    }
+    if (v !== g.vu) { g.vu = v; g.p.m.maillage.visible = v; }
+  }
   // Aucun mur entre (ax, az) et (bx, bz) ? (les cloisons du plan, en boîtes ; méthode des tranches)
   libre(ax, az, bx, bz) {
-    const dx = bx - ax, dz = bz - az;
-    for (const [x0, z0, x1, z1] of this.L.murs) {
+    const dx = bx - ax, dz = bz - az, M = this.L.murs;
+    for (let i = 0; i < M.length; i++) {
+      const m = M[i], x0 = m[0], z0 = m[1], x1 = m[2], z1 = m[3];
       let t0 = 0, t1 = 1;
-      if (Math.abs(dx) < 1e-6) { if (ax < x0 || ax > x1) continue; } else { let a = (x0 - ax) / dx, b = (x1 - ax) / dx; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
-      if (Math.abs(dz) < 1e-6) { if (az < z0 || az > z1) continue; } else { let a = (z0 - az) / dz, b = (z1 - az) / dz; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+      if (Math.abs(dx) < 1e-6) { if (ax < x0 || ax > x1) continue; } else { let a = (x0 - ax) / dx, b = (x1 - ax) / dx; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+      if (Math.abs(dz) < 1e-6) { if (az < z0 || az > z1) continue; } else { let a = (z0 - az) / dz, b = (z1 - az) / dz; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
       return false;
     }
     return true;
@@ -1600,60 +1861,78 @@ export class Solumatic {
     const c = this.c, h = c.hud, j = c.jeu.joueur.pos, cam = c.camera.position, img = ++this.img, son = c.son;
     const revoir = img % 6 === 0; // (qui voit-on ? refait toutes les six images)
     this.tBulle -= dt;
+    this.chemins();
     this.planifier(dt); this.appels(dt);
     this.babyfoot(dt, t);
-    let voix = 0;
+    let voix = 0, bulle = false;
     for (const g of this.gens) {
       const p = g.p;
       if (g.mode === 'cache' || g.dehors) { if (g.etq.vu) h.placer(g.etq, 0, 0, 0, false); continue; }
       const gp = p.assis ? p.m.groupe.position : p.pos;
-      if (revoir) { const v = Math.hypot(gp.x - cam.x, gp.z - cam.z) < 2.5 || this.libre(cam.x, cam.z, gp.x, gp.z); if (v !== g.vu) { g.vu = v; p.m.maillage.visible = v; } }
+      if (revoir) this.revoir(g, gp, cam);
       const d = Math.hypot(j.x - gp.x, j.z - gp.z);
-      if (g.mode === 'marche') this.pas(g, dt, t, j, d);
+      if (g.mode === 'marche') this.pas(g, dt, t, j);
+      // s'asseoir, se lever : chaque image (0,6 s), vu ou pas (qui ne se voit plus finit d'un coup)
+      else if (g.tr) { if (g.vu) this.transition(g, dt, t); else { g.tr.u = 1; this.transition(g, 0, t); } }
       // la tâche en cours : le temps qui passe une fois arrivé
-      if (g.tache && g.tache.arrive && g.mode !== 'marche') { g.tache.t -= dt; if (g.tache.t <= 0 && g.tache.fin) { const f = g.tache.fin; g.tache.fin = null; f(); } }
+      if (g.tache && g.tache.arrive && (g.mode === 'assis' || g.mode === 'debout')) { g.tache.t -= dt; if (g.tache.t <= 0 && g.tache.fin) { const f = g.tache.fin; g.tache.fin = null; f(); } }
       // il lève les yeux vers qui passe tout près, le salue de temps en temps (un seul à la fois), avec son prénom
       g.tParle -= dt;
-      if (g.vu && d < 2.4 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif) {
-        g.tParle = 45; this.tBulle = 3; if (!p.assis && !(g.tache && g.tache.type === 'babyfoot') && g.mode !== 'marche') p.saluer();
+      if (g.vu && d < 2.4 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !bulle) {
+        // (la bulle dure 3,2 s, plus son fondu : la suivante attend qu'elle soit partie, jamais deux à la fois)
+        g.tParle = 45; this.tBulle = 3.7; bulle = true; if (g.mode === 'debout' && !(g.tache && g.tache.type === 'babyfoot')) p.saluer();
         const l = (g.tache && g.tache.arrive && TXT[g.tache.type]) || TXT[g.role] || TXT.bonjour; h.bulle(g.etq, `${g.e.prenom} : ${l[g.i++ % l.length]}`, 3.2);
       }
       if (g.etq.vu) h.placer(g.etq, gp.x, p.assis ? 1.75 : 2.25, gp.z, g.vu);
       if (g.parle && g.vu && d < 9) voix = Math.max(voix, 1 - d / 9);
-      if (!g.vu || g.mode === 'marche') continue;
+      if (!g.vu || g.mode === 'marche' || g.tr) continue;
       // animé à chaque image de près, une sur deux à moins de 12 m, une sur quatre au-delà
       g.dtA += dt;
       const pas = d < 6 ? 1 : d < 12 ? 2 : 4;
       if ((img + g.i) % pas) continue;
       const dA = g.dtA; g.dtA = 0;
       this.attitude(g, d, j);
-      if (p.assis) p.sync(dA, t + g.ph); else p.update(dA, 0, 0, 0, false, LIBRE, t + g.ph);
-      if (p.assis && p.clavier && !g.parle && g.siege === g.home) { g.t -= dA; if (g.t <= 0 && d < 7) { g.t = 0.4 + this.rnd() * 1.6 / (CLAVIER[g.role] || 0.3); son.clavier(Math.max(0, 1 - d / 7)); } }
+      // (debout : sync, qui tourne le corps vers son cap en quelques pas ; arrivé en marchant, on se tourne vers le café,
+      // l'imprimante, le collègue, sans pivoter d'un coup)
+      p.sync(dA, t + g.ph);
+      if (g.mode === 'assis' && p.clavier && !g.parle && g.siege === g.home) { g.t -= dA; if (g.t <= 0 && d < 7) { g.t = 0.4 + this.rnd() * 1.6 / (CLAVIER[g.role] || 0.3); son.clavier(Math.max(0, 1 - d / 7)); } }
     }
     // les voix étouffées au casque, les plateaux (audio.js)
     if ((this.tVoix -= dt) <= 0) { this.tVoix = 0.5 + this.rnd() * 0.9; if (voix > 0.05) son.voix?.(voix); }
   }
+  // (o marche-t-il, et vers où nous allons ?)
+  memeSens(o, ux, uz) {
+    const T = o.trajet; if (!T || !T.ch || T.k >= T.ch.length || T.attente > 0) return false;
+    const q = T.ch[T.k], dx = q[0] - o.p.pos.x, dz = q[1] - o.p.pos.z, l = Math.hypot(dx, dz) || 1;
+    return (dx * ux + dz * uz) / l > 0.5;
+  }
+  // (o, en (ox, oz), est-il juste devant p qui marche vers (ux, uz) ?)
+  devantDe(p, ux, uz, ox, oz) { const rx = ox - p.pos.x, rz = oz - p.pos.z, av = rx * ux + rz * uz; return av > 0.05 && av < 1.0 && Math.abs(rx * uz - rz * ux) < 0.55; }
   // marcher le long de son chemin ; quelqu'un devant (le joueur, un collègue qui marche) : on le contourne (le chemin
   // refait autour de lui), ou l'on attend
   pas(g, dt, t, j) {
     const p = g.p, T_ = g.trajet;
     if (!T_) { g.mode = 'debout'; return; }
+    // (le chemin n'est pas encore là : on attend, debout ; redemandé s'il a été oublié, en entrant ou en sortant)
+    if (!T_.ch) { if (!this.cherche || this.cherche.g !== g) this.demander(g); if (g.vu) p.sync(dt, t + g.ph); return; }
     if (T_.k >= T_.ch.length) { g.trajet = null; g.mode = 'debout'; T_.apres(); return; }
-    const [tx, tz] = T_.ch[T_.k], ex = tx - p.pos.x, ez = tz - p.pos.z, dd = Math.hypot(ex, ez), dernier = T_.k === T_.ch.length - 1;
+    const pt = T_.ch[T_.k], tx = pt[0], tz = pt[1], ex = tx - p.pos.x, ez = tz - p.pos.z, dd = Math.hypot(ex, ez), dernier = T_.k === T_.ch.length - 1;
     if (dd < (dernier ? 0.12 : 0.3)) { T_.k++; return; }
     const ux = ex / dd, uz = ez / dd;
     T_.tRefait -= dt;
-    let gene = null;
-    const devant = (ox, oz) => { const rx = ox - p.pos.x, rz = oz - p.pos.z, av = rx * ux + rz * uz; return av > 0.05 && av < 1.0 && Math.abs(rx * uz - rz * ux) < 0.55; };
-    if (devant(j.x, j.z)) gene = { x: j.x, z: j.z, r: 0.7 };
-    else for (const o of this.gens) if (o !== g && o.mode === 'marche' && !o.dehors && devant(o.p.pos.x, o.p.pos.z)) { gene = { x: o.p.pos.x, z: o.p.pos.z, r: 0.55 }; if (g.i < o.i) gene = null; break; }
-    if (gene) {
+    let gx = 0, gz = 0, gr = 0;
+    if (this.devantDe(p, ux, uz, j.x, j.z)) { gx = j.x; gz = j.z; gr = 0.7; }
+    // (un collègue devant, qui marche dans le même sens : on le suit, sans s'arrêter derrière lui à chaque pas)
+    else for (const o of this.gens) if (o !== g && o.mode === 'marche' && !o.dehors && this.devantDe(p, ux, uz, o.p.pos.x, o.p.pos.z)) { if (g.i > o.i && !this.memeSens(o, ux, uz)) { gx = o.p.pos.x; gz = o.p.pos.z; gr = 0.55; } break; }
+    if (gr) {
       T_.attente += dt;
-      if (T_.attente > 0.5 && T_.tRefait <= 0) { T_.tRefait = 1.2; const ch = this.grille.chemin(p.pos.x, p.pos.z, T_.x, T_.z, gene); if (ch) { T_.ch = ch; T_.k = 0; T_.attente = 0; return; } }
+      // le contourner : un autre chemin, autour de lui (demandé ; en attendant, on attend)
+      if (T_.attente > 0.5 && T_.tRefait <= 0 && !T_.evite) { T_.tRefait = 1.2; T_.evite = { x: gx, z: gz, r: gr }; T_.ax = p.pos.x; T_.az = p.pos.z; this.demander(g); }
       if (g.vu) p.update(dt, 0, 0, 0, false, LIBRE, t + g.ph); return;
     }
     T_.attente = 0;
-    const v = Math.min(1.25, 0.35 + dd * 1.6);
+    // (on ralentit en arrivant, et un peu à chaque coude)
+    const v = Math.min(1.25, (dernier ? 0.35 : 0.75) + dd * 1.6);
     if (g.vu) p.update(dt, ux, uz, 1, false, LIBRE, t + g.ph, v);
     else { p.h = p.hv = Math.atan2(ux, uz); p.pos.x += ux * v * dt; p.pos.z += uz * v * dt; p.m.groupe.position.set(p.pos.x, p.pos.y, p.pos.z); p.m.groupe.rotation.y = p.h; }
   }
@@ -1661,9 +1940,9 @@ export class Solumatic {
   attitude(g, d, j) {
     const p = g.p;
     if (g.tache && g.tache.type === 'babyfoot' && g.tache.arrive) return; // (la balle : babyfoot)
-    if (this.visite && this.visite.b === g && this.visite.a.tache && this.visite.a.tache.arrive) { const a = this.visite.a.p.pos; p.regard = { x: a.x, y: 1.6, z: a.z }; return; }
-    if (this.visite && this.visite.a === g && g.tache && g.tache.arrive) { const b = this.visite.b.p.m.groupe.position; p.regard = { x: b.x, y: 1.15, z: b.z }; return; }
-    if (d < 3) { p.regard = { x: j.x, y: 1.6, z: j.z }; return; }
+    if (this.visite && this.visite.b === g && this.visite.a.tache && this.visite.a.tache.arrive) { const a = this.visite.a.p.pos; p.regard = this.vers(g, a.x, 1.6, a.z); return; }
+    if (this.visite && this.visite.a === g && g.tache && g.tache.arrive) { const b = this.visite.b.p.m.groupe.position; p.regard = this.vers(g, b.x, 1.15, b.z); return; }
+    if (d < 3) { p.regard = this.vers(g, j.x, 1.6, j.z); return; }
     p.regard = (g.siege && g.siege.regard) || (g.mode === 'debout' && g.tache && g.tache.l && g.tache.l.regard) || null;
   }
   // le baby-foot : la balle va et vient, les joueurs tirent et poussent leurs barres, un but de temps en temps
@@ -1681,7 +1960,12 @@ export class Solumatic {
       // une barre la frappe : elle repart, plus ou moins vite
       if (b.tToc <= 0 && this.rnd() < dt * 3.2) { b.vs = -Math.sign(b.vs) * (0.6 + this.rnd() * 1.4); b.vt = (this.rnd() - 0.5) * 1.2; b.tToc = 0.25; this.c.son.babyfoot(Math.max(0, 1 - Math.hypot(cam.x - BF.x, cam.z - BF.z) / 12)); }
       if (Math.abs(b.s) > 0.56) {
-        if (Math.abs(b.t) < 0.1) { const g = J[b.s > 0 ? 0 : 1]; this.c.hud.bulle(g.etq, `${g.e.prenom} : ${TXT.but[Math.floor(this.rnd() * TXT.but.length)]}`, 2.2); b.tBut = 1.6; b.vs = (this.rnd() < 0.5 ? -1 : 1) * 0.9; this.c.son.babyfoot(1); }
+        if (Math.abs(b.t) < 0.1) {
+          // un but (le cri du buteur, s'il n'y a pas déjà une bulle : jamais deux à la fois)
+          const g = J[b.s > 0 ? 0 : 1], cri = TXT.but[Math.floor(this.rnd() * TXT.but.length)];
+          if (this.tBulle <= 0) { this.tBulle = 2.7; this.c.hud.bulle(g.etq, `${g.e.prenom} : ${cri}`, 2.2); }
+          b.tBut = 1.6; b.vs = (this.rnd() < 0.5 ? -1 : 1) * 0.9; this.c.son.babyfoot(1);
+        }
         else { b.s = Math.sign(b.s) * 0.56; b.vs = -b.vs; }
       }
     }
@@ -1691,14 +1975,16 @@ export class Solumatic {
       const k = 1 + 2 * Math.max(0, -g.cote * b.s), ph = t * (5 + k * 3) + g.ph;
       g.mains.d[2] = 0.38 + Math.sin(ph) * 0.05 * k; g.mains.g[2] = 0.38 + Math.sin(ph * 1.3 + 1) * 0.05 * k;
       g.mains.d[1] = 0.9 + Math.sin(ph * 0.7) * 0.015; g.mains.g[1] = 0.9 + Math.cos(ph * 0.9) * 0.015;
-      g.p.regard = { x: this.balle.position.x, y: 0.8, z: this.balle.position.z };
+      g.p.regard = this.vers(g, this.balle.position.x, 0.8, this.balle.position.z);
     }
   }
+  // un point à regarder, gardé par personne (sans objet neuf à chaque image)
+  vers(g, x, y, z) { const r = g.rg || (g.rg = { x: 0, y: 0, z: 0 }); r.x = x; r.y = y; r.z = z; return r; }
   // les taches de contact de ceux qui sont debout (main.js : majTaches)
   taches(T) { for (const g of this.gens) if (g.vu && !g.p.assis && g.mode !== 'cache' && !g.dehors) T.poser(g.p.pos.x, g.p.pos.z, 0.4, 0.4, 0); }
   // la caméra à hauteur d'homme ; de tout près (dos au mur), on ne se voit plus
   camera(dt) {
-    const c = this.c, j = c.jeu.joueur, d = c.cam.interieur(dt, j.pos.x, j.pos.z, j.h, j.v, this.L.murs, SOLU.HP, this.L.portes);
+    const c = this.c, j = c.jeu.joueur, d = c.cam.interieur(dt, j.pos.x, j.pos.z, j.h, j.v, this.L.murs, SOLU.HP, this.L.portes, VIE.plantes);
     const voir = d > 0.45 || c.gestes.actif;
     if (j.m.groupe.visible !== voir) j.m.groupe.visible = voir;
   }

@@ -90,7 +90,9 @@ export const HORAIRES = {
 // les appels du bureau aux clients (téléphone : Ma journée, les rappels), de 8 h à 20 h
 export const APPELS = [8 * 60, 20 * 60];
 // le professionnel de ce métier est-il ouvert à cette heure du jeu ? (genre : une clé de HORAIRES ; commerce par défaut)
-export const ouvert = (minutes, genre = 'commerce') => { const [a, b] = HORAIRES[genre] || HORAIRES.commerce, h = heureDe(minutes); return h >= a && h < b; };
+// (lu par indices : décomposer le tableau, [a, b] = ..., passerait par un itérateur jeté à chaque appel, des dizaines de
+// fois par image)
+export const ouvert = (minutes, genre = 'commerce') => { const H = HORAIRES[genre] || HORAIRES.commerce, h = heureDe(minutes); return h >= H[0] && h < H[1]; };
 // peut-on appeler un client à cette heure du jeu ?
 export const appelPossible = minutes => { const h = heureDe(minutes); return h >= APPELS[0] && h < APPELS[1]; };
 // les minutes d'ouverture d'un métier entre deux heures du jeu (l'habillage, à l'imprimerie : la ligne ne tourne qu'aux
