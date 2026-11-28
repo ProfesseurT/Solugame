@@ -2,7 +2,7 @@
 import * as relief from './relief.js';
 import * as THREE from 'three';
 import { construireMonde, BRUME, SOLEIL } from './monde.js';
-import { UNI, compacter, indexer, MAT } from './modeles.js';
+import { UNI, compacter, indexer, MAT, B } from './modeles.js';
 import { Collisions } from './collisions.js';
 import { tracteur, van, voiture, voitureConduite, allumerPhares, geoCartonOuvert } from './engins.js';
 import { perso, HEROS, tirerApparence } from './perso.js';
@@ -15,14 +15,14 @@ import { Telephone } from './telephone.js';
 import { PC } from './pc.js';
 import { Mission, COULEUR } from './mission.js';
 import { enjambeur, deplierEnjambeur } from './enjambeur.js';
-import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habillerPalox, parPoses, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement, transpalette, TRANSPALETTE } from './remorque.js';
+import { remorque, Attelage, peutAtteler, etapesAttelerAide, etapesDeteler, habillerPalox, parPoses, chariot, placerChariot, voirChariot, asseoir as asseoirChariot, descendre as descendreChariot, Dechargement, transpalette, TRANSPALETTE, MATERIEL, materielSol, pieceSeule, montrerMateriel } from './remorque.js';
 import { Traitement } from './mission2.js';
 import { Habillage } from './mission3.js';
 import { son } from './audio.js';
 import { hasard, lisse, $, ouvert, dateJeu, jourDe, heureDe, majuscule } from './outils.js';
 import { Pilote, croisiere } from './pilote.js';
 import { Gestes, pileCartons } from './gestes.js';
-import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS, CHIEN, GUIDE_VEHICULE as GV } from './textes.js';
+import { FIN, DIALOGUES, CHOCS_VOITURE, VOITURES as REPLIQUES, TRAITEMENT, HABILLAGE, PHYTO, LP_URL, MISSIONS, CHIEN, GUIDE_VEHICULE as GV, PORTES, PORTES_MISSION as PM } from './textes.js';
 import { Paliers } from './qualite.js';
 import { Particules, Taches, Traces, EffetsVehicule } from './particules.js';
 import { Bureau } from './bureau.js';
@@ -232,6 +232,8 @@ const CLIENTS_3D = {
   labo: { femme: true, peau: '#f0c8a0', cheveux: '#3b2a1a', coiffure: 'chignon', haut: '#f4f6f8', col: '#f4f6f8', bas: '#3a3f4a', tablier: '#f4f6f8', lunettes: true },
   entrepot: { peau: '#d9a27e', cheveux: '#2b1d0e', coiffure: 'court', barbe: true, tenue: 'salopette', haut: '#3c5a8a', col: '#e9e1cf', bas: '#3c5a8a', chapeau: 'casquette', chapeauC: '#e84e1b' },
   salarie: { peau: '#e0ac69', cheveux: '#7a5230', coiffure: 'court', tenue: 'salopette', haut: '#5a6b2f', col: '#e9e1cf', bas: '#5a6b2f', chapeau: 'casquette', chapeauC: '#2f4a6b' },
+  // mission 4 : Gilles, l'agent municipal (le matériel du comité des fêtes, sur la place), en veste de travail bleu marine
+  mairie: { age: 'aine', peau: '#c68a5e', cheveux: '#9a9a9a', coiffure: 'court', barbe: 'moustache', haut: '#2f4a6b', col: '#e0b13a', bas: '#2f3440', chapeau: 'casquette', chapeauC: '#2f4a6b' },
 };
 function peupler() {
   if (peuple) return;
@@ -280,6 +282,15 @@ function peupler() {
   // du domaine, par la cour (clients.js : horaires ; son chemin dépend d'où il attend)
   { const f = gens3.liste[2]; f.etat = 'dedans'; f.p.m.groupe.visible = false; f.porte = PORTE_MAISON; f.chemin = DU_CHAI; }
   village.creerVoitures(); // les deux voitures qui montent au château, en derniers (rien ne change pour les autres)
+  // l'agent municipal (mission 4), en tout dernier : il n'est dehors que la veille des portes ouvertes, à côté du matériel
+  // du comité des fêtes ; le reste du temps, à la mairie (clients.js : sa porte, son chemin)
+  {
+    const p = new Pieton(perso(CLIENTS_3D.mairie)), P4 = L.portesOuvertes, l = P4.agent;
+    scene.add(p.m.groupe); p.placer(l.x, l.z, l.h);
+    gens4.ajouter(p, l, 'mairie');
+    const f = gens4.liste[0]; f.porte = P4.porteMairie; f.chemin = P4.cheminMairie; f.etat = 'dedans'; p.m.groupe.visible = false;
+  }
+  voirPortes();
 }
 // Un conducteur au volant d'une voiture de la départementale (son propre tirage au sort) ; on le voit par les vitres
 const rConducteurs = hasard(53), rPietons = hasard(59);
@@ -413,9 +424,11 @@ const jeu = {
   finDemo() { const h = heureDe(this.minutes); montrerFin(h >= 18 * 60 || h < 5 * 60 ? FIN : { ...FIN, texte: FIN.texteJour }, false); },
   // une mission gagnée (sauvegarde.js : on pourra la rejouer depuis le téléphone) ; la mission du moment
   gagner(id) { SAUVE.gagner(id); sauver(); },
-  get enCoursId() { return habillage.actif ? 'habillage' : traitement.actif ? 'traitement' : 'tournee'; },
+  get enCoursId() { return portesOuvertes.actif ? 'portes' : habillage.actif ? 'habillage' : traitement.actif ? 'traitement' : 'tournee'; },
   finMission2() { montrerFin(TRAITEMENT.finCarte, true); },
-  finMission3() { montrerFin(HABILLAGE.finCarte, false); },
+  // (la mission 3 finie : rentrer dormir, les portes ouvertes se préparent au réveil)
+  finMission3() { montrerFin({ ...HABILLAGE.finCarte, texte: HABILLAGE.finCarte.texte + PM.apres3 }, false); },
+  finMission4() { montrerFin(PM.finCarte, false); },
 };
 // la carte de fin d'une mission : son lien (la prévente du registre après la 2, viticode.fr après la 3)
 function montrerFin(F, phyto) {
@@ -423,7 +436,7 @@ function montrerFin(F, phyto) {
   $('fin-suite').replaceChildren(...F.suite.map(s => { const li = document.createElement('li'); li.textContent = s; return li; }));
   const cta = $('fin-cta'), lien = phyto ? { t: PHYTO.cta, u: LP_URL, c: 'cta cyan' } : F.cta ? { t: F.cta, u: F.url, c: 'cta viticode' } : null;
   cta.hidden = !lien;
-  if (lien) { cta.textContent = lien.t; cta.href = lien.u; cta.className = lien.c; }
+  if (lien) { cta.textContent = lien.t; cta.href = lien.u; cta.className = lien.c; cta.style.setProperty('background', F.fond || ''); } // (fond : la couleur de l'appli, Vitisoft pour la mission 4)
   if (phyto) $('fin-phyto').textContent = PHYTO.titre + ' ' + PHYTO.texte;
   $('fin-phyto').hidden = !phyto;
   $('continuer').textContent = F.bouton;
@@ -575,10 +588,16 @@ function finDechargement() {
 // affaire faite (l'échantillon donné, les cartons livrés), ils rentrent au labo ou à l'entrepôt (clients.js)
 L.portes.entrepot = L.entrepot.porte;
 // (leurs heures d'ouverture : le labo, l'imprimerie, le domaine ; outils.js, HORAIRES ; mission3.js)
+// (Marc : aussi la veille des portes ouvertes, la remorque sortie et pas encore attelée ; mission4.js)
 const gens3 = new Clients({ jeu, scene, col, mission: { fait: id => habillage.fait(id), arretDe: id => id, deposes: [],
-  horaire: id => habillage.horaire(id), occupe: id => habillage.occupeAvec(id), veut: id => habillage.veut(id) } });
+  horaire: id => habillage.horaire(id), occupe: id => habillage.occupeAvec(id) || (id === 'salarie' && portesOuvertes.occupe),
+  veut: id => habillage.veut(id) || (id === 'salarie' && portesOuvertes.actif && portesOuvertes.etape === 'materiel' && portesOuvertes.materiel === 'aucun' && !portesOuvertes.attelee) } });
+// l'agent municipal de la mission 4 (créé dans peupler) : dehors la veille des portes ouvertes, à côté du matériel du
+// comité des fêtes sur la place ; le matériel chargé, il rentre à la mairie (clients.js ; mission4.js : fait, veut)
+const gens4 = new Clients({ jeu, scene, col, mission: { fait: id => portesOuvertes.fait(id), arretDe: id => id, deposes: [],
+  horaire: id => portesOuvertes.horaire(id), occupe: () => portesOuvertes.occupeAvec(), veut: id => portesOuvertes.veut(id) } });
 // la mission qui mène la balise, l'itinéraire et l'objectif
-const enCours = () => (habillage.actif ? habillage : traitement.actif ? traitement : mission);
+const enCours = () => (portesOuvertes.actif ? portesOuvertes : habillage.actif ? habillage : traitement.actif ? traitement : mission);
 const clients = new Clients({ jeu, scene, col, mission }); // devant leur boutique, puis dedans (clients.js)
 const pc = new PC(jeu);
 const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // monter, descendre, porter les cartons, le bureau du chai (gestes.js)
@@ -596,7 +615,9 @@ jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 // Viticode quand le bulletin du labo est là et la fiche pas encore envoyée (mission 3) ; le Registre phyto quand une
 // parcelle traitée attend sa saisie (mission 2) ; sinon Vitisoft ou Le bureau (mission.js : ouvrirPC)
 jeu.appliPC = () => {
-  const v = mission.ouvrirPC(), H = habillage, R = traitement;
+  const v = mission.ouvrirPC(), H = habillage, R = traitement, Q = portesOuvertes;
+  // (mission 4 : Vitisoft ou Brevo, d'après l'ordinateur, pc.js : appliPortes ; la caisse s'ouvre à sa table, pas ici)
+  if (Q.actif) { const a = pc.appliPortes ? pc.appliPortes() : Q.appli; if (a && a !== 'caisse') return a; }
   if (H.actif && H.bulletin && !H.envoye) return 'viticode';
   if (R.actif && R.aNoter.length) return 'phyto';
   return v;
@@ -614,6 +635,224 @@ const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, 
 for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
 const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, emettre, garder: o => GARDES.add(o) });
 const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir, etqVelo]; // celles qui se touchent (toucher)
+
+/* ------------------------------------------------------------------ mission 4, les portes ouvertes (mission4.js)
+   Ce qui se voit et les gestes (jeu.portesMonde) : la veille, la remorque vide que Marc a sortie, le matériel du comité des
+   fêtes sur la place et l'agent municipal qui le charge, l'installation dans la cour (un fondu au noir : une heure plus
+   tard) ; le jour J, les cartons de plateaux de Clémence, chargés dans le van et portés au pied du buffet, le portable du
+   bureau porté jusqu'à la table de la caisse, la caisse (l'ordinateur ouvert à la table, debout à la place du vendeur),
+   Marc qui sort du chai et prend la caisse, le temps qui saute à 10 h. Le décor (monde.js : decorPortes) n'est montré, et
+   ses boîtes de collision posées, que pendant la mission (voirPortes, d'après l'état de mission4.js). */
+const D4 = monde.decorPortes, P4 = L.portesOuvertes;
+// le matériel du comité des fêtes, au sol sur la place (sa boîte de collision tant qu'il est là ; remorque.js)
+const matSol = materielSol();
+matSol.position.set(P4.materiel.x, relief.sol(P4.materiel.x, P4.materiel.z), P4.materiel.z); matSol.rotation.y = P4.materiel.h; matSol.visible = false;
+matSol.updateMatrix(); matSol.matrixAutoUpdate = false; scene.add(matSol);
+const GEO_PIECES = [], geoPiece = k => GEO_PIECES[k] || (GEO_PIECES[k] = pieceSeule(k)); // (une pièce portée par l'agent municipal)
+const TENIR_PIECE = new THREE.Vector3(0, 0.8, 0.45);
+// les cartons de plateaux de Clémence, sur le trottoir devant La Table de Clémence (le jour J, tant qu'on ne les a pas
+// chargés) ; les colonnes du van où ils sont rangés (gestes.js : charger)
+const palClemence = new THREE.Group();
+palClemence.position.set(P4.plateaux.x, relief.sol(P4.plateaux.x, P4.plateaux.z), P4.plateaux.z); palClemence.visible = false; scene.add(palClemence);
+const PILES4 = [-0.28, 0.28].map(z => { const g = pileCartons(3); g.position.set(0, 0.14, z); palClemence.add(g); return g; });
+const colsVan = [];
+let boitesDecor = null, boiteTas = null;
+// le portable du bureau, fermé, dans les bras ; où il est pris (le bureau du chai) et posé (la table de la caisse)
+const GEO_PORTABLE = compacter(B(0.33, 0.035, 0.24, '#2b2d33', 0, 0.0175, 0));
+const TENIR_PORTABLE = new THREE.Vector3(0, 0.98, 0.3);
+const SUR_BUREAU = new THREE.Vector3(L.bureau.portable.x - 0.1, 0.8, L.bureau.portable.z), SUR_CAISSE = new THREE.Vector3(P4.caisse.x + 0.1, 0.8, P4.caisse.z);
+// à côté de la table de la caisse : où l'on se tient quand Marc prend la place, où Marc attend pendant le supplément ;
+// la grande porte du chai, d'où sort Marc
+const COTE_CAISSE = { x: -80.7, z: -55.3 }, MARC_COTE = { x: -79.0, z: -55.3 }, PORTE_CHAI = { x: -78.4, z: -51.0 };
+// Ce qui se voit d'après l'état de la mission : le décor (et ses boîtes), le buffet garni, le portable posé (ou sur le
+// bureau du chai), les cartons de Clémence, le tas du matériel sur la place
+function voirPortes() {
+  const Q = portesOuvertes, ici = Q.actif && !Q.range, decor = ici && Q.materiel === 'installe';
+  if (D4.decor.visible !== decor) {
+    D4.decor.visible = decor;
+    if (decor) boitesDecor = P4.boites.map(([a, b, c, d]) => col.boite(a, b, c, d));
+    else if (boitesDecor) { for (const b of boitesDecor) col.retirer(b); boitesDecor = null; }
+  }
+  D4.plateaux.visible = decor && Q.plateaux === 'buffet';
+  D4.portable.visible = decor && Q.portable === 'pose';
+  monde.portableBureau.visible = !(ici && (Q.portable === 'pose' || Q.portable === 'porte'));
+  const pal = ici && (Q.etape === 'traiteur' || Q.etape === 'portable') && Q.plateaux === 'aucun';
+  if (pal && !palClemence.visible) for (const g of PILES4) g.visible = true;
+  palClemence.visible = pal;
+  const tas = ici && Q.etape === 'materiel' && Q.materiel === 'aucun';
+  if (tas && !boiteTas) { montrerMateriel(mRem, 0, matSol); boiteTas = col.boiteC(P4.materiel.x, P4.materiel.z, 2.5, 3.3); }
+  else if (!tas) { if (boiteTas) { col.retirer(boiteTas); boiteTas = null; } matSol.visible = false; }
+}
+// Marc à la caisse (après la relève, ou une partie reprise)
+function marcCaisse() {
+  const f = gens3.liste[2], V0 = P4.caisse.vendeur;
+  f.gestes.g = null; f.p.outil = null; f.p.placer(V0.x, V0.z, V0.h); f.p.m.groupe.visible = true;
+  f.etat = 'dehors'; f.l = { x: V0.x, z: V0.z, h: V0.h }; f.ferme = false; f.chemin = DU_CHAI;
+}
+// le matin du jour J (ou d'une reprise) : les véhicules à leur place, Marc à la maison (ou à la caisse, s'il l'a prise)
+function preparerJourJ() {
+  for (const v of VEHICULES) { const l = L[v.genre]; if (l && l.h !== undefined) v.p.placer(l.x, l.z, l.h); }
+  const f = gens3.liste[2];
+  if (portesOuvertes.releve) marcCaisse(); else { f.etat = 'dedans'; f.p.m.groupe.visible = false; }
+}
+jeu.portesMonde = {
+  get marc() { return gens3.liste[2]; },
+  get agent() { return gens4.liste[0]; },
+  get clemence() { return restos.get(P4.traiteur); },
+  voir: voirPortes,
+  // la veille, au réveil : les véhicules à leur place ; la remorque vide au bord de l'allée, Marc à côté (comme pour
+  // l'habillage) ; le matériel sur la place, l'agent municipal à côté
+  veille() {
+    for (const v of VEHICULES) { const l = L[v.genre]; if (l && l.h !== undefined) v.p.placer(l.x, l.z, l.h); }
+    att.poser(L.remorque.x, L.remorque.z, L.remorque.h); att.vider();
+    const f = gens3.liste[2], P = att.versMonde(2.0, 0, 2.2, { x: 0, y: 0, z: 0 });
+    f.gestes.g = null; f.p.outil = null; f.l = { x: P.x, z: P.z, h: att.h + Math.PI / 2 }; f.p.placer(P.x, P.z, f.l.h);
+    f.etat = 'dehors'; f.p.m.groupe.visible = true; f.ferme = false; f.chemin = VERS_MAISON;
+    const a = gens4.liste[0], A = P4.agent;
+    if (a) { a.gestes.g = null; a.l = { x: A.x, z: A.z, h: A.h }; a.p.placer(A.x, A.z, A.h); a.etat = 'dehors'; a.p.m.groupe.visible = true; a.ferme = false; a.t = 0; }
+    voirPortes();
+  },
+  // Marc attelle (on reste au volant ; il rentre ensuite à la maison : jeu.remorque.atteler)
+  atteler(fin) { jeu.remorque.atteler(gens3.liste[2], fin); },
+  // À la mairie : on reste au volant ; l'agent municipal porte les quatre pièces du tas jusqu'à la remorque, une à une
+  // (du côté du tas), puis s'écarte et fait signe ; la caméra cadre le tas et la remorque. fin() : tout est chargé.
+  chargerMateriel(fin) {
+    const v = veh, a = gens4.liste[0], G = a.gestes, S = P4.materiel, Q = { x: 0, z: 0 }, W = { x: 0, y: 0, z: 0 };
+    couperMoteur(); ctrl.relacher();
+    const s = (S.x - att.pos.x) * Math.cos(att.h) - (S.z - att.pos.z) * Math.sin(att.h) >= 0 ? 1 : -1; // (le côté du tas : +x de la remorque, sa gauche)
+    const surTas = k => ({ x: S.x + Math.sin(S.h) * MATERIEL.sol[k], z: S.z + Math.cos(S.h) * MATERIEL.sol[k] });
+    a.etat = 'range'; G.g = null; a.p.salut = false; a.p.regard = null;
+    const e = [];
+    for (let k = 0; k < MATERIEL.n; k++) {
+      const o = G.objet('piece' + k, geoPiece(k), 0.42);
+      e.push(...G.allerA(() => { const T = surTas(k); Q.x = T.x + Math.sin(S.h) * 0.85; Q.z = T.z + Math.cos(S.h) * 0.85; return Q; }, () => S.h + Math.PI));
+      e.push(G.prendreObjet(o, w => { const T = surTas(k); return w.set(T.x, matSol.position.y, T.z); }, TENIR_PIECE, () => montrerMateriel(mRem, k, matSol, k + 1), 1.0));
+      e.push(...G.allerA(() => att.versMonde(s * 1.75, 0, MATERIEL.z[k], W), () => att.h - s * Math.PI / 2));
+      e.push(G.poserObjet(o, w => { att.versMonde(0, 1.08, MATERIEL.z[k], W); return w.set(W.x, W.y, W.z); }, () => montrerMateriel(mRem, k + 1, matSol, k + 1)));
+    }
+    e.push(...G.allerA(() => att.versMonde(s * 2.7, 0, 2.2, W), () => att.h - s * Math.PI / 2), { action: () => a.p.saluer?.() }, { duree: 0.8, maj: (dt, t) => G.immobile(dt, t) });
+    let fait = false;
+    G.lancer(e, () => { a.etat = 'dehors'; a.l = { x: a.p.pos.x, z: a.p.pos.z, h: a.p.h }; a.t = 0; fait = true; });
+    gestes.cadrerEntre({ x: S.x, z: S.z }, att.pos, v);
+    gestes.lancer([{ maj: (dt, t) => { gestes.immobile(dt, t); return fait; } }], () => { boiteTas && col.retirer(boiteTas); boiteTas = null; fin(); });
+  },
+  // Dans la cour : on descend du tracteur ; un fondu au noir, une heure plus tard : la remorque dételée et rangée vide sous
+  // le hangar, le tracteur à sa place, le décor installé ; Marc (s'il n'est pas rentré chez lui) à côté de nous, il le
+  // dit, puis rentre à la maison. fin() : on y voit de nouveau.
+  installer(marcLa, fin) {
+    const v = veh;
+    couperMoteur(); ctrl.relacher();
+    gestes.lancer([
+      ...gestes.etapesDescendre(v, aPied),
+      { action: () => $('fondu').classList.add('noir') },
+      { duree: 1.0, maj: (dt, t) => gestes.immobile(dt, t) },
+      {
+        action: () => {
+          if (att.attelee) att.deteler();
+          vTracteur.p.placer(L.tracteur.x, L.tracteur.z, L.tracteur.h);
+          jeu.remorque.ranger();
+          portesOuvertes.materiel = 'installe'; voirPortes();
+          jeu.minutes += 60; horloge(0);
+          const J = { x: -89.6, z: -48.6 }, M = { x: -91.0, z: -47.4 };
+          joueur.placer(J.x, J.z, Math.atan2(M.x - J.x, M.z - J.z)); cam.yaw = joueur.h; cam.pret = false; // (la caméra derrière nous : Marc, le bar, la cour)
+          if (marcLa) {
+            const f = gens3.liste[2], G = f.gestes;
+            f.gestes.g = null; f.p.placer(M.x, M.z, Math.atan2(J.x - M.x, J.z - M.z)); f.p.m.groupe.visible = true; f.etat = 'range'; f.ferme = false;
+            G.lancer([{ duree: 6, maj: (dt, t) => G.immobile(dt, t) }, ...G.allerA(() => DU_CHAI[0], () => Math.PI), ...G.entrer(PORTE_MAISON)], () => { f.etat = 'dedans'; });
+          }
+        },
+      },
+      { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
+      { action: () => $('fondu').classList.remove('noir') },
+    ], fin);
+  },
+  // Chez Clémence : on descend du van, on porte ses deux piles de cartons dans le van, on remonte (gestes.js : charger)
+  chargerPlateaux(fin) {
+    const v = veh;
+    couperMoteur(); ctrl.relacher();
+    colsVan.length = 0;
+    for (const g of PILES4) g.visible = true;
+    gestes.charger(v, PILES4.map(g => ({ groupe: g, client: P4.traiteur, n: 3 })), { sorti: aPied, place: (c, p) => colsVan.push({ c, n: p.n }), installe: () => auVolant(v) }, [],
+      [{ action: () => { v.p.charge = colsVan.reduce((n, x) => n + x.n, 0); palClemence.visible = false; fin(); } }]);
+  },
+  // Au buffet : on descend, on porte les cartons au pied du buffet (gestes.js : decharger) ; déballés, les plateaux sont
+  // sur le buffet ; on referme la porte coulissante du van
+  dechargerBuffet(fin) {
+    const v = veh, posees = [], cols = colsVan.length ? colsVan.slice() : [{ c: 0, n: 3 }, { c: 3, n: 3 }];
+    jeu.decharger(P4.depot, cols, p => posees.push(p), () => {
+      for (const p of posees) scene.remove(p);
+      v.p.charge = 0; colsVan.length = 0;
+      portesOuvertes.plateaux = 'buffet'; voirPortes();
+      gestes.lancer(v.m.coulissante ? [...gestes.auVehicule(v, Object.keys(v.m.chargeur)[0]), ...gestes.fermerCote(v)] : [], fin);
+    });
+  },
+  // Au bureau du chai : devant le bureau en bois, on prend le portable (il disparaît du bureau) ; on le garde dans les bras
+  prendrePortable(fin) {
+    const B0 = L.bureau, o = gestes.objet('portable', GEO_PORTABLE, 0.16);
+    ctrl.relacher();
+    gestes.lancer([...gestes.allerA(() => B0.devant, () => B0.chaise.h), gestes.prendreObjet(o, w => w.copy(SUR_BUREAU), TENIR_PORTABLE, () => { monde.portableBureau.visible = false; })],
+      () => { portesOuvertes.portable = 'porte'; voirPortes(); fin(); });
+  },
+  // À la table de la caisse : à la place du vendeur, on le pose et on l'ouvre
+  poserPortable(fin) {
+    const V0 = P4.caisse.vendeur, o = gestes.objet('portable', GEO_PORTABLE, 0.16);
+    ctrl.relacher();
+    gestes.lancer([...gestes.allerA(() => V0, () => V0.h), gestes.poserObjet(o, w => w.copy(SUR_CAISSE), () => { portesOuvertes.portable = 'pose'; voirPortes(); })], fin);
+  },
+  // « Tenir la caisse » : à la place du vendeur, l'ordinateur s'ouvre sur la caisse de Vitisoft, plein écran (pc.js :
+  // ouvrir('caisse')) ; le supplément (stats) : Marc laisse la place le temps qu'on s'y mette, l'ordinateur s'ouvre de même
+  // (pc.js : à l'étape stats, Vitisoft sur les Statistiques)
+  tenirCaisse(stats, fin) {
+    const V0 = P4.caisse.vendeur, f = gens3.liste[2];
+    ctrl.relacher();
+    if (stats && f.p.m.groupe.visible && f.etat !== 'dedans' && Math.hypot(f.p.pos.x - V0.x, f.p.pos.z - V0.z) < 1.5) {
+      const G = f.gestes;
+      f.etat = 'range'; G.g = null;
+      G.lancer([...G.allerA(() => MARC_COTE, () => -2.4)], () => { f.etat = 'dehors'; f.l = { x: MARC_COTE.x, z: MARC_COTE.z, h: -2.4 }; });
+      hud.dire(PM.dialogues.stats);
+    }
+    gestes.lancer([...gestes.allerA(() => V0, () => V0.h)], () => { pc.ouvrir('caisse'); fin(); });
+  },
+  // la relève : on s'écarte de la table ; Marc sort du chai et prend la place du vendeur (fin : il y est)
+  marcVient(fin) {
+    const f = gens3.liste[2], G = f.gestes, V0 = P4.caisse.vendeur;
+    ctrl.relacher();
+    gestes.lancer([...gestes.allerA(() => COTE_CAISSE, () => 0.5)]);
+    f.gestes.g = null; f.p.outil = null; f.p.placer(PORTE_CHAI.x, PORTE_CHAI.z, Math.PI); f.p.m.groupe.visible = true; f.etat = 'range'; f.ferme = false;
+    G.lancer([...G.allerA(() => V0, () => V0.h)], () => { f.etat = 'dehors'; f.l = { x: V0.x, z: V0.z, h: V0.h }; f.chemin = DU_CHAI; fin(); });
+  },
+  // le supplément fini (on se lève) : on s'écarte, Marc reprend sa place
+  marcReprend() {
+    const f = gens3.liste[2], G = f.gestes, V0 = P4.caisse.vendeur;
+    if (!f.p.m.groupe.visible || f.etat === 'dedans') return;
+    gestes.lancer([...gestes.allerA(() => COTE_CAISSE, () => 0.5)]);
+    f.etat = 'range'; G.g = null;
+    G.lancer([{ duree: 0.7, maj: (dt, t) => G.immobile(dt, t) }, ...G.allerA(() => V0, () => V0.h)], () => { f.etat = 'dehors'; f.l = { x: V0.x, z: V0.z, h: V0.h }; });
+    hud.dire(PM.dialogues.marcReprend);
+  },
+  // le temps saute jusqu'à min (minutes du jeu), derrière un court fondu au noir (en avance, les portes ouvrent à 10 h)
+  sauterA(min, fin) {
+    ctrl.relacher();
+    gestes.lancer([
+      { action: () => $('fondu').classList.add('noir') },
+      { duree: 0.8, maj: (dt, t) => gestes.immobile(dt, t) },
+      { action: () => { if (jeu.minutes < min) { jeu.minutes = min; horloge(0); } } },
+      { duree: 0.4, maj: (dt, t) => gestes.immobile(dt, t) },
+      { action: () => $('fondu').classList.remove('noir') },
+    ], fin);
+  },
+};
+// les étiquettes de la mission 4 : prendre le portable (au bureau du chai), le poser, tenir la caisse (à la table)
+const etqPortable = hud.action(PM.etiquettes.prendre), etqPoser = hud.action(PM.etiquettes.poser), etqCaisse = hud.action(PM.etiquettes.caisse);
+ETQ_ACTION.push(etqPortable, etqPoser, etqCaisse);
+const presPortable = () => jeu.dedans === 'bureau' && portesOuvertes.portablePrenable && !bureau.porteDedans && Math.hypot(joueur.pos.x - L.bureau.devant.x, joueur.pos.z - L.bureau.devant.z) < 1.4;
+const presCaisse = () => !jeu.dedans && !jeu.auVolant && Math.hypot(joueur.pos.x - P4.caisse.vendeur.x, joueur.pos.z - P4.caisse.vendeur.z) < 2.3;
+const posable = () => portesOuvertes.portablePosable && presCaisse();
+const tenable = () => portesOuvertes.caisseTenable && portesOuvertes.portable === 'pose' && presCaisse();
+// le portable parti sur le parvis (le jour J) : plus de « S'asseoir au portable » au bureau du chai
+{ const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(bureau), 'chaise'); Object.defineProperty(bureau, 'chaise', { get() { return !portesOuvertes.portableAilleurs && d.get.call(this); } }); }
+// se lever de la caisse (pc.js : lever ; échap) : la mission le sait (mission4.js : quitterCaisse) ; sinon, le bureau du chai
+{ const leverBureau = jeu.leverPortable; jeu.leverPortable = () => { if (portesOuvertes.aLaCaisse) portesOuvertes.quitterCaisse(); else leverBureau(); }; }
 // Le chien du domaine (chien.js) : il vit dans la cour, s'écarte de tout véhicule qui roule vers lui, se laisse caresser,
 // dort à la maison. mobiles : ce qui peut rouler (les véhicules du joueur, la remorque, le transpalette de Marc) ; gens :
 // ce qu'il ne traverse pas (le joueur à pied, les ouvriers du parvis, Marc)
@@ -843,6 +1082,14 @@ function prendreVelo(s) {
 }
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
+  // mission 4 : prendre le portable du bureau, le poser à la table de la caisse, tenir la caisse ; le portable dans les
+  // mains, on ne fait rien d'autre que passer une porte (le poser d'abord)
+  if (portesOuvertes.actif) {
+    if (presPortable()) { portesOuvertes.prendrePortable(); return; }
+    if (posable()) { portesOuvertes.poserPortable(); return; }
+    if (tenable()) { portesOuvertes.tenirCaisse(); return; }
+    if (portesOuvertes.porte && !bureau.porteDehors && !bureau.porteDedans) { hud.dire(PM.dialogues.porteMains); return; }
+  }
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
   if (solu.agir()) return; // la porte d'entrée de Solumatic (solumatic.js)
   if (habillage.echantillonProche) { habillage.prendreEchantillon(); return; } // mission 3 : le carton ouvert du chai
@@ -929,7 +1176,7 @@ function lireEntrees() {
     else if (a === 'son') son.basculer();
     else if (a === 'radio' && !(jeu.auVolant && veh.genre === 'velo')) jeu.basculerRadio(); // (pas de radio à vélo)
     else if (a === 'echap' && tel.ouvert && mission.peutFermer()) tel.fermer();
-    else if (a === 'echap' && pc.ouvert) { pc.fermer(); mission.fermerPC(); jeu.leverPortable(); }
+    else if (a === 'echap' && pc.ouvert) pc.lever(); // (se lever : le bureau du chai, ou la table de la caisse)
   }
   ctrl.actions.length = 0;
   for (const tp of ctrl.touchers) toucher(tp);
@@ -971,12 +1218,12 @@ function guider(dt) {
     if (!guideIt || guideIt.v !== best || Math.hypot(guideIt.x - P.x, guideIt.z - P.z) > 3 || ecart(guideIt.pts, o) > 25) guideIt = { v: best, x: P.x, z: P.z, pts: reseau.itineraire(o, P) };
   }
   // la ligne sous l'objectif : où il est (« L'enjambeur : sous le hangar, derrière le chai ») ; une liste : chacun et où
-  const raison = GV.raisons[w.raison] || '', liste = Array.isArray(w.v) ? w.v : [best.genre];
+  const raison = GV.raisons[w.raison] || PM.raisons[w.raison] || '', liste = Array.isArray(w.v) ? w.v : [best.genre];
   const ligne = liste.map(g => { const v = g === best.genre ? best : VEHICULES.find(x => x.genre === g); return v ? GV.ligne(GV.noms[g], ouEst(v)) : ''; }).filter(Boolean).join(' · ');
   jeu.guide = { v: best, lieu: P, nom: GV.balise[best.genre] || 'Véhicule', route: guideIt.pts, ligne };
   hud.guide(ligne);
   // une phrase, une fois par étape et par véhicule voulu : dans un autre véhicule, ou à pied loin de lui
-  const cle = (M === mission ? 'm1' : M === traitement ? 'm2' : 'm3') + ':' + M.etape + ':' + liste.join('+');
+  const cle = (M === mission ? 'm1' : M === traitement ? 'm2' : M === habillage ? 'm3' : 'm4') + ':' + M.etape + ':' + liste.join('+');
   if (cle !== guideDit && !hud.parle && !tel.ouvert && (jeu.auVolant || dmin > 15)) {
     guideDit = cle;
     hud.dire((jeu.auVolant ? GV.mauvais : GV.pied)(liste.map(g => GV.noms[g]).join(' ou '), raison));
@@ -1117,6 +1364,8 @@ function bourg(dtm, ego) {
     esquiver(marc, dtm);
   } }
   if (isoles) return; // (chez Solumatic, le bourg attend ; seuls l'œnologue, l'étiqueteur et Marc continuent : la mission 3)
+  // l'agent municipal (mission 4) : seulement pendant la mission ; il charge plus vite quand on accélère la scène
+  if (portesOuvertes.actif) gens4.maj(dtm * (gestes.cadre && (ctrl.id !== null || ctrl.kx || ctrl.ky) ? 3 : 1), temps, ego, jeu.auVolant);
   PARVIS_C.t = temps; PARVIS_C.minutes = jeu.minutes; PARVIS_C.ego = ego; PARVIS_C.aPied = !jeu.auVolant; PARVIS_C.danger = danger;
   parvis.maj(dtm, PARVIS_C);
   chien.maj(dtm, PARVIS_C);
@@ -1205,7 +1454,7 @@ function phares() {
    lendemain (ou le jour même, en pleine nuit après minuit). La journée de travail continue où elle en était. */
 // Après la tournée de Noël (mission.js : dodo), le réveil se fait le lendemain matin (Teddy, 24/11/2026) : le tracteur, le
 // van et l'enjambeur à leur place ; la mission 2 commence (mission2.js)
-let mission2 = false, mission3 = false, resAff = true;
+let mission2 = false, mission3 = false, mission4 = false, reveil4 = null, resAff = true;
 function lendemain() {
   mission.aller('libre');
   parvis.lendemain();
@@ -1232,6 +1481,24 @@ function surlendemain() {
   jeu.remorque.ranger(); cartonOuvert.visible = true;
   mission3 = true;
 }
+// Après l'habillage (mission3.js : dodo), le réveil se fait le lendemain : la mission 4, les portes ouvertes (mission4.js) ;
+// les véhicules à leur place, vides ; la remorque rangée vide sous le hangar, le carton ouvert du chai rangé
+function jourPortes() {
+  mission.aller('libre');
+  if (traitement.actif) traitement.aller('libre');
+  if (habillage.actif) habillage.aller('libre');
+  parvis.lendemain('portes');
+  for (const v of VEHICULES) {
+    const l = L[v.genre];
+    if (l && l.h !== undefined) v.p.placer(l.x, l.z, l.h);
+    if (v.m.cartons) for (const c of v.m.cartons) c.visible = false;
+    v.p.charge = 0;
+  }
+  for (const p of mission.palette) p.groupe.visible = false;
+  if (!att.attelee) jeu.remorque.ranger();
+  cartonOuvert.visible = false;
+  mission4 = true;
+}
 const presMaison = () => !jeu.auVolant && !jeu.dedans && Math.hypot(joueur.pos.x - L.maison.x, joueur.pos.z - L.maison.z) < 2.2;
 function dormir() {
   const P = L.maison;
@@ -1248,13 +1515,24 @@ function dormir() {
         joueur.placer(L.depart.x, L.depart.z, L.depart.h); cam.yaw = L.depart.h; cam.pret = false; // sorti dans la cour (dos au mur, la caméra y entrerait)
         if (mission.etape === 'dodo') lendemain();
         else if (traitement.etape === 'dodo') surlendemain();
+        else if (habillage.etape === 'dodo') jourPortes();
         // la nuit de l'habillage : le tracteur, le van et l'enjambeur rangés dans la cour au réveil (le tracteur est peut-être
         // resté à l'imprimerie)
         else if (habillage.attendNuit) for (const v of VEHICULES) { const l = L[v.genre]; if (l) v.p.placer(l.x, l.z, l.h); }
         // la mission 3 finie : la remorque, vide, et le transpalette rangés sous le hangar pendant la nuit
         else if (habillage.etape === 'libre' && !att.attelee) jeu.remorque.ranger();
+        // la mission 4 : une semaine passe (on se réveille la veille des portes ouvertes), le jour J, les portes ouvertes
+        // pas finies qui reprennent, le lendemain (le décor rangé) ; mission4.js : nuitPassee
+        reveil4 = null;
+        if (portesOuvertes.actif) {
+          if (portesOuvertes.etape === 'semaine') { const j1 = Math.max(jourDe(jeu.minutes), portesOuvertes.jourJ - 1); jeu.minutes = j1 * 1440 + 420; horloge(0); }
+          reveil4 = portesOuvertes.nuitPassee();
+          if (reveil4 === 'veille') jeu.portesMonde.veille();
+          else if (reveil4 === 'jourJ' || reveil4 === 'reprise') preparerJourJ();
+          voirPortes();
+        }
         // les professionnels, à 7 h : ceux qui étaient rentrés pour la nuit ressortent (clients.js : reveil)
-        clients.reveil(); gens3.reveil();
+        clients.reveil(); gens3.reveil(); gens4.reveil();
       },
     },
     { duree: 0.5, maj: (dt, t) => gestes.immobile(dt, t) },
@@ -1262,7 +1540,9 @@ function dormir() {
       action: () => {
         $('fondu').classList.remove('noir'); son.jouer('claque');
         if (mission2) { mission2 = false; traitement.demarrer(); } else if (mission3) { mission3 = false; habillage.demarrer(); }
+        else if (mission4) { mission4 = false; portesOuvertes.demarrer(); voirPortes(); }
         else if (habillage.attendNuit) habillage.reveil(); // l'habillage fini pendant la nuit : le message de l'imprimerie
+        else if (reveil4 === 'veille' || reveil4 === 'jourJ') { /* (la bannière du jour : mission4.js) */ }
         else {
           hud.banniere('Bonjour !', `${majuscule(dateJeu(jourDe(jeu.minutes)))}, 7 h`, 3);
           if (enCours() === mission) mission.reveil(); // la tournée pas finie : le bureau dit ce qui reste
@@ -1287,7 +1567,15 @@ function reperes(dt, ego, cible) {
     }
   }
   hud.placer(etqCible, cible ? cible.x : 0, 4.6, cible ? cible.z : 0, !!cible && !tel.ouvert && !jeu.dedans);
-  const pcPres = bureau.maj() || solu.maj(dt, temps);
+  // mission 4 : « Prendre le portable » (au bureau du chai), « Poser le portable », « Tenir la caisse » ou « Voir les
+  // statistiques » (à la table de la caisse) ; elles passent devant les autres
+  const libre4 = portesOuvertes.actif && !tel.ouvert && !pc.ouvert && !gestes.actif && !joueur.service;
+  const pp = libre4 && presPortable(), po = libre4 && posable(), tc = libre4 && !po && tenable();
+  hud.placer(etqPortable, SUR_BUREAU.x, 1.3, SUR_BUREAU.z, pp);
+  hud.placer(etqPoser, P4.caisse.x, 1.45, P4.caisse.z, po);
+  if (tc) hud.libeller(etqCaisse, portesOuvertes.etape === 'stats' ? PM.etiquettes.stats : PM.etiquettes.caisse);
+  hud.placer(etqCaisse, P4.caisse.x, 1.45, P4.caisse.z, tc);
+  const pcPres = bureau.maj() || solu.maj(dt, temps) || pp || po || tc;
   verres.chercher(!jeu.auVolant && !tel.ouvert && !pc.ouvert && !joueur.service && joueur.sautT <= 0 && !gestes.actif);
   const servable = verres.servable;
   // un restaurateur du coin, tout près, à pied : « Présenter nos vins » (ou lui parler, déjà rencontré)
@@ -1417,6 +1705,7 @@ function majTaches() {
   for (const p of passants) if (ombrePerso(p.p.m, p.p.pos.x, p.p.pos.z)) t.poser(p.p.pos.x, p.p.pos.z, 0.4, 0.4, 0, p.p.pos.y);
   for (const f of clients.liste) if (clients.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const f of gens3.liste) if (gens3.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
+  for (const f of gens4.liste) if (gens4.dehors(f) && ombrePerso(f.p.m, f.p.pos.x, f.p.pos.z)) t.poser(f.p.pos.x, f.p.pos.z, 0.4, 0.4, 0);
   for (const p of assis) if (ombrePerso(p.m, p.m.groupe.position.x, p.m.groupe.position.z)) t.poser(p.m.groupe.position.x, p.m.groupe.position.z, 0.45, 0.45, 0);
   velos.taches(t, ombrePerso); // (les vélos et leurs cyclistes)
   for (const m of voituresM) t.poser(m.position.x, m.position.z, 1.1, 2.25, m.rotation.y, m.position.y);
@@ -1570,7 +1859,7 @@ for (const b of document.querySelectorAll('.perso')) {
   b.addEventListener('click', () => jeu.changerHeros(b.dataset.h + (choixHeros.endsWith('2') ? '2' : '')));
 }
 // Jouer : la mission 1 ; ou directement la mission 2 ou la 3 (la tournée prend un bon quart d'heure)
-function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la partie enregistrée)
+function lancer(m) { // 'tournee', 'traitement', 'habillage', 'portes', ou 'reprendre' (la partie enregistrée)
   peupler();
   ctrl.actions.length = 0; ctrl.touchers.length = 0; // rien de ce qui a été tapé sur l'accueil n'est rejoué
   son.demarrer();
@@ -1583,6 +1872,7 @@ function lancer(m) { // 'tournee', 'traitement', 'habillage', ou 'reprendre' (la
   if (m === 'reprendre') reprendrePartie(SAUVE.partie);
   else if (m === 'traitement') { lendemain(); mission2 = false; jeu.minutes = 1440 + 420; horloge(0); traitement.demarrer(); } // le lendemain d'une tournée faite, 7 h
   else if (m === 'habillage') { surlendemain(); mission3 = false; jeu.minutes = 2 * 1440 + 420; horloge(0); habillage.demarrer(); } // le jour d'après, 7 h
+  else if (m === 'portes') { jourPortes(); mission4 = false; jeu.minutes = 3 * 1440 + 420; horloge(0); portesOuvertes.demarrer(); voirPortes(); } // le lendemain de l'habillage, 7 h
   else mission.demarrer();
   dernier = performance.now();
 }
@@ -1606,7 +1896,28 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) sauve
 // bureau, l'argent, les étoiles) ; on est au domaine, à pied, les véhicules à leur place.
 function reprendrePartie(P) {
   jeu.minutes = P.minutes; jeu.ventes = P.ventes || 0; hud.argent(jeu.ventes);
-  if (P.mission === 'habillage') {
+  if (P.mission === 'portes') {
+    // la mission 4 : ce qui se voit d'après l'état (le décor, le buffet, le portable, la remorque de la veille, Marc à la
+    // caisse) ; les plateaux encore dans le van ; les portes rouvertes, la caisse et Marc, aux heures d'ouverture du jour J
+    jourPortes(); mission4 = false; horloge(0);
+    const Q = portesOuvertes;
+    Q.reprendre(P.etat);
+    if (Q.etape === 'materiel' && Q.materiel === 'aucun') jeu.portesMonde.veille();
+    if (['traiteur', 'portable', 'caisse', 'degustation', 'stats'].includes(Q.etape) && !Q.range) {
+      preparerJourJ();
+      if (Q.plateaux === 'van') {
+        const v = VEHICULES.find(x => x.genre === 'van');
+        colsVan.length = 0; for (const c of [0, 3]) { for (let l = 0; l < 3; l++) v.m.cartons[3 * c + l].visible = true; colsVan.push({ c, n: 3 }); }
+        v.p.charge = 6;
+      }
+      const h = heureDe(jeu.minutes);
+      // (la cour déjà pleine : portes.js, ouvrir(true) ; la file de la caisse se reforme au prochain « Tenir la caisse »)
+      if (jourDe(jeu.minutes) === Q.jourJ && h >= PORTES.ouverture && h < PORTES.fermeture && !Q.ferme) {
+        Q.ouvrirPortes(false); if (Q.releve) visiteurs.releve();
+      }
+    }
+    voirPortes();
+  } else if (P.mission === 'habillage') {
     surlendemain(); mission3 = false; horloge(0);
     habillage.reprendre(P.etat);
     gens3.reprendre();
@@ -1646,10 +1957,26 @@ function reprendrePartie(P) {
   hud.banniere(MISSIONS.reprise, MISSIONS.enCours[libelle(P)], 3);
 }
 // ce qu'on dit de la partie enregistrée (à l'accueil, à la reprise) : la mission, ou rentrer dormir, ou tout est gagné
-const libelle = P => (P.mission === 'traitement' && ['dodo', 'libre'].includes(P.etat.etape) ? 'dodo' : P.mission === 'habillage' && P.etat.etape === 'libre' ? 'libre' : P.mission);
+const libelle = P => (P.mission === 'traitement' && ['dodo', 'libre'].includes(P.etat.etape) ? 'dodo' : P.mission === 'habillage' && ['dodo', 'libre'].includes(P.etat.etape) ? 'dodo3'
+  : P.mission === 'portes' && P.etat.etape === 'libre' ? 'libre' : P.mission);
 // Les missions de l'accueil (Teddy, 25/11/2026 : « les niveaux ne sont pas accessibles dès le début ») : la 1 toujours ;
 // chacune des suivantes quand la précédente est gagnée (ou elle-même déjà gagnée). Le grand bouton : « Continuer » la
 // partie enregistrée, sinon « Jouer » la première mission ouverte et pas encore gagnée.
+// la quatrième carte (mission 4), faite d'après la troisième de la page (index.html) ; quatre cartes : deux par ligne sur
+// un téléphone, quatre sur un grand écran
+{
+  const ol = document.querySelector('.missions'), C = MISSIONS.carte4, M4 = MISSIONS.liste.find(M => M.id === 'portes');
+  if (ol && M4 && !ol.querySelector('[data-m="portes"]')) {
+    const li = ol.lastElementChild.cloneNode(true), b = li.querySelector('.mi');
+    b.dataset.m = 'portes'; b.style.setProperty('--app', 'var(--vitisoft)');
+    const d = b.querySelector('.mi-date'), n = document.createElement('b'); n.textContent = C.n;
+    d.replaceChildren(n, C.jour, document.createElement('br'), C.mois);
+    b.querySelector('.mi-t').textContent = M4.titre; b.querySelector('.mi-app').textContent = C.app; b.querySelector('.mi-v').textContent = C.apres;
+    ol.appendChild(li);
+    ol.setAttribute('aria-label', C.aria);
+    ol.style.gridTemplateColumns = 'repeat(auto-fit,minmax(122px,1fr))'; ol.style.width = 'min(100%,640px)';
+  }
+}
 const IDS = MISSIONS.liste.map(M => M.id);
 const ouverte = (G, i) => i === 0 || !!G[IDS[i - 1]] || !!G[IDS[i]];
 let aJouer = IDS[0];
@@ -1703,6 +2030,10 @@ window.CL = {
   },
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil
   versMission3() { traitement.etape = 'dodo'; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
+  // l'habillage fait d'un coup (essais) : on rentre dormir, la mission 4 (les portes ouvertes) commence au réveil
+  // (le soir du jeudi 10 décembre au plus tôt, comme après une mission 3 jouée : le réveil, le vendredi 11 ; les portes ouvertes, le samedi 19)
+  versMission4() { habillage.etape = 'dodo'; jeu.minutes = Math.max(jeu.minutes, 2 * 1440 + 18 * 60); horloge(0); joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
+  gens4, matSol, get colsVan() { return colsVan; }, PILES4, // (la mission 4 : l'agent municipal, le tas du matériel, les plateaux)
   get voitureProche() { return voitureProche(); },
   // les vélos (essais : banc velo) : celui qu'on peut prendre ici, le prendre, ceux qu'on a pris
   get veloProche() { return veloProche(); }, prendreVelo, velosJ: VELOS_J, gares: GARES,

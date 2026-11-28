@@ -66,8 +66,9 @@ export class Restaurateurs {
   get(id) { return this.liste.find(r => r.id === id) || null; }
   get rencontres() { return this.liste.filter(r => r.statut !== 'inconnu'); }
   get signees() { return this.liste.filter(r => r.statut === 'signee'); }
-  // pendant ses heures, et pas pendant son coup de feu (repassez)
-  voulu(r, m) { return heuresOuverture(m) || r.visite !== null; }
+  // pendant ses heures, et pas pendant son coup de feu (repassez). Le jour des portes ouvertes (mission 4), Clémence, le
+  // traiteur, attend avec ses plateaux dès 7 h (mission4.js : attendTraiteur)
+  voulu(r, m) { return heuresOuverture(m) || r.visite !== null || (r.id === this.j.lieux.portesOuvertes.traiteur && !!this.j.portes?.attendTraiteur && ouvert(m, 'commerce')); }
   occupe(r) { const m = mn(this.j.minutes); return r.F.heures.some(([a, b]) => m >= a && m < b); }
   // le point (x, z) est-il sous les yeux de la caméra ? (ils arrivent et partent hors de la vue)
   vu(x, z) {

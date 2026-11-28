@@ -2040,6 +2040,277 @@ if (scenario === 'velos') {
   await capture('velos');
 }
 
+if (scenario === 'portes') {
+  // la mission 4, les portes ouvertes (Teddy, 28/11/2026) : au réveil après l'habillage, les invitations (l'ordinateur
+  // piloté par l'API de mission4.js : la recherche multi-critères, la campagne, l'email, le SMS, le courrier, les
+  // relances) ; une semaine passe en dormant ; la veille, Marc attelle la remorque vide, à la mairie l'agent municipal
+  // charge le matériel du comité des fêtes, retour dans la cour, l'installation (un fondu) ; le jour J, les plateaux de
+  // Clémence en van, portés au buffet ; le portable du bureau porté jusqu'à la table de la caisse ; 10 h (le temps saute) ;
+  // la caisse (les dix tickets, un refus) ; Marc prend la caisse ; la dégustation (cinq invités servis : réglé à la main,
+  // portes.js est vide ici) ; la carte de fin ; le supplément (les statistiques, le merci) ; 18 h ; la sauvegarde et la
+  // reprise ; l'accueil à quatre cartes
+  const pre = () => {
+    window.T4 = {
+      obj: () => document.querySelector('#objectif')?.textContent || '',
+      dit: () => document.querySelector('#sous-titre').textContent,
+      // conduite assistée au doigt jusqu'à ce que but() soit vrai : durée, chocs, butées de la remorque
+      rouler(but, max = 60 * 160) {
+        const C = CL.ctrl, J = CL.jeu; let t = 0, chocs = 0, butees = 0, arret = 0, ou = '';
+        C.id = 1; C.jx = 0; C.jy = 0;
+        for (let k = 0; k < max && !but(); k++) {
+          CL.step(1); t += 1 / 60;
+          if (CL.tr.chocVu > 0.15) { chocs++; if (!ou) ou = ` (choc en ${CL.tr.pos.x.toFixed(1)}, ${CL.tr.pos.z.toFixed(1)})`; }
+          if (CL.attelage.bute) butees++;
+          if (Math.abs(CL.tr.v) < 0.25 && !J.gestes.actif) arret += 1 / 60; else arret = 0;
+          if (arret > 25) break; // (une voiture qui arrive doucement sur la départementale : on lui cède le passage)
+        }
+        C.id = null;
+        return { t: Math.round(t), chocs: chocs + ou, butees, ok: but() && !chocs, x: CL.tr.pos.x.toFixed(1), z: CL.tr.pos.z.toFixed(1) };
+      },
+      monterDans(genre) { const v = CL.vehicule(genre), p = v.p.pos; CL.teleporter(p.x + Math.cos(v.p.h) * 2.4, p.z - Math.sin(v.p.h) * 2.4, 0); CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3); return CL.jeu.auVolant && CL.jeu.veh.genre === genre; },
+      descendre() { if (CL.jeu.auVolant) { CL.agir(); CL.finirGeste(); CL.step(3); } },
+      // entrer au bureau du chai, en sortir (par la porte)
+      entrerBureau() { const B = CL.jeu.lieux.bureau; CL.teleporter(B.dehors.x - 0.6, B.dehors.z, Math.PI / 2); CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3); return CL.jeu.dedans === 'bureau'; },
+      sortirBureau() { const B = CL.jeu.lieux.bureau; CL.teleporter(B.dedans.x + 0.3, B.dedans.z, -Math.PI / 2); CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3); return !CL.jeu.dedans; },
+      vu: e => [...document.querySelectorAll('#etiquettes .etiquette')].some(x => !x.hidden && x.textContent.includes(e)),
+    };
+  };
+  await ev(pre);
+  // le jour des invitations
+  let r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, log = [], T = T4;
+    try {
+      CL.jouer(); CL.step(30);
+      CL.versMission4(); CL.step(60 * 6);
+      log.push([`au réveil, le vendredi 11 décembre : la mission 4 ; les portes ouvertes le ${Q.dateJ} ; la balise : le bureau du chai (objectif : ${T.obj()})`,
+        Q.actif && J.enCoursId === 'portes' && Q.etape === 'ciblage' && Math.floor(J.minutes / 1440) === 3 && Q.jourJ === 11 && Q.dateJ === 'samedi 19 décembre' && Q.cible === L.pc && T.obj().includes('Vitisoft')]);
+      log.push(['entré au bureau du chai, assis au portable : l\'ordinateur s\'ouvre sur Vitisoft (l\'icône mise en évidence)', T.entrerBureau() && (() => { const B = L.bureau; CL.teleporter(B.devant.x, B.devant.z, Math.PI / 2); CL.step(3); CL.agir(); CL.finirGeste(); CL.step(3); return J.pc.ouvert && J.pc.conseil === 'vitisoft' && J.appliPC() === 'vitisoft'; })()]);
+      const faux = Q.rechercher();
+      Q.filtrer('categorie', 'particulier'); const faux2 = Q.rechercher();
+      Q.filtrer('zone', 'region');
+      log.push([`la recherche multi-critères : refusée tant que les filtres ne sont pas les bons (${faux}, ${faux2}), puis 538 contacts`, faux === 'categorie' && faux2 === 'zone' && Q.compte === 538 && Q.rechercher() === null && Q.selection.total === 538]);
+      CL.step(5);
+      log.push([`la sélection faite : créer la campagne (objectif : ${T.obj()})`, Q.etape === 'campagne' && J.appliPC() === 'vitisoft' && T.obj().includes('campagne')]);
+      Q.ouvrirCampagne(); CL.step(5);
+      log.push(['la campagne créée : Brevo (l\'appli de l\'ordinateur)', Q.campagne.ouverte && J.appliPC() === 'brevo']);
+      Q.envoyerEmail(); CL.step(5); const sms = T.obj();
+      Q.envoyerSms(); CL.step(5);
+      log.push([`l'email puis le SMS (objectif entre les deux : ${sms}) ; le courrier, dans Vitisoft`, sms.includes('SMS') && Q.etape === 'courrier' && J.appliPC() === 'vitisoft']);
+      Q.envoyerCourrier(); CL.step(5);
+      log.push(['le courrier parti : les relances, dans Brevo', Q.etape === 'relances' && J.appliPC() === 'brevo']);
+      Q.activerRelances(); CL.step(10);
+      log.push([`tout est parti : rentrer dormir, une semaine passe (objectif : ${T.obj()})`, Q.invitationsParties && Q.etape === 'semaine' && T.obj().includes('semaine') && Q.cible === L.maison]);
+      J.pc.lever(); CL.step(60);
+      log.push(['levé du portable, sorti du bureau', !J.pc.ouvert && T.sortirBureau()]);
+      log.push(['la partie s\'enregistre (la mission 4, la campagne envoyée)', (() => { const P = CL.sauver(); return P && P.mission === 'portes' && P.etat.etape === 'semaine' && P.etat.campagne.relances && P.etat.jourJ === 11; })()]);
+      CL.dormir(); CL.step(60 * 4);
+      const R = J.remorque, marc = CL.gens3.liste[2], ag = CL.gens4.liste[0];
+      log.push([`une semaine plus tard, le vendredi 18 décembre, 7 h : la veille ; Marc a sorti la remorque vide au bord de l'allée ; le matériel sur la place, l'agent municipal à côté (objectif : ${T.obj()})`,
+        Q.etape === 'materiel' && Math.floor(J.minutes / 1440) === 10 && J.minutes % 1440 < 7 * 60 + 10 && Math.hypot(R.ici.x - L.remorque.x, R.ici.z - L.remorque.z) < 0.5 && !CL.mRem.materiel.visible
+        && marc.etat === 'dehors' && ag.etat === 'dehors' && ag.p.m.groupe.visible && CL.matSol.visible && T.obj().includes('tracteur') && J.guide && J.guide.v.genre === 'tracteur']);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('veille-place');
+  // la veille : atteler, la mairie, le retour, l'installation
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, R = J.remorque, marc = CL.gens3.liste[2], ag = CL.gens4.liste[0];
+    try {
+      // (9 h : les enfants de l'école, sur le trottoir de la rue de la place à l'heure de l'arrivée, comptent pour pilote.js
+      // comme des voitures qui arrivent sur la départementale : la conduite assistée leur céderait le passage sans fin au bas
+      // de la rue ; signalé, pilote.js n'est pas à cette mission)
+      J.minutes = 10 * 1440 + 9 * 60; CL.step(2);
+      T.monterDans('van'); CL.teleporter(-90, -9, 0); CL.step(60 * 9);
+      log.push(['en van devant le timon : pas d\'attelage, il faut le tracteur', J.auVolant && !J.gestes.actif && !R.attelee && Q.aideCle === 'remorque']);
+      T.descendre(); CL.vehicule('van').p.placer(L.van.x, L.van.z, L.van.h); CL.step(3);
+      T.monterDans('tracteur'); CL.teleporter(-90, -9, 0); CL.step(30);
+      log.push(['en tracteur devant le timon : Marc attelle', J.gestes.actif && Q.occupe]);
+      let descendu = false;
+      for (let n = 0; n < 4000 && J.gestes.actif; n++) { CL.step(1); if (!J.auVolant) descendu = true; }
+      CL.step(10);
+      log.push([`attelée par Marc, on est resté au volant ; la balise : la mairie (objectif : ${T.obj()})`, R.attelee && Q.attelee && !descendu && Q.cible === P4.mairie && T.obj().includes('mairie')]);
+      const a = T.rouler(() => J.gestes.actif && Q.occupe);
+      log.push([`en conduite assistée jusqu'à la place du bourg (${a.t} s, arrêté en ${a.x}, ${a.z}) : aucun choc, la remorque ne bute pas (${a.chocs}, ${a.butees}) ; l'agent municipal charge`, a.ok && a.butees === 0 && ag.etat === 'range']);
+      let porte = 0;
+      for (let n = 0; n < 6000 && J.gestes.actif; n++) { CL.step(1); if (ag.p.porte) porte++; }
+      CL.step(10);
+      const off = CL.mRem.materiel.userData.offs;
+      log.push([`le matériel chargé (porté par l'agent ${(porte / 60).toFixed(0)} s) : sur la remorque, plus sur la place ; la balise : la cour (objectif : ${T.obj()})`,
+        Q.materiel === 'charge' && CL.mRem.materiel.visible && CL.mRem.materiel.geometry.drawRange.count === off[off.length - 1] && !CL.matSol.visible && porte > 60 && Q.cible === L.remorque.chai.arret]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await ev(() => { const p = CL.attelage.pos; CL.photo(p.x - 2, 5.5, p.z - 9, p.x + 1, 1.2, p.z); CL.step(2); });
+  await capture('remorque-chargee');
+  await ev(() => CL.photo());
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, log = [], T = T4, ag = CL.gens4.liste[0];
+    try {
+      CL.step(60 * 4);
+      log.push(['l\'agent municipal rentre à la mairie', ag.etat === 'range' || ag.etat === 'dedans']);
+      const m0 = J.minutes, b = T.rouler(() => J.gestes.actif && Q.occupe);
+      if (!b.ok) log.push(['voitures : ' + JSON.stringify(CL.voitures().map(v => [v.x.toFixed(1), v.z.toFixed(1), v.v.toFixed(1), v.sens])) + ' école ' + JSON.stringify(CL.ecole.obstacles.filter(o => o.x < 1e5 && Math.hypot(o.x - CL.tr.pos.x, o.z - CL.tr.pos.z) < 30).map(o => [o.x.toFixed(1), o.z.toFixed(1)])), true]);
+      log.push([`retour dans la cour (${b.t} s, arrêté en ${b.x}, ${b.z}, objectif : ${T.obj()}) : aucun choc, la remorque ne bute pas (${b.chocs}, ${b.butees}) ; l'installation`, b.ok && b.butees === 0]);
+      CL.finirGeste(3000); CL.step(30);
+      const D = CL.monde.decorPortes, R = J.remorque;
+      log.push([`installé, une heure plus tard : le décor des portes ouvertes, la remorque rangée vide sous le hangar, le tracteur à sa place ; rentrer dormir (objectif : ${T.obj()})`,
+        Q.materiel === 'installe' && D.decor.visible && !D.plateaux.visible && !D.portable.visible && Math.hypot(R.ici.x - L.remorque.range.x, R.ici.z - L.remorque.range.z) < 0.5 && !CL.mRem.materiel.visible
+        && Math.hypot(CL.vehicule('tracteur').p.pos.x - L.tracteur.x, CL.vehicule('tracteur').p.pos.z - L.tracteur.z) < 1 && J.minutes - m0 > 60 && T.obj().includes('dormir') && Q.cible === L.maison]);
+      log.push(['les tables arrêtent : une boîte de collision par meuble', (() => { const t = L.portesOuvertes.tables[1]; CL.teleporter(t[0], t[1], 0); CL.step(5); return Math.hypot(J.joueur.pos.x - t[0], J.joueur.pos.z - t[1]) > 0.5; })()]);
+      CL.teleporter(-88.6, -45.5, -0.9); CL.step(5);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await ev(() => { CL.photo(-80.5, 7.5, -36.5, -92, 0.8, -50); CL.step(2); });
+  await capture('cour-installee');
+  await ev(() => CL.photo());
+  // le jour J : le traiteur, le buffet
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4;
+    try {
+      CL.dormir(); CL.step(60 * 4);
+      log.push([`le samedi 19 décembre, 7 h : le jour J ; les plateaux, chez Clémence, en van (objectif : ${T.obj()})`, Q.etape === 'traiteur' && Math.floor(J.minutes / 1440) === 11 && CL.monde.decorPortes.decor.visible && T.obj().includes('van') && J.guide && J.guide.v.genre === 'van']);
+      T.monterDans('van');
+      const a = T.rouler(() => J.gestes.actif && Q.occupe);
+      const C = J.portesMonde.clemence;
+      log.push([`en van, en conduite assistée jusqu'à La Table de Clémence (${a.t} s, arrêté en ${a.x}, ${a.z}) : aucun choc (${a.chocs}) ; Clémence est là dès 7 h ; on charge`, a.ok && C && C.present && C.p.m.groupe.visible]);
+      CL.finirGeste(4000); CL.step(10);
+      const v = CL.vehicule('van');
+      log.push([`les plateaux dans le van (deux piles de trois cartons) ; la balise : le buffet (objectif : ${T.obj()})`, Q.plateaux === 'van' && v.p.charge === 6 && v.m.cartons.filter(c => c.visible).length === 6 && CL.colsVan.length === 2 && Q.cible === P4.livraison && J.auVolant]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, log = [], T = T4;
+    try {
+      const b = T.rouler(() => J.gestes.actif && Q.occupe);
+      log.push([`retour au domaine, le long du buffet (${b.t} s, arrêté en ${b.x}, ${b.z}) : aucun choc (${b.chocs}) ; on décharge`, b.ok]);
+      CL.finirGeste(4000); CL.step(10);
+      const v = CL.vehicule('van');
+      log.push([`le buffet garni, le van vide, sa porte refermée ; le portable (objectif : ${T.obj()})`, Q.plateaux === 'buffet' && CL.monde.decorPortes.plateaux.visible && v.p.charge === 0 && v.m.cartons.every(c => !c.visible) && v.m.coulissante.position.z > -0.05 && Q.etape === 'portable' && T.obj().includes('portable')]);
+      log.push(['la partie s\'enregistre (les plateaux au buffet)', (() => { const P = CL.sauver(); window.P4mid = P && JSON.parse(JSON.stringify(P)); return P && P.mission === 'portes' && P.etat.plateaux === 'buffet' && P.etat.materiel === 'installe' && P.etat.etape === 'portable'; })()]);
+      CL.teleporter(-95.5, -42.6, -2.4); CL.step(3);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await ev(() => { CL.photo(-97, 2.4, -43.2, -97, 0.7, -40.6); CL.step(2); });
+  await capture('buffet');
+  await ev(() => CL.photo());
+  // le portable, 10 h, la caisse
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, B = L.bureau, V = CL.visiteurs;
+    try {
+      log.push(['au bureau du chai : « Prendre le portable » (et plus « S\'asseoir au portable »)', T.entrerBureau() && (() => { CL.teleporter(B.devant.x, B.devant.z, Math.PI / 2); CL.step(5); return T.vu('Prendre le portable') && !T.vu('asseoir'); })()]);
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      log.push(['le portable dans les mains, plus sur le bureau', Q.portable === 'porte' && !!J.joueur.porte && !CL.monde.portableBureau.visible && Q.cible === P4.caisse]);
+      log.push(['on sort du bureau, le portable dans les mains', T.sortirBureau() && !!J.joueur.porte]);
+      const V0 = P4.caisse.vendeur; CL.teleporter(V0.x - 0.2, V0.z + 1.2, Math.PI); CL.step(5);
+      log.push(['à la table de la caisse : « Poser le portable »', T.vu('Poser le portable')]);
+      const h0 = J.minutes % 1440;
+      CL.agir(); CL.finirGeste(); CL.step(5);
+      for (let n = 0; n < 600 && (J.gestes.actif || Q.etape !== 'caisse'); n++) CL.step(1);
+      CL.step(10);
+      log.push([`posé (le portable ouvert sur la table) ; en avance (${Math.floor(h0 / 60)} h ${Math.floor(h0 % 60)}), le temps saute à 10 h : les portes ouvrent, la caisse aussi`, Q.portable === 'pose' && CL.monde.decorPortes.portable.visible && !J.joueur.porte && J.minutes % 1440 >= 600 && J.minutes % 1440 < 610 && Q.etape === 'caisse' && Q.caisse.ouverte && Q.ouvert && V.actif]);
+      log.push(['« Tenir la caisse » : l\'ordinateur s\'ouvre sur la caisse, debout à la place du vendeur', T.vu('Tenir la caisse') && (() => { CL.agir(); CL.finirGeste(); CL.step(3); return J.pc.ouvert && J.pc.conseil === 'caisse' && Q.aLaCaisse && Math.hypot(J.joueur.pos.x - V0.x, J.joueur.pos.z - V0.z) < 0.3; })()]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await ev(() => { CL.jeu.pc.fermer(); CL.photo(-77.8, 2.3, -55.4, -80.4, 0.8, -57.2); CL.step(2); });
+  await capture('caisse-portable');
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, V = CL.visiteurs;
+    try {
+      CL.photo(); J.pc.ouvrir('caisse');
+      // les dix clients (portes.js est vide ici : le client au comptoir réglé à la main) ; un refus, puis les bons tickets
+      let refus = '', bons = 0;
+      for (let i = 0; i < 10; i++) {
+        V.comptoir = {};
+        const C = Q.clientCaisse;
+        if (i === 0) refus = Q.encaisser({ lignes: [[C.achats[0][0], C.achats[0][1] + 1]], remise: 0, paiement: C.paiement, ticket: C.ticket }) || '';
+        if (Q.encaisser({ lignes: C.achats.map(l => l.slice()), remise: C.remise || 0, paiement: C.paiement, percu: C.percu, ticket: C.ticket }) === null) bons++;
+        CL.step(20);
+      }
+      log.push([`la caisse : un ticket faux refusé (« ${refus} »), les dix bons tickets ; la relève`, refus.length > 0 && bons === 10 && Q.caisse.tickets.length === 10 && Q.etape === 'releve']);
+      const marc = CL.gens3.liste[2];
+      for (let n = 0; n < 60 * 40 && Q.etape === 'releve'; n++) CL.step(1);
+      CL.step(10);
+      const V0 = P4.caisse.vendeur;
+      log.push([`Marc sort du chai et prend la caisse ; l'ordinateur fermé ; la dégustation (objectif : ${T.obj()})`, !J.pc.ouvert && !Q.aLaCaisse && Q.releve && V.marc && marc.p.m.groupe.visible && Math.hypot(marc.p.pos.x - V0.x, marc.p.pos.z - V0.z) < 0.4 && Q.etape === 'degustation' && T.obj().includes('dégustation') && Q.cible === P4.bar]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await ev(() => { CL.photo(-77.2, 2.2, -59.6, -79.6, 1.1, -57.2); CL.step(2); });
+  await capture('marc-caisse');
+  await ev(() => CL.photo());
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, P4 = L.portesOuvertes, log = [], T = T4, V = CL.visiteurs;
+    try {
+      V.nServis = 3; CL.step(30);
+      log.push([`trois invités servis : pas encore (objectif : ${T.obj()})`, Q.etape === 'degustation' && T.obj().includes('3 sur 5')]);
+      V.nServis = 5; CL.step(30);
+      log.push(['cinq invités servis : la mission 4 est gagnée', Q.etape === 'fin' && CL.SAUVE.gagnees.portes === true]);
+      CL.step(60 * 6);
+      const cta = document.querySelector('#fin-cta');
+      log.push(['la carte de fin : la caisse de Vitisoft, le lien vers la page de la caisse (source du jeu)', J.finVue && document.querySelector('#fin-titre').textContent.includes('caisse') && !cta.hidden && cta.href === 'https://vitisoft.fr/fonctionnalites/caisse-caveau/?source=jeu-tournee-generale' && Q.etape === 'stats']);
+      document.querySelector('#continuer').click(); CL.step(10);
+      log.push([`le supplément : les statistiques, à la caisse (objectif : ${T.obj()})`, !J.finVue && T.obj().includes('statistiques') && Q.cible === P4.caisse]);
+      const V0 = P4.caisse.vendeur, marc = CL.gens3.liste[2];
+      CL.teleporter(V0.x - 0.4, V0.z + 1.4, Math.PI); CL.step(5);
+      log.push(['« Voir les statistiques » : Marc laisse la place, l\'ordinateur s\'ouvre (sur les Statistiques de Vitisoft, pc.js)', T.vu('Voir les statistiques') && (() => { CL.agir(); CL.finirGeste(); CL.step(60); return J.pc.ouvert && J.pc.conseil === 'caisse' && Q.aLaCaisse && Math.hypot(marc.p.pos.x - V0.x, marc.p.pos.z - V0.z) > 1; })()]);
+      const st = Q.stats;
+      log.push([`les statistiques : ${st.tickets} tickets, ${st.ca} €, panier moyen ${st.panier} €`, st.tickets === 10 && st.ca > 0 && st.panier > 0]);
+      Q.signal('statsVues'); CL.step(5);
+      log.push([`regardées (signal statsVues) : le merci (objectif : ${T.obj()})`, T.obj().includes('emerciez')]);
+      Q.envoyerMerci(); CL.step(10);
+      J.pc.lever(); CL.step(60 * 3);
+      log.push(['le merci envoyé (Brevo) ; levé, Marc reprend la caisse ; le domaine est à vous', Q.merci && Q.etape === 'libre' && !Q.aLaCaisse && Math.hypot(marc.p.pos.x - V0.x, marc.p.pos.z - V0.z) < 0.4 && T.obj().includes('finies')]);
+      J.minutes = 11 * 1440 + 18 * 60 + 1; CL.step(10);
+      log.push(['18 h : les visiteurs repartent', Q.ferme && !V.actif]);
+      log.push(['la partie s\'enregistre, la mission gagnée', (() => { const P = CL.sauver(); return P && P.mission === 'portes' && P.etat.etape === 'libre' && P.etat.merci; })()]);
+      // la nuit d'après : le décor rangé, le portable revenu au bureau
+      CL.teleporter(-90, -48, 0); CL.step(3); CL.dormir(); CL.step(60);
+      log.push(['le lendemain : le décor rangé, le portable revenu sur le bureau du chai', Q.range && !CL.monde.decorPortes.decor.visible && CL.monde.portableBureau.visible && !CL.monde.decorPortes.plateaux.visible]);
+      // la reprise : la partie enregistrée au milieu du jour J
+      CL.SAUVE.enregistrer(window.P4mid); CL.SAUVE.fige = true; // (plus rien ne s'enregistre d'ici le rechargement)
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  // la page rechargée : l'accueil à quatre cartes, « Continuer » le jour J
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.CL && !document.querySelector('#jouer').disabled, { timeout: 180000 });
+  await new Promise(res => setTimeout(res, 1500));
+  r = await ev(() => {
+    const q = s => document.querySelector(s), log = [], mi = q('.mi[data-m="portes"]');
+    log.push([`l'accueil : quatre cartes, la quatrième (les portes ouvertes, le 19 décembre) ouverte et gagnée ; « Continuer » (${q('#jouer-s').textContent})`,
+      document.querySelectorAll('.mi').length === 4 && !!mi && !mi.disabled && mi.classList.contains('gagnee') && mi.textContent.includes('19') && mi.textContent.includes('portes ouvertes') && q('#jouer-t').textContent === 'Continuer' && q('#jouer-s').textContent.includes('portes ouvertes')]);
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  await capture('accueil-quatre');
+  await ev(pre);
+  r = await ev(async () => {
+    const J = CL.jeu, Q = CL.portes, L = J.lieux, log = [], T = T4;
+    try {
+      CL.jouer(); CL.step(60);
+      const D = CL.monde.decorPortes;
+      log.push([`reprise : le jour J, le décor installé, le buffet garni, le portable encore au bureau (objectif : ${T.obj()})`, Q.actif && Q.etape === 'portable' && Q.plateaux === 'buffet' && Q.materiel === 'installe' && D.decor.visible && D.plateaux.visible && !D.portable.visible && CL.monde.portableBureau.visible && Math.floor(J.minutes / 1440) === 11 && T.obj().includes('portable')]);
+    } catch (e) { log.push(['scénario interrompu : ' + e.message + ' ' + (e.stack || '').split('\n')[1], false]); }
+    return log;
+  });
+  for (const [msg, c] of r) ok(c, msg);
+  // ce que coûte la mission : la cour installée, de jour, des deux côtés
+  const mesures = await ev(() => { CL.teleporter(-88.6, -45.5, -0.9); CL.step(30); const a = CL.bench(120); CL.monde.decorPortes.decor.visible = false; const b = CL.bench(120); CL.monde.decorPortes.decor.visible = true; return [a, b]; });
+  console.log('la cour installée : ' + mesures[0] + '\nsans le décor : ' + mesures[1]);
+}
+
 if (scenario === 'velo') {
   // le vélo du joueur (velos.js : GARES, VeloJoueur, MONTAGE ; Teddy, 28/11/2026) : prendre un vélo garé (il disparaît du
   // décor, sa boîte avec), le relever, l'enfourcher, pédaler (les pieds sur les pédales), tourner (il penche), freiner

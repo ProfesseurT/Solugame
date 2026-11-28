@@ -1089,11 +1089,14 @@ export const MISSIONS = {
     { id: 'tournee', n: 'Mission 1', titre: 'La tournée de Noël', texte: 'Les commandes au téléphone, les livraisons au bourg, le chèque, la dégustation, puis Vitisoft au bureau du chai.' },
     { id: 'traitement', n: 'Mission 2', titre: 'La journée de traitement', texte: 'Un traitement bio sur trois parcelles, noté dans le Registre phyto.' },
     { id: 'habillage', n: 'Mission 3', titre: 'L\'habillage', texte: 'Un échantillon au labo, la fiche et le QR code dans Viticode, les bouteilles habillées à l\'entrepôt de l\'imprimerie.' },
+    { id: 'portes', n: 'Mission 4', titre: 'Les portes ouvertes', texte: 'Les invitations ciblées dans Vitisoft et envoyées par Brevo, le matériel et le traiteur, puis la caisse de Vitisoft le jour J.' },
   ],
+  // la quatrième carte de l'accueil (main.js l'ajoute aux trois de la page) : le jour J, l'appli, d'après quelle mission
+  carte4: { n: '19', jour: 'sam.', mois: 'déc.', app: 'Vitisoft · Brevo', apres: 'Après la mission\u00a03', aria: 'Les quatre missions : chacune s\'ouvre quand la précédente est gagnée' },
   note: 'La partie s\'enregistre toute seule sur cet appareil. À l\'accueil, « Continuer » la reprend, au domaine.',
   confirme: t => `Rejouer « ${t} » ? La partie en cours sera remplacée ; les missions gagnées le restent.`,
   // à l'accueil, sous « Continuer » ; la bannière à la reprise
-  enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', dodo: 'La journée de traitement finie : rentrez dormir', habillage: 'L\'habillage, en cours', libre: 'Les trois missions gagnées : le domaine est à vous' },
+  enCours: { tournee: 'La tournée de Noël, en cours', traitement: 'La journée de traitement, en cours', dodo: 'La journée de traitement finie : rentrez dormir', habillage: 'L\'habillage, en cours', dodo3: 'L\'habillage fini : rentrez dormir', portes: 'Les portes ouvertes, en cours', libre: 'Les quatre missions gagnées : le domaine est à vous' },
   reprise: 'Partie reprise',
 };
 
@@ -1309,11 +1312,151 @@ export const RESTAURATEURS = {
   missions: { n: 'Hors mission', titre: 'Les restaurants du coin', texte: (k, total, sg) => `${k} restaurateur${s(k)} rencontré${s(k)} sur ${total}${sg ? `, ${sg} commande${s(sg)} signée${s(sg)}` : ''}. Allez les voir à pied, faites goûter vos vins : le bureau dit quand les rappeler.` },
 };
 
-// Le chien du domaine (chien.js) : ce qu'on lui dit en le caressant (gestes.js : caresser)
-// Mission 4 : objectifs, dialogues, bannières, carte de fin (mission4.js)
+// Mission 4 : objectifs, dialogues, bannières, carte de fin (mission4.js ; main.js : le matériel, le traiteur, le portable,
+// la caisse, Marc). Ce qui touche au produit suit les sources en tête du bloc PORTES ; le domaine, l'agent municipal, les
+// plateaux de Clémence : fictifs. Le personnage ne boit jamais : il sert.
+const pDate = d => majuscule(d);
 export const PORTES_MISSION = {
+  agent: 'Gilles', // l'agent municipal, à la mairie (main.js : gens4)
+  bannieres: {
+    titre: date => [pDate(date), 'Mission 4 : les portes ouvertes'],
+    selection: S => ['Recherche multi-critères', `${S.total} particuliers de la région`],
+    email: ['Brevo', `L'invitation part par email`],
+    sms: ['Brevo', 'Les SMS partent'],
+    courrier: ['Vitisoft', 'Le courrier part au routage postal'],
+    relances: ['Brevo', 'Les relances partiront toutes seules'],
+    semaine: date => ['Une semaine plus tard', pDate(date)],
+    attelee: ['Remorque attelée', 'Direction la mairie'],
+    charge: ['Matériel chargé', 'Tables, bancs et sono'],
+    installe: ['Une heure plus tard', 'Le parvis est prêt'],
+    jourJ: date => [pDate(date), 'Les portes ouvertes de Noël'],
+    plateaux: ['Les plateaux de Clémence', 'Chargés dans le van'],
+    buffet: ['Le buffet', 'Garni'],
+    pose: ['La caisse', 'Le portable en place'],
+    ouverture: ['10 h', 'Les portes ouvrent'],
+    ticket: (i, n) => ['Ticket encaissé', `${i} sur ${n}`],
+    caisseFinie: ['La caisse', 'Dix tickets, dix clients servis'],
+    fin: ['Mission 4 gagnée', 'Les portes ouvertes de Noël'],
+    merci: ['Brevo', 'Le merci part à tous ceux qui sont passés'],
+  },
+  objectifs: {
+    message: 'Au bureau du chai, sur l\'ordinateur : préparez les invitations dans Vitisoft',
+    ciblage: 'Vitisoft, Clients / contacts : la recherche multi-critères, tous les particuliers de la région',
+    campagne: 'Créez la campagne depuis la sélection : l\'email et le SMS des invitations, dans Brevo',
+    campagneSms: 'Brevo : envoyez aussi le SMS',
+    campagneEmail: 'Brevo : envoyez aussi l\'email',
+    courrier: 'Vitisoft : le courrier, pour ceux qui n\'ont pas d\'adresse e-mail',
+    courrierRecherche: 'Vitisoft : relancez la recherche des particuliers de la région, puis le courrier',
+    relances: 'Brevo : programmez les relances automatiques par mail',
+    semaine: 'Tout est parti. Rentrez dormir : une semaine passe',
+    tracteur: 'Prenez le tracteur : Marc a sorti la remorque, au bord de l\'allée',
+    retour: 'Rentrez au domaine : Marc sort la remorque',
+    atteler: 'En tracteur, arrêtez-vous devant le timon : Marc vous aide à atteler',
+    mairie: 'À la mairie, sur la place du bourg : le matériel du comité des fêtes',
+    chargement: 'L\'agent municipal charge le matériel sur la remorque',
+    cour: 'Ramenez le matériel dans la cour du domaine',
+    installe: 'Le parvis est prêt. Rentrez dormir : demain, les portes ouvertes',
+    van: 'Prenez le van : les plateaux du traiteur, chez Clémence',
+    traiteur: 'En van, chez Clémence (La Table de Clémence, rue de la place) : les plateaux du traiteur',
+    buffet: 'Rapportez les plateaux au buffet, dans la cour du domaine',
+    portable: 'Au bureau du chai : prenez le portable, pour la caisse',
+    poser: 'Posez le portable sur la table de la caisse, contre le chai',
+    attente: 'Les portes ouvrent à 10 h',
+    tenir: (i, n) => `À la caisse : « Tenir la caisse » et encaissez les visiteurs (${i} sur ${n})`,
+    caisse: (i, n) => `La caisse de Vitisoft : encaissez les visiteurs (${i} sur ${n})`,
+    releve: 'Marc prend la caisse',
+    degustation: (n, k) => `Au bar de dégustation : servez un verre du Clos aux invités (${n} sur ${k})`,
+    fin: 'Les portes ouvertes de Noël',
+    stats: 'En supplément : à la caisse, les statistiques des portes ouvertes, dans Vitisoft',
+    merci: 'En supplément : remerciez par mail tous ceux qui sont passés, dans Brevo',
+    libre: 'Les portes ouvertes sont finies : le domaine est à vous',
+    // la nuit (outils.js : HORAIRES) : ce qui attend quelqu'un de fermé
+    nuit: {
+      marc: 'Il fait nuit : Marc est rentré chez lui. Rentrez dormir, il vous aidera à atteler demain matin',
+      mairie: 'Il fait nuit : la mairie est fermée. Rentrez dormir, vous chercherez le matériel demain matin',
+      traiteur: 'Il fait nuit : La Table de Clémence est fermée. Rentrez dormir, les portes ouvertes attendront demain',
+    },
+  },
+  dialogues: {
+    reveil: (date, dateJ) => [{ qui: '', txt: `${pDate(date)}. Les portes ouvertes de Noël, c'est ${dateJ}, au domaine.` }, { qui: '', txt: 'Les invitations partent aujourd\'hui : au bureau du chai, sur l\'ordinateur, avec Vitisoft.' }],
+    selection: S => [{ qui: '', txt: `${S.total} particuliers de la région : ${S.email} ont une adresse e-mail, ${S.sms} un mobile, et ${S.courrier} n'ont pas d'e-mail : pour eux, le courrier.` }],
+    campagne: [{ qui: '', txt: 'Brevo s\'ouvre avec la sélection : l\'email et le SMS, sans exporter un seul fichier.' }],
+    email: [{ qui: '', txt: 'L\'invitation part par email.' }],
+    sms: [{ qui: '', txt: 'Les SMS partent.' }],
+    courrier: [{ qui: '', txt: 'Le courrier part au routage, avec ses étiquettes d\'expédition.' }],
+    relances: [{ qui: '', txt: 'Les relances partiront toutes seules : une semaine avant à ceux qui n\'ont pas ouvert, la veille à tous.' }],
+    semaine: [{ qui: '', txt: 'Email, SMS, courrier, relances : tout est parti. Il n\'y a plus qu\'à préparer la fête.' }],
+    // la veille
+    veille: date => [{ qui: '', txt: `${pDate(date)}. Demain, les portes ouvertes.` }, { qui: '', txt: 'Le comité des fêtes nous prête ses tables et sa sono : Marc sort la remorque, on va les chercher à la mairie.' }],
+    prete: [{ qui: 'Marc', txt: 'La remorque est prête, au bord de l\'allée. Venez avec le tracteur, je vous aide à atteler.' }],
+    preteTracteur: [{ qui: 'Marc', txt: 'La remorque est prête. Arrêtez-vous devant le timon, je vous guide.' }],
+    pasTracteur: [{ qui: '', txt: 'Pour la remorque, il faut le tracteur.' }],
+    timon: [{ qui: 'Marc', txt: 'Arrêtez-vous juste devant le timon, dans son axe.' }],
+    marcAide: [{ qui: 'Marc', txt: 'Reculez doucement... Stop ! Je lève la béquille et je mets la goupille.' }],
+    attelee: [{ qui: 'Marc', txt: 'C\'est attelé. Direction la mairie : le comité des fêtes nous a sorti son matériel sur la place.' }],
+    marcRentre: [{ qui: '', txt: 'Marc est rentré chez lui : on attellera demain matin.' }],
+    mairie: qui => [{ qui, txt: 'Bonjour ! Le matériel du comité des fêtes : les tables pliantes, les bancs et la sono. Restez au volant, je vous charge tout ça.' }],
+    charge: qui => [{ qui, txt: 'Voilà, tout y est. Bonnes portes ouvertes ! Je passerai goûter votre Clos.' }],
+    mairieFermee: tot => [{ qui: '', txt: `La mairie est fermée à cette heure-ci. J'y retourne ${tot ? 'à l\'ouverture' : 'demain matin'}.` }],
+    pasRemorque: qui => [{ qui, txt: 'Bonjour ! Pour tout ce matériel, il faut la remorque, derrière le tracteur.' }],
+    installe: [{ qui: 'Marc', txt: 'Les tables, les bancs, la sono, les guirlandes : tout est en place. Demain, il n\'y a plus qu\'à ouvrir !' }],
+    installeSeul: [{ qui: '', txt: 'Les tables, les bancs, la sono, les guirlandes : tout est en place. Demain, il n\'y a plus qu\'à ouvrir.' }],
+    // le jour J
+    jourJ: date => [{ qui: '', txt: `${pDate(date)}. C'est le jour des portes ouvertes : on ouvre à 10 h.` }, { qui: '', txt: 'D\'abord, les plateaux du traiteur, chez Clémence ; puis le portable du bureau, pour la caisse.' }],
+    clemence: [{ qui: 'Clémence', txt: 'Bonjour ! Vos plateaux sont prêts : rillettes, fromages de chèvre, fouées. Tout est dans les cartons, chargez !' }],
+    clemenceFin: [{ qui: 'Clémence', txt: 'Bonne fête ! Je passerai goûter votre Clos 2025 cet après-midi.' }],
+    clemenceFermee: [{ qui: '', txt: 'La Table de Clémence est fermée à cette heure-ci.' }],
+    pasVan: [{ qui: 'Clémence', txt: 'Bonjour ! Pour mes plateaux, il faut le van : ils sont fragiles.' }],
+    buffet: [{ qui: '', txt: 'Les plateaux sont sur le buffet. Maintenant, le portable du bureau, pour la caisse.' }],
+    buffetApres: [{ qui: '', txt: 'Les plateaux sont sur le buffet.' }],
+    portable: [{ qui: '', txt: 'Le portable du bureau : direction la table de la caisse, contre le chai.' }],
+    porteMains: [{ qui: '', txt: 'J\'ai le portable dans les mains : d\'abord, je le pose sur la table de la caisse.' }],
+    pose: [{ qui: '', txt: 'Le portable est en place : la caisse de Vitisoft est prête.' }],
+    ouverture: [{ qui: '', txt: '10 h : les portes ouvrent. Les premiers visiteurs arrivent.' }],
+    caisse: [{ qui: '', txt: 'Chaque client dit ce qu\'il prend et comment il paie : je le saisis dans la caisse, et le ticket part.' }],
+    caisseFinie: [{ qui: '', txt: 'Le dixième ticket est parti.' }],
+    marcReleve: [{ qui: 'Marc', txt: 'Je prends la caisse. Va leur faire goûter le Clos !' }],
+    degustation: [{ qui: '', txt: 'Au bar de dégustation : un verre du Clos 2025 aux invités. Moi, je ne bois pas : je sers.' }],
+    fin: [{ qui: '', txt: 'Le Clos 2025 a trouvé ses amateurs.' }],
+    stats: [{ qui: 'Marc', txt: 'Tiens, je te laisse la place : regarde un peu ce que ça a donné.' }],
+    marcReprend: [{ qui: 'Marc', txt: 'Je reprends la caisse.' }],
+    merci: [{ qui: '', txt: 'Le merci est parti à tous ceux qui sont passés.' }],
+    fermeture: [{ qui: '', txt: '18 h : les derniers visiteurs repartent. Belle journée !' }],
+  },
+  // le bon véhicule (main.js : guider ; GUIDE_VEHICULE : les noms)
+  raisons: { materiel: 'lui seul tire la remorque', traiteur: 'les plateaux tiennent dedans' },
+  // les étiquettes posées dans le monde (main.js)
+  etiquettes: { prendre: 'Prendre le portable', poser: 'Poser le portable', caisse: 'Tenir la caisse', stats: 'Voir les statistiques' },
+  // la fin de la mission 3, qui propose de rentrer dormir (main.js : finMission3) ; l'objectif d'ici là (mission3.js)
+  apres3: ' Rentrez dormir : demain, on prépare les portes ouvertes de Noël.',
+  dodo3: 'Le Clos 2025 est habillé. Rentrez dormir : demain, on prépare les portes ouvertes',
+  // la carte de fin (sources : en tête du bloc PORTES)
+  finCarte: {
+    sur: 'Fin de la mission 4',
+    titre: 'C\'est ça, la caisse de Vitisoft.',
+    texte: 'Les invitations : vos clients choisis dans Vitisoft, l\'email et le SMS envoyés par Brevo, le courrier pour ceux qui n\'ont pas d\'e-mail. Le jour J, la caisse tactile du caveau : chaque vente sort du stock et met à jour la fiche client.',
+    h: 'Dans Vitisoft',
+    suite: [
+      'La recherche multi-critères : zone géographique, catégorie, historique d\'achat',
+      'Vitisoft cible, Brevo envoie l\'email ou le SMS personnalisé : plus un seul fichier à exporter',
+      'Le courrier postal pour ceux dont vous n\'avez pas l\'adresse e-mail : publipostage, étiquettes, routage',
+      'La caisse : une grande touche par famille, la quantité, la remise, le règlement',
+      'Le ticket en facturette, en A4 ou par mail',
+      'Panier moyen, nombre de factures, ventes par familles de produits',
+    ],
+    cta: 'Découvrir la caisse sur vitisoft.fr', url: 'https://vitisoft.fr/fonctionnalites/caisse-caveau/?source=jeu-tournee-generale', fond: 'var(--vitisoft)',
+    bouton: 'Continuer : les statistiques',
+  },
+  // le parvis du chai en parle aussi (parvis.js : PARVIS[nom][jour], ajoutés plus bas)
+  parvis: {
+    rinceur: ['Les portes ouvertes : je rince les verres de dégustation.', 'Recule un peu, ça éclabousse !'],
+    porteuse: ['Les invitations sont parties ? Ma voisine a reçu un SMS !', 'Je range les caisses : il faudra de la place dans la cour pour les portes ouvertes.'],
+  },
 };
+// (parvis.js lit PARVIS[nom][jour] : le jour des portes ouvertes, ce qu'en disent ceux qui travaillent sur le parvis)
+PARVIS.rinceur.portes = PORTES_MISSION.parvis.rinceur; PARVIS.porteuse.portes = PORTES_MISSION.parvis.porteuse;
 
+// Le chien du domaine (chien.js) : ce qu'on lui dit en le caressant (gestes.js : caresser)
 export const CHIEN = {
   caresse: ['Brave chien !', 'Qui c\'est le bon chien ?', 'Allez, une caresse.', 'T\'es un bon gardien, toi.', 'Doucement, doucement...', 'Tu veux des grattouilles ?', 'Tu as bien gardé la cour ?'],
 };
