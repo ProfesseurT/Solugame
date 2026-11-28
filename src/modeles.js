@@ -131,6 +131,29 @@ function caillouxTuilables() {
 }
 export const CAILLOUX = caillouxTuilables();
 
+// Une texture peinte en code (un canevas), sans copie gardée : une fois envoyée à la carte graphique (la première fois
+// qu'un objet qui la porte est dessiné), le canevas est rendu (largeur nulle : sa mémoire est libérée) ; s'il fallait la
+// renvoyer (contexte WebGL perdu puis rendu), elle serait repeinte. peindre(c, l, h) ; quand : 'tot' (peinte tout de suite :
+// le navigateur la dessine pendant que le jeu se construit, l'envoi n'attend rien), 'repos' (quand le navigateur n'a rien à
+// faire, après le démarrage), sinon au moment de l'envoi. userData.octets : ce qu'elle occupe sur la carte graphique,
+// mipmaps comprises (main.js : memoire ; ne pas lire .image, qui la repeindrait).
+export function texturePeinte(l, h, peindre, quand) {
+  const t = new THREE.Texture();
+  let cv = null;
+  const canevas = () => { if (!cv) { cv = document.createElement('canvas'); cv.width = l; cv.height = h; peindre(cv.getContext('2d'), l, h); } return cv; };
+  Object.defineProperty(t.source, 'data', { get: canevas, set() {}, configurable: true });
+  t.onUpdate = () => { if (cv) { cv.width = cv.height = 0; cv = null; } t.userData.envoyee = true; };
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  t.userData.octets = Math.round(l * h * 4 * 4 / 3);
+  t.needsUpdate = true;
+  if (quand === 'tot') canevas();
+  else if (quand === 'repos') {
+    const plusTard = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 8000 }) : f => setTimeout(f, 3000);
+    setTimeout(() => plusTard(() => { if (!t.userData.envoyee) canevas(); }), 1500);
+  }
+  return t;
+}
+
 const V3 = v => `vec3(${v.x.toFixed(4)}, ${v.y.toFixed(4)}, ${v.z.toFixed(4)})`;
 const V2 = v => { const l = Math.hypot(v.x, v.z); return `vec2(${(v.x / l).toFixed(4)}, ${(v.z / l).toFixed(4)})`; };
 
@@ -207,6 +230,14 @@ vec3 cl_brume(vec3 base, vec3 d) {
 				mix( texture2DCompare( shadowMap, uv + vec2( 0.0, texelSize.y ), shadowCoord.z ), texture2DCompare( shadowMap, uv + texelSize, shadowCoord.z ), f.x ),
 				f.y );
 		`);
+  // La carte d'ombre n'est lue que là où le soleil compte : à 4 lectures (16 en ombres douces) par pixel, c'est le plus
+  // gros de l'éclairage. Lambert ne garde du soleil que max(n.l, 0) : une face du décor tournée à l'opposé n'en reçoit rien,
+  // ombre ou pas (CL_LU, posé par les matières du décor, detailler : la face elle-même, à facettes ; vide ailleurs, la
+  // peau des personnages reçoit aussi un peu du soleil de dos, perso.js) ; dedans, le soleil est coupé (definirInterieur).
+  // Même image au bit près : on ne saute que des lectures multipliées par zéro.
+  C.lights_fragment_begin = C.lights_fragment_begin
+    .replace('IncidentLight directLight;', 'IncidentLight directLight;\n#ifndef CL_LU\n#define CL_LU\n#endif')
+    .replace('( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap', '( directLight.visible && receiveShadow CL_LU ) ? getShadow( directionalShadowMap');
   // l'ombre s'efface en douceur au bord de la zone couverte par la carte (pas de coupure nette au loin)
   C.shadowmap_pars_fragment = C.shadowmap_pars_fragment.replace('\t\treturn mix( 1.0, shadow, shadowIntensity );', `\t\tvec2 bordOmbre = abs( shadowCoord.xy * 2.0 - 1.0 );
 		shadow = mix( shadow, 1.0, smoothstep( 0.78, 1.0, max( bordOmbre.x, bordOmbre.y ) ) );
@@ -519,7 +550,7 @@ ${poids ? `{
 #endif`);
     sh.vertexShader = vs;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + GLSL)
+      .replace('#include <common>', '#include <common>\n' + (m.flatShading ? '#define CL_LU && dot( geometryNormal, directLight.direction ) > 0.0\n' : '') + GLSL)
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = cl_detail(diffuseColor.rgb);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (attr ? GLSL_EMISSIF : '') + (o.transparente ? GLSL_ALPHA(o.transparente === true ? 0.42 : o.transparente) : ''));
   };
@@ -746,7 +777,9 @@ export function definirInterieur(boites) {
 vec3 cl_pm = ( vec4( geometryPosition - viewMatrix[ 3 ].xyz, 0.0 ) * viewMatrix ).xyz;
 float cl_dehors = 1.0;
 ${dans.join('\n')}`)
-    .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cl_dehors;') + `
+    .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cl_dehors;')
+    // tout à fait dedans, le soleil ne compte plus : la carte d'ombre n'y est pas lue
+    .replace('receiveShadow CL_LU ) ? getShadow( directionalShadowMap', 'receiveShadow && cl_dehors > 0.0 CL_LU ) ? getShadow( directionalShadowMap') + `
 #if defined( RE_IndirectDiffuse )
 if ( cl_dehors < 1.0 ) {
   vec3 cl_l = vec3( 0.0 );

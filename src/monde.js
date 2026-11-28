@@ -3,7 +3,7 @@
 // Le décor fixe est fusionné par quartiers (et par secteurs au loin) : l'élagage hors champ
 // et hors de la zone d'ombre ne dessine que ce qui sert.
 import * as THREE from 'three';
-import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI } from './modeles.js';
+import { B, C, S, toit, teinter, fusion, poser, deplacer, tournerY, indexer, definirInterieur, MAT_VITRINE, MAT, MAT_VENT, matiere, detailler, T, SOLEIL, GLSL_BRUME, UNI, texturePeinte } from './modeles.js';
 import { hasard, lisse, assombrir, bruit, hache, angle } from './outils.js';
 import { Atelier, camion, figer } from './engins.js';
 import { chariot } from './remorque.js';
@@ -148,6 +148,10 @@ class Atlas {
     const g = new THREE.PlaneGeometry(w3, h3);
     g.rotateY(rot); g.translate(x, y, z);
     (lumineux ? this.geosL : this.geos).push(g);
+    // le même dessin (la même fonction), à la même taille : une seule case (les deux faces d'une plaque, d'une enseigne,
+    // les portières d'un camion, une enseigne répétée)
+    const deja = this.cases.find(k => k.dessin === dessin && k.w === w && k.h === h);
+    if (deja) { deja.copies.push({ g, u0: 0, u1: 1 }); return deja; }
     const k = { w, h, dessin, g, copies: [] };
     this.cases.push(k);
     return k;
@@ -158,7 +162,8 @@ class Atlas {
   maillage() {
     // le rangement « en ligne d'horizon » : les cases de la plus large à la plus étroite, chacune posée là où son haut monte
     // le moins (puis le plus à gauche), à 4 pixels de ses voisines ; ciel : le dessus de ce qui est déjà posé, en segments.
-    // (2 410 pixels de haut au lieu de 3 990 en rangées dans l'ordre d'arrivée ; 2 080 au mieux)
+    // (2 410 pixels de haut au lieu de 3 990 en rangées dans l'ordre d'arrivée ; le 28/11/2026, avec les panneaux du site de
+    // Solumatic, 3 228 au lieu de 3 588 : les dessins en double n'ont plus qu'une case, poser)
     let ciel = [{ x: 0, y: 0, w: 1024 }], H = 0;
     for (const k of [...this.cases].sort((a, b) => b.w - a.w || b.h - a.h)) {
       let mieux = null;
@@ -178,18 +183,16 @@ class Atlas {
       ciel = neuf.filter((q, i) => q.w > 0).reduce((l, q) => { const d = l[l.length - 1]; if (d && d.y === q.y) d.w += q.w; else l.push({ ...q }); return l; }, []);
     }
     H = Math.ceil((H + 1) / 4) * 4;
-    const cv = document.createElement('canvas');
-    cv.width = 1024; cv.height = H;
-    const c = cv.getContext('2d');
-    for (const { px, py, w, h, dessin, g, copies } of this.cases) {
-      c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore();
+    for (const { px, py, w, h, g, copies } of this.cases) {
       for (const { g: gc, u0, u1 } of [{ g, u0: 0, u1: 1 }, ...copies]) {
         const uv = gc.attributes.uv;
         for (let i = 0; i < uv.count; i++) uv.setXY(i, (px + (u0 + uv.getX(i) * (u1 - u0)) * w) / 1024, 1 - (py + (1 - uv.getY(i)) * h) / H);
       }
     }
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    // peint tout de suite ; une fois envoyé à la carte graphique, le canevas est rendu (14 Mo de moins : modeles.js, texturePeinte)
+    const tex = texturePeinte(1024, H, c => {
+      for (const { px, py, w, h, dessin } of this.cases) { c.save(); c.translate(px, py); c.beginPath(); c.rect(0, 0, w, h); c.clip(); dessin(c, w, h); c.restore(); }
+    }, 'tot');
     const m = new THREE.Mesh(fusion(this.geos), new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5 }));
     m.renderOrder = ORDRE.bati; m.name = 'enseignes';
     if (this.geosL.length) {
@@ -1582,13 +1585,11 @@ void main() {
       const M = (lx, y, lz) => ({ x: cx + lx * co + lz * si, y, z: cz + lz * co - lx * si });
       poser(K.geos, cx, cz, r, bati);
       for (let k = 0; k < 3; k++) { const q = M(0, K.plateau, zp0 + 0.75 + k * 1.3); bati.push(B(1.1, 0.13, 1.1, '#a8825a', q.x, q.y + 0.065, q.z, r), B(1.02, 0.95, 1.02, '#dcd6c8', q.x, q.y + 0.6, q.z, r)); }
-      for (const s of [1, -1]) {
-        const q = M(s * 1.152, 1.52, 2.66);
-        atlas.poser(256, 100, (c, W, H) => {
-          c.clearRect(0, 0, W, H); c.fillStyle = '#f2efe6'; c.textAlign = 'center'; c.textBaseline = 'middle';
-          c.font = 'bold 32px Georgia, serif'; c.fillText('Transports', W / 2, H * 0.3); c.font = 'italic 30px Georgia, serif'; c.fillText('Gaudrel', W / 2, H * 0.74);
-        }, 0.78, 0.3, q.x, q.y, q.z, s * Math.PI / 2 + r);
-      }
+      const nom = (c, W, H) => { // (les deux portières : une seule case)
+        c.clearRect(0, 0, W, H); c.fillStyle = '#f2efe6'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = 'bold 32px Georgia, serif'; c.fillText('Transports', W / 2, H * 0.3); c.font = 'italic 30px Georgia, serif'; c.fillText('Gaudrel', W / 2, H * 0.74);
+      };
+      for (const s of [1, -1]) { const q = M(s * 1.152, 1.52, 2.66); atlas.poser(256, 100, nom, 0.78, 0.3, q.x, q.y, q.z, s * Math.PI / 2 + r); }
       plusTard.push(() => { col.boiteO(cx, cz + 0.05, 2.9, 6.9, r); });
       contact.tache(cx, cz, 3.6, 1.5, 0.4);
     }
@@ -1611,9 +1612,11 @@ void main() {
     const r = o.rot || 0, a = o.d / 2 + avance;
     return { x: o.x + Math.sin(r) * a + Math.cos(r) * lx, z: o.z + Math.cos(r) * a - Math.sin(r) * lx, rot: r };
   };
+  // (la même enseigne, mêmes couleurs, même hauteur dans l'atlas : le même dessin, une seule case, Atlas.poser)
+  const ENSEIGNES = new Map();
   function enseigne(txt, p, y, w, h, fond, encre, bord) {
-    const W = 512, H = Math.max(64, Math.round(512 * h / w));
-    atlas.poser(W, H, c => {
+    const W = 512, H = Math.max(64, Math.round(512 * h / w)), cle = [txt, H, fond, encre, bord].join('|');
+    if (!ENSEIGNES.has(cle)) ENSEIGNES.set(cle, c => {
       c.fillStyle = fond; c.fillRect(0, 0, W, H);
       c.strokeStyle = bord || encre; c.lineWidth = bord ? 18 : 6;
       const m = bord ? 12 : 10;
@@ -1625,7 +1628,8 @@ void main() {
       const t = Math.max(12, Math.min(Math.round(H * 0.52), Math.floor(100 * (W - 60) / c.measureText(txt).width)));
       c.font = police(t);
       c.fillText(txt, W / 2, H / 2 + 3);
-    }, w, h, p.x, y, p.z, p.rot);
+    });
+    atlas.poser(W, H, ENSEIGNES.get(cle), w, h, p.x, y, p.z, p.rot);
   }
 
   // Domaine du Clos Libre
@@ -3561,6 +3565,8 @@ void main() {
      posées après les herbes. Le bâti fusionné avec son quartier ; le toit de Solumatic à part (il disparaît quand on est
      dedans), son intérieur à part (dessiné seulement dedans ou porte ouverte : solumatic.js). */
   function zoneActivites() {
+    // la plaque au logo de Solumatic (à l'entrée, à la grille) : un seul dessin, une seule case de l'atlas
+    const PLAQUE_LOGO = (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); };
     const L = [], boites = [], D = []; // (D : les petits détails de Solumatic, dessinés de près seulement : proches)
     const GRIS_F = '#3b3f46', ALU = '#c9ccd1', VERRE = '#2d3846', FER = '#3a3a3e';
     const bat = (x0, z0, x1, z1) => { contact.jupe(x0 - 0.07, z0 - 0.07, x1 + 0.07, z1 + 0.07, 1.6, 0.45); plan.push({ t: 'b', x0, z0, x1, z1 }); };
@@ -3733,7 +3739,7 @@ void main() {
         E(2.6, 0.1, 1.35, ANTH, 3.08, 0.675, ENTREE.z); E(2.5, 0.02, 1.25, '#55595f', 3.02, 0.68, ENTREE.z); E(0.2, 0.02, 0.2, LAMPE, 3.01, 0.8, ENTREE.z);
         for (const s of [-1, 1]) L.push(manche([X1 + 0.05, 3.95, ENTREE.z + s * 1.15], [X1 + 1.28, 3.12, ENTREE.z + s * 1.15], 0.014, ANTH));
         nuitSol.push([X1 + 1.0, ENTREE.z, 2.6]);
-        atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, X1 + 0.066, 1.62, e0 - 0.8, Math.PI / 2);
+        atlas.poser(512, 121, PLAQUE_LOGO, 0.62, 0.146, X1 + 0.066, 1.62, e0 - 0.8, Math.PI / 2);
         E(0.66, 0.19, 0.012, '#c9ccd1', 1.62, 0.06, e0 - 0.8);
         E(0.15, 0.26, 0.04, NOIR, 1.4, 0.08, e1 + 0.34, D); E(0.09, 0.07, 0.01, '#3d5f8e', 1.46, 0.105, e1 + 0.34, D); E(0.03, 0.03, 0.01, '#c9ccd1', 1.33, 0.105, e1 + 0.34, D); E(0.07, 0.11, 0.03, NOIR, 1.12, 0.075, e1 + 0.34, D);
         D.push(B(0.95, 0.012, 1.4, '#3a3a3a', X1 + 0.55, 0.076, ENTREE.z));
@@ -3758,14 +3764,15 @@ void main() {
       // la bâche au logo, au-dessus des fenêtres de Soleil : sa propre texture, sur un cadre d'aluminium (dans le toit)
       {
         // (7,4 m : au-dessus des quatre fenêtres de Soleil ; le logo au milieu, des marges blanches, les œillets)
-        const bx = uX(10.05), by = 3.62, bw = 7.4, bh = 1.3, cv = document.createElement('canvas');
+        const bx = uX(10.05), by = 3.62, bw = 7.4, bh = 1.3;
         Su(bw + 0.08, bh + 0.08, 0.03, '#d8d9d6', by, 0.02, bx, toitS);
-        cv.width = 1024; cv.height = Math.round(1024 * bh / bw);
-        const c = cv.getContext('2d'), W = cv.width, H2 = cv.height, w = Math.min(W * 0.86, H2 * 0.78 * 1602 / 378);
-        c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H2);
-        logoSolumatic(c, (W - w) / 2, (H2 - w * 378 / 1602) / 2, w);
-        c.fillStyle = '#c8cac6'; for (let k = 0; k <= 6; k++) for (const y of [8, H2 - 8]) { c.beginPath(); c.arc(8 + k * (W - 16) / 6, y, 3.5, 0, 7); c.fill(); }
-        const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+        // (sans copie gardée, une fois envoyée à la carte graphique : modeles.js, texturePeinte)
+        const tex = texturePeinte(1024, Math.round(1024 * bh / bw), (c, W, H2) => {
+          const w = Math.min(W * 0.86, H2 * 0.78 * 1602 / 378);
+          c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H2);
+          logoSolumatic(c, (W - w) / 2, (H2 - w * 378 / 1602) / 2, w);
+          c.fillStyle = '#c8cac6'; for (let k = 0; k <= 6; k++) for (const y of [8, H2 - 8]) { c.beginPath(); c.arc(8 + k * (W - 16) / 6, y, 3.5, 0, 7); c.fill(); }
+        }, 'tot');
         bache = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh).translate(bx, by, Z1 + 0.04), new THREE.MeshLambertMaterial({ map: tex }));
         bache.name = 'bâche Solumatic'; bache.matrixAutoUpdate = false; bache.renderOrder = ORDRE.bati;
         devanture.bache = [bx - bw / 2, bx + bw / 2];
@@ -3910,7 +3917,7 @@ void main() {
         L.push(B(0.3, 0.4, 0.24, '#5b5f66', grille.x0 - 0.5, 0.27, gz - 1.05), B(0.34, 0.05, 0.28, '#4a4e55', grille.x0 - 0.5, 0.49, gz - 1.05), C(0.06, 0.07, 0.12, 8, '#e07a1f', grille.x0, 2.11, gz));
         L.push(B(0.36, 0.42, 0.22, BLANC, grille.x1 + 0.3, 1.15, gz + 0.25), B(0.3, 0.03, 0.02, NOIR, grille.x1 + 0.3, 1.28, gz + 0.37), B(0.12, 0.2, 0.04, NOIR, grille.x1 - 0.15, 1.35, gz + 0.15));
         boites.push([gx0 - 0.05, gzv - 0.1, gx1 + 0.05, gzv + 0.1], [grille.x0 - 0.68, gz - 1.2, grille.x0 - 0.32, gz - 0.9], [grille.x1 + 0.1, gz + 0.12, grille.x1 + 0.5, gz + 0.38]);
-        atlas.poser(512, 121, (c, W, H) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); logoSolumatic(c, 16, 6, W - 32); }, 0.62, 0.146, grille.x1, 1.55, gz + 0.125, 0);
+        atlas.poser(512, 121, PLAQUE_LOGO, 0.62, 0.146, grille.x1, 1.55, gz + 0.125, 0);
       }
       // la route : ses bordures (hautes du côté du trottoir, basses du côté de l'herbe ; rien le long du parking, de plain-pied
       // avec elle), ses lignes de rive (à 30 cm des bords), le long du tour (tourSolu : chaque morceau, un pavé tourné)
@@ -4210,10 +4217,11 @@ void main() {
         poser(K.geos, cx, cz, 0, L);
         for (const dx of [-0.55, 0.55]) for (let k = 0; k < 4; k++) barrique(cx + dx, K.plateau + 0.475, cz + zp0 + 0.55 + k * 0.82, 'y', false);
         for (let k = 0; k < 4; k++) { const z = cz + zp0 + 0.55 + k * 0.82; L.push(B(2.3, 0.03, 0.06, '#e8962a', cx, K.plateau + 0.96, z)); for (const s of [1, -1]) L.push(B(0.02, 0.5, 0.06, '#e8962a', cx + s * 1.16, K.plateau + 0.72, z)); }
-        for (const s of [1, -1]) atlas.poser(512, 200, (c, W, H) => {
+        const nom = (c, W, H) => { // (les deux portières : une seule case)
           c.clearRect(0, 0, W, H); c.fillStyle = '#efe3c8'; c.textAlign = 'center'; c.textBaseline = 'middle';
           c.font = 'bold 70px Georgia, serif'; c.fillText('Tonnellerie', W / 2, H * 0.3); c.font = 'italic 56px Georgia, serif'; c.fillText('du Coteau', W / 2, H * 0.74);
-        }, 0.78, 0.3, cx + s * 1.152, 1.52, cz + 2.66, s * Math.PI / 2);
+        };
+        for (const s of [1, -1]) atlas.poser(512, 200, nom, 0.78, 0.3, cx + s * 1.152, 1.52, cz + 2.66, s * Math.PI / 2);
         boites.push([cx - 1.45, cz - 3.4, cx + 1.45, cz + 3.5]); contact.tache(cx, cz, 1.5, 3.6, 0.4);
       }
       {
