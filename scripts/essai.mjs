@@ -50,6 +50,10 @@
 //             d'entrée proposée ; la place où Romane fume ; aucune voiture garée sur la route ; la devanture dans l'ordre
 //             voulu (baie, fenêtres, bâche, fenêtres) ; les lumières la nuit ; captures (devanture, trois quarts, route, dessus,
 //             nuit)
+//   velo      le vélo du joueur : prendre un vélo garé, le chèque à vélo, pédaler, tourner, freiner, descendre, le reprendre,
+//             un vélo couché poussé par le van, la conduite assistée pas bloquée, emprunter le vélo d'un cycliste, la nuit
+//   ordinateur Viticode et le Registre phyto sur le portable du bureau du chai : quatre icônes, la mission 1 (annonces),
+//             une parcelle notée depuis l'ordinateur (mission 2), la fiche Viticode jusqu'à l'imprimerie (mission 3)
 //   poids     démarrage (ms), mémoire, coût de chaque étape d'une image ; LENT=4 simule un processeur 4 fois plus lent,
 //             QUALITE=faible|moyen|haut impose un palier
 // Sortie : texte sur la console ; captures dans essais/<dossier>/ ; code 1 si une erreur JS est apparue.
@@ -2216,6 +2220,115 @@ if (scenario === 'velo') {
     return log;
   });
   await capture('velo-enfant');
+}
+
+if (scenario === 'ordinateur') {
+  // Viticode et le Registre phyto sur le portable du bureau du chai aussi (pc.js ; Teddy, 28/11/2026 : « accessibles et
+  // utilisables depuis l'ordinateur, dans toutes les missions ») : quatre icônes ; mission 1, leurs écrans d'annonce ;
+  // mission 2, une parcelle notée dans le registre depuis l'ordinateur (l'icône mise en évidence, les refus, l'export, le
+  // téléphone voit la même saisie) ; mission 3, la fiche Viticode créée, testée, téléchargée et envoyée depuis
+  // l'ordinateur ; captures
+  const etape = async (nom, f, ...a) => { const r = await ev(f, ...a).catch(e => [['scénario interrompu (' + nom + ') : ' + e.message, false]]); for (const [msg, c] of r) ok(c, msg); };
+  await ev(() => {
+    // s'asseoir au portable du bureau du chai (entrer par la porte, la chaise) ; se lever
+    window.ASSIS = () => {
+      const J = CL.jeu, BU = J.lieux.bureau;
+      CL.finirGeste(); // (se lever du portable : le geste joué jusqu'au bout)
+      if (J.auVolant) { CL.tr.v = 0; CL.agir(); CL.finirGeste(); }
+      if (!J.dedans) { J.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); }
+      J.joueur.placer(BU.chaise.x + 0.5, BU.chaise.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+      return J.pc.ouvert;
+    };
+    window.CLIC = s => { const e = document.querySelector('#pc ' + s); if (!e) throw new Error('absent du portable : ' + s); e.click(); CL.step(1); };
+    window.PC = () => document.querySelector('#pc-ecran').textContent;
+    CL.jouer(); CL.step(120);
+  });
+  // 1. la tournée de Noël : quatre icônes ; Viticode et le registre annoncent leur mission
+  await etape('mission 1', () => {
+    const log = [], J = CL.jeu, q = s => document.querySelector('#pc ' + s);
+    log.push(['assis au portable du bureau du chai', ASSIS()]);
+    log.push(['quatre icônes : Vitisoft, Le bureau, Viticode, Registre phyto', ['vitisoft', 'bureau', 'viticode', 'phyto'].every(a => !!q(`.pc-ico[data-a="lancer:${a}"]`))]);
+    CLIC('[data-a="lancer:viticode"]');
+    log.push(['Viticode dans le navigateur, son écran d\'annonce (mission 3)', !!q('.nav-fenetre .pt-bureau .ap-tete.viticode') && PC().includes('mission 3')]);
+    CLIC('[data-a="lancer:phyto"]');
+    log.push(['le Registre phyto aussi, son annonce et le lien de la prévente', !!q('.pt-bureau .ap-tete.phyto') && PC().includes('Mission 2') && !!q('.pt-bureau a[href*="source=jeu-tournee-generale"]')]);
+    CLIC('[data-a="tache:bureau"]'.replace('tache:bureau', 'lancer:bureau'));
+    log.push(['Le bureau et Vitisoft sont toujours là, chacun sa fenêtre dans la barre', !!q('.pt-bureau .onglets') && q('.pc-taches').children.length === 3]);
+    CLIC('[data-a="tache:viticode"]');
+    log.push(['revenu à Viticode : là où on l\'avait laissé', !!q('.pt-bureau .ap-tete.viticode')]);
+    CLIC('[data-a="quitter"]'); CL.step(60);
+    return log;
+  });
+  // 2. la journée de traitement : une parcelle traitée, notée depuis l'ordinateur
+  await etape('mission 2', () => {
+    const log = [], J = CL.jeu, T = CL.traitement, tel = J.tel, q = s => document.querySelector('#pc ' + s);
+    CL.versMission2(); CL.step(300);
+    tel.ouvrir('messages'); tel.action('fil:claire'); tel.fermer(); CL.step(30);
+    // (la bouillie prête, Les Perrières traitées : la saisie attend)
+    const p = T.parcelles.find(x => x.id === 'perrieres'), n0 = T.registre.length;
+    T.prete = true; T.etape = 'traiter'; p.traitee = true; T.notifier('phyto'); CL.step(15); // (l'objectif : dix fois par seconde)
+    log.push([`l'objectif dit le téléphone ou l'ordinateur du bureau du chai (« ${document.querySelector('#objectif').textContent} »)`, document.querySelector('#objectif').textContent.includes('ordinateur du bureau du chai')]);
+    ASSIS();
+    log.push(['assis au portable : l\'icône du Registre phyto mise en évidence, le pense-bête dit la parcelle à noter', !!q('.pc-ico.conseil[data-a="lancer:phyto"]') && q('.pc-note').textContent.includes('Noter Les Perrières')]);
+    CLIC('[data-a="lancer:phyto"]');
+    log.push(['le registre dans le navigateur : la consigne, « Noter un traitement » mis en évidence ; la notification du téléphone vue', PC().includes('Les Perrières : touchez') && !!q('.pt-bureau [data-a="rp-nouveau"].guide') && tel.notif !== 'phyto']);
+    CLIC('[data-a="rp-nouveau"]'); CLIC('[data-a="rp-suite"]');
+    log.push(['rien de coché : l\'appli le refuse, ici aussi', T.saisie.etape === 'parcelles' && (q('.ph-toast')?.textContent || '').length > 3]);
+    CLIC('[data-a="rp-cocher:perrieres"]'); CLIC('[data-a="rp-suite"]');
+    for (let i = 0; i < 3; i++) CLIC('[data-a="rp-dose:cuivre:1"]');
+    CLIC('[data-a="rp-suite"]'); CLIC('[data-a="rp-suite"]'); CLIC('[data-a="rp-cible:Mildiou"]'); CLIC('[data-a="rp-suite"]');
+    log.push(['les cinq écrans de la saisie, jusqu\'à « Vérifier »', T.saisie && T.saisie.etape === 'recap' && PC().includes('5 sur 5')]);
+    CLIC('[data-a="rp-enregistrer"]'); CL.step(5);
+    log.push([`enregistré depuis l'ordinateur : Les Perrières notées, une ligne de plus au registre (${T.registre.length - n0})`, p.notee && T.registre.length === n0 + 1 && T.registre[0].statut !== 'attente']);
+    log.push(['la consigne dit de se lever du portable (pas de fermer le téléphone)', PC().includes('Levez-vous du portable')]);
+    CLIC('[data-a="rp-export"]');
+    const ret = q('.pt-bureau .ap-ret[data-a="ouvrir:phyto"]');
+    log.push(['l\'export pour un contrôle, et le retour au registre', PC().includes('Stat\'Phyto') && !!ret]);
+    if (ret) CLIC('.pt-bureau .ap-ret[data-a="ouvrir:phyto"]');
+    CLIC('[data-a="quitter"]'); CL.step(30);
+    tel.ouvrir('phyto');
+    log.push(['sur le téléphone, le même registre : la saisie faite au bureau', document.querySelector('#app').textContent.includes('Les Perrières') && document.querySelector('#app').textContent.includes('Envoyé')]);
+    tel.fermer(); CL.step(60);
+    log.push(['levé du portable : on dit la suite (Le Clos, en enjambeur)', document.querySelector('#sous-titre').textContent.includes('Le Clos') || T.cible !== null]);
+    return log;
+  });
+  // 3. l'habillage : la fiche Viticode, du bulletin à l'imprimerie, depuis l'ordinateur
+  await etape('mission 3', () => {
+    const log = [], J = CL.jeu, H = CL.habillage, tel = J.tel, q = s => document.querySelector('#pc ' + s);
+    CL.versMission3(); CL.step(300);
+    H.messageLu(); H.echantillon = 'depose'; H.bulletin = true; CL.step(5);
+    ASSIS();
+    log.push(['le bulletin arrivé, assis au portable : l\'icône de Viticode mise en évidence, le pense-bête Viticode', !!q('.pc-ico.conseil[data-a="lancer:viticode"]') && q('.pc-note').textContent.includes('Créer la fiche')]);
+    CLIC('[data-a="lancer:viticode"]'); CLIC('[data-a="vc-fiche"]');
+    log.push(['la fiche, avec la consigne du bulletin, et le retour à la liste', PC().includes('12,5 % vol') && !!q('.pt-bureau .ap-ret[data-a="ouvrir:viticode"]')]);
+    CLIC('[data-a="vc-publier"]');
+    log.push(['incomplète : l\'appli la refuse et dit pourquoi', !H.publiee && (q('.ph-toast')?.textContent || '').length > 3]);
+    for (const k of ['nom', 'millesime', 'appellation', 'lot']) CLIC(`[data-a="vc-remplir:${k}"]`);
+    CLIC('[data-a="vc-couleur:Rouge"]'); for (let i = 0; i < 4; i++) CLIC('[data-a="vc-degre:1"]');
+    CLIC('[data-a="vc-ingr:raisins"]'); CLIC('[data-a="vc-bio"]'); CLIC('[data-a="vc-ingr:sulfites"]');
+    for (let i = 0; i < 8; i++) CLIC('[data-a="vc-val:glucides:1"]');
+    for (let i = 0; i < 2; i++) CLIC('[data-a="vc-val:sucres:1"]');
+    CLIC('[data-a="vc-label:Bio"]'); CLIC('[data-a="vc-calculer"]'); CLIC('[data-a="vc-publier"]');
+    log.push(['publiée depuis l\'ordinateur : son QR code', H.publiee && !!q('.pt-bureau .vc-qr')]);
+    CLIC('[data-a="vc-tester"]'); CLIC('[data-a="vc-age:oui"]');
+    log.push(['« Testez-moi ! » : la fiche côté consommateur', H.testee && PC().includes('viticode.fr/fiche-produit') && PC().includes('Ingrédients')]);
+    CLIC('[data-a="vc-fermer-test"]'); CLIC('[data-a="vc-telecharger"]'); CLIC('[data-a="vc-dl"]');
+    log.push(['téléchargé : le fichier dans les téléchargements de l\'ordinateur, à envoyer à l\'imprimerie', H.telecharge && PC().includes('Dans vos téléchargements') && !!q('[data-a="vc-envoyer"]')]);
+    CLIC('[data-a="vc-envoyer"]'); CL.step(5);
+    log.push(['envoyé à l\'imprimerie depuis l\'ordinateur ; on reste dans Viticode, sa réponse viendra sur le téléphone', H.envoye && PC().includes('Envoyé à l\'imprimerie') && (q('.ph-toast')?.textContent || '').includes('téléphone')]);
+    CLIC('[data-a="quitter"]'); CL.step(30);
+    tel.ouvrir('viticode');
+    log.push(['sur le téléphone, la même fiche : publiée', document.querySelector('#app').textContent.includes('Publiée')]);
+    tel.fermer();
+    return log;
+  });
+  // captures : le bureau de l'ordinateur, le registre, Viticode
+  await ev(() => { ASSIS(); CLIC('[data-a="lancer:phyto"]'); });
+  await capture('ordi-registre');
+  await ev(() => { CLIC('[data-a="lancer:viticode"]'); });
+  await capture('ordi-viticode');
+  await ev(() => { CLIC('[data-a="reduire"]'); });
+  await capture('ordi-bureau');
 }
 
 if (scenario === 'ecole') {

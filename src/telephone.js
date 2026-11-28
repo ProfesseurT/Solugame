@@ -1,6 +1,7 @@
 // Le téléphone du personnage : la mise en abyme. Le bureau (vendre, faire signer, livrer),
 // Viticode, Registre phyto, Messages, Réglages. Vitisoft n'est pas sur téléphone : il est sur le portable du bureau du
-// chai, qui montre aussi Le bureau (vuePortable : mêmes écrans, mêmes actions).
+// chai, qui montre aussi Le bureau, Viticode et le Registre phyto (Teddy, 28/11/2026 : « accessible et utilisable depuis
+// l'ordinateur aussi, dans toutes les missions » ; vuePortable : mêmes écrans, mêmes actions, le même compte).
 // Tout texte vient de textes.js.
 import { VITICODE, PHYTO, LP_URL, MESSAGES, VERSION, BUREAU, CONSIGNE_QTE, CONSIGNE_RETOUR, CONSIGNE_NUIT, TRAITEMENT as TX, HABILLAGE as HX, EN_PREVENTE, MISSIONS } from './textes.js';
 import { son } from './audio.js';
@@ -16,6 +17,13 @@ export const ICONES = {
   missions: '<svg viewBox="0 0 24 24"><path d="M6.5 21V3.5" stroke="#fff" stroke-width="2.2"/><path d="M7.5 4h11l-2.6 4 2.6 4h-11z" fill="#fff"/></svg>',
   reglages: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2" fill="none" stroke="#fff" stroke-width="3.2" stroke-dasharray="3.4 2.2"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>',
 };
+// les écrans de chaque appli que le portable du bureau du chai montre (pc.js : une fenêtre chacune)
+const FAMILLES = {
+  bureau: a => a === 'bureau' || a === 'commande' || a === 'tournee' || a === 'message' || a === 'restoCmd',
+  viticode: a => a === 'viticode' || a.startsWith('vc'),
+  phyto: a => a.startsWith('phyto'),
+};
+export const famille = a => (FAMILLES.bureau(a) ? 'bureau' : FAMILLES.viticode(a) ? 'viticode' : FAMILLES.phyto(a) ? 'phyto' : null);
 const APPS = [['bureau', 'Le bureau'], ['viticode', 'Viticode'], ['phyto', 'Registre phyto'], ['messages', 'Messages'], ['missions', 'Missions'], ['reglages', 'Réglages']];
 // Un QR code dessiné pour l'œil (trois repères aux coins, des modules tirés d'une graine) : n x n modules, en SVG
 function qrSvg(c = '#1d1a26', fond = '#fff', n = 25, graine = 7) {
@@ -191,7 +199,7 @@ export class Telephone {
     this.afficher();
   }
   // un écran à redessiner s'il est affiché (mission 2 : le registre change quand le réseau revient)
-  rafraichir(app) { if (this.ouvert && this.app.startsWith(app)) this.afficher(); }
+  rafraichir(app) { if (this.ouvert && this.app.startsWith(app)) this.afficher(); if (this.jeu.pc) this.jeu.pc.rafraichir(app); }
   toast(txt) {
     this.dernierToast = { txt, t: performance.now() }; // le portable le remontre après avoir redessiné sa page
     const t = document.querySelector('#pc:not([hidden]) .ph-toast') || this.el.querySelector('.ph-toast');
@@ -244,11 +252,14 @@ export class Telephone {
     cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
   }
 
-  // Le bureau sur le portable du bureau du chai (« Au domaine sur l'ordinateur », page du bureau) : les mêmes écrans,
-  // sans l'en-tête du téléphone
-  vuePortable() {
-    if (!['bureau', 'commande', 'tournee', 'message', 'restoCmd'].includes(this.app)) this.app = 'bureau';
-    this.surPortable = true;
+  // Une appli sur le portable du bureau du chai (fam : 'bureau', « Au domaine sur l'ordinateur », page du bureau ;
+  // 'viticode' ; 'phyto') : les mêmes écrans ; ecran : celui où sa fenêtre en était (pc.js). Le bureau sans l'en-tête du
+  // téléphone (ses onglets suffisent) ; Viticode et le registre avec le leur (le retour d'un écran à l'autre).
+  vuePortable(fam = 'bureau', ecran = null) {
+    const F = FAMILLES[fam];
+    if (ecran && F(ecran)) this.app = ecran;
+    if (!F(this.app)) this.app = fam;
+    this.surPortable = fam;
     const h = this[this.app]();
     this.surPortable = false;
     const d = this.dernierToast, recent = d && performance.now() - d.t < 2500;
@@ -257,8 +268,9 @@ export class Telephone {
 
   /* ------------------------------------------------------------ écrans */
   entete(titre, classe, retour = 'accueil') {
-    if (this.surPortable) return '';
-    const r = this.jeu.mission.peutFermer() ? `<button class="ap-ret" data-a="${retour}" aria-label="Retour">‹</button>` : '<i class="ap-ret vide"></i>';
+    if (this.surPortable === 'bureau') return '';
+    // (sur le portable, l'écran d'accueil d'une appli n'a pas de retour : pas d'écran d'accueil du téléphone)
+    const r = this.jeu.mission.peutFermer() && !(this.surPortable && retour === 'accueil') ? `<button class="ap-ret" data-a="${retour}" aria-label="Retour">‹</button>` : '<i class="ap-ret vide"></i>';
     const R = this.jeu.traitement, res = classe === 'phyto' && R && R.actif ? `<i class="ap-res${R.reseau ? '' : ' non'}" aria-label="${R.reseau ? 'Réseau' : 'Pas de réseau'}"><b></b><b></b><b></b><b></b></i>` : '';
     return `<header class="ap-tete ${classe}">${r}<span>${esc(titre)}</span>${res}<i class="ap-ic">${ICONES[classe] || ''}</i></header>`;
   }
@@ -434,7 +446,7 @@ export class Telephone {
   }
   vcFiche() {
     const H = this.H, F = H.fiche, fini = H.publiee, d = fini ? ' disabled' : '';
-    const champ = (k, lab, val) => `<button class="vc-champ${val ? '' : ' vide'}" data-a="vc-remplir:${k}"${d}><small>${lab}</small>${val ? esc(val) : '<i>Toucher pour saisir</i>'}</button>`;
+    const champ = (k, lab, val) => `<button class="vc-champ${val ? '' : ' vide'}" data-a="vc-remplir:${k}"${d}><small>${lab}</small>${val ? esc(val) : `<i>${this.surPortable ? 'Cliquer' : 'Toucher'} pour saisir</i>`}</button>`;
     const pas = (a, val, min) => `<div class="pas"><button data-a="${a}:-1" aria-label="Moins"${val === null || val <= min || fini ? ' disabled' : ''}>−</button><b>${val === null ? '·' : fr(val)}</b><button data-a="${a}:1" aria-label="Plus"${d}>+</button></div>`;
     const zero = lab => `<div class="vc-ligne"><span class="vc-lab">${lab} *</span><span>0 grammes</span></div>`;
     const e = F.energie, perime = e && F.base && (F.base.degre !== F.degre || F.base.glucides !== F.glucides);
@@ -502,9 +514,14 @@ export class Telephone {
       <div class="reg-choix"><button class="vc-bt clair" data-a="vc-qr">✕ Annuler</button><button class="vc-bt" data-a="vc-dl">✓ Télécharger le QR code</button></div></section></div>`;
   }
   get nomFichier() { return `QR code ${HX.vin.nom}.${this.H.fiche.perso.format}`; }
-  // la feuille de partage du téléphone, juste après le téléchargement
+  // la feuille de partage du téléphone, juste après le téléchargement ; sur l'ordinateur, le fichier dans les
+  // téléchargements, à envoyer à l'imprimerie (sa réponse arrive sur le téléphone, dans Messages)
   vcPartage() {
     const H = this.H;
+    if (this.surPortable) return this.entete('Viticode', 'viticode', 'vc-qr') + `<div class="ap-corps">${this.qrBloc(H.fiche.perso)}
+      <div class="partage"><div class="fichier"><span class="doc">${esc(H.fiche.perso.format.toUpperCase())}</span><span><b>${esc(this.nomFichier)}</b><br><small>${esc(HX.app.telechargeOrdi)}</small></span></div>
+        <button class="contact" data-a="vc-envoyer"><span class="av" style="background:#3c5a8a">IS</span><span>${esc(HX.app.envoyerOrdi(HX.imprimerie))}<br><small>${esc(HX.app.reponseOrdi)}</small></span></button>
+        <button class="vc-bt clair" data-a="vc-qr">Plus tard</button></div></div>`;
     return this.entete('Viticode', 'viticode', 'vc-qr') + `<div class="ap-corps" style="min-height:calc(100% - 60px);align-content:end">
       ${this.qrBloc(H.fiche.perso)}
       <div class="partage"><div class="fichier"><span class="doc">${esc(H.fiche.perso.format.toUpperCase())}</span><span><b>${esc(this.nomFichier)}</b><br><small>Téléchargé</small></span></div>
@@ -571,7 +588,7 @@ export class Telephone {
     // la consigne du jeu : quoi faire ici (une parcelle à noter), ou la suite (la parcelle suivante, remonter là où ça
     // capte), ou rien encore à noter
     const consigne = aN.length ? G.accueil(R.noms(aN)) : R.etape !== 'traiter' && R.etape !== 'remplir' && R.etape !== 'preparer' ? ''
-      : n && !R.reseau ? G.attente : R.jour.some(p => p.notee) && suite ? G.suite(suite.nom) : !R.jour.some(p => p.traitee) ? G.avant : '';
+      : n && !R.reseau ? G.attente : R.jour.some(p => p.notee) && suite ? (this.surPortable ? G.suiteOrdi : G.suite)(suite.nom) : !R.jour.some(p => p.traitee) ? G.avant : '';
     const lignes = R.registre.map(l => `<div class="rp-ligne"><p class="rp-quand"><b>${esc(l.quand)}</b>${l.statut === 'attente' ? `<span class="tag decroche">${esc(A.attente)}</span>` : `<span class="tag ok">${esc(A.envoye)}</span>`}</p>
       <p>${esc(l.parcelles.join(', '))}</p><p class="rp-p">${esc(l.produits.join(' ; '))} · ${esc(l.cibles.join(', '))} · ${esc(l.stade)}</p><p class="ap-note">Saisi par ${esc(l.par)}</p></div>`).join('');
     const a = (consigne ? `<p class="consigne rp">${esc(consigne)}</p>` : '') + (aN.length ? `<div class="carte-a-faire rp"><p class="ap-sur">Traité aujourd'hui, à noter</p><b>${esc(R.noms(aN))}</b></div>` : '');

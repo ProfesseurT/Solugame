@@ -1,23 +1,26 @@
 // Le portable du bureau du chai : le bureau d'un ordinateur (fond d'écran, icônes, barre des tâches à l'heure du jeu).
-// Deux icônes : Vitisoft, le logiciel installé (une icône sur le bureau, pas un onglet : Teddy, 24/11/2026), et Le bureau,
-// l'extension web de Vitisoft, dans le navigateur (les mêmes écrans que sur le téléphone, telephone.js ; les appels
-// partent du téléphone). L'interface de Vitisoft suit les captures du site (textes.js, VITISOFT) : barre noire, menu à
+// Quatre icônes : Vitisoft, le logiciel installé (une icône sur le bureau, pas un onglet : Teddy, 24/11/2026), et, dans le
+// navigateur, Le bureau, l'extension web de Vitisoft (les appels partent du téléphone), Viticode et le Registre phyto
+// (Teddy, 28/11/2026 : « accessibles et utilisables depuis l'ordinateur aussi, dans toutes les missions ») : les mêmes
+// écrans que sur le téléphone, le même compte (telephone.js : vuePortable), chaque fenêtre là où on l'a laissée (ecrans).
+// Assis, l'icône de l'appli que la mission attend est mise en évidence (main.js : jeu.appliPC). L'interface de Vitisoft suit les captures du site (textes.js, VITISOFT) : barre noire, menu à
 // gauche par rubriques, tableau de bord en tuiles, listes en grilles, fenêtre Règlement aux modes de paiement en tuiles.
 // Trois choses à faire dans Vitisoft au retour de la tournée : saisir le règlement du chèque de l'épicerie (Liste des
 // factures / Règlements), facturer les commandes signées dans le bureau (Liste des commandes / BL ; Factur-X, transmises
 // par Pennylane, plateforme agréée), calculer la DRM du mois dernier (DRM / DMS ; à valider ensuite dans CIEL). Le
 // journal des ventes et les encaissements partent chez le comptable. Un pense-bête collé sur le bureau de l'ordinateur
 // les rappelle ; l'objectif du jeu est repris au-dessus de l'écran (le portable cache celui du jeu).
-import { VITISOFT as V } from './textes.js';
-import { ICONES as IC } from './telephone.js';
+import { VITISOFT as V, HABILLAGE as HX } from './textes.js';
+import { ICONES as IC, famille } from './telephone.js';
 import { son } from './audio.js';
 import { $, esc, eur, dateJeu, jourDe } from './outils.js';
 
 const hl = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' hl';
 const VUES = ['accueil', 'factures', 'commandes', 'drm']; // les écrans où l'on agit ; les autres disent ce qu'ils font
-const NOMS = { vitisoft: 'Vitisoft', bureau: 'Le bureau' };
+const NOMS = { vitisoft: 'Vitisoft', bureau: 'Le bureau', viticode: 'Viticode', phyto: 'Registre phyto' };
+const NAVIGATEUR = ['bureau', 'viticode', 'phyto']; // (les fenêtres du navigateur : les écrans du téléphone)
 // l'icône de Vitisoft : le O du logo, un cercle ouvert en haut
-const ICONES = { vitisoft: '<svg viewBox="0 0 24 24"><path d="M8.6 5.6a7.6 7.6 0 1 0 6.8 0" fill="none" stroke="#fff" stroke-width="3.4"/></svg>', bureau: IC.bureau };
+const ICONES = { vitisoft: '<svg viewBox="0 0 24 24"><path d="M8.6 5.6a7.6 7.6 0 1 0 6.8 0" fill="none" stroke="#fff" stroke-width="3.4"/></svg>', bureau: IC.bureau, viticode: IC.viticode, phyto: IC.phyto };
 // les modes de paiement de la fenêtre Règlement, dans l'ordre des captures
 const S = d => `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">${d}</svg>`;
 const MODES = [
@@ -36,6 +39,7 @@ export class PC {
     // les fenêtres ouvertes (dans l'ordre de la barre des tâches), celle de devant (null : le bureau de l'ordinateur),
     // l'icône à ouvrir (mise en évidence)
     this.ouvertes = []; this.fenetre = null; this.conseil = null;
+    this.ecrans = { bureau: 'bureau', viticode: 'viticode', phyto: 'phyto' }; // (l'écran où chaque fenêtre du navigateur en est)
     this.vue = 'accueil'; this.reglement = false; this.mode = ''; this.envoi = null; this.tEnvoi = 0; this.tDrm = 0;
     this.obj = ''; this.heure = '';
     this.el.addEventListener('click', e => {
@@ -54,13 +58,19 @@ export class PC {
         this.ouvertes = this.ouvertes.filter(f => f !== arg); this.fenetre = this.ouvertes[0] || null;
         this.afficher(); return;
       }
-      if (this.fenetre === 'bureau') {
+      const w = this.fenetre;
+      if (NAVIGATEUR.includes(w)) {
         // un appel part du téléphone, le bon de livraison s'y signe (on revient ensuite au portable, bureau.js) ; le reste se
         // fait ici, comme sur le téléphone
-        if (nom === 'rappel' && m.client(arg)?.mode === 'appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); m.rappel(arg); return; }
-        if (nom === 'r-appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); tel.action(b.dataset.a); return; } // (un restaurateur du coin)
-        if (nom === 'bl') { if (m.blPret) { this.fermer(); tel.ouvrir('bl'); } return; }
+        if (w === 'bureau' && nom === 'rappel' && m.client(arg)?.mode === 'appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); m.rappel(arg); return; }
+        if (w === 'bureau' && nom === 'r-appel') { if (m.appelEnCours) return; this.fermer(); tel.ouvrir('bureau'); tel.action(b.dataset.a); return; } // (un restaurateur du coin)
+        if (w === 'bureau' && nom === 'bl') { if (m.blPret) { this.fermer(); tel.ouvrir('bl'); } return; }
+        if (nom === 'accueil') return;
+        tel.app = this.ecrans[w];
         tel.action(b.dataset.a);
+        if (famille(tel.app) === w) this.ecrans[w] = tel.app;
+        // le QR code envoyé à l'imprimerie depuis l'ordinateur : on reste dans Viticode, sa réponse viendra au téléphone
+        if (nom === 'vc-envoyer') { this.ecrans.viticode = 'vcQr'; this.afficher(); tel.toast(HX.app.envoyeOrdi); return; }
         this.afficher();
         return;
       }
@@ -82,10 +92,15 @@ export class PC {
     this.ouvert = true; this.el.hidden = false; this.obj = ''; this.update(0); this.afficher();
   }
   fermer() { this.ouvert = false; this.el.hidden = true; }
+  // un écran de l'appli app a changé (telephone.js : rafraichir ; le bulletin du labo, le réseau revenu) : redessiné s'il
+  // est devant
+  rafraichir(app) { if (this.ouvert && NAVIGATEUR.includes(this.fenetre) && this.ecrans[this.fenetre].startsWith(app)) this.afficher(); }
   lever() { this.fermer(); this.jeu.mission.fermerPC(); this.jeu.leverPortable(); }
   lancer(app) {
     if (!this.ouvertes.includes(app)) { this.ouvertes.push(app); if (app === 'vitisoft') { this.vue = 'accueil'; this.reglement = false; } }
     this.fenetre = app; if (this.conseil === app) this.conseil = null;
+    // (le Registre phyto ouvert ici : la notification du téléphone est vue)
+    const tel = this.jeu.tel; if (tel.notif === app && app !== 'bureau') tel.notifier(null);
   }
   update(dt) {
     if (!this.ouvert) return;
@@ -107,12 +122,17 @@ export class PC {
   // le pense-bête : ce qu'il y a à faire dans Vitisoft, d'après ce qui est arrivé (rien d'avance : le chèque déposé au
   // bureau, les commandes livrées) ; la DRM du mois dernier se calcule quand on veut
   penseBete(m) {
+    const note = (titre, t) => `<aside class="pc-note"><b>${esc(titre)}</b>${t.map(([x, ok]) => `<span${ok ? ' class="ok"' : ''}>${esc(x)}</span>`).join('')}</aside>`;
+    // la journée de traitement : chaque parcelle à noter dans le registre ; l'habillage : la fiche Viticode jusqu'à l'envoi
+    const R = this.jeu.traitement, H = this.jeu.habillage;
+    if (H && H.actif && H.bulletin && !H.envoye) return note('Dans Viticode', [['Créer la fiche du Clos 2025', H.publiee], ['La tester', H.testee], ['Télécharger le QR code', H.telecharge], ['L\'envoyer à l\'imprimerie', H.envoye]]);
+    if (R && R.actif && R.parcelles.some(p => p.traitee && !p.notee)) return note('Registre phyto', R.jour.map(p => ['Noter ' + p.nom, p.notee]));
     const r = m.retardataire.statut, livrees = m.clients.filter(c => ['livree', 'facturee', 'transmise'].includes(c.statut));
     const t = [];
     if (r === 'depose' || r === 'saisi') t.push([V.tacheReglement, r === 'saisi']);
     if (livrees.length) t.push([V.tacheFactures(livrees.length), livrees.every(c => c.statut === 'transmise')]);
     t.push([V.tacheDrm, m.drm === 'faite']);
-    return `<aside class="pc-note"><b>Dans Vitisoft</b>${t.map(([x, ok]) => `<span${ok ? ' class="ok"' : ''}>${esc(x)}</span>`).join('')}</aside>`;
+    return note('Dans Vitisoft', t);
   }
 
   // la date du jour du jeu (outils.js : dateJeu ; la tournée peut finir le lendemain) : la tuile, la barre des tâches, les
@@ -221,21 +241,25 @@ export class PC {
   afficher() {
     const m = this.jeu.mission, f = this.fenetre;
     // ce qui défile garde sa place quand on redessine le même écran
-    const haut = s => this.el.querySelector(s)?.scrollTop || 0, menu = haut('.vs-menu'), main = haut('.vs-main'), bu = haut('.pt-bureau');
+    const haut = s => this.el.querySelector(s)?.scrollTop || 0, menu = haut('.vs-menu'), main = haut('.vs-main'), bu = haut('.pt-bureau'), tel = this.jeu.tel;
     const icone = id => `<button class="pc-ico${this.conseil === id ? ' conseil' : ''}" data-a="lancer:${id}"><span class="ic ${id}">${ICONES[id]}</span>${NOMS[id]}</button>`;
-    const taches = this.ouvertes.map(id => `<button class="pc-t${f === id ? ' on' : ''}" data-a="tache:${id}"><span class="ic ${id}">${ICONES[id]}</span>${NOMS[id]}</button>`).join('');
+    const taches = this.ouvertes.map(id => `<button class="pc-t${f === id ? ' on' : ''}" data-a="tache:${id}" aria-label="${NOMS[id]}"><span class="ic ${id}">${ICONES[id]}</span><b>${NOMS[id]}</b></button>`).join('');
     const boutons = id => `<button data-a="reduire" aria-label="Réduire"><i class="moins"></i></button><button class="x" data-a="fermerF:${id}" aria-label="Fermer">×</button>`;
     let fen = '';
     if (f === 'vitisoft') fen = `<section class="win"><header class="win-titre"><span>Vitisoft</span>${boutons(f)}</header>${this.vitisoft(m)}</section>`;
-    else if (f === 'bureau') fen = `<section class="win nav-fenetre"><header class="win-titre nav"><span class="nav-o"><i class="nav-ic"></i>Le bureau</span>${boutons(f)}</header>
-      <div class="pt-bureau">${this.jeu.tel.vuePortable()}</div></section>`;
-    $('pc-ecran').innerHTML = `<div class="pc-bureau"><div class="pc-icones">${icone('vitisoft')}${icone('bureau')}</div>${this.penseBete(m)}${fen}
+    else if (NAVIGATEUR.includes(f)) {
+      const corps = tel.vuePortable(f, this.ecrans[f]);
+      this.ecrans[f] = tel.app;
+      fen = `<section class="win nav-fenetre"><header class="win-titre nav"><span class="nav-o"><i class="nav-ic ${f}"></i>${NOMS[f]}</span>${boutons(f)}</header>
+      <div class="pt-bureau app-${tel.app}">${corps}</div></section>`;
+    }
+    $('pc-ecran').innerHTML = `<div class="pc-bureau"><div class="pc-icones">${icone('vitisoft')}${icone('bureau')}${icone('viticode')}${icone('phyto')}</div>${this.penseBete(m)}${fen}
       <footer class="pc-barre"><button class="pc-lever" data-a="quitter">Se lever</button><div class="pc-taches">${taches}</div>
       <p class="pc-h"><b class="pc-heure">${this.jeu.heureTxt}</b>${dateJeu(this.jour, 'chiffres')}</p></footer></div>`;
     const garder = (s, v) => { const e = this.el.querySelector(s); if (e) e.scrollTop = v; };
     garder('.vs-menu', menu);
     if (this.derniereVue === this.vue) garder('.vs-main', main);
-    if (f === 'bureau' && this.dernierBureau === this.jeu.tel.app) garder('.pt-bureau', bu);
-    this.derniereVue = this.vue; if (f === 'bureau') this.dernierBureau = this.jeu.tel.app;
+    if (NAVIGATEUR.includes(f) && this.dernierEcran === f + tel.app) garder('.pt-bureau', bu);
+    this.derniereVue = this.vue; this.dernierEcran = NAVIGATEUR.includes(f) ? f + tel.app : '';
   }
 }

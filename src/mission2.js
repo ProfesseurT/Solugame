@@ -243,7 +243,7 @@ export class Traitement {
     this.tRappel = Math.max(0, this.tRappel - dt);
     this.tArret = Math.max(0, this.tArret - dt);
     // (ce qui restait à dire de la parcelle finie ne sert plus : la suite d'abord)
-    if (this.aDire && !j.tel.ouvert) { j.hud.vider(); j.hud.dire(this.aDire); this.aDire = null; }
+    if (this.aDire && !j.tel.ouvert && !j.pc.ouvert) { j.hud.vider(); j.hud.dire(this.aDire); this.aDire = null; } // (noté sur le portable du bureau du chai : une fois levé)
     // l'itinéraire : refait si l'on s'en est écarté de plus de 25 m
     if (this.itin && !this.itin.p && (this.tItin -= dt) <= 0) {
       this.tItin = 0.5;

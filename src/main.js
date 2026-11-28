@@ -587,6 +587,15 @@ const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // mon
   });
 }
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
+// assis au portable du bureau du chai : l'appli que la mission en cours attend (son icône mise en évidence, pc.js) :
+// Viticode quand le bulletin du labo est là et la fiche pas encore envoyée (mission 3) ; le Registre phyto quand une
+// parcelle traitée attend sa saisie (mission 2) ; sinon Vitisoft ou Le bureau (mission.js : ouvrirPC)
+jeu.appliPC = () => {
+  const v = mission.ouvrirPC(), H = habillage, R = traitement;
+  if (H.actif && H.bulletin && !H.envoye) return 'viticode';
+  if (R.actif && R.aNoter.length) return 'phyto';
+  return v;
+};
 
 // étiquettes posées dans le monde
 const etqVelo = hud.action('Prendre le vélo'); // (un vélo garé, ou celui d'un cycliste : veloProche)

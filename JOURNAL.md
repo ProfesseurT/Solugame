@@ -1023,3 +1023,20 @@ Fichier 677 / 514 Ko (192 / 159 Ko compressé). Géométrie en mémoire graphiqu
 **Vérifié** : banc `velo` (20 contrôles), ajouté à `npm run verifie` (vingt bancs, tous verts avec `PARALLELE=3`) ; captures (en selle, sur la béquille, couché, un vélo d'enfant au bourg), la montée et la descente image par image.
 
 **Bancs fragiles sous la charge** : à 4 ou 6 navigateurs ensemble, la journée à la carte (« le personnage ne traverse jamais un véhicule », 11 images) et la route du château (la glisse, la voiture qui monte, le van) tombent parfois. Comparé à l'ancien code dans les mêmes conditions (trois de chaque en même temps) : l'ancien tombe autant, ou plus. Ce n'est pas ce lot ; à quatre ou six, il faut parfois relancer. La glisse du château s'arrête maintenant aussi quand la voiture rencontre un cycliste (il saute, ou elle pousse son vélo couché, `velos.pousses`) : avant, buter sur le vélo couché comptait comme un choc et finissait la mesure ; maintenant on le pousse et la glisse continuait, selon où étaient les cyclistes.
+
+## 28/11/2026 · Retours de Teddy (36) : Viticode et le registre sur l'ordinateur aussi, dans toutes les missions
+
+**Demande** : « Il faut que Viticode et le registre soit accessible et utilisable depuis l'ordinateur aussi ! Dans toutes les missions ! »
+
+**Ce que dit la source** : la page du registre (dépôt vitisoft.fr, `src/pages/registre-phytosanitaire.astro`, lue le 28/11/2026) : « Sur téléphone, tablette et ordinateur, avec le même compte. […] Au chai ou au bureau, vous retrouvez le registre sur grand écran, vous pouvez y saisir aussi, et vous l'exportez. » Viticode est un site (viticode.fr) : on s'y connecte depuis l'ordinateur comme depuis le téléphone. Notées en tête des blocs `TRAITEMENT` et `HABILLAGE` (textes.js).
+
+**Fait** :
+- Le portable du bureau du chai a quatre icônes : Vitisoft, et dans le navigateur Le bureau, Viticode et le Registre phyto. Ce sont les écrans du téléphone (telephone.js `vuePortable`), avec leurs vérifications et leurs consignes : le même compte, ce qui est saisi d'un côté se voit de l'autre. Chaque fenêtre garde l'écran où on l'a laissée.
+- Mission 1 : Viticode et le registre montrent leur annonce (et le lien de la prévente du registre).
+- Mission 2 : une parcelle traitée se note depuis l'ordinateur (les cinq écrans, les refus, l'enregistrement, l'export pour un contrôle) ; assis, l'icône du registre est mise en évidence, le pense-bête dit les parcelles à noter, la notification du téléphone est vue ; la consigne dit de se lever du portable (plus « fermez le téléphone ») ; la suite se dit une fois levé. L'objectif : « Notez Les Perrières dans le Registre phyto (téléphone, touche T ; ou l'ordinateur du bureau du chai) ». La carte de fin ajoute « Sur téléphone, tablette et ordinateur, avec le même compte ». Sans réseau, au fond des Grands Champs, c'est toujours le téléphone (l'objectif ne propose pas l'ordinateur).
+- Mission 3 : la fiche Viticode du bulletin jusqu'à l'imprimerie depuis l'ordinateur (créer, publier, « Testez-moi ! », personnaliser et télécharger le QR code) ; le fichier arrive « Dans vos téléchargements », « L'envoyer à l'imprimerie » ; on reste dans Viticode, la réponse de l'imprimerie (le BAT) arrive sur le téléphone, dans Messages. Assis, l'icône de Viticode est mise en évidence, le pense-bête suit les étapes. « Direction Viticode : sur le téléphone, ou sur l'ordinateur du bureau du chai. »
+- Petit écran : les icônes passent sur deux colonnes ; trois fenêtres ouvertes, leurs icônes seules dans la barre des tâches ; les messages (« Enregistré », « Envoyé ») centrés dans la fenêtre (ils glissaient à gauche sur le portable, Le bureau compris).
+
+**Pas sur l'ordinateur** : Messages (le bulletin du labo, le BAT de l'imprimerie) reste sur le téléphone, comme les appels du bureau.
+
+**Vérifié** : banc `ordinateur` (24 contrôles, à 1280 x 800 et à 390 x 844), ajouté à `npm run verifie` (vingt et un bancs) ; captures relues (le bureau de l'ordinateur, le registre, la fiche Viticode, le QR code, sur ordinateur et sur téléphone).

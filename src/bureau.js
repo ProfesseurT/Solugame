@@ -55,7 +55,7 @@ export class Bureau {
   asseoir() {
     const c = this.c;
     c.ctrl.relacher();
-    c.gestes.asseoir(this.B, () => { this.auPortable = true; c.pc.ouvrir(c.mission.ouvrirPC()); });
+    c.gestes.asseoir(this.B, () => { this.auPortable = true; c.pc.ouvrir(c.jeu.appliPC()); });
   }
   lever() { if (!this.auPortable) return; this.auPortable = false; this.c.gestes.lever(this.B, () => {}); }
 

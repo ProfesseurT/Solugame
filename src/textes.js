@@ -314,7 +314,10 @@ export const FIN = {
    vigne ; on coche les parcelles traitées, le produit et la dose ; le stade est repris du dernier traitement ; la cible ;
    pas de réseau : noté, puis envoyé quand ça capte ; chaque ligne dit qui a saisi, et quand ; l'ETA ou la CUMA saisit
    chez vous ; une erreur se corrige avec motif, rien n'est effacé ; en cas de contrôle : PDF, format officiel et fiche
-   Stat'Phyto. Parcelles retrouvées depuis le fichier Telepac. Aucune promesse de conformité (jamais « en règle ») :
+   Stat'Phyto. Parcelles retrouvées depuis le fichier Telepac. Sur téléphone, tablette et ordinateur, avec le même
+   compte : au chai ou au bureau, le registre sur grand écran, on peut y saisir aussi, et l'exporter (vitisoft.fr :
+   src/pages/registre-phytosanitaire.astro, lu le 28/11/2026 ; dans le jeu, le portable du bureau du chai, pc.js ;
+   Teddy, 28/11/2026 : « accessible et utilisable depuis l'ordinateur aussi, dans toutes les missions »). Aucune promesse de conformité (jamais « en règle ») :
    l'application enregistre, le contenu du registre reste sous la responsabilité de l'exploitant. Le registre devient
    numérique le 1er janvier 2027 (fiche de faits). La mission se passe le lendemain de la tournée de Noël (Teddy,
    24/11/2026), le mercredi 9 décembre si la tournée a fini le soir même (la date suit les jours du jeu : outils.js,
@@ -364,7 +367,7 @@ export const TRAITEMENT = {
     aire: 'En enjambeur, à l\'aire de remplissage : préparez la bouillie',
     // une parcelle à la fois : n sur 3 ; pc, son avancement
     traiter: (nom, n, pc) => pc ? `Traitez ${nom} : ${pc} %` : `En enjambeur, traitez ${nom} (parcelle ${n} sur 3)`,
-    noter: (noms, t) => `Notez ${noms} dans le Registre phyto (téléphone, ${t ? 'en bas à droite' : 'touche T'})`,
+    noter: (noms, t) => `Notez ${noms} dans le Registre phyto (téléphone, ${t ? 'en bas à droite' : 'touche T'} ; ou l'ordinateur du bureau du chai)`,
     noterIci: (noms, t) => `Sans réseau, notez quand même ${noms} : Registre phyto (téléphone, ${t ? 'en bas à droite' : 'touche T'})`,
     envoyer: 'Remontez vers la route : la saisie partira toute seule quand ça capte',
     fin: 'Journée de traitement finie',
@@ -425,6 +428,7 @@ export const TRAITEMENT = {
       recap: 'Tout est juste : enregistrez.',
       recapSans: 'Pas de réseau ici : enregistrez quand même. La saisie reste sur le téléphone et partira toute seule quand ça captera.',
       suite: nom => `Noté. Fermez le téléphone : direction ${nom}, en enjambeur.`,
+      suiteOrdi: nom => `Noté. Levez-vous du portable : direction ${nom}, en enjambeur.`,
       attente: 'Noté sans réseau. Fermez le téléphone et remontez vers la route : la saisie partira toute seule.',
     },
     attenteNote: n => `${n} saisie${n > 1 ? 's' : ''} en attente : envoyée${n > 1 ? 's' : ''} dès que ça capte.`,
@@ -449,6 +453,7 @@ export const TRAITEMENT = {
       'Chaque ligne dit qui a saisi, et quand ; votre ETA ou CUMA saisit chez vous',
       'Une erreur de saisie se corrige avec un motif : rien n\'est effacé',
       'En cas de contrôle : PDF, format officiel et fiche Stat\'Phyto',
+      'Sur téléphone, tablette et ordinateur, avec le même compte',
     ],
     bouton: 'Continuer la balade',
   },
@@ -456,7 +461,8 @@ export const TRAITEMENT = {
 
 /* ---------------------------------------------------------------- mission 3 : l'habillage, avec Viticode
    Ce que fait Viticode, d'après viticode.fr (la page d'accueil, ses captures d'écran et la fiche produit d'exemple, lues
-   le 24/11/2026) : gratuit, nombre de fiches produit illimité ; la fiche produit (nom du produit, 50 caractères au plus ;
+   le 24/11/2026) : un site, où l'on se connecte depuis le navigateur de l'ordinateur comme du téléphone (dans le jeu,
+   aussi sur le portable du bureau du chai, pc.js ; Teddy, 28/11/2026) ; gratuit, nombre de fiches produit illimité ; la fiche produit (nom du produit, 50 caractères au plus ;
    description ; degré d'alcool ; millésime ; appellation ; lot ; couleur : rouge, blanc, rosé, orange, jaune, aucune) ;
    les ingrédients par catégorie, préchargés (on peut ajouter les siens), ingrédients bio et allergènes ; la déclaration
    nutritionnelle pour 100 ml, la calculatrice de l'énergie (« Calculer mon énergie »), les valeurs à zéro affichées
@@ -584,7 +590,7 @@ export const HABILLAGE = {
       { qui: 'Hélène', txt: 'Alors en ingrédients : raisins et sulfites. Je lance l\'analyse, le bulletin arrive sur votre téléphone dans la demi-heure.' },
     ],
     sansEchantillon: [{ qui: 'Hélène', txt: 'Bonjour ! Pour l\'analyse, il me faut un échantillon : une bouteille du lot.' }],
-    bulletin: [{ qui: '', txt: 'Le bulletin du labo est arrivé. Direction Viticode, sur le téléphone.' }],
+    bulletin: [{ qui: '', txt: 'Le bulletin du labo est arrivé. Direction Viticode : sur le téléphone, ou sur l\'ordinateur du bureau du chai.' }],
     publiee: [{ qui: '', txt: 'La fiche est publiée : elle a son QR code. Je la teste.' }],
     teste: [{ qui: '', txt: 'Ce que lira le client en scannant la bouteille, dans sa langue.' }],
     envoye: [{ qui: '', txt: 'Le fichier est parti à l\'imprimerie.' }],
@@ -631,6 +637,12 @@ export const HABILLAGE = {
     titre: 'Gardez le titre « Ingrédients » : il dit à quoi sert le QR code.',
     pied: 'Gardez le pied de page : la valeur énergétique doit rester sur l\'étiquette.',
     telecharge: 'QR code téléchargé.',
+    // sur l'ordinateur du bureau du chai (pc.js) : le fichier dans les téléchargements, envoyé à l'imprimerie, sa réponse
+    // sur le téléphone
+    telechargeOrdi: 'Dans vos téléchargements',
+    envoyerOrdi: qui => `L'envoyer à ${qui}`,
+    reponseOrdi: 'Sa réponse arrivera sur le téléphone, dans Messages',
+    envoyeOrdi: 'Envoyé à l\'imprimerie : sa réponse arrivera sur le téléphone, dans Messages.',
     copie: 'Lien copié.',
     mineur: 'Cette fiche est réservée aux personnes majeures.',
   },

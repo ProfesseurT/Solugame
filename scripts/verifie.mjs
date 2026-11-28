@@ -4,7 +4,7 @@
 //     (390 x 844), le clavier, la nuit et le matin (1280 x 800), la route du château et la glisse (900 x 600), la diversité
 //     des personnages, le chien du domaine, les vélos et les cyclistes, l'école et ses enfants (1280 x 800), la mission 2,
 //     la mission 3, la sauvegarde, la nuit et les professionnels fermés, les restaurateurs du coin (390 x 844), les abords
-//     et l'intérieur de Solumatic, le vélo du joueur (1280 x 800), en même temps ;
+//     et l'intérieur de Solumatic, le vélo du joueur, Viticode et le registre sur l'ordinateur (1280 x 800), en même temps ;
 //  3. regarde git : index.html doit aller avec src/ dans le même commit.
 // Code 1 si le build ou un parcours échoue, ou si le dernier commit a un index.html en retard sur src/.
 import { spawn, execFileSync } from 'node:child_process';
@@ -57,6 +57,7 @@ const parcours = await Promise.all([
   lancer(['scripts/essai.mjs', 'abords', '1280x800', 'abords']).then(r => ({ ...r, nom: 'Solumatic dehors (la route du tour, la devanture)' })),
   lancer(['scripts/essai.mjs', 'solumatic', '1280x800', 'solumatic']).then(r => ({ ...r, nom: 'Solumatic dedans (l\'équipe, ses horaires, la nuit)' })),
   lancer(['scripts/essai.mjs', 'velo', '1280x800', 'velo']).then(r => ({ ...r, nom: 'À vélo (prendre, rouler, descendre, emprunter ; un vélo tombé se pousse)' })),
+  lancer(['scripts/essai.mjs', 'ordinateur', '1280x800', 'ordinateur']).then(r => ({ ...r, nom: 'l\'ordinateur du bureau du chai (Viticode et le registre, dans les trois missions)' })),
 ]);
 for (const r of parcours) {
   if (r.code !== 0 || !r.sortie.includes('Aucune erreur.')) echec(r.nom, r.sortie);
