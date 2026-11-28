@@ -14,7 +14,7 @@
 // (au fioul), les sanitaires, le local ménage, les moyens généraux, entourés du couloir. Seule la disposition des pièces
 // est reprise du plan (ni l'adresse, ni le reste du document). Qui est où : textes.js, EQUIPE.
 import * as THREE from 'three';
-import { B, C, S, fusion, UNI } from './modeles.js';
+import { B, C, S, fusion, UNI, texturePeinte } from './modeles.js';
 import { perso, persoPas, tirerApparence, OS } from './perso.js';
 import { Pieton } from './pieton.js';
 import { logoSolumatic } from './logo.js';
@@ -410,11 +410,11 @@ function peindre(c) {
 }
 // Les panneaux texturés : affiches (éclairées comme la pièce) et écrans (lumineux : écrans, dalles lumineuses, voyants).
 // [{ zone, x, y, z, rot, w, h, bas }] : un rectangle tourné de rot autour de la verticale (bas : posé à plat, tourné vers
-// le bas, une dalle du faux plafond). Mémoire : une texture de 1024 x TEX_H.
+// le bas, une dalle du faux plafond). Mémoire : une texture de 1024 x TEX_H, peinte après le démarrage, quand le navigateur
+// n'a rien à faire (9 ms de moins pour construire le monde, 37 sur un téléphone lent), et sans copie gardée une fois envoyée
+// à la carte graphique, la première fois qu'on voit l'intérieur (7,6 Mo de canevas rendus : modeles.js, texturePeinte).
 export function panneauxSolumatic(affiches, ecrans) {
-  const cv = document.createElement('canvas'); cv.width = TEX_L; cv.height = TEX_H;
-  peindre(cv.getContext('2d'));
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const tex = texturePeinte(TEX_L, TEX_H, c => peindre(c), 'repos');
   const maillage = (liste, mat, nom) => {
     const geos = liste.map(({ zone, x, y, z, rot, w, h, bas }) => {
       const [px, py, pw, ph] = CASES[zone], g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv;

@@ -1388,6 +1388,30 @@ function avantRendu(ego) {
     monde.ombres(monde.soleil.target.position, c.right, c.top);
   }
 }
+// Les matrices, avant chaque rendu. three.js (r170) recalcule à chaque image celles de tout ce qui est dans la scène, caché
+// ou non : les 18 os de chaque personnage lointain ou derrière une cloison comme les autres (le matrixWorldAutoUpdate que
+// perso.js et chien.js font suivre à leur visibilité ne coupe que la matrice du groupe : three.js descend quand même dans
+// ses enfants, et les force). On descend soi-même, sans entrer sous ce qui ne se met pas à jour (un personnage, le chien,
+// cachés) : ses os seront recalculés dès qu'il se remontrera (ce qu'on lit de ses os ailleurs passe par updateWorldMatrix).
+// Le reste à l'identique ; une classe qui a sa propre mise à jour (SkinnedMesh : bindMatrixInverse) la garde. Matrices
+// recalculées par image : au bourg 2 250 -> 1 310, sur la place 2 250 -> 1 360, au domaine 2 270 -> 680, au château
+// 3 140 -> 1 220.
+{
+  const MAJ0 = THREE.Object3D.prototype.updateMatrixWorld;
+  const descendre = (o, force) => {
+    if (o.updateMatrixWorld !== MAJ0) { o.updateMatrixWorld(force); return; }
+    if (o.matrixAutoUpdate) o.updateMatrix();
+    if (o.matrixWorldNeedsUpdate || force) { o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix); o.matrixWorldNeedsUpdate = false; force = true; }
+    const e = o.children;
+    for (let i = 0; i < e.length; i++) if (e[i].matrixWorldAutoUpdate !== false) descendre(e[i], force);
+  };
+  scene.updateMatrixWorld = function (force) {
+    if (this.matrixAutoUpdate) this.updateMatrix();
+    if (this.matrixWorldNeedsUpdate || force) { this.matrixWorld.copy(this.matrix); this.matrixWorldNeedsUpdate = false; force = true; }
+    const e = this.children;
+    for (let i = 0; i < e.length; i++) if (e[i].matrixWorldAutoUpdate !== false) descendre(e[i], force);
+  };
+}
 const rendre = () => renderer.render(scene, camera);
 
 // Cadence : 60 images/s au plus (un écran à 90 ou 120 Hz en demanderait jusqu'à deux fois plus, pour rien : chauffe
@@ -1678,7 +1702,9 @@ window.CL = {
       if (g.index && !tampons.has(g.index.array)) { tampons.add(g.index.array); octGeo += g.index.array.byteLength; }
     }
     let octTex = 0;
-    for (const t of texs) { const im = t.image; if (im && im.width) octTex += im.width * im.height * 4 * (t.generateMipmaps ? 1.33 : 1); }
+    // (une texture peinte à l'envoi, sans copie gardée, dit ce qu'elle occupe : modeles.js, texturePeinte ; lire son image la
+    // repeindrait)
+    for (const t of texs) { if (t.userData.octets) { octTex += t.userData.octets; continue; } const im = t.image; if (im && im.width) octTex += im.width * im.height * 4 * (t.generateMipmaps ? 1.33 : 1); }
     const sm = monde.soleil.shadow.map; if (sm) octTex += sm.width * sm.height * 4;
     const Mo = x => +(x / 1048576).toFixed(1);
     return { objets, matrixAutoUpdate: auto, maillages, geometries: geos.size, sommets, geoMo: Mo(octGeo), texMo: Mo(octTex), programmes: renderer.info.programs.length, tasJSMo: performance.memory ? Mo(performance.memory.usedJSHeapSize) : null };
@@ -1688,8 +1714,9 @@ window.CL = {
     for (let i = 0; i < n; i++) { temps += 1 / 60; miseAJour(1 / 60); particules.maj(1 / 60); avantRendu(jeu.auVolant ? tr.pos : joueur.pos); rendre(); }
     paliers.attendreGPU();
     const ms = (performance.now() - t0) / n;
-    // une image de plus pour compter aussi la passe d'ombre (comptée avant la remise à zéro de three.js)
-    const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.shadowMap.needsUpdate = !!paliers.q.ombres; rendre(); inf.autoReset = true;
+    // une image de plus pour compter aussi la passe d'ombre (comptée avant la remise à zéro de three.js), là où le jeu la fait
+    // (dedans, la carte d'ombre n'est pas recalculée : avantRendu)
+    const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.shadowMap.needsUpdate = !!paliers.q.ombres && !jeu.dedans; rendre(); inf.autoReset = true;
     return ms.toFixed(2) + ' ms par image, ' + inf.render.calls + ' appels de dessin, ' + inf.render.triangles + ' triangles (ombres comprises), qualité ' + paliers.q.nom + ', ratio ' + paliers.ratio;
   },
 };
