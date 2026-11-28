@@ -1061,8 +1061,9 @@ export function interieurSolumatic() {
     VIE.cibles.uranus = [xm - 1.0, q.z1 - 1.0];
   }
 
-  // ---- Saturne, les commerciales : un îlot de quatre postes (Le bureau à l'écran, un téléphone chacune), le poste de
-  // Vanessa (à part : rangé quand elle n'est pas là) ; le tableau de la semaine, une armoire, le portemanteau, une plante
+  // ---- Saturne, les commerciales : un îlot de quatre postes (Le bureau à l'écran, un téléphone chacune), les trois
+  // commerciales et Vanessa (son poste rangé quand elle n'est pas là) ; le tableau de la semaine, une armoire, le
+  // portemanteau, une plante
   {
     const q = P.saturne, xi = q.x0 + 2.75, zi = (q.z0 + q.z1) / 2 - 0.45;
     const P4 = [['romane', -0.945, 0.7, EST], ['alice', 0.945, 0.7, OUEST], ['camila', -0.945, -0.7, EST], ['vanessa', 0.945, -0.7, OUEST]];
