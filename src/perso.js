@@ -703,36 +703,38 @@ export function cigarette(m) {
 /* ---------------------------------------------------------------- peau souple
    Chaque pièce suit son os ; un sommet proche d'une jointure suit aussi l'os voisin, d'autant plus qu'il en est près
    (jusqu'à la moitié, à la jointure même). Coudes, genoux, épaules, hanches, taille et cou se plient en courbe au lieu
-   de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend [os voisin, poids]
-   ou null. */
+   de se casser comme ceux d'un pantin. x, y : position du sommet par rapport à son os, au repos. Rend l'os voisin (son
+   poids dans LIEN[0]), ou -1 (sans tableau neuf par sommet : trois mille par personnage). */
+const LIEN = new Float64Array(1);
+const lien = (os, w) => { LIEN[0] = w; return os; };
 function liens(i, x, y) {
   switch (i) {
     case 0: // bassin : le ventre au-dessus ; en dessous, la cuisse de son côté (une jupe suit un peu les jambes)
-      if (y > 0.04) return [1, 0.45 * lisse((y - 0.04) / 0.07)];
-      if (y < -0.05 && Math.abs(x) > 0.015) return [x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * lisse((-0.05 - y) / 0.08)];
-      return null;
+      if (y > 0.04) return lien(1, 0.45 * lisse((y - 0.04) / 0.07));
+      if (y < -0.05 && Math.abs(x) > 0.015) return lien(x > 0 ? OS.cuisseG : OS.cuisseD, 0.4 * lisse((-0.05 - y) / 0.08));
+      return -1;
     case 1: // ventre : le bassin en bas, la poitrine en haut
-      if (y < 0.02) return [0, 0.5 * lisse((0.02 - y) / 0.07)];
-      if (y > 0.15) return [2, 0.45 * lisse((y - 0.15) / 0.07)];
-      return null;
-    case 2: return y < 0.03 ? [1, 0.5 * lisse((0.03 - y) / 0.07)] : null; // poitrine : le ventre en bas
-    case 3: return y < 0.05 ? [2, 0.6 * lisse((0.05 - y) / 0.08)] : null; // le bas du cou suit la poitrine
+      if (y < 0.02) return lien(0, 0.5 * lisse((0.02 - y) / 0.07));
+      if (y > 0.15) return lien(2, 0.45 * lisse((y - 0.15) / 0.07));
+      return -1;
+    case 2: return y < 0.03 ? lien(1, 0.5 * lisse((0.03 - y) / 0.07)) : -1; // poitrine : le ventre en bas
+    case 3: return y < 0.05 ? lien(2, 0.6 * lisse((0.05 - y) / 0.08)) : -1; // le bas du cou suit la poitrine
     case 4: case 7: // haut du bras : l'épaule suit la poitrine, le bas suit l'avant-bras
-      if (y > -0.07) return [2, 0.5 * lisse((y + 0.07) / 0.08)];
-      if (y < -0.23) return [i + 1, 0.5 * lisse((-0.23 - y) / 0.06)];
-      return null;
+      if (y > -0.07) return lien(2, 0.5 * lisse((y + 0.07) / 0.08));
+      if (y < -0.23) return lien(i + 1, 0.5 * lisse((-0.23 - y) / 0.06));
+      return -1;
     case 5: case 8: // avant-bras : le coude suit le bras, le poignet un peu la main
-      if (y > -0.06) return [i - 1, 0.5 * lisse((y + 0.06) / 0.06)];
-      if (y < -0.215) return [i + 1, 0.3 * lisse((-0.215 - y) / 0.035)];
-      return null;
-    case 6: case 9: return y > -0.025 ? [i - 1, 0.3 * lisse((y + 0.025) / 0.025)] : null;
+      if (y > -0.06) return lien(i - 1, 0.5 * lisse((y + 0.06) / 0.06));
+      if (y < -0.215) return lien(i + 1, 0.3 * lisse((-0.215 - y) / 0.035));
+      return -1;
+    case 6: case 9: return y > -0.025 ? lien(i - 1, 0.3 * lisse((y + 0.025) / 0.025)) : -1;
     case 10: case 13: // cuisse : la hanche suit le bassin, le bas suit le tibia
-      if (y > -0.1) return [0, 0.5 * lisse((y + 0.1) / 0.1)];
-      if (y < -0.37) return [i + 1, 0.5 * lisse((-0.37 - y) / 0.07)];
-      return null;
-    case 11: case 14: return y > -0.07 ? [i - 1, 0.5 * lisse((y + 0.07) / 0.07)] : null; // le genou suit la cuisse
+      if (y > -0.1) return lien(0, 0.5 * lisse((y + 0.1) / 0.1));
+      if (y < -0.37) return lien(i + 1, 0.5 * lisse((-0.37 - y) / 0.07));
+      return -1;
+    case 11: case 14: return y > -0.07 ? lien(i - 1, 0.5 * lisse((y + 0.07) / 0.07)) : -1; // le genou suit la cuisse
   }
-  return null;
+  return -1;
 }
 
 /* ---------------------------------------------------------------- mains
@@ -867,9 +869,9 @@ function assembler(G, W, kj, ka) {
           if (cs) { r = cs[k * 3]; gg = cs[k * 3 + 1]; b = cs[k * 3 + 2]; }
           if (pm) { const w = pm[1] * Math.max(0, Math.min(1, (-pm[0] * n[k * 3] - 0.35) * 2)); r += (PAUME[0] - r) * w; gg += (PAUME[1] - gg) * w; b += (PAUME[2] - b) * w; }
           COL[j * 3] = LIN[(r + 0.5) | 0]; COL[j * 3 + 1] = LIN[(gg + 0.5) | 0]; COL[j * 3 + 2] = LIN[(b + 0.5) | 0];
-          const l = liens(i, x - wx, (y - wy) / ky), w = l ? Math.round(l[1] * 255) : 0;
+          const l = liens(i, x - wx, (y - wy) / ky), w = l >= 0 ? Math.round(LIEN[0] * 255) : 0;
           SI[j * 4] = i; SW[j * 4] = 255 - w;
-          if (w) { SI[j * 4 + 1] = l[0]; SW[j * 4 + 1] = w; }
+          if (w) { SI[j * 4 + 1] = l; SW[j * 4 + 1] = w; }
         }
         IDX[ni++] = j;
       }

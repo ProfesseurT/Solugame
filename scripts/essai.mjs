@@ -1055,7 +1055,7 @@ if (scenario === 'nuit') {
         log.push([(m ? m.e.prenom : 'personne') + ' se lève et va jusqu\'à la cuisine (' + loin.toFixed(1) + ' m de sa place)', m && loin > 6 && !m.p.assis]);
         const deux = S.gens.filter(g => g.etat === 'poste' && g.mode === 'assis' && !g.tache && g !== m), b0 = S.balle.position.z;
         if (deux.length >= 2) S.envoyer(deux[0].id, 'babyfoot', deux[1].id);
-        CL.step(60 * 22);
+        CL.step(60 * 30); // (de la maintenance à Atlas, par les couloirs : 25 m à pied, et l'on se lève d'abord)
         log.push(['au baby-foot, la balle roule', S.balle.visible && Math.abs(S.balle.position.z - b0) > 0.01]);
         CL.teleporter(LS.dedans.x - 0.3, LS.dedans.z, Math.PI / 2); CL.step(10);
         const sortir = etq('Sortir');

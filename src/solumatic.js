@@ -1292,9 +1292,10 @@ class Grille {
     if (!trouve) return n > 0 ? undefined : this.finir(null);
     const pts = []; for (let k = b; k !== -1; k = de[k]) { const i = k % nx; pts.push([this.x0 + (i + 0.5) * this.p, this.z0 + ((k - i) / nx + 0.5) * this.p]); }
     pts.reverse(); pts.push([R.bx, R.bz]);
-    // tendu : de chaque point, on file en ligne droite tant que le point suivant se voit
+    // tendu : de chaque point, on file en ligne droite jusqu'au plus loin qu'on voit (pas seulement jusqu'au premier qu'on
+    // ne voit plus : moins de coudes, on ralentit moins)
     const res = []; let cx = R.ax, cz = R.az, i = 0;
-    while (i < pts.length - 1) { let j = i + 1; while (j + 1 < pts.length && this.vue(cx, cz, pts[j + 1][0], pts[j + 1][1])) j++; res.push(pts[j]); cx = pts[j][0]; cz = pts[j][1]; i = j; }
+    while (i < pts.length - 1) { let j = i + 1; for (let k = i + 2; k < pts.length; k++) if (this.vue(cx, cz, pts[k][0], pts[k][1])) j = k; res.push(pts[j]); cx = pts[j][0]; cz = pts[j][1]; i = j; }
     return this.finir(res);
   }
 }
@@ -1899,6 +1900,12 @@ export class Solumatic {
     // les voix étouffées au casque, les plateaux (audio.js)
     if ((this.tVoix -= dt) <= 0) { this.tVoix = 0.5 + this.rnd() * 0.9; if (voix > 0.05) son.voix?.(voix); }
   }
+  // (o marche-t-il, et vers où nous allons ?)
+  memeSens(o, ux, uz) {
+    const T = o.trajet; if (!T || !T.ch || T.k >= T.ch.length || T.attente > 0) return false;
+    const q = T.ch[T.k], dx = q[0] - o.p.pos.x, dz = q[1] - o.p.pos.z, l = Math.hypot(dx, dz) || 1;
+    return (dx * ux + dz * uz) / l > 0.5;
+  }
   // (o, en (ox, oz), est-il juste devant p qui marche vers (ux, uz) ?)
   devantDe(p, ux, uz, ox, oz) { const rx = ox - p.pos.x, rz = oz - p.pos.z, av = rx * ux + rz * uz; return av > 0.05 && av < 1.0 && Math.abs(rx * uz - rz * ux) < 0.55; }
   // marcher le long de son chemin ; quelqu'un devant (le joueur, un collègue qui marche) : on le contourne (le chemin
@@ -1915,7 +1922,8 @@ export class Solumatic {
     T_.tRefait -= dt;
     let gx = 0, gz = 0, gr = 0;
     if (this.devantDe(p, ux, uz, j.x, j.z)) { gx = j.x; gz = j.z; gr = 0.7; }
-    else for (const o of this.gens) if (o !== g && o.mode === 'marche' && !o.dehors && this.devantDe(p, ux, uz, o.p.pos.x, o.p.pos.z)) { if (g.i > o.i) { gx = o.p.pos.x; gz = o.p.pos.z; gr = 0.55; } break; }
+    // (un collègue devant, qui marche dans le même sens : on le suit, sans s'arrêter derrière lui à chaque pas)
+    else for (const o of this.gens) if (o !== g && o.mode === 'marche' && !o.dehors && this.devantDe(p, ux, uz, o.p.pos.x, o.p.pos.z)) { if (g.i > o.i && !this.memeSens(o, ux, uz)) { gx = o.p.pos.x; gz = o.p.pos.z; gr = 0.55; } break; }
     if (gr) {
       T_.attente += dt;
       // le contourner : un autre chemin, autour de lui (demandé ; en attendant, on attend)
@@ -1923,7 +1931,8 @@ export class Solumatic {
       if (g.vu) p.update(dt, 0, 0, 0, false, LIBRE, t + g.ph); return;
     }
     T_.attente = 0;
-    const v = Math.min(1.25, 0.35 + dd * 1.6);
+    // (on ralentit en arrivant, et un peu à chaque coude)
+    const v = Math.min(1.25, (dernier ? 0.35 : 0.75) + dd * 1.6);
     if (g.vu) p.update(dt, ux, uz, 1, false, LIBRE, t + g.ph, v);
     else { p.h = p.hv = Math.atan2(ux, uz); p.pos.x += ux * v * dt; p.pos.z += uz * v * dt; p.m.groupe.position.set(p.pos.x, p.pos.y, p.pos.z); p.m.groupe.rotation.y = p.h; }
   }
