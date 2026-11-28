@@ -2187,8 +2187,8 @@ if (scenario === 'velo') {
     CL.agir(); CL.finirGeste();
     log.push([`il nous le prête : on roule sur son vélo (le même), lui s'en va à pied`, J.auVolant && J.veh.m === m && c.prete === 1 && !c.m]);
     const ct = CL.ctrl; ct.ky = -1; CL.step(90); ct.ky = 0;
-    const p0 = { x: c.p.pos.x, z: c.p.pos.z }; CL.step(120);
-    log.push([`il marche (${Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z).toFixed(1)} m en 2 s)`, Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z) > 1.5]);
+    const p0 = { x: c.p.pos.x, z: c.p.pos.z }; CL.step(240);
+    log.push([`il marche (${Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z).toFixed(1)} m en 4 s ; bloqué, il se rapproche de la route)`, Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z) > 2]);
     // loin et hors de la vue : il revient sur un autre vélo, plus loin
     CL.teleporter(-150, 10, Math.PI / 2); CL.photo(-150, 3, 10, -140, 1, 10); CL.step(400); CL.photo();
     log.push([`hors de la vue, il revient plus loin sur son chemin (il roule)`, c.prete === 0 && c.etat === 'roule']);

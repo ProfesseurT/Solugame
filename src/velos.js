@@ -1167,7 +1167,7 @@ class Cycliste {
     this.m = null; this.p = null; this.casque = null; this.dtA = 0; this.vu = false; this.attendu = false; this.attenduP = false;
     this.sx = 0; this.sz = 0; this.svx = 0; this.svz = 0; this.tE = 0; this.chute = 0; this.cote = 1; this.source = null; this.outil = null; // (à pied : le vélo couché)
     this.sauts = 0; this.touches = 0; // (essais : combien de fois il a sauté ; touché par un véhicule, ce qui ne doit pas arriver)
-    this.hV = 0; this.court = false; this.dx0 = 0; this.dz0 = 0; this.dx1 = 0; this.dz1 = 0; this.prete = 0; // (son vélo couché qui tourne ; prêté : il s'en va à pied)
+    this.hV = 0; this.court = false; this.dx0 = 0; this.dz0 = 0; this.dx1 = 0; this.dz1 = 0; this.prete = 0; this.decPied = 0; // (son vélo couché qui tourne ; prêté : il s'en va à pied)
     this.cri = V.c.hud.etiquette('', 'bulle');
     this.regard = new THREE.Vector3(); this.Vp = new Float64Array(VL.N); // (la pose demandée au personnage : anim.js, poseVelo)
     this.lampe = null;
@@ -1708,7 +1708,7 @@ export class Velos {
     p.assis = false; p.velo = null; p.outil = null; p.regard = null;
     p.placer(vA.x, vA.z, c.h); p.m.groupe.visible = true;
     c.dx0 = vA.x; c.dz0 = vA.z; c.dx1 = c.x + lx * co + lz * si; c.dz1 = c.z - lx * si + lz * co;
-    c.prete = 1; c.etat = 'prete'; c.tE = 0; c.court = wtf; c.v = 0; c.danger = false; c.cede = 0; c.contour = null; c.regarde = 0;
+    c.prete = 1; c.etat = 'prete'; c.tE = 0; c.court = wtf; c.decPied = 0; c.bloqueT = 0; c.v = 0; c.danger = false; c.cede = 0; c.contour = null; c.regarde = 0;
     c.x = c.z = c.sx = c.sz = 1e5;
     if (wtf) { p.sauter(-co, si); this.dire(c, REPLIQUES.vole); c.prete = 2; }
     else this.dire(c, REPLIQUES.prete);
@@ -1728,7 +1728,15 @@ export class Velos {
       const ch = c.ch;
       c.s = ch.projeterPres(p.pos.x, p.pos.z, c.s);
       ch.point(ch.ramener(c.s + 4), PT);
-      const dd = -(PT.d + 1.4), tx = PT.x + Math.cos(PT.h) * dd, tz = PT.z - Math.sin(PT.h) * dd, dx = tx - p.pos.x, dz = tz - p.pos.z, d = Math.hypot(dx, dz) || 1;
+      // (le point visé libre : sur le trottoir, sinon plus près de sa ligne ; bloqué une seconde, il se rapproche de la route)
+      if (p.vr < 0.25 && c.tE > 1.2) { c.bloqueT += dt; if (c.bloqueT > 1) { c.bloqueT = 0; c.decPied = Math.min(2, c.decPied + 1); } } else c.bloqueT = 0;
+      let tx = 0, tz = 0;
+      for (let k = c.decPied; k < 3; k++) {
+        const dd = k === 0 ? -(PT.d + 1.4) : k === 1 ? -(PT.d + 0.5) : 0;
+        tx = PT.x + Math.cos(PT.h) * dd; tz = PT.z - Math.sin(PT.h) * dd; SONDE.x = tx; SONDE.z = tz;
+        if (!this.c.col.resoudre(SONDE, 0.35)) break;
+      }
+      const dx = tx - p.pos.x, dz = tz - p.pos.z, d = Math.hypot(dx, dz) || 1;
       if (c.prete === 2 && p.sautT <= 0 && c.tE > 0.8 && c.tE < 1.2) p.regard = null;
       p.update(dt, dx / d, dz / d, 1, c.court, this.c.col, E.t, c.court ? undefined : 1.35);
       E.pousser(p.pos, 0.34);
