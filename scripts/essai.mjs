@@ -3038,7 +3038,9 @@ if (scenario === 'visiteurs') {
     const L = V.L.bar;
     CL.teleporter(L.x - 3, L.z + 3, Math.PI); CL.step(30);
     let essais = 0;
-    while (V.nServis < 5 && essais < 40) {
+    // (sous la charge des autres bancs, le jeu tourne en temps réel entre deux appels : on laisse le temps aux invités de
+    // venir au bar)
+    while (V.nServis < 5 && essais < 90) {
       essais++;
       // un invité au bar qu'on peut servir (pas un enfant)
       let cible = null;
