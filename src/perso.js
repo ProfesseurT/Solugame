@@ -976,7 +976,8 @@ class EulerOs extends THREE.Euler {
   set z(v) { this.frais(); this._z = v; this._onChangeCallback(); }
   get order() { return this._order; }
   set order(v) { this.frais(); this._order = v; this._onChangeCallback(); }
-  set(x, y, z, order = this._order) { this.perime = false; return super.set(x, y, z, order); }
+  // (écrit sur place plutôt que par super.set : un appel de plus, des nombres en boîte de plus)
+  set(x, y, z, order = this._order) { this.perime = false; this._x = x; this._y = y; this._z = z; this._order = order; this._onChangeCallback(); return this; }
   copy(e) { this.perime = false; return super.copy(e); }
 }
 class OsPerso extends THREE.Bone {
