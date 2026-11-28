@@ -294,8 +294,142 @@ export const MESSAGES = [
 ];
 
 // Mission 4 : les écrans de l'ordinateur (pc.js : Vitisoft, Brevo, la caisse, les statistiques) ; les libellés d'interface
-// restent dans pc.js, ce qui touche au produit est ici
+// restent dans pc.js, ce qui touche au produit est ici. Les sources : celles du bloc PORTES (plus bas) ; les libellés de
+// Vitisoft recopiés des pages du site (crm-viticole : la recherche multi-critères ; marketing-emailing : publipostage,
+// routage postal, étiquettes d'expédition ; caisse-caveau et ses deux captures ; statistiques-pilotage : panier moyen,
+// ventes par famille). Les contacts, leurs adresses, les chiffres : fictifs.
 export const PORTES_ORDI = {
+  // des contacts de la sélection (les particuliers de la région ; données fictives) : l'aperçu du fichier, la
+  // personnalisation des emails ({prenom}), la lettre et les étiquettes du courrier (ceux sans adresse e-mail)
+  contacts: [
+    { prenom: 'Anne', nom: 'Martin', civ: 'Madame', rue: '8 rue du Pressoir', cp: '49000', ville: 'Angers', email: true, mobile: true },
+    { prenom: 'Jacques', nom: 'Robin', civ: 'Monsieur', rue: '21 chemin des Caves', cp: '49400', ville: 'Saumur', email: false, mobile: true },
+    { prenom: 'Claire', nom: 'Lefebvre', civ: 'Madame', rue: '3 place du Marché', cp: '49300', ville: 'Cholet', email: false, mobile: false },
+    { prenom: 'Pierre', nom: 'Bernard', civ: 'Monsieur', rue: '14 rue des Tilleuls', cp: '44000', ville: 'Nantes', email: true, mobile: true },
+    { prenom: 'Josiane', nom: 'Leroy', civ: 'Madame', rue: '2 impasse des Vignes', cp: '49400', ville: 'Saumur', email: false, mobile: false },
+    { prenom: 'Gilles', nom: 'Petit', civ: 'Monsieur', rue: '37 avenue de la Loire', cp: '72000', ville: 'Le Mans', email: true, mobile: true },
+    { prenom: 'Marie', nom: 'Garnier', civ: 'Madame', rue: '5 rue de l\'Église', cp: '53000', ville: 'Laval', email: true, mobile: false },
+    { prenom: 'Bernard', nom: 'Chauvin', civ: 'Monsieur', rue: '11 route de Doué', cp: '49700', ville: 'Doué-en-Anjou', email: false, mobile: true },
+    { prenom: 'Odette', nom: 'Moreau', civ: 'Madame', rue: '9 rue Basse', cp: '85000', ville: 'La Roche-sur-Yon', email: false, mobile: false },
+    { prenom: 'Henri', nom: 'Gautier', civ: 'Monsieur', rue: '18 quai de la Loire', cp: '44600', ville: 'Saint-Nazaire', email: false, mobile: true },
+  ],
+  // le ciblage (Vitisoft, Contacts > Clients / contacts) : le moteur multi-critères (crm-viticole : « zone géographique,
+  // type de vin, millésime, catégorie et historique d'achat » ; type de vin et millésime restent sur « Tous »)
+  recherche: 'Recherche multi-critères',
+  rechercheNote: 'Le moteur croise zone géographique, type de vin, millésime, catégorie et historique d\'achat.',
+  fixes: [['Type de vin', 'Tous'], ['Millésime', 'Tous']],
+  compte: 'contacts correspondent', // (après le nombre que donnent les filtres choisis)
+  selection: n => `Sélection : ${n} contacts`,
+  canaux: [['email', 'avec une adresse e-mail', 'l\'email'], ['sms', 'avec un numéro de mobile', 'le SMS'], ['courrier', 'sans adresse e-mail', 'le courrier']],
+  autres: n => `... et ${n} autres.`,
+  campagneCreee: 'Campagne créée : la sélection est dans Brevo, sans export ni import.',
+  courrierParti: n => `${n} courriers partis en routage postal.`,
+  // ce que dit le jeu (une consigne en haut de l'écran) : le filtre encore à changer, puis la suite
+  consigne: {
+    menu: 'Les invitations vont à tous les particuliers de la région : dans le menu, Contacts, touchez « Clients / contacts ».',
+    categorie: 'Tous les particuliers de la région. D\'abord la catégorie : touchez « Particuliers ».',
+    zone: 'La région, maintenant : Zone géographique, touchez « Pays de la Loire ».',
+    historique: 'On invite tout le monde, clients d\'hier comme d\'aujourd\'hui : Historique d\'achat, remettez « Tous ».',
+    rechercher: 'Les filtres sont bons : touchez Rechercher.',
+    campagne: n => `${n} contacts. Touchez « Créer la campagne » : la sélection part dans Brevo, pour l'email et le SMS.`,
+    brevo: 'L\'email et le SMS se font dans Brevo : sa fenêtre est dans la barre des tâches.',
+    courrier: n => `Reste le courrier, pour les ${n} contacts sans adresse e-mail : touchez « Créer le courrier ».`,
+    routage: n => `La lettre et les étiquettes sont prêtes : touchez « Envoyer en routage » (${n} courriers).`,
+    relances: 'Dernière chose : les relances automatiques par mail, dans Brevo (Automatisations).',
+    fini: 'Email, SMS, courrier, relances : les invitations sont parties. Levez-vous du portable.',
+    stats: 'Les portes ouvertes en chiffres. Puis touchez « Remercier les visiteurs » : le merci part par mail, dans Brevo.',
+    statsMenu: 'Les chiffres des portes ouvertes : dans le menu, Analyse, touchez « Statistiques ».',
+    merci: 'Le merci se fait dans Brevo : sa fenêtre est dans la barre des tâches.',
+    merciFait: 'Merci envoyé : les portes ouvertes sont bouclées. Levez-vous du portable.',
+  },
+  refusFiltre: f => `Pas encore : le filtre « ${f} ».`,
+  // le pense-bête collé sur le bureau de l'ordinateur
+  penseBete: {
+    invitations: 'Les invitations', cibler: 'Cibler les particuliers de la région', email: 'L\'email (Brevo)', sms: 'Le SMS (Brevo)',
+    courrier: 'Le courrier, en routage', relances: 'Les relances automatiques',
+    caisse: 'La caisse', clients: (n, t) => `Encaisser les clients : ${n} sur ${t}`,
+    apres: 'Après les portes ouvertes', stats: 'Les statistiques', merci: 'Remercier les visiteurs',
+  },
+  // le courrier (Créer le courrier, depuis la sélection) : le publipostage, les étiquettes, le routage
+  courrier: 'Créer le courrier',
+  publipostage: n => `Publipostage : une lettre à chacun des ${n} contacts sans adresse e-mail, et son étiquette d'expédition.`,
+  signature: 'Le Domaine du Clos Libre',
+  planche: n => `${n} étiquettes`,
+  // Brevo (brevo.js)
+  brevo: {
+    aucune: 'Aucune campagne pour l\'instant. Elle se crée dans Vitisoft, depuis la sélection de Clients / contacts.',
+    liste: n => `Liste « Portes ouvertes de Noël » : ${n} contacts, depuis Vitisoft`,
+    invitation: 'Invitation aux portes ouvertes',
+    invitationSms: 'Invitation aux portes ouvertes, par SMS',
+    modele: 'Portes ouvertes (modèle)',
+    destEmail: n => `${n} contacts avec une adresse e-mail`,
+    destSms: n => `${n} contacts avec un numéro de mobile`,
+    expSms: 'CLOS LIBRE',
+    pied: 'Vous recevez cet e-mail en tant que client du Domaine du Clos Libre.',
+    emailParti: n => `Envoyée à ${n} contacts.`,
+    smsParti: n => `Envoyé à ${n} contacts.`,
+    relances: 'Relances des portes ouvertes',
+    declencheur: n => `Départ : l'invitation par email, envoyée à ${n} contacts. Ensuite, Brevo envoie tout seul :`,
+    relancesActives: 'Relances activées : elles partiront toutes seules.',
+    relancesSansEmail: 'Les relances suivent l\'invitation par email : envoyez-la d\'abord.',
+    merci: 'Merci de votre visite',
+    titreMerci: 'Merci de votre visite',
+    modeleMerci: 'Remerciement (modèle)',
+    destMerci: n => `${n} visiteurs : les invités venus et les nouveaux clients`,
+    merciParti: n => `Merci envoyé à ${n} visiteurs.`,
+    // la consigne en haut de la page
+    consigne: {
+      email: () => 'L\'invitation part du modèle des portes ouvertes, au prénom de chacun, avec la mention sanitaire et le lien de désinscription. Touchez Envoyer.',
+      sms: () => 'Le SMS, pour ceux qui ont un mobile : court, avec STOP pour ne plus en recevoir. Touchez Envoyer.',
+      relances: () => 'Les relances partent toutes seules : une semaine avant à ceux qui n\'ont pas ouvert l\'invitation, la veille à tous. Touchez Activer.',
+      merci: n => `Le merci, par mail, aux ${n} visiteurs passés. Touchez Envoyer.`,
+    },
+    onglet: { email: 'Ouvrez l\'invitation par email (à gauche).', sms: 'L\'email est parti. Passez au SMS (à gauche).', relances: 'Ouvrez les relances : Automatisations (à gauche).', merci: 'Ouvrez le merci (à gauche).' },
+    versCourrier: 'Email et SMS partis. Le courrier se fait dans Vitisoft : revenez-y (barre des tâches).',
+    versVitisoft: 'La suite se fait dans Vitisoft : revenez-y (barre des tâches).',
+    versStats: 'Les chiffres sont dans Vitisoft : Analyse, Statistiques (barre des tâches).',
+  },
+  // la caisse (caisse.js)
+  caisse: {
+    attente: 'En attente du client suivant',
+    finie: 'Les dix clients sont passés : Marc arrive pour prendre la caisse.',
+    rang: (i, n) => `Client ${i} sur ${n}`,
+    aucun: 'Aucun produit choisi',
+    choisir: 'Choisissez d\'abord un produit.',
+    rien: 'Aucun produit dans la vente.',
+    mode: 'Choisissez d\'abord le mode de règlement.',
+    personne: 'Personne au comptoir.',
+    billets: 'Le client donne :',
+    mail: n => `Ticket envoyé par mail : ${n}.`,
+    nouveau: n => `Nouvelle fiche client : ${n}.`,
+    merci: 'Merci de votre visite, à bientôt au domaine.',
+    // le premier client, guidé pas à pas (les suivants : il faut écouter ce qu'ils disent)
+    guide: {
+      famille: (p, f) => `${p} : touchez la famille ${f}.`,
+      produit: p => `Touchez « ${p} ».`,
+      quantite: q => `Quantité : ${q}, au pavé numérique.`,
+      remise: r => `Sa remise de fidélité : touchez le champ %, puis ${r}.`,
+      suivant: 'Touchez « Produit suivant » : la ligne s\'ajoute, et l\'on choisit le produit suivant.',
+      valider: 'Tout y est : touchez VALIDER, pour le règlement.',
+      enTrop: p => `${p} n'est pas dans sa commande : touchez la croix pour l'enlever.`,
+      sortir: 'La vente n\'est pas juste : touchez Sortir pour la corriger.',
+      mode: (comment, touche) => `Règlement ${comment} : touchez ${touche}.`,
+      comment: { especes: 'en espèces', cheque: 'par chèque', carte: 'par carte', sans: 'par carte, sans contact' },
+      percu: e => `Montant perçu : ${e} €. Touchez les billets que le client vous donne.`,
+      ticket: t => (t === 'mail' ? 'Le ticket : touchez « Par mail ».' : 'Le ticket : touchez « Facturette ».'),
+    },
+  },
+  // les statistiques des portes ouvertes (Vitisoft, Analyse > Statistiques)
+  stats: {
+    titre: d => `Portes ouvertes de Noël, ${d}`,
+    caisse: 'La caisse',
+    familles: 'Ventes par familles de produits',
+    journee: 'La journée',
+    campagne: 'La campagne',
+    note: 'Les ventes des clients ciblés reviennent dans les statistiques de Vitisoft.',
+    remercier: 'Remercier les visiteurs',
+    merciFait: n => `Merci envoyé à ${n} visiteurs, par Brevo.`,
+  },
 };
 
 export const FIN = {

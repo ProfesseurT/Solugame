@@ -1,5 +1,6 @@
 // Le portable du bureau du chai : le bureau d'un ordinateur (fond d'écran, icônes, barre des tâches à l'heure du jeu).
-// Quatre icônes : Vitisoft, le logiciel installé (une icône sur le bureau, pas un onglet : Teddy, 24/11/2026), et, dans le
+// Quatre icônes (et Brevo, une fois la campagne de la mission 4 créée) : Vitisoft, le logiciel installé (une icône sur le
+// bureau, pas un onglet : Teddy, 24/11/2026), et, dans le
 // navigateur, Le bureau, l'extension web de Vitisoft (les appels partent du téléphone), Viticode et le Registre phyto
 // (Teddy, 28/11/2026 : « accessibles et utilisables depuis l'ordinateur aussi, dans toutes les missions ») : les mêmes
 // écrans que sur le téléphone, le même compte (telephone.js : vuePortable), chaque fenêtre là où on l'a laissée (ecrans).
@@ -10,17 +11,32 @@
 // par Pennylane, plateforme agréée), calculer la DRM du mois dernier (DRM / DMS ; à valider ensuite dans CIEL). Le
 // journal des ventes et les encaissements partent chez le comptable. Un pense-bête collé sur le bureau de l'ordinateur
 // les rappelle ; l'objectif du jeu est repris au-dessus de l'écran (le portable cache celui du jeu).
-import { VITISOFT as V, HABILLAGE as HX } from './textes.js';
+// La mission 4, les portes ouvertes (Teddy, 28/11/2026 ; mission4.js tient l'état, textes.js PORTES et PORTES_ORDI) :
+// - le ciblage dans Vitisoft, Contacts > Clients / contacts : la recherche multi-critères (les filtres, le compte qui les
+//   suit, Rechercher), guidée à chaque fois (une consigne du jeu, ce qu'il faut toucher mis en évidence) ; la sélection
+//   et « Créer la campagne » (un clic : la fenêtre Brevo s'ouvre, brevo.js) ; « Créer le courrier » (le publipostage, les
+//   étiquettes, « Envoyer en routage ») ;
+// - la fenêtre Brevo, dans le navigateur de l'ordinateur (brevo.js) : l'email, le SMS, les relances, le merci ;
+// - la caisse caveau, le jour J, l'ordinateur posé sur le parvis (caisse.js) : pc.ouvrir('caisse') l'ouvre directement ;
+// - Analyse > Statistiques : les portes ouvertes en chiffres, et « Remercier les visiteurs » (le merci, dans Brevo).
+// Ce que la mission attend sur l'ordinateur, à chaque instant, se lit dans aFaire() (l'appli, l'action) : l'icône ou la
+// fenêtre de la barre des tâches mise en évidence, Vitisoft ouvert sur la bonne vue, les consignes, le pense-bête.
+import { VITISOFT as V, HABILLAGE as HX, PORTES, PORTES_ORDI as O } from './textes.js';
 import { ICONES as IC, famille } from './telephone.js';
 import { son } from './audio.js';
 import { $, esc, eur, dateJeu, jourDe } from './outils.js';
+import { Caisse } from './caisse.js';
+import { Brevo } from './brevo.js';
 
 const hl = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' hl';
 const VUES = ['accueil', 'factures', 'commandes', 'drm']; // les écrans où l'on agit ; les autres disent ce qu'ils font
-const NOMS = { vitisoft: 'Vitisoft', bureau: 'Le bureau', viticode: 'Viticode', phyto: 'Registre phyto' };
-const NAVIGATEUR = ['bureau', 'viticode', 'phyto']; // (les fenêtres du navigateur : les écrans du téléphone)
-// l'icône de Vitisoft : le O du logo, un cercle ouvert en haut
-const ICONES = { vitisoft: '<svg viewBox="0 0 24 24"><path d="M8.6 5.6a7.6 7.6 0 1 0 6.8 0" fill="none" stroke="#fff" stroke-width="3.4"/></svg>', bureau: IC.bureau, viticode: IC.viticode, phyto: IC.phyto };
+const NOMS = { vitisoft: 'Vitisoft', bureau: 'Le bureau', viticode: 'Viticode', phyto: 'Registre phyto', brevo: 'Brevo' };
+const NAVIGATEUR = ['bureau', 'viticode', 'phyto']; // (les fenêtres du navigateur : les écrans du téléphone ; Brevo aussi, à part)
+// l'icône de Vitisoft : le O du logo, un cercle ouvert en haut ; Brevo : une enveloppe (son logo n'est pas imité)
+const ICONES = { vitisoft: '<svg viewBox="0 0 24 24"><path d="M8.6 5.6a7.6 7.6 0 1 0 6.8 0" fill="none" stroke="#fff" stroke-width="3.4"/></svg>', bureau: IC.bureau, viticode: IC.viticode, phyto: IC.phyto,
+  brevo: '<svg viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2" fill="#fff"/><path d="M3.8 6.6l8.2 6.4 8.2-6.4" fill="none" stroke="#3d4f66" stroke-width="1.8"/></svg>' };
+// mission 4 : les étapes de la préparation (les invitations, sur l'ordinateur du bureau du chai)
+const PREPA = ['message', 'ciblage', 'campagne', 'courrier', 'relances'];
 // les modes de paiement de la fenêtre Règlement, dans l'ordre des captures
 const S = d => `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">${d}</svg>`;
 const MODES = [
@@ -42,13 +58,23 @@ export class PC {
     this.ecrans = { bureau: 'bureau', viticode: 'viticode', phyto: 'phyto' }; // (l'écran où chaque fenêtre du navigateur en est)
     this.vue = 'accueil'; this.reglement = false; this.mode = ''; this.envoi = null; this.tEnvoi = 0; this.tDrm = 0;
     this.obj = ''; this.heure = '';
+    // mission 4 : l'écran ('bureau' : le bureau de l'ordinateur et ses fenêtres ; 'caisse' : la caisse en plein écran, le
+    // portable sur le parvis), la caisse, la fenêtre Brevo, les statistiques déjà vues ; surLever : ce que la mission
+    // veut savoir quand on se lève (le portable sur le parvis : mission4.js)
+    this.ecran = 'bureau'; this.caisse = new Caisse(this, MODES); this.brevo = new Brevo(this); this.statsVues = false; this.merciVu = false; this.surLever = null;
+    // un message de l'ordinateur (un refus, un envoi fait), par-dessus l'écran redessiné
+    this.elToast = document.createElement('p'); this.elToast.className = 'pc-toast'; this.el.querySelector('.moniteur').appendChild(this.elToast);
     this.el.addEventListener('click', e => {
       const b = e.target.closest('[data-a]');
       if (!b || b.disabled) return;
       e.preventDefault(); son.jouer('tap');
-      const [nom, arg] = b.dataset.a.split(':'), m = this.jeu.mission, tel = this.jeu.tel;
+      const a = b.dataset.a.split(':'), [nom, arg] = a, m = this.jeu.mission, tel = this.jeu.tel;
       // l'ordinateur : ouvrir une icône, passer d'une fenêtre à l'autre, réduire, fermer, se lever
       if (nom === 'quitter') { this.lever(); return; }
+      // mission 4 : la caisse (caisse.js), la fenêtre Brevo (brevo.js), le ciblage, le courrier et les statistiques
+      if (nom.startsWith('cs-')) { this.caisse.action(a); this.afficher(); return; }
+      if (nom.startsWith('bv-')) { this.brevo.action(a); this.afficher(); return; }
+      if (nom.startsWith('po-')) { this.actionPortes(a); this.afficher(); return; }
       if (nom === 'lancer') { this.lancer(arg); this.afficher(); return; }
       if (nom === 'tache') { this.fenetre = this.fenetre === arg ? null : arg; this.afficher(); return; }
       if (nom === 'reduire') { this.fenetre = null; this.afficher(); return; }
@@ -74,7 +100,7 @@ export class PC {
         this.afficher();
         return;
       }
-      if (nom === 'vue') { this.vue = arg; this.reglement = false; }
+      if (nom === 'vue') { this.voir(arg); this.reglement = false; }
       else if (nom === 'ouvrirReg') { this.reglement = true; this.mode = ''; }
       else if (nom === 'sortirReg') this.reglement = false;
       else if (nom === 'regler') m.saisirReglement();
@@ -86,25 +112,112 @@ export class PC {
     });
   }
   // s'asseoir : app, l'icône à mettre en évidence (on arrive sur le bureau de l'ordinateur, les fenêtres déjà ouvertes
-  // restent dans la barre) ; sans app, on revient au portable tel qu'on l'a laissé (après un appel)
+  // restent dans la barre) ; sans app, on revient au portable tel qu'on l'a laissé (après un appel). Mission 4 : 'caisse'
+  // ouvre directement la caisse, en plein écran (le portable sur le parvis) ; le jour des statistiques, le portable
+  // s'ouvre sur Vitisoft, Analyse > Statistiques (la caisse est finie)
   ouvrir(app) {
-    if (app) { this.conseil = app; this.fenetre = null; }
+    const P4 = this.jeu.portes;
+    if (app === 'caisse' && P4 && P4.etape === 'stats') { this.ecran = 'bureau'; this.conseil = null; this.lancer('vitisoft'); this.voir('statistiques'); }
+    else if (app === 'caisse') { this.ecran = 'caisse'; this.caisse.clientVu = null; }
+    else if (app) { this.ecran = 'bureau'; this.conseil = app; this.fenetre = null; }
     this.ouvert = true; this.el.hidden = false; this.obj = ''; this.update(0); this.afficher();
   }
   fermer() { this.ouvert = false; this.el.hidden = true; }
   // un écran de l'appli app a changé (telephone.js : rafraichir ; le bulletin du labo, le réseau revenu) : redessiné s'il
   // est devant
   rafraichir(app) { if (this.ouvert && NAVIGATEUR.includes(this.fenetre) && this.ecrans[this.fenetre].startsWith(app)) this.afficher(); }
-  lever() { this.fermer(); this.jeu.mission.fermerPC(); this.jeu.leverPortable(); }
+  lever() {
+    this.fermer(); this.jeu.mission.fermerPC(); this.jeu.leverPortable();
+    const f = this.surLever; this.surLever = null; if (f) f(); // (le portable sur le parvis : mission4.js)
+  }
   lancer(app) {
-    if (!this.ouvertes.includes(app)) { this.ouvertes.push(app); if (app === 'vitisoft') { this.vue = 'accueil'; this.reglement = false; } }
+    // Vitisoft s'ouvre sur la vue qu'attend la mission (mission 4 : Clients / contacts, les statistiques), ou le tableau
+    // de bord ; Brevo, sur l'écran qu'elle attend
+    if (app === 'vitisoft' && (!this.ouvertes.includes(app) || this.conseil === app)) { this.voir(this.vueVoulue()); this.reglement = false; }
+    if (app === 'brevo' && (!this.ouvertes.includes(app) || this.conseil === app)) this.brevo.montrer();
+    if (!this.ouvertes.includes(app)) this.ouvertes.push(app);
     this.fenetre = app; if (this.conseil === app) this.conseil = null;
     // (le Registre phyto ouvert ici : la notification du téléphone est vue)
     const tel = this.jeu.tel; if (tel.notif === app && app !== 'bureau') tel.notifier(null);
   }
+  // un message de l'ordinateur, quelques secondes (un refus, un envoi fait)
+  toast(txt) { const t = this.elToast; t.textContent = txt; t.classList.remove('vu'); void t.offsetWidth; t.classList.add('vu'); }
+
+  /* ------------------------------------------------------------ mission 4 : ce que la mission attend sur l'ordinateur */
+  // { app, quoi } : l'appli (vitisoft, brevo) et l'action attendue (filtre, rechercher, campagne, email, sms, courrier,
+  // routage, relances, stats, merci) ; null s'il n'y a rien à faire sur l'ordinateur. D'après ce qui est fait (pas
+  // seulement l'étape) : on peut tout faire dans l'ordre qu'on veut.
+  aFaire() {
+    const P4 = this.jeu.portes;
+    if (!P4 || !P4.actif) return null;
+    if (PREPA.includes(P4.etape)) {
+      const C = P4.campagne;
+      if (!P4.selection) return { app: 'vitisoft', quoi: P4.filtreAttendu ? 'filtre' : 'rechercher' };
+      if (!C.ouverte) return { app: 'vitisoft', quoi: 'campagne' };
+      if (!C.email) return { app: 'brevo', quoi: 'email' };
+      if (!C.sms) return { app: 'brevo', quoi: 'sms' };
+      if (!C.courrier) return { app: 'vitisoft', quoi: this.vue === 'courrier' ? 'routage' : 'courrier' };
+      if (!C.relances) return { app: 'brevo', quoi: 'relances' };
+      return null;
+    }
+    // après les portes ouvertes : les statistiques, puis « Remercier les visiteurs » (dans les statistiques), puis le
+    // merci dans Brevo une fois sa fenêtre ouverte dessus
+    if (P4.etape === 'stats' && !P4.merci) return this.merciVu ? { app: 'brevo', quoi: 'merci' } : { app: 'vitisoft', quoi: this.statsVues ? 'merci' : 'stats' };
+    return null;
+  }
+  // l'appli que la mission 4 attend sur l'ordinateur (main.js : jeu.appliPC, l'icône à mettre en évidence), ou null
+  appliPortes() {
+    const P4 = this.jeu.portes;
+    if (!P4 || !P4.actif) return null;
+    if (P4.etape === 'caisse') return 'caisse';
+    const f = this.aFaire(); return f ? f.app : null;
+  }
+  // la vue où s'ouvre Vitisoft : celle qu'attend la mission 4, ou le tableau de bord
+  vueVoulue() {
+    const f = this.aFaire();
+    if (!f || f.app !== 'vitisoft') return 'accueil';
+    return f.quoi === 'stats' || f.quoi === 'merci' ? 'statistiques' : f.quoi === 'routage' ? 'courrier' : 'clients';
+  }
+  // aller à une vue de Vitisoft ; les statistiques des portes ouvertes vues, la suite est le merci
+  voir(vue) {
+    this.vue = vue;
+    const P4 = this.jeu.portes;
+    if (vue === 'statistiques' && P4 && P4.caisse.tickets.length && !this.statsVues) { this.statsVues = true; P4.signal('statsVues'); }
+  }
+  // le jour des portes ouvertes (outils.js : dateJeu) : la mission le dit (portes.jourJ), sinon on le déduit de l'étape
+  // (la préparation : une semaine plus un jour plus tard ; la veille : demain)
+  get jourJ() {
+    const P4 = this.jeu.portes, j = jourDe(this.jeu.minutes);
+    if (P4 && P4.jourJ != null) return P4.jourJ;
+    if (P4 && P4.caisse.tickets.length) return jourDe(P4.caisse.tickets[0].minutes);
+    const e = P4 ? P4.etape : 'avant';
+    if (e === 'avant' || PREPA.includes(e) || e === 'semaine') return j + PORTES.semaine + 1;
+    return e === 'materiel' ? j + 1 : j;
+  }
+  get dateJ() { return dateJeu(this.jourJ); }
+  get dateTicket() { return dateJeu(jourDe(this.jeu.minutes), 'chiffres'); }
+  // les actions des écrans de Vitisoft de la mission 4 (a : le data-a découpé)
+  actionPortes(a) {
+    const P4 = this.jeu.portes, [nom, x, y] = a;
+    if (!P4) return;
+    if (nom === 'po-filtre') P4.filtrer(x, y);
+    else if (nom === 'po-rechercher') {
+      const f = P4.rechercher();
+      if (f) { son.jouer('erreur'); this.toast(O.refusFiltre(PORTES.filtres.find(z => z.id === f).nom)); }
+      else son.jouer('notif');
+    } else if (nom === 'po-campagne') {
+      // un clic : la campagne créée depuis la sélection, la fenêtre Brevo s'ouvre devant
+      if (P4.ouvrirCampagne()) { son.jouer('envoi'); this.lancer('brevo'); this.brevo.montrer(); }
+    } else if (nom === 'po-courrier') { if (P4.selection) this.vue = 'courrier'; }
+    else if (nom === 'po-routage') { if (P4.envoyerCourrier()) { son.jouer('envoye'); this.toast(O.courrierParti(PORTES.selection.courrier)); } }
+    else if (nom === 'po-brevo') this.lancer('brevo');
+    else if (nom === 'po-merci') { this.statsVues = true; this.lancer('brevo'); this.brevo.montrer('merci'); }
+  }
   update(dt) {
     if (!this.ouvert) return;
     const m = this.jeu.mission;
+    // la caisse : un client arrive ou s'en va, le ticket montré disparaît
+    if (this.ecran === 'caisse' && this.caisse.update(dt)) this.afficher();
     if (this.envoi) {
       this.tEnvoi -= dt;
       if (this.tEnvoi <= 0) { m.transmettre(this.envoi); this.envoi = null; this.afficher(); }
@@ -124,7 +237,15 @@ export class PC {
   penseBete(m) {
     const note = (titre, t) => `<aside class="pc-note"><b>${esc(titre)}</b>${t.map(([x, ok]) => `<span${ok ? ' class="ok"' : ''}>${esc(x)}</span>`).join('')}</aside>`;
     // la journée de traitement : chaque parcelle à noter dans le registre ; l'habillage : la fiche Viticode jusqu'à l'envoi
-    const R = this.jeu.traitement, H = this.jeu.habillage;
+    const R = this.jeu.traitement, H = this.jeu.habillage, P4 = this.jeu.portes;
+    // les portes ouvertes : les invitations (le ciblage, l'email, le SMS, le courrier, les relances) ; la caisse ; après,
+    // les statistiques et le merci
+    if (P4 && P4.actif && P4.etape !== 'avant') {
+      const N = O.penseBete, C = P4.campagne;
+      if (P4.etape === 'stats' || P4.merci) return note(N.apres, [[N.stats, this.statsVues], [N.merci, P4.merci]]);
+      if (P4.caisse.ouverte || P4.caisse.tickets.length) return note(N.caisse, [[N.clients(P4.caisse.tickets.length, PORTES.clients.length), P4.caisse.i >= PORTES.clients.length]]);
+      return note(N.invitations, [[N.cibler, !!P4.selection || C.ouverte], [N.email, C.email], [N.sms, C.sms], [N.courrier, C.courrier], [N.relances, C.relances]]);
+    }
     if (H && H.actif && H.bulletin && !H.envoye) return note('Dans Viticode', [['Créer la fiche du Clos 2025', H.publiee], ['La tester', H.testee], ['Télécharger le QR code', H.telecharge], ['L\'envoyer à l\'imprimerie', H.envoye]]);
     if (R && R.actif && R.parcelles.some(p => p.traitee && !p.notee)) return note('Registre phyto', R.jour.map(p => ['Noter ' + p.nom, p.notee]));
     const r = m.retardataire.statut, livrees = m.clients.filter(c => ['livree', 'facturee', 'transmise'].includes(c.statut));
@@ -231,10 +352,114 @@ export class PC {
     return `<h2>${esc(x ? x[1] : '')}</h2>${d ? `<p class="vs-texte">${esc(d)}</p>` : ''}<p class="vs-note">Dans le jeu complet.</p>`;
   }
 
+  /* ------------------------------------------------------------ mission 4 : les écrans de Vitisoft */
+  // l'écran de la mission 4 pour la vue en cours (Clients / contacts, le courrier, les statistiques), ou '' (la fiche)
+  vuePortes() {
+    const P4 = this.jeu.portes;
+    if (!P4) return '';
+    if (this.vue === 'statistiques') return P4.caisse.tickets.length ? this.statistiques() : '';
+    if (!P4.actif && !P4.selection) return '';
+    if (this.vue === 'clients') return this.clients();
+    if (this.vue === 'courrier') return P4.selection ? this.courrier() : this.clients();
+    return '';
+  }
+  // l'entrée du menu à toucher (mise en évidence) quand la mission attend une autre vue de Vitisoft
+  menuVoulu() {
+    const f = this.aFaire();
+    if (!f || f.app !== 'vitisoft') return null;
+    const v = f.quoi === 'stats' || f.quoi === 'merci' ? 'statistiques' : 'clients';
+    return this.vue === v || (v === 'clients' && this.vue === 'courrier') ? null : v;
+  }
+  // la consigne du jeu en haut de Vitisoft (comme le Registre phyto : c'est le jeu qui parle, pas l'appli)
+  consigneVs() {
+    const P4 = this.jeu.portes, f = this.aFaire(), K = O.consigne, S = PORTES.selection;
+    if (!P4 || !P4.actif) return '';
+    let t = '';
+    if (!f) t = PREPA.includes(P4.etape) && P4.invitationsParties ? K.fini : P4.etape === 'stats' && P4.merci ? K.merciFait : '';
+    else if (f.app === 'brevo') t = f.quoi === 'relances' ? K.relances : f.quoi === 'merci' ? K.merci : K.brevo;
+    else if (f.quoi === 'stats' || f.quoi === 'merci') t = this.vue === 'statistiques' ? K.stats : K.statsMenu;
+    else if (this.vue !== 'clients' && this.vue !== 'courrier') t = K.menu;
+    else if (f.quoi === 'filtre') t = K[P4.filtreAttendu.id];
+    else if (f.quoi === 'rechercher') t = K.rechercher;
+    else if (f.quoi === 'campagne') t = K.campagne(S.total);
+    else if (f.quoi === 'courrier') t = K.courrier(S.courrier);
+    else if (f.quoi === 'routage') t = K.routage(S.courrier);
+    return t ? `<p class="consigne vs-consigne">${esc(t)}</p>` : '';
+  }
+  // Contacts > Clients / contacts : la recherche multi-critères (crm-viticole : zone géographique, type de vin,
+  // millésime, catégorie, historique d'achat), le compte qui suit les filtres, Rechercher ; la sélection, ses canaux, un
+  // aperçu du fichier, « Créer la campagne » (Brevo) et « Créer le courrier »
+  clients() {
+    const P4 = this.jeu.portes, f = this.aFaire(), quoi = f && f.app === 'vitisoft' ? f.quoi : null, att = P4.filtreAttendu;
+    const S = PORTES.selection, C = P4.campagne, sel = P4.selection;
+    const opts = F => F.options.map(([id, nom]) => {
+      const g = quoi === 'filtre' && att && att.id === F.id && id === F.voulu;
+      return `<button class="${P4.filtres[F.id] === id ? 'on' : ''}${g ? ' guide' : ''}" data-a="po-filtre:${F.id}:${id}">${esc(nom)}</button>`;
+    }).join('');
+    const filtres = PORTES.filtres.map(F => `<div class="po-filtre"><span>${esc(F.nom)}</span><div class="po-opts">${opts(F)}</div></div>`).join('')
+      + O.fixes.map(([t, v]) => `<div class="po-filtre fixe"><span>${esc(t)}</span><div class="po-opts"><button class="on" disabled>${esc(v)}</button></div></div>`).join('');
+    const recherche = `<section class="po-boite"><header>${esc(O.recherche)}</header><div class="po-filtres">${filtres}</div>
+      <footer><span class="po-compte"><b>${P4.compte.toLocaleString('fr-FR')}</b> ${esc(O.compte)}</span>
+      <button class="vs-bt${quoi === 'rechercher' ? ' guide' : ''}" data-a="po-rechercher">Rechercher</button></footer></section>`;
+    if (!sel) return `<h2>Clients / contacts</h2><p class="vs-texte">${esc(O.rechercheNote)}</p>${recherche}`;
+    const lignes = O.contacts.map(c => `<tr><td data-l="Nom"><b>${esc(c.nom.toUpperCase())}</b> ${esc(c.prenom)}</td><td data-l="Ville">${esc(c.cp + ' ' + c.ville)}</td>
+      <td data-l="Catégorie">Particulier</td><td data-l="E-mail" class="c">${c.email ? '✓' : '·'}</td><td data-l="Mobile" class="c">${c.mobile ? '✓' : '·'}</td></tr>`).join('');
+    const versBrevo = f && f.app === 'brevo' ? ' guide' : '';
+    const actions = (C.ouverte ? `<p class="po-fait"><span class="vs-ok">${esc(O.campagneCreee)}</span><button class="vs-bt${versBrevo}" data-a="po-brevo">Ouvrir Brevo</button></p>`
+      : `<button class="vs-bt vert gros${quoi === 'campagne' ? ' guide' : ''}" data-a="po-campagne">Créer la campagne</button>`)
+      + (C.courrier ? `<p class="po-fait"><span class="vs-ok">${esc(O.courrierParti(S.courrier))}</span></p>`
+        : `<button class="vs-bt gros${quoi === 'courrier' ? ' guide' : ''}" data-a="po-courrier">Créer le courrier</button>`);
+    return `<h2>Clients / contacts</h2>${recherche}<section class="po-boite po-sel"><header>${esc(O.selection(S.total))}</header>
+      <div class="po-canaux">${O.canaux.map(([k, t, c]) => `<p><b>${S[k]}</b><span>${esc(t)}</span><small>${esc(c)}</small></p>`).join('')}</div>
+      <div class="po-actions">${actions}</div>
+      <table class="vs-grille po-table"><thead><tr><th>Nom</th><th>Ville</th><th>Catégorie</th><th class="c">E-mail</th><th class="c">Mobile</th></tr></thead><tbody>${lignes}</tbody></table>
+      <p class="vs-note">${esc(O.autres(S.total - O.contacts.length))}</p></section>`;
+  }
+  // « Créer le courrier » : le publipostage pour ceux qui n'ont pas d'adresse e-mail (marketing-emailing : publipostage,
+  // routage postal, étiquettes d'expédition) ; la lettre d'un contact, la planche d'étiquettes, « Envoyer en routage »
+  courrier() {
+    const P4 = this.jeu.portes, S = PORTES.selection, K = PORTES.courrier, f = this.aFaire(), sans = O.contacts.filter(c => !c.email), d = sans[0];
+    const adresse = c => `${esc(c.civ + ' ' + c.prenom + ' ' + c.nom)}<br>${esc(c.rue)}<br>${esc(c.cp + ' ' + c.ville)}`;
+    const lettre = `<article class="po-lettre"><header>${esc(PORTES.domaine)}</header><address>${adresse(d)}</address>
+      <p class="po-date">Le ${esc(dateJeu(this.jour, 'courte'))}</p><h4>${esc(K.titre)}</h4>${K.corps.map(p => `<p>${esc(p.replaceAll('{date}', this.dateJ))}</p>`).join('')}
+      <p class="po-sign">${esc(O.signature)}</p><small>${esc(PORTES.email.mention)}</small></article>`;
+    const etiq = `<div class="po-etiq"><b>${esc(K.etiquettes)}</b><div class="po-planche">${sans.map(c => `<p>${adresse(c)}</p>`).join('')}</div><small>${esc(O.planche(S.courrier))}</small></div>`;
+    const bas = P4.campagne.courrier ? `<span class="vs-ok">${esc(O.courrierParti(S.courrier))}</span>`
+      : `<button class="vs-bt vert gros${f && f.quoi === 'routage' ? ' guide' : ''}" data-a="po-routage">Envoyer en routage</button>`;
+    return `<h2>${esc(O.courrier)}</h2><p class="vs-texte">${esc(O.publipostage(S.courrier))}</p>
+      <p class="po-bas">${bas}<button class="vs-bt" data-a="vue:clients">Retour à la sélection</button></p><div class="po-courrier">${lettre}${etiq}</div>`;
+  }
+  // Analyse > Statistiques, après les portes ouvertes (statistiques-pilotage : nombre de factures, panier moyen, ventes
+  // par familles de produits ; marketing-emailing : ouvertures, clics, les ventes des clients ciblés) ; « Remercier les
+  // visiteurs » ouvre le merci dans Brevo
+  statistiques() {
+    const P4 = this.jeu.portes, s = P4.stats, S = O.stats, f = this.aFaire();
+    const tuile = (cl, v, t) => `<div class="vs-tu ${cl}"><b>${v}</b><span>${t}</span></div>`;
+    const tuiles = tuile('noir', s.tickets, 'Tickets de caisse') + tuile('vert', eur(s.ca), 'Chiffre d\'affaires TTC') + tuile('orange', eur(s.panier), 'Panier Moyen TTC')
+      + tuile('noir', s.bouteilles, 'Bouteilles vendues') + tuile('bleu', s.visiteurs, 'Visiteurs') + tuile('rouge', s.invitesVenus, 'Invités venus');
+    const max = Math.max(1, ...Object.values(s.parFamille).map(k => k.ca));
+    const barres = PORTES.familles.filter(F => s.parFamille[F.id]).map(F => {
+      const k = s.parFamille[F.id];
+      return `<div class="po-barre"><span>${esc(F.nom)}</span><i><em style="width:${(k.ca / max * 100).toFixed(1)}%;background:${F.c}"></em></i><b>${k.q} · ${eur(k.ca)}</b></div>`;
+    }).join('');
+    const pct = x => Math.round(x * 100) + ' %';
+    const camp = `<table class="vs-grille po-camp"><thead><tr><th>Canal</th><th class="n">Envoyés</th><th class="n">Ouvertures</th><th class="n">Clics</th></tr></thead><tbody>
+      <tr><td data-l="Canal">Email (Brevo)</td><td data-l="Envoyés" class="n">${s.envoyes.email}</td><td data-l="Ouvertures" class="n">${pct(s.ouvertures)}</td><td data-l="Clics" class="n">${pct(s.clics)}</td></tr>
+      <tr><td data-l="Canal">SMS (Brevo)</td><td data-l="Envoyés" class="n">${s.envoyes.sms}</td><td data-l="Ouvertures" class="n">·</td><td data-l="Clics" class="n">·</td></tr>
+      <tr><td data-l="Canal">Courrier (routage)</td><td data-l="Envoyés" class="n">${s.envoyes.courrier}</td><td data-l="Ouvertures" class="n">·</td><td data-l="Clics" class="n">·</td></tr></tbody></table>`;
+    const merci = P4.merci ? `<p class="po-fait"><span class="vs-ok">${esc(S.merciFait(s.destinataires))}</span></p>`
+      : `<p class="po-bas"><button class="vs-bt vert gros${f && f.app === 'vitisoft' ? ' guide' : ''}" data-a="po-merci">${esc(S.remercier)}</button></p>`;
+    return `<h2>${esc(S.titre(this.dateJ))}</h2>${merci}<div class="vs-tuiles po-tuiles">${tuiles}</div>
+      <div class="po-stats"><section class="po-boite"><header>${esc(S.familles)}</header><div class="po-barres">${barres}</div></section>
+      <section class="po-boite"><header>${esc(S.campagne)}</header>${camp}<p class="vs-note">${esc(S.note)}</p></section></div>`;
+  }
+
   vitisoft(m) {
-    const menu = V.menu.map(([r, items]) => `<b>${esc(r)}</b>${items.map(([id, t]) => `<button class="${id === this.vue ? 'on' : ''}" data-a="vue:${id}">${esc(t)}</button>`).join('')}`).join('');
+    const vue = this.vue === 'courrier' ? 'clients' : this.vue, gm = this.menuVoulu();
+    const menu = V.menu.map(([r, items]) => `<b>${esc(r)}</b>${items.map(([id, t]) => `<button class="${id === vue ? 'on' : ''}${id === gm ? ' guide' : ''}" data-a="vue:${id}">${esc(t)}</button>`).join('')}`).join('');
+    const corps = VUES.includes(this.vue) ? this[this.vue](m) : this.vuePortes() || this.fiche();
     return `<div class="vs"><header class="vs-barre"><button data-a="vue:accueil">VITISOFT</button><span>${esc(V.domaine)}</span></header>
-      <div class="vs-corps"><nav class="vs-menu">${menu}</nav><main class="vs-main">${VUES.includes(this.vue) ? this[this.vue](m) : this.fiche()}</main></div>
+      <div class="vs-corps"><nav class="vs-menu">${menu}</nav><main class="vs-main">${this.consigneVs()}${corps}</main></div>
       ${this.reglement ? this.fenReglement(m) : ''}</div>`;
   }
 
@@ -242,24 +467,55 @@ export class PC {
     const m = this.jeu.mission, f = this.fenetre;
     // ce qui défile garde sa place quand on redessine le même écran
     const haut = s => this.el.querySelector(s)?.scrollTop || 0, menu = haut('.vs-menu'), main = haut('.vs-main'), bu = haut('.pt-bureau'), tel = this.jeu.tel;
-    const icone = id => `<button class="pc-ico${this.conseil === id ? ' conseil' : ''}" data-a="lancer:${id}"><span class="ic ${id}">${ICONES[id]}</span>${NOMS[id]}</button>`;
-    const taches = this.ouvertes.map(id => `<button class="pc-t${f === id ? ' on' : ''}" data-a="tache:${id}" aria-label="${NOMS[id]}"><span class="ic ${id}">${ICONES[id]}</span><b>${NOMS[id]}</b></button>`).join('');
+    const bv = haut('.bv-main'), cs = haut('.cs-corps');
+    const pied = `<p class="pc-h"><b class="pc-heure">${this.jeu.heureTxt}</b>${dateJeu(this.jour, 'chiffres')}</p>`;
+    // mission 4 : la caisse, en plein écran (le portable sur le parvis) ; « Se lever » reste possible
+    if (this.ecran === 'caisse') {
+      $('pc-ecran').innerHTML = `<div class="pc-bureau pc-caisse"><section class="win cs-win"><header class="win-titre"><span>Sélection des produits</span></header>${this.caisse.html()}</section>
+        <footer class="pc-barre"><button class="pc-lever" data-a="quitter">Se lever</button><div class="pc-taches"><span class="pc-t on"><span class="ic vitisoft">${ICONES.vitisoft}</span><b>Vitisoft</b></span></div>${pied}</footer></div>`;
+      const e = this.el.querySelector('.cs-corps'); if (e) e.scrollTop = cs;
+      this.montrerGuide();
+      return;
+    }
+    // mission 4 : l'appli que la mission attend (son icône, ou sa fenêtre dans la barre des tâches, mise en évidence) ;
+    // l'icône de Brevo une fois la campagne créée
+    const voulu = (this.aFaire() || {}).app, P4 = this.jeu.portes;
+    const icone = id => `<button class="pc-ico${this.conseil === id || (voulu === id && !this.ouvertes.includes(id)) ? ' conseil' : ''}" data-a="lancer:${id}"><span class="ic ${id}">${ICONES[id]}</span>${NOMS[id]}</button>`;
+    const taches = this.ouvertes.map(id => `<button class="pc-t${f === id ? ' on' : ''}${voulu === id && f !== id ? ' guide' : ''}" data-a="tache:${id}" aria-label="${NOMS[id]}"><span class="ic ${id}">${ICONES[id]}</span><b>${NOMS[id]}</b></button>`).join('');
     const boutons = id => `<button data-a="reduire" aria-label="Réduire"><i class="moins"></i></button><button class="x" data-a="fermerF:${id}" aria-label="Fermer">×</button>`;
     let fen = '';
     if (f === 'vitisoft') fen = `<section class="win"><header class="win-titre"><span>Vitisoft</span>${boutons(f)}</header>${this.vitisoft(m)}</section>`;
+    else if (f === 'brevo') fen = `<section class="win nav-fenetre bv-fenetre"><header class="win-titre nav"><span class="nav-o"><i class="nav-ic brevo"></i>Brevo</span>${boutons(f)}</header>${this.brevo.html()}</section>`;
     else if (NAVIGATEUR.includes(f)) {
       const corps = tel.vuePortable(f, this.ecrans[f]);
       this.ecrans[f] = tel.app;
       fen = `<section class="win nav-fenetre"><header class="win-titre nav"><span class="nav-o"><i class="nav-ic ${f}"></i>${NOMS[f]}</span>${boutons(f)}</header>
       <div class="pt-bureau app-${tel.app}">${corps}</div></section>`;
     }
-    $('pc-ecran').innerHTML = `<div class="pc-bureau"><div class="pc-icones">${icone('vitisoft')}${icone('bureau')}${icone('viticode')}${icone('phyto')}</div>${this.penseBete(m)}${fen}
-      <footer class="pc-barre"><button class="pc-lever" data-a="quitter">Se lever</button><div class="pc-taches">${taches}</div>
-      <p class="pc-h"><b class="pc-heure">${this.jeu.heureTxt}</b>${dateJeu(this.jour, 'chiffres')}</p></footer></div>`;
+    const brevo = (P4 && P4.campagne.ouverte) || this.conseil === 'brevo' || this.ouvertes.includes('brevo') ? icone('brevo') : '';
+    $('pc-ecran').innerHTML = `<div class="pc-bureau"><div class="pc-icones">${icone('vitisoft')}${icone('bureau')}${icone('viticode')}${icone('phyto')}${brevo}</div>${this.penseBete(m)}${fen}
+      <footer class="pc-barre"><button class="pc-lever" data-a="quitter">Se lever</button><div class="pc-taches">${taches}</div>${pied}</footer></div>`;
     const garder = (s, v) => { const e = this.el.querySelector(s); if (e) e.scrollTop = v; };
     garder('.vs-menu', menu);
     if (this.derniereVue === this.vue) garder('.vs-main', main);
     if (NAVIGATEUR.includes(f) && this.dernierEcran === f + tel.app) garder('.pt-bureau', bu);
-    this.derniereVue = this.vue; this.dernierEcran = NAVIGATEUR.includes(f) ? f + tel.app : '';
+    if (f === 'brevo' && this.dernierEcran === 'brevo' + this.brevo.onglet) garder('.bv-main', bv);
+    this.derniereVue = this.vue; this.dernierEcran = NAVIGATEUR.includes(f) ? f + tel.app : f === 'brevo' ? 'brevo' + this.brevo.onglet : '';
+    this.montrerGuide();
+  }
+  // mission 4 : ce qu'il faut toucher (mis en évidence) défile jusqu'à se voir, quand il vient de changer (pas à chaque
+  // image : on peut faire défiler soi-même) ; seulement dans la zone qui défile (jamais la page du jeu)
+  montrerGuide() {
+    const g = this.el.querySelector('#pc-ecran .win .guide'), cle = g ? g.dataset.a : '';
+    if (g && cle !== this.dernierGuide) {
+      let z = g.parentElement; // (la zone qui défile vraiment : selon la taille de l'écran, ce n'est pas la même)
+      while (z && z.id !== 'pc-ecran' && !(z.scrollHeight > z.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(z).overflowY))) z = z.parentElement;
+      if (z && z.id !== 'pc-ecran') {
+        const r = g.getBoundingClientRect(), b = z.getBoundingClientRect();
+        if (r.bottom > b.bottom - 6) z.scrollTop += r.bottom - b.bottom + 14;
+        else if (r.top < b.top + 6) z.scrollTop -= b.top - r.top + 14;
+      }
+    }
+    this.dernierGuide = cle;
   }
 }

@@ -2222,6 +2222,261 @@ if (scenario === 'velo') {
   await capture('velo-enfant');
 }
 
+if (scenario === 'portesordi') {
+  // Mission 4, les écrans de l'ordinateur (pc.js, brevo.js, caisse.js ; l'état réglé à la main, sans le déroulé) : le
+  // ciblage guidé dans Vitisoft jusqu'à la sélection (refus, compte qui suit les filtres, historique remis), la campagne en
+  // un clic (Brevo : l'email personnalisé, la mention, la désinscription ; le SMS et STOP ; les relances refusées avant
+  // l'email), le courrier (publipostage, étiquettes, routage), les relances activées, le pense-bête ; la caisse : le
+  // premier client guidé pas à pas, les neuf autres sans guide (des erreurs corrigées : montant perçu, remise oubliée,
+  // mauvais ticket, mauvais règlement), la facturette, le ticket par mail ; les statistiques et le merci ; captures
+  const etape = async (nom, f, ...a) => { const r = await ev(f, ...a).catch(e => [['scénario interrompu (' + nom + ') : ' + e.message, false]]); for (const [msg, c] of r) ok(c, msg); };
+  await ev(() => {
+    // s'asseoir au portable du bureau du chai (entrer par la porte, la chaise)
+    window.ASSIS = () => {
+      const J = CL.jeu, BU = J.lieux.bureau;
+      CL.finirGeste();
+      if (J.auVolant) { CL.tr.v = 0; CL.agir(); CL.finirGeste(); }
+      if (!J.dedans) { J.joueur.placer(BU.dehors.x - 0.6, BU.dehors.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5); }
+      J.joueur.placer(BU.chaise.x + 0.5, BU.chaise.z, Math.PI / 2); CL.step(5); CL.agir(); CL.finirGeste(); CL.step(5);
+      return J.pc.ouvert;
+    };
+    window.Q = s => document.querySelector('#pc ' + s);
+    window.CLIC = s => { const e = Q(s); if (!e) throw new Error('absent du portable : ' + s); if (e.disabled) throw new Error('désactivé : ' + s); e.click(); CL.step(1); };
+    window.PC = () => document.querySelector('#pc-ecran').textContent;
+    window.GUIDE = () => [...document.querySelectorAll('#pc .guide')].map(e => e.dataset.a);
+    // la caisse : le client suivant arrive au comptoir (portes.js le fait venir ; ici, à la main)
+    window.SUIVANT = () => { CL.visiteurs.comptoir = { def: null }; CL.visiteurs.comptoir.def = CL.portes.clientCaisse; CL.step(2); return CL.portes.clientCaisse; };
+    // saisir une vente au clavier de la caisse : les produits (par Favoris), la quantité au pavé, la remise
+    window.SAISIR = (achats, remise = 0) => {
+      for (const [id, q] of achats) {
+        CLIC('[data-a="cs-favoris"]'); CLIC(`[data-a="cs-produit:${id}"]`);
+        if (q === 12 || q === 24) CLIC(`[data-a="cs-touche:${q}"]`); else for (const d of String(q)) CLIC(`[data-a="cs-touche:${d}"]`);
+        if (remise) { CLIC('[data-a="cs-cible:remise"]'); for (const d of String(remise)) CLIC(`[data-a="cs-touche:${d}"]`); }
+        CLIC('[data-a="cs-suivant"]');
+      }
+      CLIC('[data-a="cs-valider"]');
+    };
+    window.REGLER = (C, ticket = C.ticket, mode = C.paiement) => {
+      CLIC(`[data-a="cs-mode:${mode}"]`);
+      if (mode === 'especes') { let r = C.percu; for (const b of [50, 20, 10, 5]) while (r >= b) { CLIC(`[data-a="cs-billet:${b}"]`); r -= b; } }
+      CLIC(`[data-a="cs-ticket:${ticket}"]`);
+    };
+    CL.jouer(); CL.step(120);
+  });
+  // 1. la préparation : le ciblage guidé dans Vitisoft
+  await etape('ciblage', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc;
+    P4.actif = true; P4.etape = 'ciblage';
+    log.push(['assis au portable du bureau du chai', ASSIS()]);
+    log.push(['l\'icône de Vitisoft mise en évidence ; le pense-bête des invitations, rien de coché', !!Q('.pc-ico.conseil[data-a="lancer:vitisoft"]') && Q('.pc-note').textContent.includes('Les invitations') && !Q('.pc-note .ok')]);
+    log.push(['pc.appliPortes() dit Vitisoft', pc.appliPortes() === 'vitisoft']);
+    CLIC('[data-a="lancer:vitisoft"]');
+    log.push(['Vitisoft s\'ouvre sur Clients / contacts : la recherche multi-critères, la consigne, « Particuliers » mis en évidence', pc.vue === 'clients' && PC().includes('Recherche multi-critères') && !!Q('.vs-consigne') && GUIDE().join() === 'po-filtre:categorie:particulier']);
+    CLIC('[data-a="vue:accueil"]');
+    log.push(['ailleurs dans Vitisoft : la consigne dit le menu, « Clients / contacts » mis en évidence', Q('.vs-consigne').textContent.includes('Clients / contacts') && GUIDE().includes('vue:clients')]);
+    CLIC('[data-a="vue:clients"]');
+    const c0 = P4.compte;
+    CLIC('[data-a="po-rechercher"]');
+    log.push([`Rechercher trop tôt : pas de sélection, le filtre à corriger est dit (« ${Q('.pc-toast').textContent} »)`, !P4.selection && Q('.pc-toast').textContent.includes('Catégorie')]);
+    CLIC('[data-a="po-filtre:categorie:particulier"]');
+    log.push([`le compte suit les filtres (${c0} puis ${P4.compte}) ; la zone mise en évidence`, P4.compte < c0 && PC().includes(P4.compte.toLocaleString('fr-FR')) && GUIDE().join() === 'po-filtre:zone:region' && Q('.vs-consigne').textContent.includes('Pays de la Loire')]);
+    CLIC('[data-a="po-filtre:zone:region"]');
+    CLIC('[data-a="po-filtre:historique:recents"]');
+    log.push(['l\'historique changé : la consigne le fait remettre à « Tous »', GUIDE().join() === 'po-filtre:historique:tous' && Q('.vs-consigne').textContent.includes('Tous')]);
+    CLIC('[data-a="po-filtre:historique:tous"]');
+    log.push([`les bons filtres : ${P4.compte} contacts, Rechercher mis en évidence`, P4.compte === 538 && GUIDE().join() === 'po-rechercher']);
+    CLIC('[data-a="po-rechercher"]');
+    log.push(['la sélection : 538 contacts, 312 e-mail, 246 SMS, 226 courrier ; « Créer la campagne » mis en évidence', !!P4.selection && ['538', '312', '246', '226'].every(n => PC().includes(n)) && GUIDE().join() === 'po-campagne']);
+    log.push(['le pense-bête coche le ciblage', Q('.pc-note').textContent.includes('Cibler') && Q('.pc-note .ok')?.textContent.includes('Cibler')]);
+    return log;
+  });
+  await capture('po-clients');
+  // 2. la campagne : Brevo, l'email, le SMS
+  await etape('campagne', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc;
+    P4.etape = 'campagne';
+    CLIC('[data-a="po-campagne"]');
+    log.push(['« Créer la campagne » : un clic, la fenêtre Brevo devant, sur l\'invitation par email', P4.campagne.ouverte && pc.fenetre === 'brevo' && !!Q('.bv-fenetre .bv-nom') && pc.brevo.onglet === 'email' && !!Q('.pc-ico[data-a="lancer:brevo"]')]);
+    const t = PC();
+    log.push([`l'email personnalisé : « Bonjour Anne, », la date (${pc.dateJ}), la mention sanitaire, la désinscription, Envoyer mis en évidence`, t.includes('Bonjour Anne,') && t.includes(pc.dateJ) && t.includes('L\'abus d\'alcool est dangereux') && t.includes('Se désinscrire') && GUIDE().join() === 'bv-email']);
+    log.push(['aucun {prenom} ni {date} oublié', !/\{(prenom|date)\}/.test(t)]);
+    CLIC('[data-a="bv-contact"]');
+    log.push(['contact suivant : l\'aperçu change de prénom', PC().includes('Bonjour Pierre,')]);
+    CLIC('[data-a="bv-onglet:relances"]');
+    log.push(['les relances avant l\'email : Activer impossible, on dit pourquoi', Q('[data-a="bv-relances"]').disabled && PC().includes('envoyez-la d\'abord') && GUIDE().includes('bv-onglet:email')]);
+    CLIC('[data-a="bv-onglet:email"]'); CLIC('[data-a="bv-email"]');
+    log.push(['email envoyé : « Envoyée », le SMS mis en évidence', P4.campagne.email && Q('.bv-statut.ok') && GUIDE().join() === 'bv-onglet:sms']);
+    CLIC('[data-a="bv-onglet:sms"]');
+    log.push(['le SMS : la date, STOP, Envoyer mis en évidence', PC().includes('STOP') && PC().includes(pc.dateJ) && GUIDE().join() === 'bv-sms']);
+    CLIC('[data-a="bv-sms"]');
+    log.push(['SMS envoyé ; la consigne renvoie à Vitisoft pour le courrier, sa fenêtre mise en évidence dans la barre', P4.campagne.sms && Q('.bv-consigne').textContent.includes('courrier') && GUIDE().join() === 'tache:vitisoft']);
+    CLIC('[data-a="bv-onglet:email"]');
+    return log;
+  });
+  await capture('po-brevo-email');
+  // 3. le courrier, puis les relances
+  await etape('courrier', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc;
+    P4.etape = 'courrier';
+    CLIC('[data-a="tache:vitisoft"]');
+    log.push(['de retour dans Vitisoft : « Créer le courrier » mis en évidence', pc.fenetre === 'vitisoft' && GUIDE().join() === 'po-courrier']);
+    CLIC('[data-a="po-courrier"]');
+    const t = PC();
+    log.push(['le publipostage : la lettre (date, mention), les étiquettes d\'expédition, 226 courriers ; « Envoyer en routage » mis en évidence', t.includes('Invitation') && t.includes(pc.dateJ) && t.includes('Étiquettes d\'expédition') && t.includes('226') && !!Q('.po-lettre') && Q('.po-planche').children.length >= 4 && GUIDE().join() === 'po-routage']);
+    return log;
+  });
+  await capture('po-courrier');
+  await etape('relances', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc;
+    CLIC('[data-a="po-routage"]');
+    log.push(['envoyé en routage ; la consigne dit les relances, Brevo mis en évidence dans la barre', P4.campagne.courrier && PC().includes('routage postal') && GUIDE().join() === 'tache:brevo']);
+    P4.etape = 'relances';
+    CLIC('[data-a="tache:brevo"]'); CLIC('[data-a="bv-onglet:relances"]');
+    log.push(['les relances : une semaine avant aux non-ouvreurs, la veille à tous ; Activer mis en évidence', PC().includes('Une semaine avant') && PC().includes('La veille') && GUIDE().join() === 'bv-relances']);
+    CLIC('[data-a="bv-relances"]');
+    log.push(['relances activées : les invitations sont toutes parties', P4.campagne.relances && P4.invitationsParties && Q('.bv-statut.ok').textContent === 'Active']);
+    CLIC('[data-a="reduire"]');
+    log.push(['le pense-bête : les cinq lignes cochées', Q('.pc-note').querySelectorAll('.ok').length === 5]);
+    log.push(['plus rien à faire sur l\'ordinateur', pc.aFaire() === null && pc.appliPortes() === null]);
+    return log;
+  });
+  await capture('po-brevo-relances-fini');
+  await ev(() => { CLIC('[data-a="quitter"]'); CL.step(30); });
+  // 4. la caisse : le premier client guidé
+  await etape('caisse premier client', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc;
+    P4.etape = 'caisse'; P4.caisse.ouverte = true;
+    pc.ouvrir('caisse');
+    log.push(['pc.ouvrir(\'caisse\') : la caisse en plein écran, pas le bureau d\'icônes ; « Se lever » reste', pc.ouvert && pc.ecran === 'caisse' && !!Q('.cs-win') && !Q('.pc-icones') && !!Q('[data-a="quitter"]')]);
+    log.push(['sans client : « En attente du client suivant »', PC().includes('En attente du client suivant')]);
+    const C = SUIVANT();
+    log.push([`le premier client au comptoir : ${C.nom}, ce qu'il dit ; la consigne, la famille ROUGES mise en évidence`, PC().includes(C.nom) && PC().includes(C.dit) && !!Q('.cs-consigne') && GUIDE().join() === 'cs-famille:rouges']);
+    // suivre le guide jusqu'au produit choisi (capture), puis jusqu'au ticket
+    CLIC('[data-a="cs-famille:rouges"]');
+    log.push(['les produits de la famille, « Cuvée du Clos, rouge » mis en évidence', GUIDE().join() === 'cs-produit:closRouge' && !!Q('.cs-grille.produits')]);
+    CLIC('[data-a="cs-produit:closRouge"]');
+    log.push(['la quantité : 2 au pavé mis en évidence', GUIDE().join() === 'cs-touche:2']);
+    CLIC('[data-a="cs-touche:2"]');
+    log.push(['« Produit suivant » mis en évidence', GUIDE().join() === 'cs-suivant']);
+    CLIC('[data-a="cs-suivant"]'); CLIC('[data-a="cs-famille:bulles"]'); CLIC('[data-a="cs-produit:cremant"]');
+    log.push([`la ligne ajoutée, le total suit (${Q('.cs-total b').textContent}) ; VALIDER mis en évidence (le crémant : quantité 1)`, Q('.cs-lignes').children.length === 1 && Q('.cs-total b').textContent.startsWith('24,00') && GUIDE().join() === 'cs-valider']);
+    return log;
+  });
+  await capture('po-caisse-selection');
+  await etape('caisse premier client, règlement', () => {
+    const log = [], P4 = CL.portes;
+    let n = 0;
+    while (P4.caisse.i === 0 && n++ < 12) { const g = GUIDE(); if (g.length !== 1) throw new Error('guide : ' + g.join()); CLIC(`[data-a="${g[0]}"]`); }
+    log.push([`le premier client servi en suivant le guide jusqu'au bout (${n} touches : VALIDER, CARTE, Facturette)`, P4.caisse.i === 1 && P4.caisse.tickets.length === 1 && n <= 4]);
+    log.push(['la facturette sort : le domaine, les lignes, le total, le règlement', !!Q('.cs-facturette') && PC().includes('TOTAL TTC') && PC().includes('Carte')]);
+    return log;
+  });
+  await capture('po-caisse-facturette');
+  // 5. les neuf autres, sans guide : il faut les écouter (et corriger quand ils le disent)
+  await etape('caisse client 2, espèces', () => {
+    const log = [], P4 = CL.portes;
+    CL.step(220);
+    log.push(['le ticket rangé, l\'écran vidé : en attente du client suivant', !Q('.cs-facturette') && PC().includes('En attente du client suivant') && !Q('.cs-lignes li')]);
+    const C = SUIVANT();
+    log.push([`${C.nom} : pas de consigne ni de mise en évidence, sa phrase reste affichée`, !Q('.cs-consigne') && GUIDE().length === 0 && PC().includes(C.dit)]);
+    SAISIR(C.achats);
+    CLIC('[data-a="cs-mode:especes"]'); CLIC('[data-a="cs-billet:20"]');
+    log.push(['espèces : les billets, le montant perçu, le restant dû', !!Q('.cs-billets') && PC().includes('Restant dû')]);
+    return log;
+  });
+  await capture('po-caisse-reglement');
+  await etape('caisse clients 2 à 10', () => {
+    const log = [], P4 = CL.portes;
+    let C = P4.clientCaisse;
+    // client 2 : le mauvais montant perçu, corrigé
+    CLIC('[data-a="cs-ticket:facturette"]');
+    log.push([`montant perçu faux : ${C.nom} le dit (« ${Q('.cs-refus')?.textContent} »), le client reste`, P4.caisse.i === 1 && (Q('.cs-refus')?.textContent || '').includes('50')]);
+    CLIC('[data-a="cs-effacer"]'); CLIC('[data-a="cs-billet:50"]');
+    log.push(['50 € perçus : le rendu affiché (11,00 €)', PC().includes('Rendu') && PC().includes('11,00')]);
+    CLIC('[data-a="cs-ticket:facturette"]');
+    log.push(['corrigé : le ticket sort, le rendu sur la facturette', P4.caisse.i === 2 && PC().includes('Rendu')]);
+    // client 3 : nouveau, le ticket par mail
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C);
+    log.push([`${C.nom} : ticket par mail, nouvelle fiche client`, P4.caisse.i === 3 && !!Q('.cs-mail') && PC().includes('Nouvelle fiche client')]);
+    // client 4 : la remise de fidélité oubliée, puis corrigée
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C);
+    log.push([`remise oubliée : ${C.nom} la réclame (« ${Q('.cs-refus')?.textContent} »)`, P4.caisse.i === 3 && (Q('.cs-refus')?.textContent || '').includes('5 %')]);
+    CLIC('[data-a="cs-sortir"]'); CLIC('[data-a="cs-suppr:0"]');
+    SAISIR(C.achats, C.remise);
+    log.push(['la ligne remisée de 5 % : le total suit', PC().includes('51,30')]);
+    REGLER(C);
+    log.push(['corrigé : encaissé avec sa remise', P4.caisse.i === 4 && P4.caisse.tickets[3].remise === 5]);
+    // client 5 : le mauvais ticket, puis le bon
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C, 'facturette');
+    log.push([`mauvais ticket : ${C.nom} veut le sien par mail`, P4.caisse.i === 4 && (Q('.cs-refus')?.textContent || '').includes('mail')]);
+    CLIC('[data-a="cs-ticket:mail"]');
+    log.push(['corrigé : parti par mail', P4.caisse.i === 5]);
+    // client 6 : douze bouteilles, la touche 12
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C);
+    log.push([`${C.nom} : douze bouteilles à la touche 12`, P4.caisse.i === 6 && P4.caisse.tickets[5].total === 144]);
+    // client 7 : espèces et ticket par mail
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C);
+    log.push([`${C.nom} : espèces, rendu, ticket par mail`, P4.caisse.i === 7 && P4.caisse.tickets[6].rendu === 7.5]);
+    // client 8 : un produit en trop, enlevé
+    C = SUIVANT();
+    SAISIR([...C.achats, ['jus', 1]]); REGLER(C);
+    log.push([`un produit en trop : ${C.nom} le dit`, P4.caisse.i === 7 && (Q('.cs-refus')?.textContent || '').includes('Jus de raisin')]);
+    CLIC('[data-a="cs-sortir"]'); CLIC(`[data-a="cs-suppr:${C.achats.length}"]`); CLIC('[data-a="cs-valider"]'); REGLER(C);
+    log.push(['corrigé : encaissé', P4.caisse.i === 8]);
+    // client 9 : le mauvais règlement, puis le bon
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C, C.ticket, 'carte');
+    log.push([`mauvais règlement : ${C.nom} paie par chèque`, P4.caisse.i === 8 && (Q('.cs-refus')?.textContent || '').includes('chèque')]);
+    REGLER(C);
+    log.push(['corrigé : encaissé', P4.caisse.i === 9]);
+    // client 10
+    C = SUIVANT(); SAISIR(C.achats); REGLER(C);
+    log.push([`les dix clients encaissés (${P4.caisse.tickets.length} tickets)`, P4.caisse.i === 10 && P4.caisse.tickets.length === 10]);
+    CL.step(220);
+    log.push(['après le dixième : la caisse dit que Marc arrive', PC().includes('Marc arrive')]);
+    log.push(['le pense-bête de la caisse (sur le bureau de l\'ordinateur) : 10 sur 10', CL.jeu.pc.penseBete(CL.mission).includes('10 sur 10')]);
+    CLIC('[data-a="quitter"]'); CL.step(10);
+    log.push(['« Se lever » : l\'ordinateur se ferme', !CL.jeu.pc.ouvert]);
+    return log;
+  });
+  // 6. les statistiques et le merci
+  await etape('statistiques', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc, s = P4.stats;
+    P4.etape = 'stats';
+    pc.ouvrir('caisse');
+    log.push(['le jour des statistiques, le portable s\'ouvre sur Vitisoft, Analyse > Statistiques', pc.ecran === 'bureau' && pc.fenetre === 'vitisoft' && pc.vue === 'statistiques' && !!Q('.vs-menu button.on[data-a="vue:statistiques"]')]);
+    const t = PC();
+    log.push([`les chiffres : ${s.tickets} tickets, ${s.ca} € TTC, panier moyen ${s.panier} €, ${s.bouteilles} bouteilles, ${s.visiteurs} visiteurs, ${s.invitesVenus} invités venus`, t.includes('Tickets de caisse') && t.includes(s.ca.toLocaleString('fr-FR', { minimumFractionDigits: 2 })) && t.includes('Panier Moyen') && t.includes(String(s.visiteurs)) && t.includes(String(s.invitesVenus))]);
+    log.push([`les ventes par familles en barres (${document.querySelectorAll('#pc .po-barre').length}) ; la campagne : envoyés par canal, ouvertures, clics`, document.querySelectorAll('#pc .po-barre').length === Object.keys(s.parFamille).length && ['312', '246', '226', '61 %', '19 %'].every(x => t.includes(x))]);
+    log.push(['« Remercier les visiteurs » mis en évidence ; le pense-bête « Après les portes ouvertes »', GUIDE().join() === 'po-merci' && PC().includes('Après les portes ouvertes')]);
+    return log;
+  });
+  await capture('po-stats');
+  await etape('merci', () => {
+    const log = [], P4 = CL.portes, pc = CL.jeu.pc, n = P4.stats.destinataires;
+    CLIC('[data-a="po-merci"]');
+    log.push([`le merci dans Brevo : ${n} visiteurs, l'aperçu, Envoyer mis en évidence`, pc.fenetre === 'brevo' && pc.brevo.onglet === 'merci' && PC().includes(String(n) + ' visiteurs') && PC().includes('Merci d\'être passé') && GUIDE().join() === 'bv-merci']);
+    log.push(['l\'invitation, une fois les portes ouvertes passées : ouvertures et clics', (() => { CLIC('[data-a="bv-onglet:email"]'); const r = PC().includes('61 %'); CLIC('[data-a="bv-onglet:merci"]'); return r; })()]);
+    CLIC('[data-a="bv-merci"]');
+    log.push(['merci envoyé : la mission le sait (portes.merci), plus rien à faire', P4.merci && pc.aFaire() === null && PC().includes('Merci envoyé')]);
+    return log;
+  });
+  await capture('po-brevo-merci');
+  // 7. ce que coûtent ces écrans : redessiner (à chaque touche seulement), et l'ordinateur ouvert sur la caisse, à chaque
+  // image (un client qui arrive, le ticket qui disparaît)
+  await etape('mesures', () => {
+    const pc = CL.jeu.pc, P4 = CL.portes, moy = (n, f) => { const t0 = performance.now(); for (let i = 0; i < n; i++) f(); return (performance.now() - t0) / n; };
+    const brevo = moy(40, () => pc.afficher());
+    pc.lancer('vitisoft'); pc.voir('statistiques'); const stats = moy(40, () => pc.afficher());
+    pc.voir('clients'); const clients = moy(40, () => pc.afficher());
+    P4.etape = 'caisse'; pc.ecran = 'caisse'; const caisse = moy(40, () => pc.afficher());
+    const image = moy(2000, () => pc.update(1 / 60));
+    pc.ecran = 'bureau'; P4.etape = 'stats'; pc.afficher();
+    const f = x => x.toFixed(2).replace('.', ',');
+    return [[`redessiner l'écran : caisse ${f(caisse)} ms, Clients / contacts ${f(clients)} ms, statistiques ${f(stats)} ms, Brevo ${f(brevo)} ms ; ouvert sur la caisse, ${f(image * 1000)} µs par image`, Math.max(caisse, clients, stats, brevo) < 12 && image < 0.05]];
+  });
+  await ev(() => { CLIC('[data-a="quitter"]'); CL.step(10); });
+}
+
 if (scenario === 'ordinateur') {
   // Viticode et le Registre phyto sur le portable du bureau du chai aussi (pc.js ; Teddy, 28/11/2026 : « accessibles et
   // utilisables depuis l'ordinateur, dans toutes les missions ») : quatre icônes ; mission 1, leurs écrans d'annonce ;
