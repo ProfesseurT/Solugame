@@ -3671,10 +3671,10 @@ void main() {
       }
       for (const [P, le] of [[Su, uX(6.5) - 0.1], [N, uX(9.4)], [E, vZ(15.65)], [O, vZ(14.5)]]) P(0.022, HT - 0.52, 0.01, JOINT_D, 0.35 + (HT - 0.52) / 2, 0.005, le);
       // les fenêtres (solumatic.js : FENETRES, FEN) : l'encadrement d'enduit en saillie (le tableau), le coffre du volet, le
-      // dormant et le meneau d'aluminium anthracite, la vitre (trois allumées : Mars, Neptune, Jupiter), le volet roulant plus
+      // dormant et le meneau d'aluminium anthracite, la vitre (jamais allumée : à la nuit, le bureau est vide), le volet roulant plus
       // ou moins baissé d'une fenêtre à l'autre (coulisses, tablier, lames, lame finale), l'appui et sa goutte d'eau ; sous
       // l'appui, des coulures : des traînées dégradées de longueur inégale (sommets colorés : rien dans le shader)
-      const KV = [0.45, 0.3, 0.55, 0.4, 0.62, 0.35, 0.5, 0, 0.45, 0.85, 0.3, 0.52, 0.4], ALLUMEES = new Set([9, 16, 21]);
+      const KV = [0.45, 0.3, 0.55, 0.4, 0.62, 0.35, 0.5, 0, 0.45, 0.85, 0.3, 0.52, 0.4];
       const tra = { p: [], c: [] }, cT = new THREE.Color('#d3d1ca'), cB = new THREE.Color(CREPI);
       const trainee = (P, le, w, yh, long) => {
         const [ax, az] = P.pt(0.006, le - w / 2), [bx, bz] = P.pt(0.006, le + w / 2), yb = yh - long, nx = P.ns ? 0 : P.o, nz = P.ns ? P.o : 0;
@@ -3684,12 +3684,12 @@ void main() {
       };
       FENETRES.forEach(([m, p, l], i) => {
         const P = F[m], y0 = FEN.y0, y1 = FEN.y1, hy = y1 - y0, ym = (y0 + y1) / 2, eS = 0.12, sa = 0.1, yc = y1 + 0.22, yt = yc + eS, lt = l + 2 * eS;
-        const allumee = ALLUMEES.has(i), kv = allumee ? Math.min(0.4, KV[i % KV.length]) : KV[i % KV.length], yv = y1 - kv * (hy - 0.05);
+        const kv = KV[i % KV.length], yv = y1 - kv * (hy - 0.05);
         P(lt, eS, sa, CREPI, yt - eS / 2, sa / 2, p);
         for (const s of [-1, 1]) P(eS, yt - y0, sa, CREPI, (y0 + yt) / 2, sa / 2, p + s * (l / 2 + eS / 2));
         P(l, yc - y1, 0.07, ANTH, (y1 + yc) / 2, 0.035, p);
         P(l, 0.06, 0.05, ANTH, y0 + 0.03, 0.025, p); P(0.06, hy - 0.1, 0.04, ANTH, ym, 0.022, p);
-        P(l - 0.06, hy - 0.06, 0.02, allumee ? '#4a3a2a' : VERRE, ym, 0.012, p);
+        P(l - 0.06, hy - 0.06, 0.02, VERRE, ym, 0.012, p);
         for (const s of [-1, 1]) P(0.045, hy, 0.05, ANTH, ym, 0.027, p + s * (l / 2 - 0.0225));
         if (kv > 0.02) { P(l - 0.08, y1 - yv, 0.025, VOLET, (y1 + yv) / 2, 0.04, p); for (let y = yv + 0.075; y < y1 - 0.03; y += 0.075) P(l - 0.08, 0.012, 0.03, LAME, y, 0.044, p, D); }
         P(l - 0.07, 0.045, 0.045, ANTH, yv + 0.022, 0.042, p);
