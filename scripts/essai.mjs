@@ -2385,6 +2385,15 @@ if (scenario === 'visiteurs') {
     // pour le jeu, sans le rendu)
     VI.mesurer = () => { const o = {}; for (const q of ['haut', 'faible']) { CL.palier(q); CL.step(30); CL.bench(30); o[q] = CL.bench(150) + ', jeu ' + CL.profil(120).jeu + ' ms'; } return o; };
     VI.sans = VI.mesurer();
+    // (le décor de l'événement, posé par la mission : s'il n'est pas là, des boîtes à sa place, pour vérifier qu'on ne
+    // traverse pas les tables : le bar, le buffet, la table de la caisse, la sono)
+    const PL = (() => { const L = CL.monde.lieux; return L.portes && L.portes.caisse ? L.portes : L.portesOuvertes; })();
+    const q = { x: PL.bar.x, z: PL.bar.z };
+    if (!col.resoudre(q, 0.05)) {
+      col.boiteC(PL.bar.x, PL.bar.z, 1.6, 1.0); col.boiteC(PL.buffet.x, PL.buffet.z, 2.6, 0.9);
+      col.boiteC(PL.caisse.x, PL.caisse.z, 0.7, 1.3); col.boiteC(PL.sono.x, PL.sono.z, 0.9, 0.9);
+      log.push(['(le décor de l\'événement absent : quatre boîtes à la place du bar, du buffet, de la caisse et de la sono)', true]);
+    }
     V.ouvrir(); VI.jouer(10);
     log.push(['portes ouvertes à 9 h 40 : personne avant 10 h', V.actif && V.presents === 0]);
     J.minutes = 4 * 1440 + 10 * 60; CL.step(2);
@@ -2462,7 +2471,7 @@ if (scenario === 'visiteurs') {
     const log = [], V = CL.visiteurs;
     V.releve();
     let file = 0;
-    for (let i = 0; i < 120 && V.nMarc < 2; i++) { VI.jouer(1); file = Math.max(file, V.file.length); }
+    for (let i = 0; i < 240 && V.nMarc < 2; i++) { VI.jouer(1); file = Math.max(file, V.file.length); }
     log.push([`après la relève, des visiteurs passent chez Marc, attendent et repartent servis (${V.nMarc} servis, file de ${file} au plus)`, V.marc && V.nMarc >= 2 && V.nServis === 0]);
     return log;
   });

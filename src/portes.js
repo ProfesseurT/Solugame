@@ -213,6 +213,7 @@ export class Visiteurs {
   ouvrir(plein = false) {
     if (!this.preparer()) return;
     this.actif = true; this.mPrec = null;
+    for (const g of this.groupes) if (g.etat === 'absent') g.tRetour = 0;
     if (plein) this.remplir();
   }
   fermer() {
@@ -479,7 +480,7 @@ export class Visiteurs {
   choisir(g, poser = false) {
     this.liberer(g);
     if (!g.def && g.programme <= 0) {
-      if (this.marc && !g.caisse && this.rnd() < 0.6 && this.file.length < this.slots.length && this.prochain >= this.clients.length) { g.caisse = true; this.enFile(g); return; }
+      if (this.marc && !g.caisse && this.rnd() < 0.7 && this.file.length < this.slots.length && this.prochain >= this.clients.length) { g.caisse = true; this.enFile(g); return; }
       this.partir(g); return;
     }
     g.programme--;
