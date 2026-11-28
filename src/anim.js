@@ -50,6 +50,11 @@ const TALON = 0.065, POINTE = 0.15, CH = DIM.cheville, L1 = DIM.cuisse, L2 = DIM
 // chemin au sol, foulée, course (0 à 1), levée.
 const PIEDS = new Float64Array(12), X = 0, Y = 1, Z = 2, TG = 3, LACET = 4, F = 5;
 const FOU = new Float64Array(6), Q = 0, BETA = 1, PAS = 2, FS = 3, W = 4, LEVER = 5;
+// Une jambe (JB : cheville x, y, z, tangage, lacet, pôle y) et un bras (BR : poignet x, y, z, pôle x, y, z, poids) passent
+// aussi par des tableaux : jambeA et brasA, trop longues pour que V8 les insère dans l'appelant, recevraient sinon des
+// nombres mis en boîte, sept par appel (mesuré le 28/11/2026 sur la place : 7 Ko jetés par image dans poseDebout). Les
+// petites jambe et brasIK, elles, s'insèrent.
+const JB = new Float64Array(6), BR = new Float64Array(7);
 // La cheville quand le talon pivote au sol, la pointe relevée de t ; quand la pointe pivote au sol, le talon levé de t.
 // zf : la cheville du pied à plat ; y : au-dessus de sa hauteur à plat
 function talon(zf, t, R, k) { R[k + Z] = zf - TALON + TALON * Math.cos(t) - CH * Math.sin(t); R[k + Y] = TALON * Math.sin(t) + CH * Math.cos(t) - CH; R[k + TG] = -t; }
@@ -126,6 +131,8 @@ export class Anim {
     this.F = new Float64Array(4);
     this.wFume = 0; this.tFume = 2 + r() * 6; this.uFume = -1; this.fRepos = r() < 0.6 ? 1 : 0; this.fAutre = r() < 0.5 ? 1 : 0;
     this.wParle = 0; this.att = 0; this.tAtt = 4 + r() * 10; this.wAtt = 0; this.tCligne = 0.5 + r() * 4; this.cligne = 0;
+    // (déclarés ici aussi : une seule forme d'objet pour tous, voir pieton.js) l'enfant qui change de jeu, à vélo, au bureau
+    this.jeuPrec = undefined; this.tLisse = 0; this.colonne = 0; this.epaule = 0; this.bur = null;
   }
 
   // dt = 0 : tout se place d'un coup (placement, changement de personnage)
@@ -315,11 +322,12 @@ export class Anim {
   }
 
   // Bras par cinématique inverse, mélangé à la pose déjà posée. c : 0 gauche, 3 droit ; cible et pôle dans le repère du personnage.
-  brasIK(c, x, y, z, px, py, pz, w) {
-    const o = this.o, a = o[BRAS[c]], b = o[BRAS[c + 1]];
+  brasIK(c, x, y, z, px, py, pz, w) { BR[0] = x; BR[1] = y; BR[2] = z; BR[3] = px; BR[4] = py; BR[5] = pz; BR[6] = w; this.brasA(c); }
+  brasA(c) {
+    const o = this.o, a = o[BRAS[c]], b = o[BRAS[c + 1]], w = BR[6];
     if (w < 0.999) { FK[c].copy(a.quaternion); FK[c + 1].copy(b.quaternion); }
-    v1.set(x, y, z).applyMatrix4(mPi);
-    v2.set(px, py, pz).applyQuaternion(qPi);
+    v1.set(BR[0], BR[1], BR[2]).applyMatrix4(mPi);
+    v2.set(BR[3], BR[4], BR[5]).applyQuaternion(qPi);
     ik(a, b, this.long, 2, v1, v2, 1);
     if (w < 0.999) {
       q1.copy(a.quaternion); a.quaternion.copy(FK[c]).slerp(q1, w);
@@ -328,13 +336,15 @@ export class Anim {
   }
 
   // Jambe : cheville en (x, y, z) dans le repère du personnage, pied incliné (tangage) et tourné (lacet)
-  jambe(i, sg, x, y, z, tangage, lacet, poleY = 0) {
+  jambe(i, sg, x, y, z, tangage, lacet, poleY = 0) { JB[0] = x; JB[1] = y; JB[2] = z; JB[3] = tangage; JB[4] = lacet; JB[5] = poleY; this.jambeA(i, sg, JB, 0); }
+  // la même, la cheville et le pied lus dans A à partir de k (x, y, z, tangage, lacet ; le pôle y : JB[5])
+  jambeA(i, sg, A, k) {
     const o = this.o, cuisse = o[i], genou = o[i + 1], pied = o[i + 2];
-    v1.set(x, y, z).applyMatrix4(mBi);
-    v2.set(sg * 0.12, poleY, 1);
+    v1.set(A[k], A[k + 1], A[k + 2]).applyMatrix4(mBi);
+    v2.set(sg * 0.12, JB[5], 1);
     ik(cuisse, genou, this.long, 0, v1, v2, -1);
     q1.copy(qB).multiply(cuisse.quaternion).multiply(genou.quaternion).invert();
-    q2.setFromEuler(eul.set(tangage, lacet, 0));
+    q2.setFromEuler(eul.set(A[k + 3], A[k + 4], 0));
     pied.quaternion.multiplyQuaternions(q1, q2);
   }
 
@@ -415,7 +425,8 @@ export class Anim {
     o[OS.poitrine].rotation.set(pen * 0.55 - br + this.rp * 0.12 + hoche * 0.4, -lacetB * (0.8 + 0.35 * marche) + this.ry * 0.22, -roulisB * (0.25 + 0.25 * marche) + this.bank * 0.2);
     o[OS.tete].rotation.set(-pen * 0.75 - 0.45 * choc + this.rp * 0.85 - hoche, lacetB * 0.3 + this.ry * 0.66, -roulisB * 0.1 - this.bank * 0.6);
     this.reperes();
-    for (let j = 0, k = 0; j < 2; j++, k += 6) this.jambe(JAMBES[j][0], JAMBES[j][1], PIEDS[k + X], PIEDS[k + Y], PIEDS[k + Z], PIEDS[k + TG], PIEDS[k + LACET]);
+    JB[5] = 0;
+    for (let j = 0, k = 0; j < 2; j++, k += 6) this.jambeA(JAMBES[j][0], JAMBES[j][1], PIEDS, k);
 
     // bras : balancier opposé aux jambes, un peu plus devant que derrière, la main vient vers le milieu en avançant ; coudes
     // pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un peu écartés du corps, coudes légèrement
@@ -750,7 +761,8 @@ export class Anim {
     this.poseDebout(dt, p, 0, 1, br);
     for (let i = 0; i < n; i++) MEMO[i].copy(o[i].quaternion);
     vMemo.copy(o[OS.bassin].position);
-    if (conduite) this.poseConduite(dt, p, t, br); else this.poseAssise(br);
+    // (sur une chaise : la pose assise de p, ses mains au clavier comprises (Solumatic) : elles y arrivent à la fin)
+    if (conduite) this.poseConduite(dt, p, t, br); else this.poseAssise(br, p);
     const wb = entre(0.8, 1, w);
     for (let i = 0; i < n; i++) { q1.copy(o[i].quaternion); o[i].quaternion.copy(MEMO[i]).slerp(q1, BRAS.includes(i) ? wb : w); }
     v1.copy(o[OS.bassin].position); o[OS.bassin].position.copy(vMemo).lerp(v1, w);
@@ -855,7 +867,8 @@ export class Anim {
     o[OS.poitrine].rotation.set(0.4 * al - br, this.ry * 0.2 + 0.03 * Math.sin(th) * (1 - pied), -roul * 0.3);
     o[OS.tete].rotation.set(-Math.min(0.95 * al, 0.95) + 0.04 + this.rp * 0.85, this.ry * 0.66, -roul * 0.3); // (le regard devant soi, la nuque relevée)
     this.reperes();
-    for (let j = 0; j < 2; j++) this.jambe(JAMBES[j][0], JAMBES[j][1], PIEDS[6 * j + X], PIEDS[6 * j + Y], PIEDS[6 * j + Z], PIEDS[6 * j + TG], JAMBES[j][1] * (0.05 + 0.12 * pied * (1 - j)), 0.6);
+    JB[5] = 0.6;
+    for (let j = 0; j < 2; j++) { PIEDS[6 * j + LACET] = JAMBES[j][1] * (0.05 + 0.12 * pied * (1 - j)); this.jambeA(JAMBES[j][0], JAMBES[j][1], PIEDS, 6 * j); }
     // les mains aux poignées : la paume (velos.js : celle de la main gauche ; la droite en miroir), les doigts autour
     const fx = V[VL.doigts], fy = V[VL.doigts + 1], fz = V[VL.doigts + 2], nx = V[VL.paume], ny = V[VL.paume + 1], nz = V[VL.paume + 2];
     for (let c = 0; c <= 3; c += 3) {
