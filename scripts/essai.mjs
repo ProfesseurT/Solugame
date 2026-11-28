@@ -604,12 +604,16 @@ if (scenario === 'chateau') {
         CL.ctrl.ky = -1; for (let k = 0; k < 400 && CL.tr.v < 17; k++) CL.step(1);
         let tenue = 0, bmax = 0, vmin = 99;
         // (mesuré jusqu'au premier choc : la glisse peut finir contre un mur ou un cycliste, selon l'endroit où elle mène ;
-        // c'est la tenue de route qu'on vérifie, et elle doit tenir 2,5 s au moins avant)
+        // c'est la tenue de route qu'on vérifie, et elle doit tenir 2,5 s au moins avant. Un cycliste sur le chemin compte
+        // comme un choc : il saute de côté, ou la voiture pousse son vélo couché, velos.js, et ne s'arrête plus dessus)
+        const cyclistes = () => CL.velos.cyclistes.reduce((a, c) => a + (c.sauts || 0), 0) + CL.velos.pousses;
+        let cy0 = -1;
         for (let k = 0; k < 300; k++) {
           const tr = CL.tr, beta = Math.atan2(tr.vT, Math.max(1, Math.abs(tr.v))), T = k / 60;
           if (T < 0.45) { CL.ctrl.kx = -1; CL.ctrl.fm = true; } else { CL.ctrl.fm = false; CL.ctrl.kx = Math.max(-1, Math.min(1, -(beta + 0.5) * 2)); }
           CL.ctrl.ky = -1; CL.step(1);
-          if (T > 1.5 && tr.chocVu > 0.15) break;
+          if (T > 1.5 && cy0 < 0) cy0 = cyclistes();
+          if (T > 1.5 && (tr.chocVu > 0.15 || cyclistes() !== cy0)) break;
           if (T > 1.5) { if (Math.abs(beta) > 0.3) tenue += 1 / 60; vmin = Math.min(vmin, tr.v); }
           bmax = Math.max(bmax, Math.abs(beta));
         }
@@ -2030,6 +2034,188 @@ if (scenario === 'velos') {
   }).catch(e => [['scénario interrompu : ' + e.message, false]]);
   for (const [msg, c] of r) ok(c, msg);
   await capture('velos');
+}
+
+if (scenario === 'velo') {
+  // le vélo du joueur (velos.js : GARES, VeloJoueur, MONTAGE ; Teddy, 28/11/2026) : prendre un vélo garé (il disparaît du
+  // décor, sa boîte avec), le relever, l'enfourcher, pédaler (les pieds sur les pédales), tourner (il penche), freiner
+  // (pied à terre), descendre (la béquille ; couché, sans béquille), le reprendre ; emprunter le vélo d'un cycliste arrêté
+  // (il s'en va à pied, revient plus loin sur un autre) ; un vélo tombé se pousse en voiture (on n'est pas bloqué, la
+  // conduite assistée non plus) ; un vélo laissé aussi ; le phare la nuit ; ce que ça coûte
+  const etape = async (nom, f, ...a) => { const r = await ev(f, ...a).catch(e => [['scénario interrompu (' + nom + ') : ' + e.message, false]]); for (const [msg, c] of r) ok(c, msg); };
+  await ev(() => { CL.jouer(); CL.step(120); });
+  // 1. un vélo garé seul, contre un mur (à l'épicerie) : on le prend, il disparaît du décor
+  await etape('garé', () => {
+    const log = [], J = CL.jeu, V3 = CL.camera.position.constructor;
+    const G = CL.gares.find(g => g.genre === 'ville' && g.mur), co = Math.cos(G.h), si = Math.sin(G.h);
+    // (du côté libre : le mur est à sa gauche)
+    CL.teleporter(G.x - co * 0.75, G.z + si * 0.75, G.h); CL.step(3);
+    const vp = CL.veloProche;
+    log.push([`un vélo garé contre un mur, « Prendre le vélo » à côté (${G.genre})`, !!vp && vp.gare === G]);
+    const ix = G.maillage.geometry.index.array, avant = new Set(ix.subarray(G.i0, G.i0 + G.n)).size > 100;
+    CL.agir(); CL.finirGeste();
+    const veh = J.veh, vide = Array.from(ix.subarray(G.i0, G.i0 + G.n)).every(i => i === ix[G.i0]);
+    const libre = !CL.col.boites.includes(G.boite);
+    log.push([`pris : effacé du décor (${G.n} sommets, plus aucun triangle), sa boîte retirée, un vélo qui roule à sa place`, avant && vide && libre && G.pris && J.auVolant && veh.genre === 'velo']);
+    log.push([`en selle : relevé (penche ${veh.p.incl.toFixed(2)}), béquille repliée, la selle à sa hauteur (${veh.p.selleE.toFixed(2)})`, Math.abs(veh.p.incl - 0.12) < 0.06 && veh.p.beq === 0 && veh.p.selleE > 0.05 && J.joueur.velo === veh.p.Vp]);
+    // la mission à vélo : le chèque de l'épicerie (on descend, on va au comptoir, on remonte en selle)
+    {
+      const q = s => document.querySelector(s), T = J.tel, m = CL.mission, a = J.lieux.arrets.epicerie;
+      CL.step(140); q('#poche').click(); q('[data-a="ouvrir:bureau"]').click(); q('[data-a="cheque"]').click(); T.fermer(); CL.step(5);
+      CL.teleporter(a.x - 3, a.z, Math.PI / 2); CL.step(30);
+      for (let n = 0; n < 4000 && CL.jeu.gestes.actif; n++) CL.step(1);
+      CL.step(5);
+      log.push([`à vélo, le chèque de l'épicerie : descendu, au comptoir, remonté en selle (${m.retardataire.statut})`, m.retardataire.statut === 'recupere' && J.auVolant && J.veh === veh]);
+    }
+    // 2. pédaler sur la départementale (vers l'est), les pieds sur les pédales
+    CL.teleporter(30, 12.4, Math.PI / 2); CL.step(2);
+    const tr = CL.tr, ct = CL.ctrl, x0 = tr.pos.x;
+    ct.ky = -1; ct.kx = 0;
+    let pire = 0, n = 0, vmax = 0;
+    for (let k = 0; k < 60 * 6; k++) {
+      CL.step(1); vmax = Math.max(vmax, tr.v);
+      if (k > 90 && k % 4 === 0) {
+        CL.scene.updateMatrixWorld();
+        for (const [pied, pedale] of [[12, 5], [15, 6]]) {
+          const b = J.joueur.m.os[pied].localToWorld(new V3(0, -0.08, 0.11)), p = tr.m.os[pedale].getWorldPosition(new V3()); p.y += 0.016;
+          pire = Math.max(pire, b.distanceTo(p)); n++;
+        }
+      }
+    }
+    { const s = Math.sin(tr.h), c = Math.cos(tr.h); CL.photo(tr.pos.x + s * 2.5 + c * 2.2, tr.pos.y + 1.3, tr.pos.z + c * 2.5 - s * 2.2, tr.pos.x, tr.pos.y + 0.8, tr.pos.z); }
+    log.push([`on pédale : ${vmax.toFixed(1)} m/s au plus (vélo de ville), ${(tr.pos.x - x0).toFixed(0)} m en 6 s, les pieds sur les pédales (${n} mesures, au pire ${(pire * 100).toFixed(1)} cm), le pédalier tourne`, vmax > 5 && vmax < 7.5 && tr.pos.x - x0 > 20 && pire < 0.05 && n > 100]);
+    return log;
+  });
+  await capture('velo-roule');
+  await etape('tourner', () => {
+    const log = [], J = CL.jeu, tr = CL.tr, ct = CL.ctrl, veh = J.veh; CL.photo();
+    // 3. tourner : il penche dans le virage ; freiner : pied à terre
+    const h0 = tr.h; let pench = 0;
+    ct.kx = 1; for (let k = 0; k < 50; k++) { CL.step(1); pench = Math.max(pench, Math.abs(tr.incl)); }
+    ct.kx = 0; ct.ky = 1; for (let k = 0; k < 60 * 3 && tr.v > 0.05; k++) CL.step(1); ct.ky = 0; CL.step(40);
+    log.push([`il tourne (${(Math.abs(h0 - tr.h) * 57).toFixed(0)}°) en penchant (${(pench * 57).toFixed(0)}°) ; freiné, arrêté pied à terre`, Math.abs(h0 - tr.h) > 0.3 && pench > 0.1 && Math.abs(tr.v) < 0.05 && tr.pied > 0.9]);
+    // 4. descendre : sur sa béquille ; le reprendre
+    CL.agir(); CL.finirGeste();
+    log.push([`descendu : debout à côté (${Math.hypot(J.joueur.pos.x - tr.pos.x, J.joueur.pos.z - tr.pos.z).toFixed(2)} m), le vélo sur sa béquille (penche ${tr.incl.toFixed(2)})`, !J.auVolant && tr.beq > 0.99 && Math.abs(tr.incl - 0.1) < 0.02 && !J.joueur.assis && Math.hypot(J.joueur.pos.x - tr.pos.x, J.joueur.pos.z - tr.pos.z) < 1.2]);
+    CL.step(10);
+    const mv = CL.veloProche, et = document.querySelector('.action:not([hidden])');
+    CL.agir(); CL.finirGeste();
+    log.push([`repris (« ${et ? et.textContent : '?'} »), en selle`, J.auVolant && J.veh === veh]);
+    CL.agir(); CL.finirGeste();
+    return log;
+  });
+  await capture('velo-bequille');
+  // 5. un vélo de course (pas de béquille), dans un range-vélos : descendu, on le couche sur le côté
+  await etape('course', () => {
+    const log = [], J = CL.jeu;
+    const G = CL.gares.find(g => !g.pris && (g.genre === 'course' || g.genre === 'vtt')), co = Math.cos(G.h), si = Math.sin(G.h);
+    CL.teleporter(G.x + co * 0.7, G.z - si * 0.7, G.h); CL.step(3);
+    if (CL.veloProche?.gare !== G) CL.teleporter(G.x - co * 0.7, G.z + si * 0.7, G.h), CL.step(3);
+    CL.agir(); CL.finirGeste();
+    const veh = J.veh, ok1 = J.auVolant && veh.genre === 'velo' && veh.m.genre === G.genre;
+    const ct = CL.ctrl; ct.ky = -1; CL.step(120); ct.ky = 1; CL.step(150); ct.ky = 0; CL.step(20);
+    CL.agir(); CL.finirGeste();
+    log.push([`un ${G.genre === 'vtt' ? 'VTT' : 'vélo de course'} pris dans un range-vélos, roulé, laissé couché sur le côté (penche ${veh.p.incl.toFixed(2)})`, ok1 && !J.auVolant && Math.abs(Math.abs(veh.p.incl) - 1.36) < 0.02 && veh.p.couche !== 0]);
+    CL.photo(veh.p.pos.x + 2.2, veh.p.pos.y + 1.6, veh.p.pos.z + 2.2, veh.p.pos.x, veh.p.pos.y + 0.3, veh.p.pos.z);
+    return log;
+  });
+  await capture('velo-couche');
+  // 6. un vélo laissé, le van le pousse : il tombe, glisse, le van n'est pas arrêté
+  await etape('pousse-laisse', () => {
+    const log = [], J = CL.jeu; CL.photo();
+    const b = CL.velosJ[0].p, van = CL.vehicule('van');
+    // le vélo au milieu de la cour du domaine, debout sur sa béquille
+    b.placer(-95, -45, 0); b.poser({ incl: 0.1, braq: 0.25, roue: 0, mani: 0, selleE: 0.1 }); b.beq = 1; b.sync(0, 0);
+    CL.remonter('van'); CL.teleporter(-95, -58, 0); CL.step(2);
+    const tr = CL.tr, ct = CL.ctrl, x0 = b.pos.x, z0 = b.pos.z; ct.ky = -1;
+    let vmin = 99, passe = false;
+    for (let k = 0; k < 60 * 6 && !passe; k++) { CL.step(1); if (tr.pos.z > -50) vmin = Math.min(vmin, tr.v); if (tr.pos.z > -40) passe = true; }
+    ct.ky = 1; CL.step(90); ct.ky = 0;
+    for (let k = 0; k < 200 && b.bouge; k++) CL.step(1);
+    log.push([`un vélo laissé dans la cour, le van le pousse : il tombe (${b.couche ? 'couché' : 'debout'}), glisse de ${Math.hypot(b.pos.x - x0, b.pos.z - z0).toFixed(1)} m ; le van passe (au plus lent ${vmin.toFixed(1)} m/s)`, passe && vmin > 1.5 && b.couche !== 0 && Math.hypot(b.pos.x - x0, b.pos.z - z0) > 1 && !b.bouge]);
+    CL.agir(); CL.finirGeste();
+    return log;
+  });
+  // 7. un cycliste tombé : son vélo par terre, le van le pousse sans être bloqué ; la conduite assistée passe au pas
+  await etape('pousse-cycliste', () => {
+    const log = [], J = CL.jeu, V = CL.velos, C = V.cyclistes;
+    for (const w of CL.voitures()) w.x = w.sens > 0 ? -330 : 330;
+    const c = C[1], suivre = n => { for (let k = 0; k < n; k++) { CL.photo(c.x + 3, c.y + 2, c.z + 3, c.x, c.y, c.z); CL.step(1); } };
+    suivre(30);
+    CL.remonter('van');
+    const tr = CL.tr, ct = CL.ctrl;
+    // il tombe (il a sauté de côté) : le vélo couché au milieu de la route, devant le van
+    V.sauter(c, 0, -1, tr); for (let k = 0; k < 90; k++) suivre(1);
+    c.sz = 11.2; c.sx = Math.max(-100, Math.min(c.sx, 20)); c.p.placer(c.sx, 13.8, 0);
+    const bx = c.sx, bz = c.sz;
+    CL.teleporter(bx - 14, 11.4, Math.PI / 2); CL.step(2);
+    ct.ky = -1; let vmin = 99, passe = false, n = 0;
+    for (let k = 0; k < 60 * 6 && !passe; k++) { CL.step(1); if (tr.pos.x > bx - 6) vmin = Math.min(vmin, tr.v); if (tr.pos.x > bx + 6) passe = true; }
+    ct.ky = 1; for (let k = 0; k < 120 && tr.v > 0.2; k++) CL.step(1); ct.ky = 0; CL.step(10);
+    const d = Math.hypot(c.sx - bx, c.sz - bz);
+    log.push([`un cycliste tombé, son vélo couché sur la route : le van le pousse (${d.toFixed(1)} m) et passe (au plus lent ${vmin.toFixed(1)} m/s) ; personne n'est touché (${c.touches || 0})`, passe && vmin > 1.5 && d > 1 && !(c.touches > 0)]);
+    // la conduite assistée : un autre vélo couché sur son chemin, elle ne s'arrête pas pour lui
+    for (let k = 0; k < 60 * 20 && c.etat !== 'roule'; k++) CL.step(1);
+    V.sauter(c, 0, -1, tr); for (let k = 0; k < 60; k++) CL.step(1);
+    c.sz = 8.6; c.sx = Math.max(-60, Math.min(c.sx, 20)); c.p.placer(c.sx, 5.8, 0); // (dans la file de la conduite assistée, vers l'ouest)
+    CL.mission.etape = 'retour'; CL.mission.itin = null;
+    CL.teleporter(c.sx + 30, 8.4, -Math.PI / 2); CL.step(2);
+    ct.id = 1; ct.jx = 0; ct.jy = 0;
+    let passeA = false, vminA = 99; const bx2 = c.sx;
+    for (let k = 0; k < 60 * 25 && !passeA; k++) { CL.step(1); if (Math.abs(tr.pos.x - bx2) < 8) vminA = Math.min(vminA, tr.v); if (tr.pos.x < bx2 - 8) passeA = true; }
+    ct.id = null; ct.ky = 1; for (let k = 0; k < 200 && Math.abs(tr.v) > 0.2; k++) CL.step(1); ct.ky = 0; CL.step(5);
+    log.push([`la conduite assistée ne reste pas derrière un vélo couché : elle le contourne, ou le pousse au pas (au plus lent ${vminA.toFixed(1)} m/s)`, passeA && vminA > 0.8 && vminA < 90]);
+    CL.agir(); CL.finirGeste();
+    return log;
+  });
+  // 8. le vélo d'un cycliste : arrêté devant nous, il nous le prête et s'en va à pied ; il revient plus loin sur un autre
+  await etape('emprunt', () => {
+    const log = [], J = CL.jeu, V = CL.velos, C = V.cyclistes;
+    for (const w of CL.voitures()) w.x = w.sens > 0 ? -330 : 330;
+    const c = C.find(x => x.actif && x.vu !== undefined && x.genre !== 'enfant' && !x.def.suit && x.def.chemin === 'ouest') || C[2];
+    for (let k = 0; k < 60 && !(c.vu && c.etat === 'roule'); k++) { CL.photo(c.x + 4, c.y + 2, c.z + 4, c.x, c.y, c.z); CL.step(1); }
+    CL.teleporter(c.x + Math.sin(c.h) * 9, c.z + Math.cos(c.h) * 9, c.h + Math.PI); CL.step(1);
+    let vp = null;
+    for (let k = 0; k < 60 * 12 && !vp; k++) { CL.photo(c.x + 4, c.y + 2, c.z + 4, c.x, c.y, c.z); CL.step(1); const q = CL.veloProche; if (q && q.cycliste === c) vp = q; else if (k % 30 === 0 && Math.hypot(J.joueur.pos.x - c.x, J.joueur.pos.z - c.z) > 2.2) CL.teleporter(c.x + Math.sin(c.h) * 1.9, c.z + Math.cos(c.h) * 1.9, c.h + Math.PI); }
+    log.push([`un cycliste arrêté devant nous : « Emprunter le vélo »`, !!vp]);
+    if (!vp) return log;
+    const m = c.m;
+    CL.agir(); CL.finirGeste();
+    log.push([`il nous le prête : on roule sur son vélo (le même), lui s'en va à pied`, J.auVolant && J.veh.m === m && c.prete === 1 && !c.m]);
+    const ct = CL.ctrl; ct.ky = -1; CL.step(90); ct.ky = 0;
+    const p0 = { x: c.p.pos.x, z: c.p.pos.z }; CL.step(120);
+    log.push([`il marche (${Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z).toFixed(1)} m en 2 s)`, Math.hypot(c.p.pos.x - p0.x, c.p.pos.z - p0.z) > 1.5]);
+    // loin et hors de la vue : il revient sur un autre vélo, plus loin
+    CL.teleporter(-150, 10, Math.PI / 2); CL.photo(-150, 3, 10, -140, 1, 10); CL.step(400); CL.photo();
+    log.push([`hors de la vue, il revient plus loin sur son chemin (il roule)`, c.prete === 0 && c.etat === 'roule']);
+    let refait = false;
+    for (let k = 0; k < 60 * 40 && !refait; k++) { CL.photo(c.x + 5, c.y + 3, c.z + 5, c.x, c.y, c.z); CL.step(1); refait = !!c.m && c.vu && c.p.m.groupe.parent === c.m.incline; }
+    log.push([`un autre vélo pour lui, de près, et il est dessus`, refait]);
+    CL.photo();
+    return log;
+  });
+  // 9. la nuit, le feu arrière (et le phare des vélos qui en ont) ; un vélo d'enfant de l'école ; ce que ça coûte
+  await etape('nuit', () => {
+    const log = [], J = CL.jeu;
+    J.minutes = Math.floor(J.minutes / 1440) * 1440 + 1210; CL.step(5);
+    const m = J.veh.m;
+    log.push(['la nuit, à vélo : le feu arrière allumé (le phare aussi, s\'il en a un)', J.auVolant && m.lampe.ar.visible && (!m.lampe.av || m.lampe.av.visible)]);
+    CL.agir(); CL.finirGeste();
+    J.minutes = Math.floor(J.minutes / 1440) * 1440 + 1440 + 600; CL.step(5);
+    const G = CL.gares.find(g => !g.pris && g.genre === 'enfant'), co = Math.cos(G.h), si = Math.sin(G.h);
+    CL.teleporter(G.x + co * 0.6, G.z - si * 0.6, G.h); CL.step(3);
+    const q = CL.veloProche; CL.agir(); CL.finirGeste();
+    log.push([`un vélo d'enfant du râtelier de l'école se prend aussi`, q && q.gare === G && J.auVolant && J.veh.m.genre === 'enfant']);
+    const tr = CL.tr; CL.ctrl.ky = 1; CL.step(60); CL.ctrl.ky = 0;
+    CL.teleporter(100, 12.4, Math.PI / 2); CL.step(30);
+    CL.ctrl.ky = -1; CL.step(60);
+    const b = CL.bench ? CL.bench(120) : null; CL.ctrl.ky = 0;
+    log.push([`à vélo dans le bourg : ${b ? JSON.stringify(b) : '?'}`, true]);
+    const s = Math.sin(tr.h), c = Math.cos(tr.h);
+    CL.photo(tr.pos.x - s * 4 + c * 1.6, tr.pos.y + 1.7, tr.pos.z - c * 4 - s * 1.6, tr.pos.x, tr.pos.y + 0.9, tr.pos.z);
+    return log;
+  });
+  await capture('velo-enfant');
 }
 
 if (scenario === 'ecole') {

@@ -85,7 +85,11 @@ class Grille {
         l = gros.concat(petits);
         for (const g of gros) nOmbre += g.attributes.position.count;
       }
+      // (un vélo garé qu'on peut prendre, velos.js : GARES ; ses triangles gardent leur ordre, sa plage d'indices est notée)
+      const gares = [];
+      for (let i = 0, n = 0; i < l.length; i++) { const g = l[i], c = g.attributes.position.count; if (g.userData.gare) gares.push(g.userData.gare, n, c); n += c; }
       const geo = indexer(fusion(l), true), m = new THREE.Mesh(geo, vent ? MAT_VENT : MAT);
+      for (let i = 0; i < gares.length; i += 3) { const G = gares[i]; G.maillage = m; G.i0 = gares[i + 1]; G.n = gares[i + 2]; }
       if (ombre && nOmbre < geo.attributes.position.count) {
         m.onBeforeShadow = () => geo.setDrawRange(0, nOmbre);
         m.onAfterShadow = () => geo.setDrawRange(0, Infinity);

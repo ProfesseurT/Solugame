@@ -54,6 +54,9 @@ export const TEMPERAMENTS = {
   // une voiture empruntée (ou volée, en mode WTF) : la plus vive, accrocheuse sur la route, perdue dans les vignes
   voiture: { vmax: 23, vmaxVigne: 2.4, vmaxAr: 5, vmaxArVigne: 1.6, acc: 5.6, accAr: 3, frein: 9.5, alat: 8.6, braqMax: 0.58, volant: 8,
     rapports: [0, 5, 10, 15.5, 99], resVigne: 2.2, ressorts: 0.55, tenue: 1, survirage: 0.16 },
+  // un vélo (velos.js : VeloJoueur, sa propre physique) : ce que lisent la conduite assistée et la caméra
+  velo: { vmax: 7, vmaxVigne: 2, vmaxAr: 0.8, vmaxArVigne: 0.6, acc: 1.3, accAr: 1.2, frein: 5.2, alat: 5, braqMax: 0.7, volant: 1,
+    rapports: [0, 99], resVigne: 1, ressorts: 0, tenue: 0, survirage: 0 },
 };
 const DIMS = { rAr: 0.78, rAv: 0.45, yAr: 0.78, yAv: 0.45, emp: 2.25, off: [1.05, -0.95], r: 1.12, pivot: new THREE.Vector3(0, 0.75, -0.35) };
 const DEUX = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
@@ -75,6 +78,7 @@ export class Tracteur {
     this.volant = 0; this.aLong = 0; this.aLat = 0;
     // caisse sur ressorts : roulis, tangage, pompage et leurs vitesses ; essieu avant oscillant
     this.rl = 0; this.rlv = 0; this.tg = 0; this.tgv = 0; this.pp = 0; this.ppv = 0; this.es = 0; this.esv = 0;
+    this.nx = 0; this.nz = 0; // (heurter : la normale du dernier contact)
     // la pente sous les roues (relief.js) : en long (positive en montée), le véhicule penché d'autant (tangage, roulis)
     this.pente = 0; this.solTg = 0; this.solRl = 0;
     modele.groupe.rotation.order = 'YXZ';
@@ -184,34 +188,8 @@ export class Tracteur {
     this.pos.x += (fx * this.v + fz * this.vT) * dt; this.pos.z += (fz * this.v - fx * this.vT) * dt;
 
     /* -- deux cercles (avant, arrière) contre le décor, les voitures et l'autre véhicule du domaine */
-    let touche = false, nx = 0, nz = 0;
-    const OFF = this.d.off, RC = this.d.r;
-    for (let i = 0; i < 2; i++) {
-      const c = DEUX[i]; c.x = this.pos.x + fx * OFF[i]; c.z = this.pos.z + fz * OFF[i];
-      const ox = c.x, oz = c.z;
-      if (col.resoudre(c, RC)) { touche = true; nx += col.nx; nz += col.nz; }
-      for (let j = 0; j < voitures.length; j++) {
-        const vo = voitures[j];
-        // ses deux cercles le long de son axe (sur la départementale : x, dans son sens ; au château : ax, az, village.js ;
-        // un cycliste, velos.js : deux petits cercles, dc et rc)
-        const ax = vo.ax ?? vo.sens, az = vo.az ?? 0, dc = vo.dc ?? 1.1;
-        for (let k = -1; k <= 1; k += 2) {
-          const vx = vo.x + k * dc * ax, vz = vo.z + k * dc * az, dx = c.x - vx, dz = c.z - vz, d2 = dx * dx + dz * dz, R = RC + (vo.rc ?? 1.0);
-          if (d2 < R * R && d2 > 1e-6) {
-            const d = Math.sqrt(d2), p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d;
-            vo.cogner(this, -dx / d, -dz / d); // la voiture encaisse le choc
-          }
-        }
-      }
-      for (const a of this.autres) { // les autres véhicules du joueur, garés (deux cercles eux aussi)
-        const ax = Math.sin(a.h), az = Math.cos(a.h);
-        for (const o of a.d.off) {
-          const dx = c.x - (a.pos.x + ax * o), dz = c.z - (a.pos.z + az * o), d2 = dx * dx + dz * dz, R = RC + a.d.r;
-          if (d2 < R * R && d2 > 1e-6) { const d = Math.sqrt(d2), p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d; }
-        }
-      }
-      this.pos.x += c.x - ox; this.pos.z += c.z - oz;
-    }
+    const touche = this.heurter(col, voitures);
+    let nx = this.nx, nz = this.nz;
     this.chocVu = 0;
     let frotte = 0;
     if (touche) {
@@ -251,6 +229,50 @@ export class Tracteur {
     this.effort += ((garder ? 0.35 : charge) + this.frein * 0.1 - this.effort) * lisser(dt, 8);
 
     this.sync(dt, t);
+  }
+
+  // Deux cercles (avant, arrière) contre le décor, les voitures (et les cyclistes) et les autres véhicules du joueur : le
+  // véhicule en est repoussé ; rend s'il y a eu contact (la somme des normales : this.nx, this.nz). rangs : les rangs de
+  // vigne arrêtent aussi (le vélo). Ce qui se pousse (poussable : un vélo couché, ou un vélo du joueur qu'il a laissé,
+  // velos.js) n'arrête pas le véhicule : il est écarté (pousse(qui, nx, nz, de combien il était dedans)) et glisse.
+  heurter(col, voitures, rangs = false) {
+    let touche = false, nx = 0, nz = 0;
+    const OFF = this.d.off, RC = this.d.r, fx = Math.sin(this.h), fz = Math.cos(this.h);
+    for (let i = 0; i < 2; i++) {
+      const c = DEUX[i]; c.x = this.pos.x + fx * OFF[i]; c.z = this.pos.z + fz * OFF[i];
+      const ox = c.x, oz = c.z;
+      if (col.resoudre(c, RC)) { touche = true; nx += col.nx; nz += col.nz; }
+      if (rangs && col.rangs(c, RC, true)) { touche = true; nx += col.nx; nz += col.nz; }
+      for (let j = 0; j < voitures.length; j++) {
+        const vo = voitures[j];
+        // ses deux cercles le long de son axe (sur la départementale : x, dans son sens ; au château : ax, az, village.js ;
+        // un cycliste, velos.js : deux petits cercles, dc et rc)
+        const ax = vo.ax ?? vo.sens, az = vo.az ?? 0, dc = vo.dc ?? 1.1;
+        for (let k = -1; k <= 1; k += 2) {
+          const vx = vo.x + k * dc * ax, vz = vo.z + k * dc * az, dx = c.x - vx, dz = c.z - vz, d2 = dx * dx + dz * dz, R = RC + (vo.rc ?? 1.0);
+          if (d2 < R * R && d2 > 1e-6) {
+            const d = Math.sqrt(d2);
+            if (vo.poussable) { vo.pousse(this, -dx / d, -dz / d, R - d); continue; } // (un vélo tombé : on le pousse)
+            const p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d;
+            vo.cogner(this, -dx / d, -dz / d); // la voiture encaisse le choc
+          }
+        }
+      }
+      for (const a of this.autres) { // les autres véhicules du joueur, garés (deux cercles eux aussi)
+        const ax = Math.sin(a.h), az = Math.cos(a.h);
+        for (const o of a.d.off) {
+          const dx = c.x - (a.pos.x + ax * o), dz = c.z - (a.pos.z + az * o), d2 = dx * dx + dz * dz, R = RC + a.d.r;
+          if (d2 < R * R && d2 > 1e-6) {
+            const d = Math.sqrt(d2);
+            if (a.poussable) { a.pousse(this, -dx / d, -dz / d, R - d); continue; }
+            const p = (R - d) / d; c.x += dx * p; c.z += dz * p; touche = true; nx += dx / d; nz += dz / d;
+          }
+        }
+      }
+      this.pos.x += c.x - ox; this.pos.z += c.z - oz;
+    }
+    this.nx = nx; this.nz = nz;
+    return touche;
   }
 
   sync(dt, t) {

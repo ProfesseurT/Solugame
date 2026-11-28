@@ -5,7 +5,7 @@ import { borne } from './outils.js';
 
 const VOIE = 1.6;          // décalage vers la droite de l'itinéraire sur la départementale (on roule à droite)
 const surRoute = (a, b) => Math.abs(a[1] - 10) < 2.5 && Math.abs(b[1] - 10) < 2.5; // segment le long de la départementale (z = 10)
-const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14, enjambeur: 6.8 }; // vitesse de croisière (m/s)
+const CROISIERE = { tracteur: 8.5, van: 12.5, voiture: 14, enjambeur: 6.8, velo: 5 }; // vitesse de croisière (m/s ; un vélo : la sienne, tr.croisiere)
 const SONDE = { x: 0, z: 0 }; // point d'essai devant ou derrière le véhicule (demi-tour)
 const COINS = [0, 0.8, -0.8]; // milieu et coins du pare-chocs, sondés pendant un demi-tour
 // la commande rendue (la même à chaque appel : main.js la lit aussitôt ; jusqu'à trois appels par image pour l'enjambeur)
@@ -155,7 +155,7 @@ export class Pilote {
     const lim = Math.min(T.braqMax, Math.atan(emp * T.alat / Math.max(0.01, av * av)));
     const braq = borne(delta / lim, -1, 1);
     // vitesse : croisière, moins vite en virage, dans les vignes et près de la destination ; derrière une voiture
-    let vc = (CROISIERE[genre] || 8) * (1 - 0.75 * Math.min(1, Math.abs(delta) / T.braqMax));
+    let vc = (tr.croisiere || CROISIERE[genre] || 8) * (1 - 0.75 * Math.min(1, Math.abs(delta) / T.braqMax));
     if (lon <= 0.5) vc = 2.2;
     if (tr.vignes) vc = Math.min(vc, T.vmaxVigne * 0.85);
     if (cible) {
@@ -165,12 +165,15 @@ export class Pilote {
     // un autre véhicule du joueur, garé sur le passage : on s'arrête avant (on le contourne à la main) ; mesuré le long de
     // la direction du point visé (pas du capot : pendant un virage, il balaie à côté)
     for (const a of tr.autres) {
+      if (a.poussable) continue; // (un vélo laissé là : on le pousse, vehicules.js)
       const ux = dx / Ld, uz = dz / Ld, ex = a.pos.x - pos.x, ez = a.pos.z - pos.z, lo = ex * ux + ez * uz, la = ex * uz - ez * ux;
       if (lo > 0 && lo < 9 && Math.abs(la) < a.d.r + tr.d.r * 0.85) vc = Math.min(vc, lo < 5.5 ? 0 : (lo - 5.5) * 1.2);
     }
     for (let k = 0; k < voitures.length; k++) {
       const v = voitures[k], ex = v.x - pos.x, ez = v.z - pos.z, lo = ex * sx + ez * cz, la = ex * cz - ez * sx;
       // un cycliste : là où il sera une fois qu'on se sera décalé ; on le suit à sa vitesse, on s'arrête à 5 m de lui
+      // (tombé, son vélo par terre : on passe au pas en le poussant, vehicules.js)
+      if (v.poussable) { if (lo > 0 && lo < 30 && Math.abs(la) < (tr.demiL ?? 1.2) + 0.8) vc = Math.min(vc, 2.5 + Math.max(0, lo - 5) * 0.8); continue; }
       if (v.velo) { if (lo > 0 && lo < 20 && Math.abs(la - (decalC - this.decal)) < (tr.demiL ?? 1.2) + 0.55) vc = Math.min(vc, lo < 5 + (tr.nez ?? 2) ? 0 : v.v * 0.92); continue; }
       // (en tournant à gauche, la voiture d'en face arrêtée pour nous laisser passer, de côté, n'est pas devant nous : on ne
       // l'attend pas, sinon chacun attend l'autre)

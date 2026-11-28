@@ -133,7 +133,7 @@ export const DIALOGUES = {
   attenteSignature: n => [{ qui: '', txt: `Encore ${n} commande${s(n)} à signer. Patience, les clients relisent.` }],
   rienACharger: [{ qui: '', txt: 'Rien à charger pour l\'instant : les commandes se préparent dans le bureau, sur votre téléphone.' }],
   // un véhicule sans plateau (une voiture empruntée, l'enjambeur) au chai : il ne porte pas de cartons
-  sansPlateau: g => [{ qui: '', txt: `${g === 'enjambeur' ? 'L\'enjambeur' : 'Une voiture'} ne porte pas de cartons : prenez le tracteur ou le van.` }],
+  sansPlateau: g => [{ qui: '', txt: `${g === 'enjambeur' ? 'L\'enjambeur' : g === 'velo' ? 'Un vélo' : 'Une voiture'} ne porte pas de cartons : prenez le tracteur ou le van.` }],
   wtf: on => [{ qui: '', txt: on ? 'Mode WTF : volez les voitures, aplatissez les passants. Ils se relèvent, promis.' : 'Mode WTF coupé : on emprunte les voitures, les passants s\'écartent.' }],
   aPied: [{ qui: '', txt: 'Les cartons à pied ? Prenez plutôt le tracteur ou le van.' }],
   sansCartons: v => [{ qui: '', txt: v === 'van' ? 'Les cartons sont dans le van.' : 'Les cartons sont sur le tracteur.' }],
@@ -768,6 +768,10 @@ export const VELOS = {
   saute: ['Waouh !', 'Ouh là !', 'Aïe aïe aïe !'],
   chute: ['Non mais ça va pas ?!', 'Eh ! Il y a un vélo !', 'On ne voit pas les cyclistes, ou quoi ?', 'Mon vélo !'],
   repart: ['Bon, il n\'a rien. On repart.', 'Plus de peur que de mal.', 'Les tracteurs, je vous jure !', 'Allez, en selle.'],
+  // son vélo couché, poussé par un véhicule (Teddy, 28/11/2026) ; prêté au joueur ; volé (mode WTF)
+  pousse: ['Hé ! Mon vélo !', 'Doucement avec mon vélo !', 'Il était là, mon vélo !'],
+  prete: ['Tenez, prenez-le. Faites-y attention !', 'Allez-y, je finirai à pied.', 'Prenez-le, je ne suis pas pressé.'],
+  vole: ['Au voleur ! Mon vélo !', 'Hé ! Rendez-moi ça !', 'Mon vélo ! Revenez !'],
 };
 
 // Le parvis du chai (parvis.js) : ce que disent ceux qui y travaillent quand on passe près d'eux, à pied. Le soir de la

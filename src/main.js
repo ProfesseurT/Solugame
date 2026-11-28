@@ -35,7 +35,7 @@ import { Chien } from './chien.js';
 import { Tonnellerie } from './tonnellerie.js';
 import { Village } from './village.js';
 import { Restaurateurs } from './restaurateurs.js';
-import { Velos } from './velos.js';
+import { Velos, VeloJoueur, modeleVelo, gareProche, prendreGare, GARES } from './velos.js';
 import { Ecole } from './ecole.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur, ecart } from './reseau.js';
@@ -147,13 +147,14 @@ joueur.placer(L.depart.x, L.depart.z, L.depart.h);
 // ou le dernier conduit. VEH_CARTE : repérés sur la mini-carte quand on est à pied ; OBSTACLES : ce que voient les
 // voitures de la départementale (le joueur, puis chaque véhicule, avec son emprise).
 const VEHICULES = [], VEH_CARTE = [], OBSTACLES = [null], LOINS = []; // (LOINS : cachés au-delà de la brume, voirLoin)
-function creerVehicule(genre, modele, lieu, poste) {
+function creerVehicule(genre, modele, lieu, poste, Physique = Tracteur) {
   scene.add(modele.groupe); LOINS.push(modele.groupe);
-  const p = new Tracteur(modele, genre);
+  const p = new Physique(modele, genre);
   p.placer(lieu.x, lieu.z, lieu.h);
   p.pos.veh = p;
   const v = { genre, m: modele, p, poste };
-  VEHICULES.push(v); VEH_CARTE.push(p); OBSTACLES.push(p.pos);
+  VEHICULES.push(v); OBSTACLES.push(p.pos);
+  if (genre !== 'velo') VEH_CARTE.push(p); // (un vélo laissé quelque part n'est pas repéré sur la mini-carte)
   for (const a of VEHICULES) a.p.autres = VEHICULES.filter(b => b !== a).map(b => b.p); // on ne se traverse pas
   return v;
 }
@@ -397,7 +398,8 @@ const jeu = {
     joueur.pos.copy(ancien.pos); joueur.h = ancien.h; joueur.assis = ancien.assis;
     ancien.m.groupe.removeFromParent();
     ancien.m.groupe.traverse(o => { if (o.isSkinnedMesh) { o.geometry.dispose(); o.skeleton.dispose(); } });
-    if (this.auVolant) { tm.caisse.add(joueur.m.groupe); joueur.m.groupe.position.copy(tm.siege); }
+    if (this.auVolant && veh.genre === 'velo') { tm.incline.add(joueur.m.groupe); joueur.velo = tr.Vp; } // (en selle : velos.js)
+    else if (this.auVolant) { tm.caisse.add(joueur.m.groupe); joueur.m.groupe.position.copy(tm.siege); }
     else scene.add(joueur.m.groupe);
     joueur.sync(0, temps);
     for (const b of document.querySelectorAll('.perso')) b.setAttribute('aria-pressed', String(b.dataset.h === h.replace('2', ''))); // (l'autre apparence compte)
@@ -587,6 +589,7 @@ const gestes = new Gestes({ jeu, scene, col, porte: monde.porteBureau }); // mon
 jeu.tel = tel; jeu.mission = mission; jeu.pc = pc; jeu.gestes = gestes;
 
 // étiquettes posées dans le monde
+const etqVelo = hud.action('Prendre le vélo'); // (un vélo garé, ou celui d'un cycliste : veloProche)
 const etqMonter = hud.action('Monter'), etqServir = hud.action('Servir un verre'), etqDescendre = hud.action('Descendre'), etqPrendre = hud.action('Emprunter la voiture'), etqDormir = hud.action('Rentrer dormir');
 const etqEchantillon = hud.action('Prendre un échantillon'); // mission 3 : le carton ouvert du chai
 const etqPresenter = hud.action(''); // les restaurateurs du coin : « Présenter nos vins » (restaurateurs.js)
@@ -596,7 +599,7 @@ const bureau = new Bureau({ jeu, monde, scene, gestes, hud, ctrl, cam, mission, 
 // les bureaux de Solumatic, dans la zone d'activités (solumatic.js) : la porte d'entrée, ceux qui y travaillent
 for (const o of [monde.soleil, monde.soleil.target, monde.hemi, monde.interieurSolu, monde.porteSolu.parent, joueur.m.groupe, taches.im]) GARDES.add(o);
 const solu = new Solumatic({ jeu, monde, scene, gestes, hud, ctrl, cam, tel, son, camera, regarder, isoler, emettre, garder: o => GARDES.add(o) });
-const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir]; // celles qui se touchent (toucher)
+const ETQ_ACTION = [...bureau.etiquettes, ...solu.etiquettes, etqEchantillon, etqServir, etqPresenter, etqMonter, etqDescendre, etqPrendre, etqDormir, etqVelo]; // celles qui se touchent (toucher)
 // Le chien du domaine (chien.js) : il vit dans la cour, s'écarte de tout véhicule qui roule vers lui, se laisse caresser,
 // dort à la maison. mobiles : ce qui peut rouler (les véhicules du joueur, la remorque, le transpalette de Marc) ; gens :
 // ce qu'il ne traverse pas (le joueur à pied, les ouvriers du parvis, Marc)
@@ -653,13 +656,15 @@ $('radio').addEventListener('click', e => { e.stopPropagation(); if (jeu.auVolan
 // le véhicule à portée de main (le plus proche, à moins de 5 m), ou null
 function vehiculeProche() {
   let best = null, dmin = 5;
-  for (const v of VEHICULES) { const d = Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z); if (d < dmin) { dmin = d; best = v; } }
+  // (un vélo : à moins de 1,6 m)
+  for (const v of VEHICULES) { const d = Math.hypot(joueur.pos.x - v.p.pos.x, joueur.pos.z - v.p.pos.z) + (v.genre === 'velo' ? 3.4 : 0); if (d < dmin) { dmin = d; best = v; } }
   return best;
 }
 // Installé au volant (fin de la montée, gestes.js) : le moteur démarre
 function auVolant(v) {
   veh = v; tr = v.p; tm = v.m;
   jeu.auVolant = true;
+  if (v.genre === 'velo') { joueur.v = 0; return; } // (en selle : velos.js, MONTAGE ; ni moteur, ni radio)
   joueur.poste = v.poste; joueur.assis = true; joueur.v = 0; joueur.sync(0, temps);
   son.jouer('moteur-on'); son.radio(true); hud.radio(son.radioAllumee, tactile);
   if (tactile && !dejaConduit) { dejaConduit = true; hud.dire(DIALOGUES.conduite); }
@@ -787,6 +792,37 @@ function prendreVoiture(c) {
     ...gestes.etapesMonter(v, monter),
   ]);
 }
+/* ------------------------------------------------------------------ les vélos (Teddy, 28/11/2026 : « permettre au personnage
+   de prendre et faire du vélo, tous les vélos »)
+   À pied, tout près : un vélo garé (velos.js : GARES ; il disparaît du décor, un vélo qui roule le remplace, à sa place et
+   dans sa pose), ou celui d'un cycliste arrêté devant nous (il nous le prête et s'en va à pied ; en mode WTF, on le lui
+   vole). Il devient un véhicule du joueur (VeloJoueur) : on le relève, on l'enfourche ; on en descend comme d'un autre
+   véhicule (la béquille, ou couché sur le côté) ; on le reprend (« Monter sur le vélo »). Un vélo laissé, un véhicule le
+   pousse (il glisse : VELOS_J, glisser). */
+const VELOS_J = [];
+function veloProche() {
+  const g = gareProche(joueur.pos.x, joueur.pos.z);
+  if (g) return { gare: g, x: g.x, y: g.y, z: g.z };
+  const c = velos.empruntable(joueur.pos.x, joueur.pos.z);
+  return c ? { cycliste: c, x: c.x, y: c.y, z: c.z } : null;
+}
+function prendreVelo(s) {
+  if (gestes.actif) return;
+  let v;
+  if (s.gare) {
+    const G = s.gare;
+    prendreGare(G, col);
+    const m = modeleVelo(G.genre, G.couleur, { panier: G.o.panier, selle2: G.o.selle2 }, true);
+    v = creerVehicule('velo', m, { x: G.x, z: G.z, h: G.h }, null, VeloJoueur);
+    v.p.poser(G);
+  } else {
+    const r = velos.ceder(s.cycliste, jeu.wtf);
+    v = creerVehicule('velo', r.m, { x: r.x, z: r.z, h: r.h }, null, VeloJoueur);
+    v.p.poser(r);
+  }
+  VELOS_J.push(v);
+  monter(v);
+}
 function agir() {
   if (tel.ouvert || pc.ouvert || jeu.finVue || etat !== 'jeu' || joueur.service || gestes.actif) return; // pas pendant un geste
   if (bureau.agir()) return; // la porte, le chèque, le portable (bureau.js)
@@ -799,6 +835,8 @@ function agir() {
   if (chien.caressable(joueur.pos)) { caresser(); return; }
   const v = vehiculeProche();
   if (v) { monter(v); return; }
+  const vl = !jeu.dedans && veloProche();
+  if (vl) { prendreVelo(vl); return; }
   const vc = voitureProche();
   if (vc) prendreVoiture(vc);
 }
@@ -871,7 +909,7 @@ function lireEntrees() {
     if (a === 'agir') agir();
     else if (a === 'tel' && $('fin').hidden && !pc.ouvert) tel.basculer();
     else if (a === 'son') son.basculer();
-    else if (a === 'radio') jeu.basculerRadio();
+    else if (a === 'radio' && !(jeu.auVolant && veh.genre === 'velo')) jeu.basculerRadio(); // (pas de radio à vélo)
     else if (a === 'echap' && tel.ouvert && mission.peutFermer()) tel.fermer();
     else if (a === 'echap' && pc.ouvert) { pc.fermer(); mission.fermerPC(); jeu.leverPortable(); }
   }
@@ -955,7 +993,7 @@ function conduire(dt, dtm, dernier = true) {
       if (auto) { gaz = auto.gaz; braq = auto.braq; jeu.pilote = true; }
       else {
         braq = volant;
-        const vc = croisiere(veh.genre) * (sy < -0.4 ? 1.35 : 1) * (1 - 0.45 * Math.abs(braq)) * (tr.vignes ? 0.45 : 1);
+        const vc = (tr.croisiere || croisiere(veh.genre)) * (sy < -0.4 ? 1.35 : 1) * (1 - 0.45 * Math.abs(braq)) * (tr.vignes ? 0.45 : 1);
         gaz = Math.max(-1, Math.min(1, (vc - tr.v) * 0.9));
       }
     }
@@ -966,6 +1004,13 @@ function conduire(dt, dtm, dernier = true) {
   tr.update(dtm, gaz, braq, col, AUTOS, temps, fm);
   if (M === traitement) traitement.pas(dtm); // les rampes traitent les rangs qu'elles survolent
   if (!dernier) return;
+  if (veh.genre === 'velo') {
+    // à vélo (velos.js : la pose est posée par le vélo) ; un choc ; la roue libre qui cliquette
+    joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
+    if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu * 0.6; }
+    if ((tSon -= dt) <= 0) { tSon = 0.22; if (tr.roueLibre && tr.v > 1.5) son.roueLibre(0.75, tr.v); }
+    return;
+  }
   joueur.volant = tr.braq; // les mains suivent la direction
   joueur.pos.copy(tr.pos); joueur.sync(dtm, temps);
   if (tr.chocVu > 0.15) { son.jouer('choc'); cam.secousse = tr.chocVu; try { navigator.vibrate?.(40); } catch (_) { /* rien */ } }
@@ -1038,7 +1083,7 @@ const klaxonVillage = v => { son.jouer('klaxon'); hud.bulle(v.cri, 'Tût tût !'
 function bourg(dtm, ego) {
   if (jeu.auVolant) { DANGER.x = tr.pos.x; DANGER.z = tr.pos.z; DANGER.v = tr.v; DANGER.h = tr.h; }
   DANGER.wtf = jeu.wtf;
-  const danger = jeu.auVolant ? DANGER : null, ecraseur = jeu.wtf && jeu.auVolant && Math.abs(tr.v) > 2.5;
+  const danger = jeu.auVolant ? DANGER : null, ecraseur = jeu.wtf && jeu.auVolant && Math.abs(tr.v) > 2.5 && veh.genre !== 'velo'; // (à vélo, on n'aplatit personne)
   if (!isoles) {
     for (const p of passants) passantVit(p, dtm, danger, ecraseur);
     clients.maj(dtm, temps, ego, jeu.auVolant);
@@ -1209,7 +1254,7 @@ function dormir() {
 
 // La balise de la mission et son étiquette (nom, distance) ; les étiquettes d'action : le bureau du chai d'abord (les
 // autres s'effacent devant elles), servir un verre, monter, descendre
-const HAUT_MONTER = { van: 3.0, voiture: 2.3, enjambeur: 4.9 }; // hauteur de l'étiquette « Monter » (le tracteur : 3,6 m)
+const HAUT_MONTER = { van: 3.0, voiture: 2.3, enjambeur: 4.9, velo: 1.75 }; // hauteur de l'étiquette « Monter » (le tracteur : 3,6 m)
 function reperes(dt, ego, cible) {
   marque.visible = !!cible && !jeu.dedans;
   if (cible) {
@@ -1238,14 +1283,18 @@ function reperes(dt, ego, cible) {
   hud.placer(etqCaresser, chien.x, chien.g.position.y + 1.1, chien.z, caresse);
   hud.placer(etqEchantillon, CARTON3.x, CARTON3.y + 0.8, CARTON3.z, habillage.echantillonProche && !tel.ouvert && !pcPres);
   const vp = !caresse && !dodo && !pcPres && !pr && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? vehiculeProche() : null;
-  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : 'Monter');
+  if (vp) hud.libeller(etqMonter, vp.genre === 'van' ? 'Monter dans le van' : vp.genre === 'voiture' ? 'Monter dans la voiture' : vp.genre === 'enjambeur' ? 'Monter dans l\'enjambeur' : vp.genre === 'velo' ? 'Monter sur le vélo' : 'Monter');
   hud.placer(etqMonter, vp ? vp.p.pos.x : 0, vp ? vp.p.pos.y + (HAUT_MONTER[vp.genre] ?? 3.6) : 0, vp ? vp.p.pos.z : 0, !!vp);
+  // un vélo garé, ou celui d'un cycliste arrêté devant nous (à emprunter, ou à voler en mode WTF)
+  const vl = !vp && !caresse && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? veloProche() : null;
+  if (vl) hud.libeller(etqVelo, vl.gare ? 'Prendre le vélo' : jeu.wtf ? 'Voler le vélo' : 'Emprunter le vélo');
+  hud.placer(etqVelo, vl ? vl.x : 0, vl ? vl.y + (vl.gare ? 1.45 : 2.3) : 0, vl ? vl.z : 0, !!vl);
   // une voiture des autres, à emprunter (ou à voler, en mode WTF)
-  const vc = !vp && !caresse && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
+  const vc = !vp && !vl && !caresse && !pcPres && !jeu.dedans && !jeu.auVolant && !tel.ouvert && !servable && !joueur.service && !gestes.actif ? voitureProche() : null;
   if (vc) hud.libeller(etqPrendre, jeu.wtf ? 'Voler la voiture' : 'Emprunter la voiture');
   hud.placer(etqPrendre, vc ? vc.x : 0, 2.3 + (vc ? vc.y ?? (vc.m ? vc.m.position.y : 0) : 0), vc ? vc.z : 0, !!vc); // (au château : sur son plateau)
   hud.placer(etqServir, servable ? servable.pos.x : 0, servable && servable.assis ? 1.9 : 2.5, servable ? servable.pos.z : 0, !!servable && !pcPres);
-  hud.placer(etqDescendre, tr.pos.x, tr.pos.y + (veh.genre === 'enjambeur' ? 5.0 : 3.8), tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
+  hud.placer(etqDescendre, tr.pos.x, tr.pos.y + (veh.genre === 'enjambeur' ? 5.0 : veh.genre === 'velo' ? 2.35 : 3.8), tr.pos.z, jeu.auVolant && !tel.ouvert && Math.abs(tr.v) < 0.8 && !hud.parle && !gestes.actif);
 }
 
 function miseAJour(dt) {
@@ -1269,9 +1318,10 @@ function miseAJour(dt) {
   // la remorque attelée suit le tracteur (aussi pendant un geste : il recule tout seul pour atteler) ; le chariot de
   // l'imprimerie décharge les palox (mission 3)
   att.maj(dtm, !gestes.roule, voitures);
+  for (let i = 0; i < VELOS_J.length; i++) { const p = VELOS_J[i].p; if (p.bouge) p.glisser(dtm, temps, col); } // (un vélo laissé, poussé)
   if (dech && !dech.fini) { dech.maj(dtm, temps); if (dech.fini) finDechargement(); }
   const ego = jeu.auVolant ? tr.pos : joueur.pos, cap = jeu.auVolant ? tr.h : joueur.h;
-  son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant, !!jeu.dedans);
+  son.ambiance(dt, ego.x, ego.z, jeu.minutes, !jeu.auVolant || veh.genre === 'velo', !!jeu.dedans); // (à vélo, on entend les oiseaux comme à pied)
   bourg(dtm, ego);
   phares();
   if (!isoles) particules.fontaine(dtm, L.fontaine);
@@ -1335,7 +1385,7 @@ const ombrePerso = (m, x, z) => {
   if (m.maillage.visible !== vu) m.maillage.visible = vu;
   return vu;
 };
-const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05], enjambeur: [1.35, 2.25] }; // demi-largeur, demi-longueur
+const TACHES = { tracteur: [1.2, 2.1], van: [1.15, 2.5], voiture: [0.95, 2.05], enjambeur: [1.35, 2.25], velo: [0.28, 0.95] }; // demi-largeur, demi-longueur
 function majTaches() {
   const t = taches;
   t.debut();
@@ -1633,6 +1683,8 @@ window.CL = {
   // la journée de traitement faite d'un coup (essais) : on rentre dormir, la mission 3 commence au réveil
   versMission3() { traitement.etape = 'dodo'; joueur.placer(L.maison.x, L.maison.z + 1, Math.PI); dormir(); this.finirGeste(); },
   get voitureProche() { return voitureProche(); },
+  // les vélos (essais : banc velo) : celui qu'on peut prendre ici, le prendre, ceux qu'on a pris
+  get veloProche() { return veloProche(); }, prendreVelo, velosJ: VELOS_J, gares: GARES,
   sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
   // l'accueil : le plan i figé à la fraction u (captures), ou qui reprend son cours (u omis)
   plan(i, u) { allerPlan(i); planFige = u == null ? null : { u }; }, PLANS,

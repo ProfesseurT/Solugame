@@ -13,6 +13,12 @@
 // - Garé, il est figé en géométries du décor de son quartier (aucun appel de dessin de plus) : veloGare, rangeVelos
 //   (des arceaux, ou un râtelier pince-roues, garnis), pour monde.js.
 // - Les cyclistes (Velos) : voir plus bas.
+// - Le vélo du joueur (Teddy, 28/11/2026 : « permettre au personnage de prendre et faire du vélo, tous les vélos ») : un
+//   vélo garé (GARES : effacé du décor, prendreGare), celui d'un cycliste arrêté (il le prête, ou en mode WTF on le lui
+//   vole : Velos.ceder), ou celui qu'on a laissé : VeloJoueur, un véhicule du joueur (main.js : creerVehicule) avec sa
+//   propre physique ; monter et descendre : MONTAGE (gestes.js le joue).
+// - Un vélo tombé se pousse (Teddy, 28/11/2026 : « quand un vélo est tombé, on puisse le pousser avec la voiture, pour
+//   ne pas être bloqué ») : poussable, pousse (vehicules.js : heurter) ; il glisse, tourne, s'arrête contre un mur.
 import * as THREE from 'three';
 import { T, MAT, UNI, fusion, teinter, compacter, indexer } from './modeles.js';
 import { Atelier, matieresPhares } from './engins.js';
@@ -20,7 +26,8 @@ import { Pieton } from './pieton.js';
 import { perso, OS, DIM } from './perso.js';
 import { VL } from './anim.js';
 import { ROUTE, CHATEAU, sol } from './relief.js';
-import { hasard, angle, borne, amortir } from './outils.js';
+import { hasard, angle, borne, amortir, versAngle } from './outils.js';
+import { Tracteur, natureSol } from './vehicules.js';
 import { VELOS as REPLIQUES } from './textes.js';
 
 const TAU = Math.PI * 2;
@@ -152,7 +159,7 @@ function roue(at, G, n, fin) {
    bas, direction droite, selle au plus bas) ; les points utiles (D) ; os() fait le squelette. o : { panier : ce qu'il y a
    dans le panier ('baguette', 'poireaux', 'fleurs', null), detail : 1 (qui roule) ou 0 (garé, plus léger), bequille :
    'pliee' ou 'depliee', lumiere : un phare (pour ceux qui roulent le soir), selle2 : couleur de la selle }. */
-const OS_VELO = ['cadre', 'direction', 'roueAv', 'roueAr', 'pedalier', 'pedaleG', 'pedaleD', 'selle'];
+const OS_VELO = ['cadre', 'direction', 'roueAv', 'roueAr', 'pedalier', 'pedaleG', 'pedaleD', 'selle', 'bequille'];
 export function construire(genre, couleur, o = {}) {
   const G = GENRES[genre], fin = o.detail !== 0, nR = fin ? 20 : 12;
   REDUIT = fin ? 0 : 2;
@@ -228,8 +235,10 @@ export function construire(genre, couleur, o = {}) {
     pave(cad, [0, y - 0.02, z0 - 0.015], 0.03, 0.018, 0.012, '#b8231c', 0);
     if (G.sacoche) pave(cad, [-0.11, y - 0.13, A[2] + 0.02], 0.045, 0.13, 0.15, o.sacoche || '#2f4a6b', 0);
   } else pave(cad, [0, ST[1] - 0.06, ST[2] - 0.045], 0.016, 0.022, 0.01, '#b8231c', 0); // un petit feu sur la tige de selle
-  if (G.bequille && o.bequille !== 'depliee') tube(cad, [0.05, BB[1] - 0.02, BB[2] - 0.07], [0.07, A[1] + 0.02, A[2] + 0.12], 0.009, 4, NOIR, 0, 2);
-  if (G.bequille && o.bequille === 'depliee') tube(cad, [0.05, BB[1] - 0.02, BB[2] - 0.07], [0.2, 0.0, BB[2] - 0.2], 0.009, 4, NOIR, 0, 2);
+  // la béquille, sur son os : repliée le long de la base (au repos), dépliée vers le sol à gauche (poserOs : beq)
+  const P0 = [0.05, BB[1] - 0.02, BB[2] - 0.07], uPl = unit(moins([0.07, A[1] + 0.02, A[2] + 0.12], P0)), dep = moins([0.2, 0.0, BB[2] - 0.2], P0);
+  const Lb = Math.hypot(dep[0], dep[1], dep[2]);
+  if (G.bequille) { tube(at.bequille, P0, plus(P0, uPl, Lb), 0.009, 4, NOIR, 0, 2); pave(at.bequille, plus(P0, uPl, Lb - 0.01), 0.012, 0.006, 0.02, NOIR, 0); }
   // -- batterie et moteur (vélo à assistance électrique) ; bidon (course)
   if (G.batterie) {
     const a = plus(BB, unit(moins(HB, BB)), 0.12), b = plus(BB, unit(moins(HB, BB)), 0.47), m = entre3(a, b, 0.5), d = unit(moins(b, a));
@@ -386,6 +395,8 @@ export function construire(genre, couleur, o = {}) {
     genre, G, R, A, F, BB, ST, dS, dD, HB, HT, mani: G.mani, xp: G.xp, prise, doigts: unit(doigts), paume: unit(paume), lampe, cintre: G.cintre,
     // le dessus de la selle, au repos (sur l'os de la selle : il suit son réglage)
     selle: plus(plus(ST, dS, G.selle), [0, 0.03 + (genre === 'ville' ? 0.035 : 0.022) * 0.4, -0.01]),
+    // la béquille : son pivot, le quart de tour qui la déplie (de la base vers le sol)
+    beqP: P0, beqQ: G.bequille ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(...uPl), new THREE.Vector3(...dep).normalize()) : new THREE.Quaternion(),
     feu: G.porteBagages ? [0, R + 0.1, A[2] - 0.22] : [0, ST[1] - 0.06, ST[2] - 0.06],
   };
   return { geos, D };
@@ -394,8 +405,9 @@ export function construire(genre, couleur, o = {}) {
 // Le squelette d'un vélo construit : huit os à leur place de repos (os[0] : le cadre, à l'origine)
 function squelette(D) {
   const os = OS_VELO.map(() => new THREE.Bone());
-  const [cadre, direction, roueAv, roueAr, pedalier, pedaleG, pedaleD, selle] = os;
-  cadre.add(direction, roueAr, pedalier, selle);
+  const [cadre, direction, roueAv, roueAr, pedalier, pedaleG, pedaleD, selle, bequille] = os;
+  cadre.add(direction, roueAr, pedalier, selle, bequille);
+  bequille.position.set(...D.beqP);
   // la direction tourne autour de l'axe de la douille (incliné vers l'arrière) : son repère a y le long de cet axe
   direction.position.set(...D.HB); direction.rotation.set(-(Math.PI / 2 - D.G.aD), 0, 0, 'XYZ');
   direction.add(roueAv);
@@ -408,12 +420,14 @@ function squelette(D) {
   return os;
 }
 // Poser un squelette : braquage, angle des roues, angle du pédalier (0 : manivelle droite en bas ; en avançant, il croît),
-// réglage de la selle (le long du tube)
-function poserOs(os, D, braq, roue, mani, selle) {
+// réglage de la selle (le long du tube), béquille (0 repliée, 1 dépliée)
+const QI = new THREE.Quaternion();
+function poserOs(os, D, braq, roue, mani, selle, beq = 0) {
   os[1].rotation.y = braq;
   os[2].rotation.x = roue; os[3].rotation.x = roue;
   os[4].rotation.x = mani; os[5].rotation.x = -mani; os[6].rotation.x = -mani;
   os[7].position.set(D.ST[0], D.ST[1] + D.dS[1] * selle, D.ST[2] + D.dS[2] * selle);
+  if (beq !== os[8].userData.beq) { os[8].userData.beq = beq; os[8].quaternion.slerpQuaternions(QI, D.beqQ, beq); }
 }
 
 // Un vélo qui roule : un maillage à peau (les géométries de chaque os, chacune liée à son os d'un poids de 1)
@@ -441,9 +455,9 @@ function veloRoulant(genre, couleur, o) {
 // Un vélo garé, figé : ses géométries dans son repère (le vélo vers +z, au sol), à fondre dans le décor. o : { braq, roue,
 // mani, selle (réglage), penche (vers sa gauche, rad), bequille, panier... }
 export function veloGare(genre, couleur, o = {}) {
-  const { geos, D } = construire(genre, couleur, { ...o, detail: 0, bequille: o.bequille });
+  const { geos, D } = construire(genre, couleur, { ...o, detail: 0 });
   const os = squelette(D);
-  poserOs(os, D, o.braq ?? 0, o.roue ?? 0, o.mani ?? 0.6, o.selle ?? 0.08);
+  poserOs(os, D, o.braq ?? 0, o.roue ?? 0, o.mani ?? 0.6, o.selle ?? 0.08, o.bequille === 'depliee' ? 1 : 0);
   const racine = new THREE.Object3D(); racine.add(os[0]); racine.rotation.z = -(o.penche ?? 0); racine.updateMatrixWorld(true);
   const liste = [], inv = new THREE.Matrix4(), m = new THREE.Matrix4();
   // la pose de repos de chaque os (pour passer de sa géométrie de repos à sa pose)
@@ -502,18 +516,23 @@ export function rangeVelos(dest, col, x, z, rot, o = {}) {
   L.push(fusion(at.geos()));
   // les vélos : au hasard des places
   const k = o.garnis ?? Math.ceil(places.length * 0.6);
-  const libres = places.slice();
+  const libres = places.slice(), ici = [];
   for (let i = 0; i < k && libres.length; i++) {
     const p = libres.splice(Math.floor(r() * libres.length), 1)[0];
     const genre = pick(genres), c = pick(COULEURS[genre]);
     // (appuyé contre son arceau : il penche vers lui, à sa droite)
-    const g = veloGare(genre, c, { braq: (r() - 0.5) * 0.5, roue: r() * 6, mani: r() * 6, selle: genre === 'enfant' ? 0.02 + r() * 0.08 : 0.04 + r() * 0.14, penche: p.cote ? -0.035 : 0, panier: genre === 'ville' && r() < 0.3 ? 'fleurs' : null, selle2: genre === 'ville' && r() < 0.4 ? '#1d1e21' : undefined });
+    const og = { braq: (r() - 0.5) * 0.5, roue: r() * 6, mani: r() * 6, selle: genre === 'enfant' ? 0.02 + r() * 0.08 : 0.04 + r() * 0.14, penche: p.cote ? -0.035 : 0, panier: genre === 'ville' && r() < 0.3 ? 'fleurs' : null, selle2: genre === 'ville' && r() < 0.4 ? '#1d1e21' : undefined };
+    const g = veloGare(genre, c, og);
     // le vélo posé à sa place (la roue avant dans la fente du râtelier : on le recule d'une demi-longueur)
-    const dz = p.roueDans ? -GENRES[genre].emp / 2 - GENRES[genre].R * 0.45 : (r() - 0.5) * 0.2;
-    for (const gg of g) { if (p.h) gg.rotateY(p.h); gg.translate(p.x, 0, p.z + dz + (p.roueDans ? 0.55 : 0)); L.push(gg); }
-    if (col && p.roueDans) { const c2 = W(p.x, dz + 0.55); col.boiteO(c2[0], c2[1], 0.4, GENRES[genre].emp + 0.5, rot); }
+    const dz = p.roueDans ? -GENRES[genre].emp / 2 - GENRES[genre].R * 0.45 : (r() - 0.5) * 0.2, lz = p.z + dz + (p.roueDans ? 0.55 : 0);
+    // (une place qu'on peut prendre : GARES ; le décor dira où sont ses triangles)
+    const wp = W(p.x, lz), gare = { x: wp[0], z: wp[1], h: rot + (p.h || 0), y: 0, genre, couleur: c, o: og, mur: 0, boite: null, maillage: null, i0: 0, n: 0, pris: false };
+    GARES.push(gare); ici.push(gare);
+    for (const gg of g) { if (p.h) gg.rotateY(p.h); gg.translate(p.x, 0, lz); gg.userData.gare = gare; L.push(gg); }
+    if (col && p.roueDans) { const c2 = W(p.x, dz + 0.55); gare.boite = col.boiteO(c2[0], c2[1], 0.4, GENRES[genre].emp + 0.5, rot); }
   }
   const y = o.y ?? sol(x, z); // (au sol : le plateau du château est à 31 m)
+  for (const G of ici) G.y = y;
   for (const g of L) { if (rot) g.rotateY(rot); g.translate(x, y, z); dest.push(g); }
   return k;
 }
@@ -521,11 +540,400 @@ export function rangeVelos(dest, col, x, z, rot, o = {}) {
 // (x, z), tourné de rot. Sa boîte de collision.
 export function veloSeul(dest, col, x, z, rot, genre, couleur, o = {}) {
   const contre = o.contre ?? 0; // contre un mur : de quel côté (+1 : à sa gauche, -1 : à sa droite), 0 : sur sa béquille
-  const g = veloGare(genre, couleur, { ...o, bequille: contre ? 'pliee' : 'depliee', penche: contre ? contre * 0.16 : 0.1, braq: contre ? contre * 0.5 : o.braq ?? 0.25 });
+  const og = { ...o, bequille: contre ? 'pliee' : 'depliee', penche: contre ? contre * 0.16 : 0.1, braq: contre ? contre * 0.5 : o.braq ?? 0.25 };
+  const g = veloGare(genre, couleur, og);
   const y = o.y ?? sol(x, z);
-  for (const gg of g) { if (rot) gg.rotateY(rot); gg.translate(x, y, z); dest.push(gg); }
-  if (col) col.boiteO(x, z, 0.5, GENRES[genre].emp + GENRES[genre].R * 2 - 0.1, rot);
+  const gare = { x, z, h: rot, y, genre, couleur, o: og, mur: contre, boite: null, maillage: null, i0: 0, n: 0, pris: false };
+  GARES.push(gare);
+  for (const gg of g) { if (rot) gg.rotateY(rot); gg.translate(x, y, z); gg.userData.gare = gare; dest.push(gg); }
+  if (col) gare.boite = col.boiteO(x, z, 0.5, GENRES[genre].emp + GENRES[genre].R * 2 - 0.1, rot);
 }
+
+/* ---------------------------------------------------------------- les vélos garés qu'on prend
+   GARES : chaque vélo garé (rangeVelos, veloSeul) : sa place (x, z, au sol y), son cap h, son genre, sa couleur, sa pose et
+   ses options (o : celles de veloGare), le mur contre lequel il est appuyé (mur : +1 à sa gauche), sa boîte de collision
+   (un vélo seul, ou dans la fente d'un râtelier) ; le décor dit où sont ses triangles (monde.js, Grille : maillage, i0, n :
+   la plage de son maillage fusionné). Pris (prendreGare), il disparaît du décor sans rien redessiner d'autre : ses indices
+   pointent tous sur le même sommet (des triangles vides), seule cette plage repart à la carte graphique ; sa boîte est
+   retirée. */
+export const GARES = [];
+export function prendreGare(G, col) {
+  G.pris = true;
+  const m = G.maillage;
+  if (m) {
+    const ix = m.geometry.index, a = ix.array;
+    a.fill(a[G.i0], G.i0, G.i0 + G.n);
+    ix.addUpdateRange(G.i0, G.n); ix.needsUpdate = true;
+  }
+  if (G.boite && col) col.retirer(G.boite);
+}
+// le vélo garé à portée de main de (x, z) : à moins de 1,1 m de son axe (de la roue arrière à la roue avant), ou null
+export function gareProche(x, z) {
+  let best = null, dmin = 1.1;
+  for (const G of GARES) {
+    if (G.pris || Math.abs(G.x - x) > 2 || Math.abs(G.z - z) > 2) continue;
+    const ax = Math.sin(G.h), az = Math.cos(G.h), e = GENRES[G.genre].emp / 2 + 0.2;
+    const lo = borne((x - G.x) * ax + (z - G.z) * az, -e, e), d = Math.hypot(x - G.x - ax * lo, z - G.z - az * lo);
+    if (d < dmin) { dmin = d; best = G; }
+  }
+  return best;
+}
+
+/* ---------------------------------------------------------------- un vélo qu'on enfourche
+   modeleVelo(genre, couleur, o, feuxAussi) : un vélo qui roule, prêt à poser dans la scène : son groupe au sol (cap,
+   tangage), son groupe penché (le roulis : le cycliste y est assis), le maillage à peau et ses os, ses points (D) ; ses
+   feux (feux : le feu arrière, le phare et sa flaque s'il en a un ; m.phares pour main.js) ; dims : ce que voit la physique
+   d'un véhicule (vehicules.js : deux petits cercles le long du vélo, son emprise) ; montage : monter, descendre (gestes.js). */
+let SON = null; // (le son du jeu : Velos le donne)
+export function modeleVelo(genre, couleur, o = {}, feuxAussi = false) {
+  const v = veloRoulant(genre, couleur, o);
+  const groupe = new THREE.Group(), incline = new THREE.Group();
+  groupe.rotation.order = 'YXZ'; groupe.add(incline); incline.add(v.mesh); groupe.name = 'vélo';
+  const D = v.D, G = D.G;
+  const m = { groupe, incline, mesh: v.mesh, os: v.os, D, genre, G, couleur, o, lampe: null, phares: null, montage: MONTAGE,
+    dims: { emp: G.emp, off: [G.emp * 0.38, -G.emp * 0.38], r: genre === 'enfant' ? 0.24 : 0.3, emprise: [[-0.3, 0.3, -G.emp / 2 - G.R, G.emp / 2 + G.R]] } };
+  if (feuxAussi) feux(m, true);
+  return m;
+}
+// Les feux d'un vélo, la nuit (engins.js : les glaces des phares, leur halo) : le feu arrière ; avant (s'il a un phare),
+// le phare, qui suit la direction (dans le repère de son os), et une flaque de lumière devant
+function feux(m, avant) {
+  const M = matieresPhares(), D = m.D, G = [];
+  let av = null, fl = null;
+  if (avant && D.lampe) {
+    const os = m.os[1]; os.updateMatrix(); mInv.copy(os.matrix).invert();
+    vA.set(D.lampe[0], D.lampe[1], D.lampe[2] + 0.06).applyMatrix4(mInv);
+    const gAv = [], g = new THREE.CircleGeometry(0.03, 10), h = new THREE.CircleGeometry(0.13, 10);
+    g.translate(vA.x, vA.y, vA.z); gAv.push(teinter(g, '#fff6e2')); h.translate(vA.x, vA.y, vA.z - 0.005); gAv.push(teinter(h, '#2e2a24'));
+    av = new THREE.Mesh(fusion(gAv), M.glaces); av.renderOrder = 5; os.add(av);
+    fl = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 4.5).rotateX(-Math.PI / 2).translate(0, 0.05, D.F[2] + 2.5), M.flaque); fl.renderOrder = 4;
+    m.groupe.add(fl);
+  }
+  const disque2 = (p, r, coul) => { const g = new THREE.CircleGeometry(r, 10); g.rotateY(Math.PI); g.translate(p[0], p[1], p[2]); G.push(teinter(g, coul)); };
+  disque2([D.feu[0], D.feu[1], D.feu[2] - 0.02], 0.025, '#ff2a1a'); disque2([D.feu[0], D.feu[1], D.feu[2] - 0.025], 0.09, '#3a0a06');
+  const ar = new THREE.Mesh(fusion(G), M.glaces); ar.renderOrder = 5; m.incline.add(ar);
+  const L = m.lampe = { av, ar, fl };
+  ar.visible = false; if (av) av.visible = fl.visible = false;
+  // (main.js, phares : allumés ensemble, le phare et le feu, la flaque)
+  m.phares = { groupe: { get visible() { return L.ar.visible; }, set visible(x) { L.ar.visible = x; if (L.av) L.av.visible = x; } }, flaque: fl || { visible: false } };
+}
+
+// La pose qu'un cycliste demande à son personnage (anim.js : poseVelo ; indices VL), dans le repère du vélo penché : le
+// dessus de la selle à son réglage, les poignées tournées avec la direction autour de l'axe de la douille, les pédales au
+// tour du pédalier, danseuse, pied à terre (le pied gauche au sol, à côté du vélo : le sol vu du vélo penché), le roulis
+function remplirPose(V, D, braq, mani, selleE, dan, pied, incl) {
+  V[VL.selle] = D.selle[0] + D.dS[0] * selleE; V[VL.selle + 1] = D.selle[1] + D.dS[1] * selleE; V[VL.selle + 2] = D.selle[2] + D.dS[2] * selleE;
+  AXE.set(D.dD[0], D.dD[1], D.dD[2]); qDir.setFromAxisAngle(AXE, braq);
+  for (let j = 0; j < 2; j++) {
+    const k = j ? VL.mainD : VL.mainG, sx = j ? -1 : 1;
+    vA.set(D.prise[0] * sx - D.HB[0], D.prise[1] - D.HB[1], D.prise[2] - D.HB[2]).applyQuaternion(qDir);
+    V[k] = vA.x + D.HB[0]; V[k + 1] = vA.y + D.HB[1]; V[k + 2] = vA.z + D.HB[2];
+  }
+  vA.set(D.doigts[0], D.doigts[1], D.doigts[2]).applyQuaternion(qDir); V[VL.doigts] = vA.x; V[VL.doigts + 1] = vA.y; V[VL.doigts + 2] = vA.z;
+  vA.set(D.paume[0], D.paume[1], D.paume[2]).applyQuaternion(qDir); V[VL.paume] = vA.x; V[VL.paume + 1] = vA.y; V[VL.paume + 2] = vA.z;
+  const Lc = D.mani, co = Math.cos(mani), si = Math.sin(mani);
+  V[VL.pedG] = D.xp; V[VL.pedG + 1] = D.BB[1] + Lc * co; V[VL.pedG + 2] = D.BB[2] + Lc * si;
+  V[VL.pedD] = -D.xp; V[VL.pedD + 1] = D.BB[1] - Lc * co; V[VL.pedD + 2] = D.BB[2] - Lc * si;
+  V[VL.mani] = mani; V[VL.danseuse] = dan; V[VL.pied] = pied; V[VL.roulis] = incl;
+  const X = 0.3, Zs = D.BB[2] + 0.12, ci = Math.cos(incl), sn = Math.sin(incl);
+  V[VL.sol] = X * ci; V[VL.sol + 1] = X * sn; V[VL.sol + 2] = Zs;
+}
+// La selle à la hauteur des jambes de p : à la pédale du bas, le genou encore un peu plié (95 % de la jambe) ; rend le
+// réglage (le long du tube de selle)
+function hauteurSelle(D, p) {
+  const s = p.m.echelle, jambe = (DIM.cuisse + DIM.tibia) * s * 0.95, CH = DIM.cheville * s, Lb = 0.11 * s, pt = 0.36;
+  const cheville = [D.xp, D.BB[1] - D.mani + 0.016 + CH * Math.cos(pt) + Lb * Math.sin(pt), D.BB[2] + CH * Math.sin(pt) - Lb * Math.cos(pt)];
+  let a = -0.08, b = 0.42;
+  for (let k = 0; k < 24; k++) {
+    const e = (a + b) / 2, sel = plus(D.selle, D.dS, e), hanche = [p.m.dim.xh * s, sel[1] + 0.05 * s, sel[2] - 0.035 * s];
+    if (Math.hypot(hanche[0] - cheville[0], hanche[1] - cheville[1], hanche[2] - cheville[2]) > jambe) b = e; else a = e;
+  }
+  return (a + b) / 2;
+}
+// Les mains de p sur les poignées du vélo m (repère du personnage : p.outil, anim.js) ; le vélo déjà posé
+function mainsAuCintre(m, p, out) {
+  const D = m.D;
+  m.groupe.updateMatrixWorld(true);
+  p.m.groupe.updateMatrixWorld(true); mInv.copy(p.m.groupe.matrixWorld).invert();
+  for (let k = 0; k < 2; k++) {
+    const sx = k ? -1 : 1, q = k ? out.d : out.g;
+    vA.set(D.prise[0] * sx, D.prise[1], D.prise[2]).applyMatrix4(m.incline.matrixWorld).applyMatrix4(mInv);
+    q[0] = vA.x; q[1] = vA.y; q[2] = vA.z;
+  }
+  p.outil = out;
+}
+// Un véhicule pousse un vélo couché (o : un cycliste tombé, ou un vélo laissé par le joueur ; (nx, nz) : du véhicule vers
+// lui) : il est lancé avec l'élan du véhicule, et de côté, vers où il est déjà par rapport à son axe (on ne le pousse pas
+// devant soi jusqu'au bout de la route) ; il tourne un peu. Rend faux si le véhicule ne va pas vers lui (ou moins vite que
+// le vélo ne glisse déjà).
+function elan(o, qui, nx, nz) {
+  const ux = Math.sin(qui.h), uz = Math.cos(qui.h), qv = qui.v, vn = (ux * nx + uz * nz) * qv;
+  if (vn < 0.25 || o.svx * nx + o.svz * nz >= vn) return false;
+  const sg = nx * uz - nz * ux >= 0 ? 1 : -1, lat = Math.max(1.8, 0.6 * Math.abs(qv)), av = 1.1 * qv;
+  o.svx = ux * av + uz * sg * lat; o.svz = uz * av - ux * sg * lat;
+  o.hV += sg * Math.min(3.5, 0.4 + Math.abs(qv) * 0.35);
+  return true;
+}
+
+// le vélo qu'on conduit : sa vitesse de pointe en pédalant (m/s, sur le plat), sa reprise (m/s²), sa vitesse au doigt
+const VMAX = { ville: 6.4, course: 11, vtt: 8.2, vae: 7.2, enfant: 4.2 };
+const REPRISE = { ville: 2.0, course: 2.6, vtt: 2.3, vae: 2.8, enfant: 1.6 };
+const CROISE = { ville: 4.8, course: 8.5, vtt: 6, vae: 6.2, enfant: 3.3 };
+// la résistance du sol (m/s²) : sur la route, il roule ; dans l'herbe, il peine (un VTT moins, un vélo de course plus)
+const ROULE = { asphalte: 0.07, paves: 0.16, gravier: 0.24, herbe: 0.5, vigne: 0.9 };
+
+/* Le vélo du joueur : un véhicule (main.js : creerVehicule ; vehicules.js : Tracteur, dont il garde l'interface et les
+   chocs, heurter) avec sa physique : on pédale (la reprise baisse avec la vitesse, le vélo électrique aide), on freine,
+   on roule en roue libre ; arrêté, pied à terre, on recule en poussant des pieds et l'on tourne le vélo sur place ; la
+   pente freine ou lance ; le sol (l'herbe, le gravier ; un VTT y est chez lui) ; la direction bornée par ce que tient le
+   pneu, le vélo penche dans les virages ; les rangs de vigne arrêtent (on roule entre eux, pas à travers) ; un mur de
+   face : le vélo rebondit. La pose du cycliste (anim.js : poseVelo, remplirPose) : on pédale à la cadence de la vitesse,
+   roue libre les pédales à plat, en danseuse dans les côtes (vélo de course, VTT), pied à terre à l'arrêt.
+   Laissé (pas cavalier) : sur sa béquille, ou couché (un vélo de course, un VTT) ; un véhicule le pousse (poussable,
+   pousse) : il tombe, glisse, tourne (glisser, main.js à chaque image tant qu'il bouge), puis ses matrices sont figées. */
+export class VeloJoueur extends Tracteur {
+  constructor(m) {
+    super(m, 'velo');
+    const g = m.genre;
+    this.vmax = VMAX[g]; this.reprise = REPRISE[g]; this.croisiere = CROISE[g];
+    this.Vp = new Float64Array(VL.N); this.mains = { g: [0, 0, 0], d: [0, 0, 0] };
+    this.incl = 0; this.inclV = 0; this.roue = 0; this.mani = -2.2; this.pied = 1; this.dan = 0; this.arretT = 1; this.roueLibre = false;
+    this.selleE = 0.1; this.beq = 0; this.mur = 0; this.couche = 0; this.chute = 1;
+    this.cavalier = false; this.tenu = false; this.bouge = false; this.svx = 0; this.svz = 0; this.hV = 0;
+    m.mesh.castShadow = true;
+  }
+  // un véhicule peut le pousser : laissé là, personne ne le tient
+  get poussable() { return !this.cavalier && !this.tenu; }
+  // posé comme un vélo garé (G : GARES), ou comme le laisse un cycliste (r : Velos.ceder)
+  poser(o) {
+    if (o.o) { const q = o.o; this.incl = q.penche ?? 0; this.braq = q.braq ?? 0; this.roue = q.roue ?? 0; this.mani = q.mani ?? 0; this.selleE = q.selle ?? 0.08; this.beq = q.bequille === 'depliee' ? 1 : 0; this.mur = o.mur || 0; }
+    else { this.incl = o.incl; this.braq = o.braq; this.roue = o.roue; this.mani = o.mani; this.selleE = o.selleE; this.beq = 0; this.mur = 0; }
+    this.couche = 0; this.chute = 1;
+    this.sync(0, 0);
+  }
+  placer(x, z, h) { this.svx = this.svz = this.hV = 0; this.bouge = false; super.placer(x, z, h); }
+  reveiller() { this.m.groupe.matrixWorldAutoUpdate = true; }
+  figer() { this.m.groupe.updateMatrixWorld(true); this.m.groupe.matrixWorldAutoUpdate = false; }
+
+  // gaz -1..1 (NaN : doigt posé, on garde la vitesse), braq -1..1 (positif : à gauche), fm : on freine fort
+  update(dt, gaz, braq, col, voitures, t, fm = 0) {
+    if (dt <= 0) return;
+    const genre = this.m.genre, sol0 = this.sol, av0 = Math.abs(this.v), horsRoute = sol0 === 'herbe' || sol0 === 'vigne' || sol0 === 'gravier';
+    /* -- les pédales et les freins */
+    const garder = Number.isNaN(gaz);
+    let pousse = 0, frein = fm ? 1 : 0;
+    if (!garder) {
+      if (gaz > 0.02) { if (this.v < -0.05) frein = 1; else pousse = gaz; this.tRecul = 0; }
+      else if (gaz < -0.02) {
+        if (this.v > 0.05) { frein = Math.max(frein, -gaz); this.tRecul = 0; }
+        else { this.tRecul += dt; if (this.tRecul > 0.35) pousse = gaz; } // (arrêté : pied à terre, on recule en poussant des pieds)
+      } else this.tRecul = 0;
+    }
+    this.pedale += borne(pousse - this.pedale, -4 * dt, 3 * dt);
+    this.frein += borne(frein - this.frein, -8 * dt, 6 * dt);
+    /* -- la vitesse */
+    const vmax = this.vmax * (sol0 === 'herbe' || sol0 === 'vigne' ? (genre === 'vtt' ? 0.8 : 0.5) : sol0 === 'gravier' ? (genre === 'course' ? 0.7 : 0.88) : 1);
+    let acc = 0;
+    if (this.pedale > 0.01) { const r = Math.max(0, this.v) / vmax; acc = this.pedale * this.reprise * Math.max(0, 1 - r * r * r); }
+    else if (this.pedale < -0.01 && this.v > -0.8) acc = this.pedale * 1.2;
+    let res = 0;
+    if (!garder) {
+      res = (ROULE[sol0] ?? 0.4) * (horsRoute ? (genre === 'vtt' ? 0.6 : genre === 'course' ? 1.6 : 1) : 1) + 0.004 * av0 * av0;
+      if (Math.abs(this.pedale) < 0.05) res += 0.22 + (this.pied > 0.5 && Math.abs(this.v) < 1.2 ? 3 : 0); // (on ne pédale plus : on freine un peu ; pied à terre, on s'arrête)
+      if (this.v > vmax) res += (this.v - vmax) * 1.2; // (entré dans l'herbe trop vite)
+    }
+    res += this.frein * 5.2;
+    const vAvant = this.v;
+    this.v += acc * dt;
+    const dres = res * dt;
+    if (Math.abs(this.v) <= dres && Math.abs(acc) < 0.01) this.v = 0;
+    else this.v -= Math.sign(this.v) * Math.min(Math.abs(this.v), dres);
+    if (this.frein > 0.01 && vAvant !== 0 && Math.sign(this.v) !== Math.sign(vAvant)) this.v = 0;
+    // la pente : on peine en montée, on file en descente ; arrêté, le pied tient le vélo
+    if (!garder && (Math.abs(this.v) > 0.3 || this.pedale > 0.05)) this.v -= 9.81 * this.pente * dt;
+    this.aLong += ((this.v - vAvant) / dt - this.aLong) * amortir(dt, 12);
+    /* -- la direction : bornée par ce que tient le pneu ; arrêté, pied à terre, on tourne le vélo sur place */
+    const av = Math.abs(this.v), EMP = this.d.emp;
+    const lim = Math.min(0.7, Math.atan(EMP * 5 / Math.max(0.01, av * av)));
+    this.braq += borne(borne(braq, -1, 1) * lim - this.braq, -2.8 * dt, 2.8 * dt);
+    this.volant = this.braq;
+    let lacet = this.v / EMP * Math.tan(this.braq);
+    if (av < 0.35 && Math.abs(braq) > 0.3) lacet = Math.sign(braq) * 1.2 * Math.min(1, (Math.abs(braq) - 0.3) / 0.5);
+    this.lacet = lacet; this.aLat = this.v * lacet; this.vT = 0; this.glisse = 0; this.derive = 0; this.fm = 0;
+    this.h = angle(this.h + lacet * dt);
+    let fx = Math.sin(this.h), fz = Math.cos(this.h);
+    this.pos.x += fx * this.v * dt; this.pos.z += fz * this.v * dt;
+    /* -- contre le décor (et les rangs de vigne), les voitures, les cyclistes, les autres véhicules */
+    const touche = this.heurter(col, voitures, true);
+    this.chocVu = 0;
+    if (touche) {
+      const n = Math.hypot(this.nx, this.nz) || 1, nx = this.nx / n, nz = this.nz / n, sv = this.v >= 0 ? 1 : -1, fn = fx * nx + fz * nz, dot = fn * sv;
+      if (dot < -0.7 && av > 2.2) { this.chocVu = Math.min(1, av / 8); this.v *= -0.12; this.pedale = 0; }
+      else if (dot < 0) {
+        this.v -= sv * Math.min(av, (2 + 6 * -dot) * -dot * dt * Math.max(1, av * 0.5));
+        const tx = fx - fn * nx, tz = fz - fn * nz;
+        if (tx * tx + tz * tz > 1e-4) this.h = versAngle(this.h, Math.atan2(tx, tz) + (sv < 0 ? Math.PI : 0), dt * 1.6 * (0.4 - dot));
+      }
+    }
+    this.sol = natureSol(this.pos.x, this.pos.z, col);
+    this.vignes = this.sol === 'vigne';
+    this.regime = 0; this.effort = 0; this.cahot = 0; this.frotte = 0;
+    this.sync(dt, t);
+  }
+
+  // en selle : les pieds (pédaler, roue libre, pied à terre), la danseuse, les roues, le roulis
+  pedaler(dt) {
+    const v = this.v, av = Math.abs(v), genre = this.m.genre;
+    this.arretT = av < 0.3 ? this.arretT + dt : 0;
+    const piedC = this.arretT > 0.12 || v < -0.05 ? 1 : av > 0.9 ? 0 : this.pied;
+    this.pied += borne(piedC - this.pied, -2.2 * dt, 3.5 * dt);
+    this.roueLibre = v > 0.4 && this.pedale < 0.05;
+    const danC = this.pente > 0.05 && v > 1 && this.pedale > 0.5 && (genre === 'course' || genre === 'vtt') ? 1 : 0;
+    this.dan += borne(danC - this.dan, -1.5 * dt, 1.5 * dt);
+    const TH = this.mani;
+    if (this.pied > 0.05) { const vise = -2.2 + Math.round((TH + 2.2) / TAU) * TAU; this.mani += borne(vise - TH, -3 * dt, 3 * dt); }
+    else if (this.roueLibre) { const vise = Math.PI / 2 + Math.round((TH - Math.PI / 2) / Math.PI) * Math.PI; this.mani += borne(vise - TH, -2.5 * dt, 2.5 * dt); }
+    else { const rpm = (this.dan > 0.5 ? 58 : 52) + 36 * Math.min(1, av / this.vmax); this.mani += rpm / 60 * TAU * dt * Math.min(1, 0.3 + av); }
+    this.roue += v * dt / this.m.D.R;
+    const inclC = borne(Math.atan(v * this.lacet / 9.81), -0.55, 0.55) * (1 - this.pied) - 0.075 * Math.sin(this.mani) * this.dan + 0.12 * this.pied;
+    this.incl += (inclC - this.incl) * amortir(dt, 8);
+  }
+  sync(dt, t) {
+    const m = this.m, D = m.D, x = this.pos.x, z = this.pos.z, fx = Math.sin(this.h), fz = Math.cos(this.h);
+    // le sol sous les deux roues : la hauteur, la pente (le vélo suit le tangage)
+    const yAv = sol(x + fx * D.F[2], z + fz * D.F[2]), yAr = sol(x + fx * D.A[2], z + fz * D.A[2]);
+    this.pente = (yAv - yAr) / (D.F[2] - D.A[2]);
+    this.pos.y = (yAv + yAr) / 2;
+    if (this.cavalier && dt > 0) this.pedaler(dt);
+    // couché, le vélo dessiné repose sur le côté : son groupe est décalé pour qu'il reste sur ses cercles de collision
+    const ai = Math.abs(this.incl), dec = this.cavalier ? 0 : 0.4 * Math.sin(this.incl) * Math.min(1, ai / 0.25);
+    m.groupe.position.set(x - Math.cos(this.h) * dec, this.pos.y, z + Math.sin(this.h) * dec);
+    m.groupe.rotation.set(ai < 0.4 ? -Math.atan(this.pente) : 0, this.h, 0);
+    m.incline.rotation.z = -this.incl;
+    poserOs(m.os, D, this.braq, this.roue, this.mani, this.selleE, this.beq);
+    if (this.cavalier) remplirPose(this.Vp, D, this.braq, this.mani, this.selleE, this.dan, this.pied, this.incl);
+  }
+  // un véhicule le pousse (vehicules.js : heurter) : écarté de ce qui le pousse ; lancé, il tombe et glisse
+  pousse(qui, nx, nz, prof) {
+    this.pos.x += nx * prof; this.pos.z += nz * prof;
+    if (elan(this, qui, nx, nz) && !this.couche) {
+      this.couche = this.svx * Math.cos(this.h) - this.svz * Math.sin(this.h) >= 0 ? 1 : -1; this.chute = 0; this.inclV = 0; this.mur = 0;
+    }
+    if (!this.bouge) this.reveiller();
+    this.bouge = true;
+  }
+  // laissé là, poussé : il glisse (frotté par le sol), tourne, tombe sur le côté et rebondit un peu, s'arrête contre un mur
+  glisser(dt, t, col) {
+    if (!this.bouge || this.cavalier || this.tenu) return;
+    const k = Math.exp(-dt * (this.couche ? 2.6 : 5));
+    this.pos.x += this.svx * dt; this.pos.z += this.svz * dt; this.svx *= k; this.svz *= k;
+    this.h = angle(this.h + this.hV * dt); this.hV *= k;
+    if (col.resoudre(this.pos, 0.32)) { const vn = this.svx * col.nx + this.svz * col.nz; if (vn < 0) { this.svx -= vn * col.nx * 1.3; this.svz -= vn * col.nz * 1.3; } }
+    if (this.couche && this.chute < 1) {
+      this.inclV += this.couche * 7 * dt; this.incl += this.inclV * dt;
+      if (Math.abs(this.incl) >= 1.36) { this.incl = this.couche * 1.36; this.inclV = 0; this.chute = 1; if (SON) SON.chuteVelo(0.7); }
+    }
+    this.roue += (this.svx * Math.sin(this.h) + this.svz * Math.cos(this.h)) * dt / this.m.D.R;
+    this.sync(dt, t);
+    if (Math.hypot(this.svx, this.svz) < 0.03 && Math.abs(this.hV) < 0.03 && this.chute >= 1) { this.bouge = false; this.svx = this.svz = this.hV = 0; this.figer(); }
+  }
+}
+
+/* Monter sur un vélo et en descendre (gestes.js : etapesMonter, etapesDescendre, pour un véhicule dont le modèle a un
+   montage). On va à côté du vélo, à hauteur du cintre (à sa gauche ; à sa droite s'il est appuyé contre un mur à gauche,
+   ou couché de ce côté) ; on le relève, les mains aux poignées (la béquille repliée, la selle mise à sa hauteur) ; on
+   l'enjambe : le personnage passe dans le repère du vélo et glisse de sa place debout à la selle, pied à terre (anim.js
+   mélange les deux poses). Descendre, c'est l'inverse : pied à terre, on passe la jambe, on se retrouve debout à côté ; on
+   déplie la béquille (le vélo penche dessus), ou on le couche doucement de l'autre côté (pas de béquille). */
+const PLACE = { x: 0, z: 0 }, vM = new THREE.Vector3();
+const mix = (a, b, u) => a + (b - a) * u;
+export const MONTAGE = {
+  // le côté où l'on se tient (+1 : à sa gauche) ; descendre (col) : du côté libre
+  cote(p, col) {
+    if (p.mur) return -p.mur;
+    if (Math.abs(p.incl) > 0.5) return -Math.sign(p.incl);
+    if (col) { MONTAGE.place(p, 1, PLACE); const x = PLACE.x, z = PLACE.z; if (col.resoudre(PLACE, 0.3) && Math.hypot(PLACE.x - x, PLACE.z - z) > 0.08) return -1; }
+    return 1;
+  },
+  // la place debout, à côté du vélo, à hauteur du cintre (monde)
+  place(p, cote, out) {
+    const D = p.m.D, lx = cote * 0.5, lz = D.prise[2] - 0.45, c = Math.cos(p.h), s = Math.sin(p.h);
+    out.x = p.pos.x + lx * c + lz * s; out.z = p.pos.z - lx * s + lz * c;
+    return out;
+  },
+  monter(G, v, fin) {
+    const p = v.p, m = v.m, pt = { x: 0, z: 0 }, A = { cote: 1, i: 0, b: 0, q: 0, s: 0, sv: 0 }, off = new THREE.Vector3();
+    let offH = 0;
+    return [
+      { action: () => { p.tenu = true; p.bouge = false; p.svx = p.svz = p.hV = 0; p.reveiller(); A.cote = MONTAGE.cote(p); } },
+      ...G.allerA(() => MONTAGE.place(p, A.cote, pt), () => p.h),
+      // le relever (couché, appuyé, sur sa béquille), les mains aux poignées ; la selle à sa hauteur
+      {
+        duree: 0.8,
+        debut: () => { A.i = p.incl; A.b = p.braq; A.q = p.beq; A.s = p.selleE; A.sv = hauteurSelle(m.D, G.j); p.couche = 0; p.chute = 1; p.mur = 0; },
+        maj: (dt, t, u) => {
+          p.incl = mix(A.i, 0.12, u); p.braq = mix(A.b, 0, u); p.beq = mix(A.q, 0, Math.min(1, u * 1.6)); p.selleE = mix(A.s, A.sv, u);
+          p.sync(0, t); mainsAuCintre(m, G.j, p.mains); G.immobile(dt, t);
+        },
+      },
+      // l'enjamber
+      {
+        duree: 0.55,
+        debut: () => {
+          const j = G.j, g = j.m.groupe;
+          j.outil = null;
+          if (j.anim.jeuPrec === undefined) j.anim.jeuPrec = null; // (anim.js : la pose debout glisse vers la pose en selle)
+          m.groupe.updateMatrixWorld(true);
+          vM.copy(g.position); m.incline.worldToLocal(vM); off.copy(vM); offH = angle(j.hv - p.h);
+          m.incline.add(g); g.position.copy(off); g.rotation.set(0, offH, 0);
+          j.assis = true; j.velo = p.Vp; j.v = 0;
+          p.cavalier = true; p.v = 0; p.pied = 1; p.arretT = 1; p.dan = 0; p.mani = -2.2 + Math.round((p.mani + 2.2) / TAU) * TAU;
+        },
+        maj: (dt, t, u) => {
+          const j = G.j, g = j.m.groupe;
+          g.position.copy(off).multiplyScalar(1 - u); g.rotation.set(0, offH * (1 - u), 0);
+          p.sync(dt, t); j.pos.copy(p.pos); j.sync(dt, t);
+        },
+      },
+      { action: () => { const g = G.j.m.groupe; g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); p.tenu = false; fin(); } },
+    ];
+  },
+  descendre(G, v, sorti) {
+    const p = v.p, m = v.m, A = { cote: 1, i: 0, q: 0, beq: false, son: false }, de = new THREE.Vector3(), a = { x: 0, z: 0 };
+    return [
+      // pied à terre, on passe la jambe : le corps glisse de la selle à côté du vélo
+      {
+        duree: 0.5,
+        debut: () => {
+          const j = G.j, g = j.m.groupe;
+          p.tenu = true; p.v = 0; p.pedale = 0; p.pied = 1;
+          p.sync(0, 0);
+          A.cote = MONTAGE.cote(p, G.c.col);
+          g.getWorldPosition(de);
+          G.c.scene.add(g); g.position.copy(de); g.rotation.set(0, p.h, 0);
+          p.cavalier = false; j.velo = null; j.assis = false; j.h = j.hv = p.h; j.v = 0;
+          j.pos.set(de.x, 0, de.z);
+          MONTAGE.place(p, A.cote, a);
+        },
+        // (de côté vite d'abord : les jambes passent à côté du cadre pendant que le corps se redresse)
+        maj: (dt, t, u) => { const j = G.j, e = 1 - (1 - u) * (1 - u) * (1 - u); j.pos.x = mix(de.x, a.x, e); j.pos.z = mix(de.z, a.z, e); j.sync(dt, t); },
+      },
+      { action: () => { const j = G.j; G.c.col.resoudre(j.pos, j.r); j.sync(0, 0); sorti(); } },
+      // la béquille ; ou couché sur le côté, loin de soi (un vélo de course, un VTT : pas de béquille)
+      {
+        duree: 0.6,
+        debut: () => { A.i = p.incl; A.q = p.beq; A.beq = !!m.G.bequille; A.son = false; },
+        maj: (dt, t, u) => {
+          if (A.beq) { p.beq = mix(A.q, 1, Math.min(1, u * 1.8)); p.incl = mix(A.i, 0.1, u); }
+          else { p.incl = mix(A.i, -A.cote * 1.36, u * u); if (u > 0.97 && !A.son) { A.son = true; if (SON) SON.chuteVelo(0.25); } }
+          p.braq = mix(p.braq, A.beq ? 0.25 : 0, u);
+          p.sync(0, t); G.immobile(dt, t);
+        },
+      },
+      { action: () => { p.tenu = false; p.couche = A.beq ? 0 : -A.cote; p.chute = 1; p.figer(); } },
+    ];
+  },
+};
 
 /* ---------------------------------------------------------------- les chemins des cyclistes
    Une ligne brisée de points [x, z, g, d] : la ligne que suit le cycliste (au bord droit de sa voie), g et d : de combien il
@@ -605,6 +1013,18 @@ class Chemin {
       if (d < dmin) { dmin = d; best = i; }
     }
     return best * PAS;
+  }
+  // la même chose, en ne cherchant que près de s (de av mètres derrière à ap mètres devant) : quelques dizaines de points
+  projeterPres(x, z, s, av = 10, ap = 20) {
+    const i0 = Math.floor(s / PAS), n = this.n;
+    let best = s, dmin = Infinity;
+    for (let k = -Math.ceil(av / PAS); k <= Math.ceil(ap / PAS); k++) {
+      let i = i0 + k;
+      if (this.ferme) i = ((i % n) + n) % n; else if (i < 0 || i >= n) continue;
+      const d = (this.X[i] - x) ** 2 + (this.Z[i] - z) ** 2;
+      if (d < dmin) { dmin = d; best = i * PAS; }
+    }
+    return best;
   }
   // l'abscisse ramenée sur le chemin (une boucle : modulo sa longueur)
   ramener(s) { return this.ferme ? ((s % this.L) + this.L) % this.L : borne(s, 0, this.L); }
@@ -747,6 +1167,7 @@ class Cycliste {
     this.m = null; this.p = null; this.casque = null; this.dtA = 0; this.vu = false; this.attendu = false; this.attenduP = false;
     this.sx = 0; this.sz = 0; this.svx = 0; this.svz = 0; this.tE = 0; this.chute = 0; this.cote = 1; this.source = null; this.outil = null; // (à pied : le vélo couché)
     this.sauts = 0; this.touches = 0; // (essais : combien de fois il a sauté ; touché par un véhicule, ce qui ne doit pas arriver)
+    this.hV = 0; this.court = false; this.dx0 = 0; this.dz0 = 0; this.dx1 = 0; this.dz1 = 0; this.prete = 0; // (son vélo couché qui tourne ; prêté : il s'en va à pied)
     this.cri = V.c.hud.etiquette('', 'bulle');
     this.regard = new THREE.Vector3(); this.Vp = new Float64Array(VL.N); // (la pose demandée au personnage : anim.js, poseVelo)
     this.lampe = null;
@@ -755,27 +1176,14 @@ class Cycliste {
   // le modèle : le vélo (un maillage à peau), puis le cycliste (une image plus tard), son casque, ses feux
   construireVelo() {
     const d = this.def, V = this.V;
-    const v = veloRoulant(this.genre, d.couleur, { panier: d.panier, lumiere: d.lumiere, sacoche: d.sacoche, bidon: d.bidon, guidoline: d.guidoline, selle2: d.selle2 });
-    const groupe = new THREE.Group(), incline = new THREE.Group();
-    groupe.rotation.order = 'YXZ'; groupe.add(incline); incline.add(v.mesh);
-    groupe.visible = false; groupe.name = 'vélo';
-    V.c.scene.add(groupe);
-    this.m = { groupe, incline, mesh: v.mesh, os: v.os, D: v.D };
-    // les feux, la nuit (engins.js : les glaces des phares, leur halo ; une flaque de lumière devant)
-    if (d.lumiere) {
-      const M = matieresPhares(), D = v.D, G = [];
-      const disque2 = (p, r, coul, sz) => { const g = new THREE.CircleGeometry(r, 10); if (sz < 0) g.rotateY(Math.PI); g.translate(p[0], p[1], p[2]); G.push(teinter(g, coul)); };
-      // le phare suit la direction : dans le repère de son os
-      const os = v.os[1]; os.updateMatrix(); mInv.copy(os.matrix).invert();
-      vA.set(D.lampe[0], D.lampe[1], D.lampe[2] + 0.06).applyMatrix4(mInv);
-      const gAv = []; { const g = new THREE.CircleGeometry(0.03, 10); g.translate(vA.x, vA.y, vA.z); gAv.push(teinter(g, '#fff6e2')); const h = new THREE.CircleGeometry(0.13, 10); h.translate(vA.x, vA.y, vA.z - 0.005); gAv.push(teinter(h, '#2e2a24')); }
-      const av = new THREE.Mesh(fusion(gAv), M.glaces); av.renderOrder = 5; os.add(av);
-      disque2([D.feu[0], D.feu[1], D.feu[2] - 0.02], 0.025, '#ff2a1a', -1); disque2([D.feu[0], D.feu[1], D.feu[2] - 0.025], 0.09, '#3a0a06', -1);
-      const ar = new THREE.Mesh(fusion(G), M.glaces); ar.renderOrder = 5; incline.add(ar);
-      const fl = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 4.5).rotateX(-Math.PI / 2).translate(0, 0.05, D.F[2] + 2.5), M.flaque); fl.renderOrder = 4;
-      groupe.add(fl);
-      this.lampe = { av, ar, fl }; av.visible = ar.visible = fl.visible = false;
-    }
+    // (les feux, la nuit : modeleVelo ; seulement pour qui roule encore le soir)
+    const m = modeleVelo(this.genre, d.couleur, { panier: d.panier, lumiere: d.lumiere, sacoche: d.sacoche, bidon: d.bidon, guidoline: d.guidoline, selle2: d.selle2 }, !!d.lumiere);
+    m.groupe.visible = false;
+    V.c.scene.add(m.groupe);
+    this.m = m; this.lampe = m.lampe;
+    // revenu sur un autre vélo (il avait prêté le sien : Velos.revenir) : il y remonte
+    const p = this.p;
+    if (p) { m.incline.add(p.m.groupe); p.m.groupe.position.set(0, 0, 0); p.m.groupe.rotation.set(0, 0, 0); p.m.groupe.visible = true; this.reglerSelle(); }
   }
   construireCycliste() {
     const d = this.def, V = this.V, o = { ...d.p };
@@ -788,16 +1196,11 @@ class Cycliste {
     this.reglerSelle();
   }
   // la selle à la hauteur de ses jambes : à la pédale du bas, le genou encore un peu plié (95 % de la jambe)
-  reglerSelle() {
-    const D = this.m.D, s = this.p.m.echelle, jambe = (DIM.cuisse + DIM.tibia) * s * 0.95, CH = DIM.cheville * s, Lb = 0.11 * s, pt = 0.36;
-    const cheville = [D.xp, D.BB[1] - D.mani + 0.016 + CH * Math.cos(pt) + Lb * Math.sin(pt), D.BB[2] + CH * Math.sin(pt) - Lb * Math.cos(pt)];
-    let a = -0.08, b = 0.42;
-    for (let k = 0; k < 24; k++) {
-      const e = (a + b) / 2, sel = plus(D.selle, D.dS, e), hanche = [this.p.m.dim.xh * s, sel[1] + 0.05 * s, sel[2] - 0.035 * s];
-      if (Math.hypot(hanche[0] - cheville[0], hanche[1] - cheville[1], hanche[2] - cheville[2]) > jambe) b = e; else a = e;
-    }
-    this.selleE = (a + b) / 2;
-  }
+  reglerSelle() { this.selleE = hauteurSelle(this.m.D, this.p); }
+  // tombé, son vélo par terre : un véhicule le pousse (vehicules.js : heurter ; Teddy, 28/11/2026 : « pour ne pas être
+  // bloqué »)
+  get poussable() { return this.etat === 'saute' || this.etat === 'terre' || this.etat === 'va' || this.etat === 'releve'; }
+  pousse(qui, nx, nz, prof) { this.V.pousserCouche(this, qui, nx, nz, prof); }
 
   // vu de la caméra : devant elle, à moins de 75 m (on n'apparaît ni ne disparaît sous les yeux)
   vuDe(cam, dirX, dirZ) {
@@ -824,8 +1227,9 @@ class Cycliste {
 export class Velos {
   constructor(c) {
     this.c = c; this.ch = null; // (les chemins : à la première mise à jour, après la première image)
+    SON = c.son;
     this.liste = DEFS.map((d, i) => new Cycliste(this, d, i));
-    this.n = 0; this.file = []; this.tRoue = 0; this.sonnettes = 0;
+    this.n = 0; this.file = []; this.tRoue = 0; this.sonnettes = 0; this.pousses = 0; // (essais : combien de fois un véhicule a poussé un vélo couché)
     // le premier vélo, tout de suite (caché) : la matière des vélos (une peau) est compilée avec les autres au démarrage
     this.liste[0].construireVelo();
     this.obs = []; for (let k = 0; k < 96; k++) this.obs.push({ x: 0, z: 0, r: 0, vx: 0, vz: 0, joueur: false, vehJ: false, auto: false, cyc: null, ref: null });
@@ -854,7 +1258,11 @@ export class Velos {
     for (const v of E.voitures) for (let k = -1; k <= 1; k += 2) this.ajout(v.x + k * 1.1 * v.sens, v.z, 1.0, v.sens * v.v, 0, false, false, true, null, v);
     for (const v of E.autres) for (let k = -1; k <= 1; k += 2) this.ajout(v.x + k * 1.1 * v.ax, v.z + k * 1.1 * v.az, 1.0, v.ax * v.v, v.az * v.v, false, false, true, null, v);
     for (const p of E.passants) if (p.m.groupe.visible) this.ajout(p.pos.x, p.pos.z, 0.36, Math.sin(p.h) * p.v, Math.cos(p.h) * p.v, false, false, false, null, p);
-    for (const c of this.liste) if (c.actif) this.ajout(c.etat === 'roule' ? c.x : c.sx, c.etat === 'roule' ? c.z : c.sz, 0.42, c.ax * c.v, c.az * c.v, false, false, false, c, c);
+    for (const c of this.liste) {
+      if (!c.actif) continue;
+      if (c.prete) { if (c.p) this.ajout(c.p.pos.x, c.p.pos.z, 0.36, Math.sin(c.p.h) * c.p.v, Math.cos(c.p.h) * c.p.v, false, false, false, c, c.p); continue; } // (à pied, son vélo prêté)
+      this.ajout(c.etat === 'roule' ? c.x : c.sx, c.etat === 'roule' ? c.z : c.sz, 0.42, c.ax * c.v, c.az * c.v, false, false, false, c, c);
+    }
   }
 
   maj(dt, E) {
@@ -878,6 +1286,7 @@ export class Velos {
         } else if (voulu) { c.x = c.z = 1e5; }
       }
       if (!c.actif) continue;
+      if (c.prete) { this.partir(c, dt, E, cam, dX, dZ); continue; } // (il a prêté son vélo : il s'en va à pied)
       const dc = Math.hypot(c.x - cam.x, c.z - cam.z), de = Math.hypot(c.x - E.ego.x, c.z - E.ego.z);
       const proche = dc < 150 || de < 60;
       if (c.etat === 'roule') this.rouler(c, dt, E, proche);
@@ -1130,15 +1539,23 @@ export class Velos {
   // vélo, on le relève (les mains au cintre), on remonte et l'on repart en râlant
   aPied(c, dt, E) {
     c.tE += dt;
-    const k = Math.exp(-dt * 3.2);
+    const k = Math.exp(-dt * 2.8);
     c.sx += c.svx * dt; c.sz += c.svz * dt; c.svx *= k; c.svz *= k;
+    // (poussé par un véhicule : il tourne en glissant ; il s'arrête contre un mur)
+    if (c.hV) { c.h = angle(c.h + c.hV * dt); c.hV *= k; if (Math.abs(c.hV) < 0.02) c.hV = 0; c.ax = Math.sin(c.h); c.az = Math.cos(c.h); }
+    if (c.svx * c.svx + c.svz * c.svz > 0.002) {
+      SONDE.x = c.sx; SONDE.z = c.sz;
+      if (this.c.col.resoudre(SONDE, 0.35)) { const col = this.c.col, vn = c.svx * col.nx + c.svz * col.nz; c.sx = SONDE.x; c.sz = SONDE.z; if (vn < 0) { c.svx -= vn * col.nx * 1.3; c.svz -= vn * col.nz * 1.3; } }
+    }
     // il penche puis tombe (la pesanteur), rebondit un peu
     const cible = c.cote * 1.36;
     if (c.etat !== 'releve' && c.chute < 1) {
       c.inclV += c.cote * 7 * dt; c.incl += c.inclV * dt;
       if (Math.abs(c.incl) >= 1.36) { c.incl = cible; c.inclV = -c.inclV * 0.18; c.chute = 1; if (c.vu) this.c.son.chuteVelo(borne(1.1 - Math.hypot(c.sx - E.ego.x, c.sz - E.ego.z) / 35, 0, 1)); }
     }
-    c.x = c.sx; c.z = c.sz; c.y = sol(c.sx, c.sz);
+    // (ses cercles, pour les véhicules : au milieu du vélo couché, pas sur la ligne de ses roues)
+    const dl = 0.4 * Math.sin(c.incl) * Math.min(1, Math.abs(c.incl) / 0.25);
+    c.x = c.sx + Math.cos(c.h) * dl; c.z = c.sz - Math.sin(c.h) * dl; c.y = sol(c.sx, c.sz);
     const p = c.p;
     if (!p) { if (c.tE > 3) this.remonter(c); return; }
     const veh = c.source, loin = !veh || Math.hypot(veh.pos.x - c.sx, veh.pos.z - c.sz) > 7 || Math.abs(veh.v) < 0.5;
@@ -1239,35 +1656,108 @@ export class Velos {
     if (!p || c.etat !== 'roule') return; // (à pied : aPied le mène)
     // le cycliste : ce qu'il demande à son personnage (anim.js : poseVelo), dans le repère du vélo penché
     p.pos.set(c.x, c.y, c.z); p.h = c.h;
-    {
-      V[VL.selle] = D.selle[0] + D.dS[0] * c.selleE; V[VL.selle + 1] = D.selle[1] + D.dS[1] * c.selleE; V[VL.selle + 2] = D.selle[2] + D.dS[2] * c.selleE;
-      // les poignées, tournées avec la direction autour de l'axe de la douille
-      AXE.set(D.dD[0], D.dD[1], D.dD[2]); qDir.setFromAxisAngle(AXE, c.braq);
-      for (let j = 0; j < 2; j++) {
-        const k = j ? VL.mainD : VL.mainG, sx = j ? -1 : 1;
-        vA.set(D.prise[0] * sx - D.HB[0], D.prise[1] - D.HB[1], D.prise[2] - D.HB[2]).applyQuaternion(qDir);
-        V[k] = vA.x + D.HB[0]; V[k + 1] = vA.y + D.HB[1]; V[k + 2] = vA.z + D.HB[2];
-      }
-      vA.set(D.doigts[0], D.doigts[1], D.doigts[2]).applyQuaternion(qDir); V[VL.doigts] = vA.x; V[VL.doigts + 1] = vA.y; V[VL.doigts + 2] = vA.z;
-      vA.set(D.paume[0], D.paume[1], D.paume[2]).applyQuaternion(qDir); V[VL.paume] = vA.x; V[VL.paume + 1] = vA.y; V[VL.paume + 2] = vA.z;
-      const Lc = D.mani, co = Math.cos(c.mani), si = Math.sin(c.mani);
-      V[VL.pedG] = D.xp; V[VL.pedG + 1] = D.BB[1] + Lc * co; V[VL.pedG + 2] = D.BB[2] + Lc * si;
-      V[VL.pedD] = -D.xp; V[VL.pedD + 1] = D.BB[1] - Lc * co; V[VL.pedD + 2] = D.BB[2] - Lc * si;
-      V[VL.mani] = c.mani; V[VL.danseuse] = c.dan; V[VL.pied] = c.pied; V[VL.roulis] = c.incl;
-      // le pied gauche à terre : à côté du vélo, au sol (le sol vu du vélo penché)
-      const X = 0.3, Zs = D.BB[2] + 0.12, ci = Math.cos(c.incl), sn = Math.sin(c.incl);
-      V[VL.sol] = X * ci; V[VL.sol + 1] = X * sn; V[VL.sol + 2] = Zs;
-      // il regarde à gauche et à droite au stop ; le joueur qui le gêne ; devant lui sinon
-      if (c.regarde > 0) { const a = c.h + (Math.floor(c.regarde / 0.9) % 2 ? -1.2 : 1.2); p.regard = c.regard.set(c.x + Math.sin(a) * 10, c.y + 1.4, c.z + Math.cos(a) * 10); }
-      else p.regard = null;
-    }
+    remplirPose(V, D, c.braq, c.mani, c.selleE, c.dan, c.pied, c.incl);
+    // il regarde à gauche et à droite au stop ; devant lui sinon
+    if (c.regarde > 0) { const a = c.h + (Math.floor(c.regarde / 0.9) % 2 ? -1.2 : 1.2); p.regard = c.regard.set(c.x + Math.sin(a) * 10, c.y + 1.4, c.z + Math.cos(a) * 10); }
+    else p.regard = null;
     p.sync(dt, t);
+  }
+
+  // Un véhicule pousse le vélo couché d'un cycliste tombé (vehicules.js : heurter, Cycliste.pousse) : il s'écarte, lancé de
+  // côté (elan), et tourne ; celui qui allait le relever attend que le véhicule soit passé, le vélo retombe
+  pousserCouche(c, qui, nx, nz, prof) {
+    c.sx += nx * prof; c.sz += nz * prof; c.x += nx * prof; c.z += nz * prof;
+    if (!elan(c, qui, nx, nz)) return;
+    this.pousses++;
+    if (qui.pos) c.source = qui;
+    if (c.etat === 'va' || c.etat === 'releve') {
+      if (c.etat === 'releve') { c.chute = 0; c.inclV = 0; }
+      c.etat = 'terre'; c.tE = 0;
+      if (c.p) c.p.outil = null;
+    }
+    if (c.tDit <= 0 && c.vu && Math.hypot(c.sx - this.E.ego.x, c.sz - this.E.ego.z) < 30) { this.dire(c, REPLIQUES.pousse); c.tDit = 4; }
+    if (c.vu) this.c.son.chuteVelo(borne(Math.abs(qui.v) / 8, 0.25, 0.8));
+  }
+
+  // Le cycliste arrêté (ou presque) à portée de main de (x, z), à qui l'on peut emprunter le vélo : un adulte, pas la
+  // mère qui suit son enfant (ni l'enfant), dessiné, sur son vélo ; ou null
+  empruntable(x, z) {
+    let best = null, dmin = 2.4;
+    for (const c of this.liste) {
+      if (!c.actif || !c.vu || !c.p || c.etat !== 'roule' || c.v > 1.2 || c.def.suit || c.genre === 'enfant' || this.liste.some(o => o.def.suit && this.liste[o.i - 1] === c)) continue;
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < dmin) { dmin = d; best = c; }
+    }
+    return best;
+  }
+  // On lui emprunte son vélo (main.js : prendreVelo) : il en descend, de l'autre côté, le tient debout et nous le laisse,
+  // puis s'en va à pied (partir) ; en mode WTF, on le lui vole : il saute de côté en criant et s'enfuit en courant. Rend de
+  // quoi en faire le vélo du joueur : son modèle (le même maillage, ses feux), sa place et sa pose. Plus loin, hors de la
+  // vue, il reviendra sur un autre vélo (revenir).
+  ceder(c, wtf) {
+    const m = c.m, p = c.p, D = m.D;
+    if (!m.lampe) feux(m, false); // (le feu arrière, pour le joueur, la nuit)
+    m.lampe.ar.visible = false; if (m.lampe.av) m.lampe.av.visible = m.lampe.fl.visible = false;
+    m.groupe.visible = true; m.mesh.visible = true;
+    const r = { m, x: c.x, z: c.z, h: c.h, incl: 0.12, braq: c.braq, roue: c.roue, mani: c.mani, selleE: c.selleE };
+    c.m = null; c.lampe = null; c.attendu = false; c.vu = false;
+    // il descend : de la selle à côté du vélo, à sa droite (on monte à gauche)
+    m.groupe.updateMatrixWorld(true); p.m.groupe.getWorldPosition(vA);
+    const co = Math.cos(c.h), si = Math.sin(c.h), lx = -0.55, lz = D.prise[2] - 0.4;
+    this.c.scene.add(p.m.groupe);
+    p.assis = false; p.velo = null; p.outil = null; p.regard = null;
+    p.placer(vA.x, vA.z, c.h); p.m.groupe.visible = true;
+    c.dx0 = vA.x; c.dz0 = vA.z; c.dx1 = c.x + lx * co + lz * si; c.dz1 = c.z - lx * si + lz * co;
+    c.prete = 1; c.etat = 'prete'; c.tE = 0; c.court = wtf; c.v = 0; c.danger = false; c.cede = 0; c.contour = null; c.regarde = 0;
+    c.x = c.z = c.sx = c.sz = 1e5;
+    if (wtf) { p.sauter(-co, si); this.dire(c, REPLIQUES.vole); c.prete = 2; }
+    else this.dire(c, REPLIQUES.prete);
+    return r;
+  }
+  // Il s'en va à pied (prete 1 : il descend, puis marche ; 2 : volé, il saute et s'enfuit en courant), sur le bas-côté de
+  // son chemin, dans son sens ; il s'écarte des véhicules. Hors de la vue et loin, il revient plus loin sur un autre vélo.
+  partir(c, dt, E, cam, dX, dZ) {
+    const p = c.p;
+    c.tE += dt;
+    if (c.prete === 1 && c.tE < 0.5) {
+      const u = c.tE / 0.5, e = u * u * (3 - 2 * u);
+      p.pos.x = c.dx0 + (c.dx1 - c.dx0) * e; p.pos.z = c.dz0 + (c.dz1 - c.dz0) * e; p.h = c.h;
+      p.sync(dt, E.t);
+    } else {
+      // vers un point de son chemin, quelques mètres devant, à droite de sa ligne (le bas-côté, le trottoir)
+      const ch = c.ch;
+      c.s = ch.projeterPres(p.pos.x, p.pos.z, c.s);
+      ch.point(ch.ramener(c.s + 4), PT);
+      const dd = -(PT.d + 1.4), tx = PT.x + Math.cos(PT.h) * dd, tz = PT.z - Math.sin(PT.h) * dd, dx = tx - p.pos.x, dz = tz - p.pos.z, d = Math.hypot(dx, dz) || 1;
+      if (c.prete === 2 && p.sautT <= 0 && c.tE > 0.8 && c.tE < 1.2) p.regard = null;
+      p.update(dt, dx / d, dz / d, 1, c.court, this.c.col, E.t, c.court ? undefined : 1.35);
+      E.pousser(p.pos, 0.34);
+      const vu = this.vuPos(p.pos.x, p.pos.z, cam, dX, dZ), de = Math.hypot(p.pos.x - E.ego.x, p.pos.z - E.ego.z);
+      if (p.m.groupe.visible !== (de < 150)) p.m.groupe.visible = de < 150;
+      if ((c.tE > 5 && !vu && de > 35) || c.tE > 45) { this.revenir(c); return; }
+    }
+    if (c.cri.vu) this.c.hud.placer(c.cri, p.pos.x, p.pos.y + 2.25, p.pos.z, true);
+  }
+  // vu de la caméra : (x, z) devant elle, à moins de 75 m (Cycliste.vuDe, pour un point)
+  vuPos(x, z, cam, dirX, dirZ) {
+    const dx = x - cam.x, dz = z - cam.z, d = Math.hypot(dx, dz);
+    return d < 8 || (d < 75 && (dx * dirX + dz * dirZ) / d > 0.3);
+  }
+  // il revient, plus loin sur son chemin (au début d'un chemin ouvert, à l'autre bout d'une boucle), sur un autre vélo :
+  // celui-ci est fait en approchant, comme les autres (maj : construireVelo l'y remet en selle)
+  revenir(c) {
+    const p = c.p;
+    p.m.groupe.removeFromParent();
+    p.velo = c.Vp; p.assis = true; p.outil = null; p.regard = null; p.sautT = 0; p.saut = 0; p.v = 0;
+    c.prete = 0; c.attendu = false; c.vu = false; c.cri.vu = false;
+    c.s = c.ch.ferme ? c.ch.ramener(c.s + c.ch.L / 2) : 0; c.fin = false; c.contour = null; c.evtFait = null; c.evt = null;
+    this.placer(c);
   }
 
   // le joueur à pied ne traverse pas un vélo (deux cercles le long du vélo)
   pousser(q, r) {
     for (const c of this.liste) {
-      if (!c.actif || !c.vu) continue;
+      if (!c.actif || !c.vu || c.prete) continue;
       const x = c.etat === 'roule' ? c.x : c.sx, z = c.etat === 'roule' ? c.z : c.sz;
       if (Math.abs(q.x - x) > 2 || Math.abs(q.z - z) > 2) continue;
       for (let k = -1; k <= 1; k += 2) {
@@ -1285,6 +1775,7 @@ export class Velos {
   // les taches de contact (main.js : majTaches) ; vu(m, x, z) : le personnage dessiné ou non selon la distance
   taches(t, vu) {
     for (const c of this.liste) {
+      if (c.prete) { if (c.p && c.p.m.groupe.visible && vu(c.p.m, c.p.pos.x, c.p.pos.z)) t.poser(c.p.pos.x, c.p.pos.z, 0.38, 0.38, 0, c.p.pos.y); continue; }
       if (!c.vu) continue;
       if (c.etat === 'roule') {
         // (le vélo suit son cycliste : dessiné ou non selon la distance, comme les passants)

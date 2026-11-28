@@ -49,8 +49,10 @@ export class Camera {
     const kv = vehicule ? Math.min(1, av / 12.5) : Math.min(1, av / 5.6);
     // l'enjambeur, haut de 4 m : la caméra recule, monte et regarde plus haut (sa cabine, le rang qu'il enjambe)
     const grand = vehicule && engin && engin.genre === 'enjambeur' ? 1 : 0;
-    const dist = (vehicule ? 9.4 + 2.8 * kv + 1.8 * grand : 6.2 + 0.5 * kv) * this.zoom;
-    const haut = (vehicule ? 4.6 + 0.8 * kv + 2.2 * grand : 3.0) * (0.75 + 0.25 * this.zoom);
+    // à vélo : plus près et plus bas qu'en voiture, un peu plus loin qu'à pied
+    const velo = vehicule && engin && engin.genre === 'velo' ? 1 : 0;
+    const dist = (vehicule ? (9.4 + 2.8 * kv + 1.8 * grand) * (1 - 0.36 * velo) : 6.2 + 0.5 * kv) * this.zoom;
+    const haut = (vehicule ? (4.6 + 0.8 * kv + 2.2 * grand) * (1 - 0.4 * velo) : 3.0) * (0.75 + 0.25 * this.zoom);
     const kd = pret ? lisser(dt, 2.2) : 1;
     this.dist += (dist - this.dist) * kd; this.haut += (haut - this.haut) * kd;
     this.fovPlus += ((vehicule ? 9 * kv * kv : 2.5 * kv * kv) - this.fovPlus) * (pret ? lisser(dt, 1.8) : 1);

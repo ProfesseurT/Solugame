@@ -426,6 +426,7 @@ export class Gestes {
   }
   // (place : on est déjà devant la portière ouverte)
   etapesMonter(v, fin, place = false) {
+    if (v.m.montage) return v.m.montage.monter(this, v, fin); // (un vélo : velos.js, MONTAGE)
     const M = montee(v), porte = !!v.m.porte;
     const etapes = place ? [] : this.versMontee(v);
     if (porte && !place) etapes.push(this.portiere(v, 1));
@@ -449,6 +450,7 @@ export class Gestes {
     return etapes;
   }
   etapesDescendre(v, sorti, fermer = true) {
+    if (v.m.montage) return v.m.montage.descendre(this, v, sorti);
     const M = montee(v), porte = !!v.m.porte, D = M.depart;
     const etapes = [];
     if (porte) etapes.push(this.portiere(v, 1));

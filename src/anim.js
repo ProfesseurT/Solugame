@@ -193,8 +193,9 @@ export class Anim {
     this.ry += (cy - this.ry) * k45; this.rp += (cp - this.rp) * k45;
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
-    // (un enfant qui joue : ecole.js ; quand il passe d'un jeu à l'autre, sa pose glisse de l'ancienne à la nouvelle)
-    const lisse = m.enfant && this.changeJeu(p, dt);
+    // (un enfant qui joue : ecole.js ; quand il passe d'un jeu à l'autre, sa pose glisse de l'ancienne à la nouvelle ; de
+    // même quand on monte sur un vélo ou qu'on en descend, velos.js)
+    const lisse = (m.enfant || p.velo || this.jeuPrec === 'velo' || this.tLisse > 0) && this.changeJeu(p, dt);
     if (p.jeu) this.poseJeu(dt, p, t, va, sens, br);
     else if (p.velo) this.poseVelo(p, br); // à vélo (velos.js)
     else if (p.transition != null && p.assis) this.poseTransition(dt, p, t, br, conduite);
@@ -461,7 +462,7 @@ export class Anim {
   // Un enfant change de jeu (s'asseoir, se relever, s'accroupir, sauter) : on garde la pose de l'image d'avant ; rend vrai
   // tant qu'il faut glisser de l'une à l'autre (lisserJeu, après la nouvelle pose)
   changeJeu(p, dt) {
-    const jeu = p.jeu ? p.jeu.g : null;
+    const jeu = p.jeu ? p.jeu.g : p.velo ? 'velo' : null;
     if (jeu !== this.jeuPrec) { if (this.jeuPrec !== undefined && dt > 0) this.tLisse = 0.4; this.jeuPrec = jeu; }
     if (!(this.tLisse > 0 && dt > 0)) return false;
     const o = this.o;
