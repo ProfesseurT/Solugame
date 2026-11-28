@@ -293,6 +293,11 @@ export const MESSAGES = [
     fil: ['Je passe jeudi prendre les palettes pour le Canada. Le DAE sera prêt ?'] },
 ];
 
+// Mission 4 : les écrans de l'ordinateur (pc.js : Vitisoft, Brevo, la caisse, les statistiques) ; les libellés d'interface
+// restent dans pc.js, ce qui touche au produit est ici
+export const PORTES_ORDI = {
+};
+
 export const FIN = {
   sur: 'Fin de la mission 1',
   titre: 'C\'est ça, Tournée générale.',
@@ -774,6 +779,10 @@ export const VILLAGE = {
 };
 
 // Les cyclistes (velos.js) : la sonnette, un véhicule qui fonce sur eux, le saut de côté, le vélo relevé
+// Mission 4 : ce que disent les visiteurs des portes ouvertes (portes.js)
+export const PORTES_VISITEURS = {
+};
+
 export const VELOS = {
   sonnette: ['Dring dring !', 'Pardon, je passe !', 'Attention, vélo !', 'Dring !'],
   attention: ['Hé, doucement !', 'Attention !', 'Oh là !'],
@@ -803,6 +812,114 @@ export const PARVIS = {
 
 // Les missions : le téléphone (app Missions : où l'on en est, rejouer une mission gagnée) et l'accueil (Continuer). La
 // partie s'enregistre toute seule sur l'appareil (sauvegarde.js).
+/* ---------------------------------------------------------------- mission 4 : les portes ouvertes (Teddy, 28/11/2026)
+   « Préparer les portes ouvertes avec Vitisoft sur un ordinateur et envoyer les invitations à tous les particuliers de
+   la région par email, courrier et SMS (un 360 degrés) ; des filtres dans Vitisoft, guidés ; la campagne créée en un
+   clic, une page web Brevo pour l'emailing et les SMS ; un bouton pour le courrier à la liste sélectionnée ; des relances
+   automatiques par mail ; un délai ; le matériel (tables, sono) au tracteur, la nourriture chez un traiteur ; le jour J,
+   l'ordinateur du bureau sur le parvis pour la caisse : les bons tickets à une dizaine de clients ; puis l'employé prend
+   la caisse et l'on fait déguster le vin aux invités. En supplément : les statistiques des portes ouvertes et un mail de
+   remerciement à tous ceux qui sont passés. »
+   Ce que fait Vitisoft, seulement ce que dit vitisoft.fr (dépôt vitisoft.fr, lu le 28/11/2026) :
+   - fonctionnalites/marketing-emailing.astro : « Nouveau millésime, portes ouvertes, salon : vous choisissez vos clients
+     dans Vitisoft, Brevo envoie l'email ou le SMS personnalisé. Vos données clients sont toujours à jour, et vous
+     n'exportez plus un seul fichier » ; le courrier postal « pour ceux dont vous n'avez pas l'adresse e-mail » :
+     publipostage, routage postal, étiquettes d'expédition ; statistiques d'ouverture et de clics ; les ventes des
+     clients ciblés reviennent dans les statistiques de Vitisoft ; data/schemas.ts : « Vitisoft cible, Brevo envoie ».
+   - fonctionnalites/crm-viticole.astro : la recherche multi-critères (zone géographique, type de vin, millésime,
+     catégorie, historique d'achat) ; « Comment savoir quels clients inviter à un salon ? Le moteur multi-critères croise
+     zone géographique et historique d'achat ».
+   - fonctionnalites/caisse-caveau.astro et ses deux captures (vitisoft-caisse-selection-produits.webp,
+     vitisoft-caisse-reglement.webp) : la caisse tactile du caveau, une grande touche par famille, la quantité au pavé
+     numérique, tarif unitaire et remise, Valider, Produit suivant ; le règlement (espèces, chèque, carte, carte sans
+     contact, bons d'achat, virement, divers), puis A4, facturette ou par mail ; chaque vente sort du stock et met à
+     jour la fiche client.
+   - fonctionnalites/statistiques-pilotage.astro : panier moyen, nombre de factures, ventes par familles de produits.
+   - blog/plan-marketing-communication-vigneron.md : segmenter dans Vitisoft les contacts qui ont une adresse e-mail
+     (l'email), un numéro (le SMS) ; le consentement, le RGPD, une option de désabonnement.
+   Les relances automatiques par mail : Teddy, 28/11/2026 (Brevo les envoie). La mention sanitaire de la loi Évin dans
+   les invitations (Code de la santé publique, L3323-4). Le domaine, ses clients, ses vins, leurs prix, les chiffres
+   de la campagne et du fichier : fictifs. Le traiteur : Clémence, de La Table de Clémence (un restaurant du jeu). */
+export const PORTES = {
+  domaine: 'Domaine du Clos Libre',
+  // de la préparation (le réveil de la mission 4) à la veille des portes ouvertes : une semaine passe ; le jour J est
+  // le lendemain de la veille, un samedi si la mission 3 a tenu dans sa journée
+  semaine: 7, ouverture: 10 * 60, fermeture: 18 * 60,
+  // le fichier clients et la recherche multi-critères (Vitisoft, Clients / contacts) ; les filtres voulus : tous les
+  // particuliers de la région (Teddy) ; le compte affiché suit les filtres (base x coefficients, arrondi)
+  fichier: 1240,
+  filtres: [
+    { id: 'categorie', nom: 'Catégorie', voulu: 'particulier', options: [['tous', 'Toutes', 1], ['particulier', 'Particuliers', 0.655], ['pro', 'Professionnels', 0.2], ['caviste', 'Cavistes et restaurants', 0.145]] },
+    { id: 'zone', nom: 'Zone géographique', voulu: 'region', options: [['france', 'Toute la France', 1], ['region', 'Pays de la Loire', 0.662], ['dep', 'Maine-et-Loire', 0.45]] },
+    { id: 'historique', nom: 'Historique d\'achat', voulu: 'tous', options: [['tous', 'Tous', 1], ['recents', 'Achat ces trois dernières années', 0.62], ['sommeil', 'En sommeil', 0.21]] },
+  ],
+  // la liste obtenue : ceux qui ont une adresse e-mail (l'email), un numéro de mobile (le SMS), et ceux qui n'ont pas
+  // d'adresse e-mail (le courrier)
+  selection: { total: 538, email: 312, sms: 246, courrier: 226 },
+  // l'invitation (Brevo, à partir d'un modèle) : {prenom}, {date} (dateJeu, forme longue sans l'année)
+  email: {
+    objet: 'Portes ouvertes de Noël au Domaine du Clos Libre, {date}',
+    titre: 'Portes ouvertes de Noël',
+    corps: ['Bonjour {prenom},', 'Le domaine vous ouvre ses portes {date}, de 10 h à 18 h.', 'Au programme : dégustation du Clos 2025, tout juste habillé, le buffet de Clémence, de La Table de Clémence, et la visite du chai.', 'Entrée libre : venez en famille, entre amis.'],
+    bouton: 'Je viens', mention: 'L\'abus d\'alcool est dangereux pour la santé. À consommer avec modération.', desinscription: 'Se désinscrire',
+  },
+  sms: 'Domaine du Clos Libre : portes ouvertes de Noël {date}, 10 h à 18 h. Dégustation et buffet. Répondez STOP pour ne plus recevoir de SMS.',
+  courrier: { titre: 'Invitation', corps: ['Madame, Monsieur,', 'Le Domaine du Clos Libre vous invite à ses portes ouvertes de Noël, {date}, de 10 h à 18 h : dégustation, buffet du traiteur, visite du chai.', 'Au plaisir de vous accueillir.'], etiquettes: 'Étiquettes d\'expédition', routage: 'Routage postal' },
+  // les relances automatiques, par mail (Brevo)
+  relances: [
+    { id: 'j7', quand: 'Une semaine avant', qui: 'Ceux qui n\'ont pas ouvert l\'invitation', objet: 'Plus qu\'une semaine : les portes ouvertes de Noël' },
+    { id: 'j1', quand: 'La veille', qui: 'Tous les invités', objet: 'C\'est demain : on vous attend au domaine' },
+  ],
+  // la caisse : les familles (une grande touche de couleur chacune, comme la capture) et les produits, prix TTC au caveau
+  familles: [
+    { id: 'rouges', nom: 'ROUGES', c: '#8e2a3b', encre: '#fff' }, { id: 'blancs', nom: 'BLANCS', c: '#f2e27a' }, { id: 'bulles', nom: 'CRÉMANT', c: '#b9a6f0' },
+    { id: 'coffrets', nom: 'COFFRETS DE NOËL', c: '#7a7a2a', encre: '#fff' }, { id: 'epicerie', nom: 'EPICERIE FINE', c: '#c4c4c4' }, { id: 'divers', nom: 'DIVERS', c: '#fbbf72' },
+  ],
+  produits: [
+    { id: 'closRouge', famille: 'rouges', nom: 'Cuvée du Clos, rouge', ttc: 12 },
+    { id: 'clos2025', famille: 'rouges', nom: 'Le Clos 2025, rouge', ttc: 15.5 },
+    { id: 'closBlanc', famille: 'blancs', nom: 'Cuvée du Clos, blanc', ttc: 11 },
+    { id: 'perrieres', famille: 'blancs', nom: 'Les Perrières 2024, blanc', ttc: 13.5 },
+    { id: 'cremant', famille: 'bulles', nom: 'Crémant du Clos', ttc: 14 },
+    { id: 'coffret', famille: 'coffrets', nom: 'Coffret de Noël, 3 bouteilles', ttc: 39 },
+    { id: 'jus', famille: 'epicerie', nom: 'Jus de raisin du domaine', ttc: 6.5 },
+    { id: 'confit', famille: 'epicerie', nom: 'Confit de vin rouge', ttc: 7 },
+    { id: 'verre', famille: 'divers', nom: 'Verre gravé du domaine', ttc: 4 },
+  ],
+  // les dix clients de la caisse, dans l'ordre où ils se présentent : ce qu'ils disent, ce qu'ils achètent ([produit,
+  // quantité]), leur remise (%), leur règlement, ce qu'ils donnent en espèces (percu), le ticket (facturette ou par
+  // mail ; par mail : l'adresse de leur fiche client), nouveau : pas encore dans le fichier (le merci)
+  clients: [
+    { id: 'martin', nom: 'Mme Martin', ini: 'AM', coul: '#8e2a3b', fem: true, dit: 'Bonjour ! Deux Cuvée du Clos rouge et un crémant, s\'il vous plaît. Je paie par carte, le ticket suffira.', achats: [['closRouge', 2], ['cremant', 1]], remise: 0, paiement: 'carte', ticket: 'facturette' },
+    { id: 'robin', nom: 'M. et Mme Robin', ini: 'JR', coul: '#2f5d50', dit: 'Un coffret de Noël, pour ma belle-mère. Tenez, cinquante euros.', achats: [['coffret', 1]], remise: 0, paiement: 'especes', percu: 50, ticket: 'facturette' },
+    { id: 'morel', nom: 'Julien Morel', ini: 'JM', coul: '#2c3e66', nouveau: true, dit: 'Un carton de six Clos 2025 ! Sans contact. Le ticket par mail, vous pouvez prendre mon adresse ?', achats: [['clos2025', 6]], remise: 0, paiement: 'sans', ticket: 'mail' },
+    { id: 'lefebvre', nom: 'Mme Lefebvre', ini: 'CL', coul: '#6d4c41', fem: true, dit: 'Quatre Perrières, comme d\'habitude. J\'ai ma remise de fidélité, cinq pour cent. Par chèque.', achats: [['perrieres', 4]], remise: 5, paiement: 'cheque', ticket: 'facturette' },
+    { id: 'diallo', nom: 'Famille Diallo', ini: 'FD', coul: '#16a085', dit: 'Deux jus de raisin pour les enfants et deux Cuvée du Clos blanc. Carte, et le ticket par mail.', achats: [['jus', 2], ['closBlanc', 2]], remise: 0, paiement: 'carte', ticket: 'mail' },
+    { id: 'bernard', nom: 'M. Bernard', ini: 'PB', coul: '#7a2233', dit: 'Deux cartons de rouge, la Cuvée du Clos : douze bouteilles. Par carte. Un ticket, oui.', achats: [['closRouge', 12]], remise: 0, paiement: 'carte', ticket: 'facturette' },
+    { id: 'nguyen', nom: 'Mme Nguyen', ini: 'LN', coul: '#c8553d', fem: true, nouveau: true, dit: 'Un Clos 2025 et un confit de vin rouge. Je vous donne trente euros. Le ticket par mail, s\'il vous plaît.', achats: [['clos2025', 1], ['confit', 1]], remise: 0, paiement: 'especes', percu: 30, ticket: 'mail' },
+    { id: 'karim', nom: 'Sophie et Karim', ini: 'SK', coul: '#2e86de', dit: 'Deux crémants et deux verres gravés, c\'est pour un cadeau. Sans contact, et un ticket.', achats: [['cremant', 2], ['verre', 2]], remise: 0, paiement: 'sans', ticket: 'facturette' },
+    { id: 'petit', nom: 'M. Petit', ini: 'GP', coul: '#5d6b72', dit: 'Trois Clos 2025 et trois Cuvée du Clos blanc. Par chèque. Le ticket par mail.', achats: [['clos2025', 3], ['closBlanc', 3]], remise: 0, paiement: 'cheque', ticket: 'mail' },
+    { id: 'garnier', nom: 'Mme Garnier', ini: 'MG', coul: '#b5821f', fem: true, dit: 'Un coffret de Noël et deux Perrières. Par carte, et par mail pour le ticket.', achats: [['coffret', 1], ['perrieres', 2]], remise: 0, paiement: 'carte', ticket: 'mail' },
+  ],
+  // les modes de règlement de la caisse (les identifiants des boutons, comme la capture)
+  paiements: { especes: 'Espèces', cheque: 'Chèque', carte: 'Carte', sans: 'Carte sans contact', bons: 'Bons d\'achats', virement: 'Virement', divers: 'Divers' },
+  // ce que dit le client au comptoir quand le ticket ne correspond pas (le jeu vérifie : mission4.js, encaisser)
+  refus: {
+    vide: 'Vous n\'avez encore rien passé en caisse.',
+    manque: p => `Il manque ${p}.`,
+    enTrop: p => `${p} ? Je n'en ai pas pris.`,
+    quantite: (p, q) => `${p} : j'en ai pris ${q}.`,
+    remise: r => (r ? `Et ma remise de fidélité, ${r} % ?` : 'Pas de remise pour moi.'),
+    paiement: m => `Je paie ${m}.`,
+    percu: (e, rendu) => `Je vous ai donné ${e} € : vous me rendez ${rendu}.`,
+    ticket: t => (t === 'mail' ? 'Le ticket par mail, s\'il vous plaît.' : 'Un ticket papier, s\'il vous plaît : la facturette.'),
+  },
+  // les chiffres de la journée et de la campagne (statistiques, données fictives)
+  bilan: { visiteurs: 64, invitesVenus: 41, ouvertures: 0.61, clics: 0.19 },
+  // le merci, par mail (Brevo)
+  merci: { objet: 'Merci de votre visite au Domaine du Clos Libre', corps: ['Bonjour {prenom},', 'Merci d\'être passé aux portes ouvertes de Noël : on a été très heureux de vous faire découvrir le Clos 2025.', 'À très bientôt au domaine.'] },
+};
+
 export const MISSIONS = {
   liste: [
     { id: 'tournee', n: 'Mission 1', titre: 'La tournée de Noël', texte: 'Les commandes au téléphone, les livraisons au bourg, le chèque, la dégustation, puis Vitisoft au bureau du chai.' },
@@ -1029,6 +1146,10 @@ export const RESTAURATEURS = {
 };
 
 // Le chien du domaine (chien.js) : ce qu'on lui dit en le caressant (gestes.js : caresser)
+// Mission 4 : objectifs, dialogues, bannières, carte de fin (mission4.js)
+export const PORTES_MISSION = {
+};
+
 export const CHIEN = {
   caresse: ['Brave chien !', 'Qui c\'est le bon chien ?', 'Allez, une caresse.', 'T\'es un bon gardien, toi.', 'Doucement, doucement...', 'Tu veux des grattouilles ?', 'Tu as bien gardé la cour ?'],
 };

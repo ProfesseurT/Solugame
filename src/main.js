@@ -37,6 +37,8 @@ import { Village } from './village.js';
 import { Restaurateurs } from './restaurateurs.js';
 import { Velos, VeloJoueur, modeleVelo, gareProche, prendreGare, GARES } from './velos.js';
 import { Ecole } from './ecole.js';
+import { PortesOuvertes } from './mission4.js';
+import { Visiteurs } from './portes.js';
 import { SAUVE } from './sauvegarde.js';
 import { Reseau, longueur, ecart } from './reseau.js';
 
@@ -436,6 +438,9 @@ jeu.traitement = traitement;
 // La mission 3 (mission3.js) : la remorque de palox du Clos 2025 et le chariot élévateur de l'imprimerie (jeu.remorque,
 // jeu.chariot, plus bas)
 const habillage = new Habillage(jeu, {});
+// la mission 4, les portes ouvertes (mission4.js) et ses visiteurs (portes.js : créés plus bas, avec le reste du monde)
+const portesOuvertes = new PortesOuvertes(jeu, {});
+jeu.portes = portesOuvertes;
 jeu.habillage = habillage;
 // La remorque et le chariot, pour la mission 3 (mission3.js)
 jeu.remorque = {
@@ -656,6 +661,10 @@ const VELOS_C = { t: 0, minutes: 0, ego: null, joueur: null, conduit: null, vehi
 // est un obstacle pour les voitures de la départementale (OBSTACLES) et pour le véhicule qu'on conduit et sa conduite
 // assistée (AUTOS : une voiture immobile, sans emprise) : on ne leur roule jamais dessus, même en mode WTF
 const ecole = new Ecole({ scene, camera, lieux: L });
+// les visiteurs des portes ouvertes (mission 4, le jour J ; portes.js)
+const visiteurs = new Visiteurs({ jeu, scene, camera, col, hud, son, lieux: L });
+jeu.visiteurs = visiteurs;
+const VISITEURS_C = { t: 0, minutes: 0, ego: null, joueur: null, aPied: true, danger: null, pousser: (p, r) => horsDesVehicules(p, r) };
 OBSTACLES.push(...ecole.obstacles);
 // le choix de la radio est gardé d'une partie à l'autre ; son bandeau se touche pour la couper ou la rallumer
 son.radioCoupee = stocke.lire('tournee-generale-radio') === 'off';
@@ -909,7 +918,7 @@ function horsDesVoitures() {
 /* ------------------------------------------------------------------ servir un verre de vin (verres.js)
    les passants, les figurants assis ; le prospect, le temps de la dégustation (mission.js) */
 const verres = new Verres({ jeu, hud, mission, hasard: rnd,
-  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of clients.liste) if (x.p.servable) f(x.p, 2.4); restos.candidats(f); } });
+  candidats(f) { for (const p of passants) f(p.p, 2.1); for (const p of assis) f(p, 2.5); for (const x of clients.liste) if (x.p.servable) f(x.p, 2.4); restos.candidats(f); visiteurs.candidats(f); } });
 jeu.prospectServable = on => { for (const x of clients.liste) if (x.id === 'auberge') x.p.servable = on; };
 
 // les actions (touche E, téléphone, son, radio, échap) et les touchers courts sur l'écran
@@ -1116,6 +1125,8 @@ function bourg(dtm, ego) {
   village.maj(dtm, VILLAGE_C, klaxonVillage);
   ECOLE_C.t = temps; ECOLE_C.minutes = jeu.minutes; ECOLE_C.ego = ego; ECOLE_C.danger = danger;
   ecole.maj(dtm, ECOLE_C);
+  VISITEURS_C.t = temps; VISITEURS_C.minutes = jeu.minutes; VISITEURS_C.ego = ego; VISITEURS_C.joueur = jeu.auVolant ? null : joueur; VISITEURS_C.aPied = !jeu.auVolant; VISITEURS_C.danger = danger;
+  visiteurs.maj(dtm, VISITEURS_C); // (les visiteurs des portes ouvertes : portes.js)
   RESTOS_C.t = temps; RESTOS_C.minutes = jeu.minutes; RESTOS_C.ego = ego; RESTOS_C.aPied = !jeu.auVolant; RESTOS_C.danger = danger;
   restos.maj(dtm, RESTOS_C); // les restaurateurs du coin, devant leur restaurant
   PIETONS.length = 0; for (const p of passants) PIETONS.push(p.p); for (const g of village.gens) if (g.genre === 'touriste') PIETONS.push(g.p);
@@ -1415,6 +1426,7 @@ function majTaches() {
   village.taches(t, ombrePerso);
   restos.taches(t, ombrePerso);
   ecole.taches(t, ombrePerso);
+  visiteurs.taches(t, ombrePerso);
   t.fin();
 }
 // Les véhicules du joueur et la remorque, au-delà de la brume, ne se voient plus : ni dessinés, ni leur ombre. La brume
@@ -1694,6 +1706,7 @@ window.CL = {
   get voitureProche() { return voitureProche(); },
   // les vélos (essais : banc velo) : celui qu'on peut prendre ici, le prendre, ceux qu'on a pris
   get veloProche() { return veloProche(); }, prendreVelo, velosJ: VELOS_J, gares: GARES,
+  portes: portesOuvertes, visiteurs, // (la mission 4 : mission4.js, portes.js)
   sauver() { sauver(); return SAUVE.partie; }, SAUVE, lancer,
   // l'accueil : le plan i figé à la fraction u (captures), ou qui reprend son cours (u omis)
   plan(i, u) { allerPlan(i); planFige = u == null ? null : { u }; }, PLANS,

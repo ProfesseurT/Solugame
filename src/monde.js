@@ -4514,6 +4514,22 @@ void main() {
   };
   lieux.maisonsRoute = MAISONS_ROUTE; // les maisons de la route du château (essais)
   lieux.velos = velosGares; // les vélos garés (velos.js ; essais)
+  // Mission 4, les portes ouvertes (mission4.js, portes.js) : l'implantation dans la cour du domaine, le jour J. La caisse
+  // (la table du portable, contre la façade du chai, au sud de la grande porte ; vendeur : où se tient qui encaisse,
+  // tourné vers les clients ; file : la queue, du comptoir vers l'ouest), le bar de dégustation (à l'est du vieux chêne ;
+  // places : où se tiennent les invités), le buffet du traiteur, la sono, l'entrée (le portail), le parking des visiteurs
+  // (le long de l'allée, hors du portail, et sous le cèdre), la mairie (les tables et la sono du comité des fêtes) et le
+  // traiteur (Clémence). Rien n'y est dessiné tant que la mission ne l'a pas installé.
+  lieux.portes = {
+    caisse: { x: -80.4, z: -57.2, h: Math.PI / 2, vendeur: { x: -79.5, z: -57.2, h: -Math.PI / 2 }, file: [[-81.6, -57.2], [-82.6, -57.3], [-83.6, -57.5], [-84.6, -57.8], [-85.6, -58.2], [-86.6, -58.6]] },
+    bar: { x: -92.6, z: -51.4, h: 0, places: [[-91.2, -50.2], [-91.0, -52.6], [-92.6, -53.4], [-94.2, -52.8], [-94.4, -50.0], [-92.8, -49.4]] },
+    buffet: { x: -97.0, z: -40.6, h: 0, places: [[-95.6, -41.8], [-97.0, -42.0], [-98.4, -41.8]] },
+    sono: { x: -104.6, z: -41.2, h: Math.PI / 4 },
+    entree: { x: -90.6, z: -35.2 },
+    parking: [[-94.4, -26.5, 0], [-94.4, -20.5, 0], [-94.4, -14.5, 0], [-86.8, -26.5, Math.PI], [-86.8, -20.5, Math.PI], [-86.8, -14.5, Math.PI], [-112.4, -52.0, -Math.PI / 2]],
+    mairie: { x: 95, z: -77, h: Math.PI },
+    traiteur: 'clemence',
+  };
   lieux.chateau = villageChateau; // le village du château qui vit (village.js ; main.js : ses voitures garées)
   lieux.ecole = lieuxEcole; // l'école (ecole.js : les enfants, les adultes, le portail, la porte, les jeux, l'horloge, la cloche)
   // l'enjambeur (enjambeur.js), rangé dans le hangar, la travée du milieu, le nez vers la sortie ; le transpalette (le
