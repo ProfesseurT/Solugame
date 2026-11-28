@@ -779,8 +779,38 @@ export const VILLAGE = {
 };
 
 // Les cyclistes (velos.js) : la sonnette, un véhicule qui fonce sur eux, le saut de côté, le vélo relevé
-// Mission 4 : ce que disent les visiteurs des portes ouvertes (portes.js)
+// Mission 4 : ce que disent les visiteurs des portes ouvertes (portes.js). Des bulles courtes, au-dessus de leur tête. Rien
+// sur le vin lui-même (aucune promesse produit) : la journée, la cour, le chien, l'invitation reçue. La phrase entière de
+// chaque client de la caisse est dans PORTES.clients (l'écran de la caisse).
 export const PORTES_VISITEURS = {
+  // au comptoir de la caisse, le client dit bonjour (par client : PORTES.clients, id)
+  bonjour: {
+    martin: 'Bonjour !', robin: 'Bonjour, c\'est pour nous deux !', morel: 'Salut ! C\'est à moi ?', lefebvre: 'Bonjour, comme d\'habitude !',
+    diallo: 'Bonjour ! Les enfants, on attend.', bernard: 'Bonjour bonjour !', nguyen: 'Bonjour, je peux ?', karim: 'Bonjour ! On est ensemble.',
+    petit: 'Bonjour, belle journée !', garnier: 'Bonjour ! Enfin mon tour.',
+  },
+  // son ticket fait, il s'en va avec ses achats (et chez Marc, après la relève)
+  merci: ['Merci, bonne journée !', 'Merci, et joyeux Noël !', 'Parfait, merci !', 'À bientôt !', 'Merci beaucoup !', 'Bonnes fêtes !'],
+  // servis au bar de dégustation, après la première gorgée (verres.js)
+  verre: [
+    'Tchin ! Et joyeux Noël !', 'Je goûte, c\'est pour la science.', 'Je crache ou je ne crache pas ? Je ne crache pas.',
+    'Celui-là, je le note dans mon carnet.', 'On a bien fait de venir !', 'Mon beau-frère dit qu\'il s\'y connaît. Il n\'est pas venu.',
+    'À la vôtre, et à cette belle cour !', 'Le chien m\'a fait visiter, il connaît tout le monde.', 'Un verre en décembre, sous un chêne pareil : quel luxe !',
+    'Je ne dis rien, je savoure.', 'Je suis venu pour le buffet, je reste pour le verre.', 'Les enfants ont eu du jus de raisin, moi j\'ai la meilleure part.',
+  ],
+  // au bar, on attend qu'on vienne servir (le joueur passe tout près)
+  attente: ['On peut goûter ?', 'C\'est vous qui servez ?', 'Un petit verre pour moi ?', 'On attend le Clos 2025 !', 'Vous servez par ici ?'],
+  // en arrivant, ils croisent le joueur : l'invitation reçue (la campagne : l'email, le SMS, le courrier, la relance)
+  arrivee: ['On a reçu votre mail, alors on est venus !', 'Le SMS est arrivé pile au bon moment.', 'Votre courrier était sur le frigo depuis une semaine !',
+    'Bonjour ! C\'est bien ici, les portes ouvertes ?', 'On a eu le rappel hier soir, on n\'a pas oublié !', 'On vient en voisins !'],
+  // ils saluent le joueur qui passe
+  salut: ['Bonjour !', 'Bravo pour l\'accueil !', 'Joyeux Noël !', 'Quelle belle cour !', 'Bonjour, merci de nous recevoir !'],
+  // les enfants, à leurs parents
+  enfant: ['Papa, je peux caresser le chien ?', 'Il est trop grand, cet arbre !', 'Maman, on mange quand ?', 'Regarde, un tracteur !', 'Je peux avoir un jus de raisin ?'],
+  // au buffet de Clémence
+  buffet: ['C\'est Clémence qui a fait tout ça ?', 'Je reprends juste un petit four.', 'Goûte, c\'est délicieux !', 'On garde de la place pour le dessert.'],
+  // un véhicule qui fonce sur eux : un saut de côté
+  saut: ['Hé !', 'Holà !', 'Attention !', 'Doucement !'],
 };
 
 export const VELOS = {

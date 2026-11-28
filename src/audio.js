@@ -1,6 +1,7 @@
 // Sons composés en code (Web Audio), sans aucun fichier : moteur du tracteur en plusieurs couches,
 // roulement selon le sol, pas, ambiance du village (vent, oiseaux le jour et grillons la nuit, rumeur de la place),
-// Radio Sarment (deux morceaux originaux et un indicatif), sons du téléphone, bruitages.
+// Radio Sarment (deux morceaux originaux et un indicatif), sons du téléphone, bruitages ; les portes ouvertes (mission 4,
+// portes.js) : la foule dans la cour et la sono (« Noël au Clos », un air original).
 // Léger pour un téléphone : peu de nœuds permanents (le moteur et la rumeur ne sont branchés que
 // quand ils servent), notes groupées dans un seul filtre, et tout le son est mis en pause quand il est
 // coupé ou que la page est cachée. Rien n'est programmé quand le son est coupé.
@@ -265,6 +266,38 @@ function unPas(sol, v) {
   }
 }
 
+/* ---------------------------------------------------------------- la sono des portes ouvertes (portes.js)
+   « Noël au Clos », un air original en fa majeur, à quatre temps, en croches ('-' : tenue, null : silence) : un
+   vibraphone pour la mélodie, une basse et des accords doux sur les contretemps. Joué par un petit haut-parleur dehors
+   (sans graves ni aigus), discret : on l'entend dans la cour, plus du tout au bout de l'allée. Son propre chemin (la radio
+   des véhicules a le sien) ; branché seulement quand on est assez près. */
+const AIR = [
+  [72, '-', 69, '-', 65, '-', 69, '-'], [70, '-', 74, '-', 72, '-', '-', '-'], [69, '-', 72, '-', 77, '-', 76, 74], [72, '-', '-', '-', null, null, null, null],
+  [74, '-', 70, '-', 67, '-', 70, '-'], [72, '-', 76, '-', 74, '-', '-', '-'], [72, 74, 72, 70, 69, '-', 67, '-'], [65, '-', '-', '-', null, null, null, null],
+  [77, '-', 76, '-', 74, '-', 72, '-'], [70, '-', 72, '-', 74, '-', '-', '-'], [76, '-', 74, '-', 72, '-', 70, '-'], [69, '-', 72, '-', '-', '-', null, null],
+  [72, '-', 69, '-', 65, '-', 69, '-'], [70, '-', 74, '-', 77, '-', '-', '-'], [76, 74, 72, 70, 69, '-', 67, '-'], [65, '-', '-', '-', null, null, null, null],
+];
+const AIR_ACC = ['F', 'Bb', 'F', 'C', 'Gm', 'C', 'C7', 'F', 'F', 'Bb', 'C', 'F', 'F', 'Bb', 'C7', 'F'];
+const AIR_ACCORDS = { F: { b: [41, 48], c: [57, 60, 65] }, Bb: { b: [46, 41], c: [58, 62, 65] }, C: { b: [48, 43], c: [55, 60, 64] }, C7: { b: [48, 43], c: [55, 58, 64] }, Gm: { b: [43, 50], c: [55, 58, 62] } };
+const AIR_CROCHE = 0.25;
+let S = null, sPas = 0, sProchaine = 0;
+function creerSono() {
+  const g = gain(0), hp = filtre('highpass', 260), lp = filtre('lowpass', 3200);
+  g.connect(hp); hp.connect(lp);
+  S = { g, brancher: branchement(lp, amb) };
+}
+function jouerSono(k, t) {
+  const mes = Math.floor(k / 8) % AIR.length, p = k % 8, m = AIR[mes][p], a = AIR_ACCORDS[AIR_ACC[mes]];
+  if (typeof m === 'number') {
+    let d = 1;
+    while (p + d < 8 && AIR[mes][p + d] === '-') d++;
+    const dur = Math.min(1.2, d * AIR_CROCHE + 0.35);
+    note(f(m), t, dur, 'sine', 0.05, S.g, 0, true); note(f(m + 12), t, dur * 0.6, 'sine', 0.012, S.g, 0, true);
+  }
+  if (p === 0 || p === 4) note(f(a.b[p ? 1 : 0]), t, 0.32, 'triangle', 0.09, S.g, 0, true);
+  if (p === 2 || p === 6) voix([f(a.c[0]), f(a.c[1]), f(a.c[2])], 'triangle', null, t, 0.22, 0.03, S.g, 1600, true);
+}
+
 /* ---------------------------------------------------------------- l'objet son */
 export const son = {
   get actif() { return actif; },
@@ -482,6 +515,44 @@ export const son = {
         o.frequency.exponentialRampToValueAtTime(hasard(950, 1250), t0 + 0.3);
       }
     }
+  },
+  // Les portes ouvertes (portes.js) : la foule qui papote dans la cour, k de 0 à 1 selon la distance, n visiteurs.
+  // Rejoué toutes les 0,35 s : une à trois voix d'adultes à la fois, de-ci de-là (des syllabes graves par un formant,
+  // sans un mot), un rire de temps en temps ; adoucie (sans aigus), plus grave et plus calme que la cour de l'école.
+  foule(k, n) {
+    if (!ctx || !actif || k < 0.02 || n < 1) return;
+    const t = ctx.currentTime, nb = Math.min(3, 1 + Math.floor(n / 8 + Math.random() * 1.2));
+    for (let i = 0; i < nb; i++) {
+      if (Math.random() < 0.3) continue;
+      const t0 = t + Math.random() * 0.3, v = 0.022 * k * hasard(0.5, 1);
+      let dest = amb;
+      if (ctx.createStereoPanner) { const pan = ctx.createStereoPanner(); pan.pan.value = hasard(-0.6, 0.6); pan.connect(amb); dest = pan; }
+      const fl = filtre('lowpass', 1700); fl.connect(dest);
+      if (Math.random() < 0.85) { // des syllabes : une voix d'homme ou de femme qui monte et retombe
+        const f0 = Math.random() < 0.5 ? hasard(105, 140) : hasard(190, 240), ns = 2 + Math.floor(Math.random() * 3), bp = filtre('bandpass', hasard(550, 1000), 2); bp.connect(fl);
+        for (let s = 0, ts = t0; s < ns; s++) {
+          const d = hasard(0.09, 0.17), o = note(f0, ts, d, 'sawtooth', v, bp, 0, false);
+          o.frequency.setValueAtTime(f0 * hasard(0.95, 1.08), ts); o.frequency.linearRampToValueAtTime(f0 * hasard(1.02, 1.18), ts + d * 0.4); o.frequency.linearRampToValueAtTime(f0 * hasard(0.88, 1.0), ts + d);
+          ts += d + hasard(0.02, 0.08);
+        }
+      } else { // un rire : des « ha » qui descendent
+        const f0 = hasard(170, 260), bp = filtre('bandpass', 900, 1.6); bp.connect(fl);
+        for (let s = 0, ns = 3 + Math.floor(Math.random() * 3); s < ns; s++) { const o = note(f0 * (1 - s * 0.04), t0 + s * 0.13, 0.08, 'sawtooth', v * 1.1, bp, 0, true); o.frequency.exponentialRampToValueAtTime(f0 * (0.88 - s * 0.04), t0 + s * 0.13 + 0.08); }
+      }
+    }
+  },
+  // La sono des portes ouvertes (portes.js) : « Noël au Clos » (AIR, plus haut), k de 0 à 1 selon la distance. À appeler
+  // souvent (au moins cinq fois par seconde) : l'air se programme 0,4 s d'avance ; k à zéro, plus rien n'est programmé et le
+  // haut-parleur se débranche.
+  sono(k) {
+    if (!ctx) return;
+    if (!S) creerSono();
+    const t = ctx.currentTime, on = actif && k > 0.02;
+    S.brancher(on);
+    S.g.gain.setTargetAtTime(on ? 0.7 * k * k : 0, t, 0.4);
+    if (!on) return;
+    if (sProchaine < t) sProchaine = t + 0.05;
+    while (sProchaine < t + 0.4) { jouerSono(sPas, sProchaine); sProchaine += AIR_CROCHE; sPas = (sPas + 1) % (AIR.length * 8); }
   },
   // La cloche de l'école (ecole.js : la classe, les récréations, la sortie) : une dizaine de coups, chacun des partiels
   // inharmoniques d'une cloche qui s'éteignent ; k selon la distance
