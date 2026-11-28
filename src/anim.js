@@ -141,16 +141,20 @@ export class Anim {
     this.F[0] = dt; this.F[1] = t; // (lus par vivre, cligner, poseClavier, poseFume : sans nombre à virgule en argument)
     const conduite = p.assis && p.conduite;
     const r = Math.random;
+    // (les facteurs de lissage, calculés sur place : kl, si le moteur ne l'insère pas ici (le palier Maglev de V8, où ces
+    // fonctions passent le plus clair de leur temps), rendrait un nombre mis en boîte à chaque appel, dix par personnage)
+    const z0 = dt === 0, k10 = z0 ? 1 : 1 - Math.exp(-dt * 10), k9 = z0 ? 1 : 1 - Math.exp(-dt * 9), k8 = z0 ? 1 : 1 - Math.exp(-dt * 8), k7 = z0 ? 1 : 1 - Math.exp(-dt * 7);
+    const k6 = z0 ? 1 : 1 - Math.exp(-dt * 6), k5 = z0 ? 1 : 1 - Math.exp(-dt * 5), k45 = z0 ? 1 : 1 - Math.exp(-dt * 4.5), k18 = z0 ? 1 : 1 - Math.exp(-dt * 1.8);
 
     /* ------------------------------------------------ états lissés et petites envies */
-    this.va += ((p.assis ? 0 : p.vr) - this.va) * kl(dt, 10);
+    this.va += ((p.assis ? 0 : p.vr) - this.va) * k10;
     const va = Math.abs(this.va), sens = this.va < -0.05 ? -1 : 1;
     const immobile = va < 0.2 && !conduite && p.saut === 0;
     this.repos = immobile ? this.repos + dt : 0;
     this.resp += dt;
     // transfert de poids d'une jambe sur l'autre
     if ((this.tPoids -= dt) <= 0) { this.tPoids = 3 + r() * 6; this.poidsC = r() < 0.2 ? 0 : -Math.sign(this.poidsC || 1); }
-    this.poids += ((immobile ? this.poidsC : 0) - this.poids) * kl(dt, 1.8);
+    this.poids += ((immobile ? this.poidsC : 0) - this.poids) * k18;
     // coups d'œil autour de soi
     if ((this.tCoup -= dt) <= 0) {
       this.tCoup = immobile ? 1.5 + r() * 3.5 : 3 + r() * 5;
@@ -165,14 +169,14 @@ export class Anim {
     // on s'accroupit d'autant plus qu'elle est basse (la prendre sur la palette, la poser au sol)
     const pile = p.porte;
     if (pile) { this.pile.copy(pile.position); this.pileL = (pile.userData.demi || 0.18) * pile.scale.x; } // une pile de cartons, ou le chèque (gestes.js)
-    this.wPorte += ((pile ? 1 : 0) - this.wPorte) * kl(dt, 8);
-    this.accroupi += ((pile ? borne((0.92 - pile.position.y) / 0.55, 0, 1) : 0) - this.accroupi) * kl(dt, 9);
+    this.wPorte += ((pile ? 1 : 0) - this.wPorte) * k8;
+    this.accroupi += ((pile ? borne((0.92 - pile.position.y) / 0.55, 0, 1) : 0) - this.accroupi) * k9;
     if (pile || p.outil) this.envie = 0;
-    this.wTel += (((p.telephone || this.envie > 0) && !conduite && !pile && !p.outil ? 1 : 0) - this.wTel) * kl(dt, 5);
+    this.wTel += (((p.telephone || this.envie > 0) && !conduite && !pile && !p.outil ? 1 : 0) - this.wTel) * k5;
     // signe de la main
     if (this.salut > 0) this.salut -= dt;
     this.tSalut = Math.max(0, this.tSalut - dt);
-    this.wSalut += ((this.salut > 0.25 && !conduite ? 1 : 0) - this.wSalut) * kl(dt, 7);
+    this.wSalut += ((this.salut > 0.25 && !conduite ? 1 : 0) - this.wSalut) * k7;
 
     /* ------------------------------------------------ regard : lacet et tangage de la tête par rapport au corps */
     let cy = this.cy, cp = this.cp;
@@ -186,7 +190,7 @@ export class Anim {
     } else if (conduite) { cy = cy * 0.3; cp = 0.05; }
     if (this.wTel > 0.01) { cy = mix(cy, -0.2, this.wTel); cp = mix(cp, 0.52, this.wTel); }
     if (this.wSalut > 0.01) { cy *= 1 - this.wSalut * 0.5; cp = mix(cp, -0.05, this.wSalut); }
-    this.ry += (cy - this.ry) * kl(dt, 4.5); this.rp += (cp - this.rp) * kl(dt, 4.5);
+    this.ry += (cy - this.ry) * k45; this.rp += (cp - this.rp) * k45;
 
     const br = Math.sin(this.resp * TAU / 3.8) * (immobile || p.assis ? 0.016 : 0.006);
     // (un enfant qui joue : ecole.js ; quand il passe d'un jeu à l'autre, sa pose glisse de l'ancienne à la nouvelle)
@@ -214,7 +218,7 @@ export class Anim {
 
     /* ------------------------------------------------ un outil tenu des deux mains (parvis.js : la lance du nettoyeur) :
        p.outil = { d: [x, y, z], g: [x, y, z] }, où vont la main droite et la main gauche, dans le repère du personnage */
-    this.wOutil += ((p.outil ? 1 : 0) - this.wOutil) * kl(dt, 6);
+    this.wOutil += ((p.outil ? 1 : 0) - this.wOutil) * k6;
     if (this.wOutil > 0.01 && p.outil) {
       const { d, g } = p.outil;
       this.brasIK(3, d[0], d[1], d[2], -0.8, -0.6, -0.3, this.wOutil);
@@ -245,9 +249,9 @@ export class Anim {
     if (telVu !== this.telVu) { this.telVu = telVu; o[OS.tel].scale.setScalar(telVu ? 1 : 0.001); }
 
     /* ------------------------------------------------ servir un verre (bouteille à droite, verre à gauche) ; boire (verre à droite) */
-    this.wServ += ((p.service ? 1 : 0) - this.wServ) * kl(dt, 9);
+    this.wServ += ((p.service ? 1 : 0) - this.wServ) * k9;
     if (p.service || (m.acc && m.acc.bouteille.visible)) this.poseService(p.service, yB, this.wServ);
-    this.wVerre += ((p.verre > 0 ? 1 : 0) - this.wVerre) * kl(dt, 7);
+    this.wVerre += ((p.verre > 0 ? 1 : 0) - this.wVerre) * k7;
     if (p.verre > 0 || (m.acc && m.acc.verre.visible && !p.service)) this.poseBoire(p, yB, this.wVerre);
 
     /* ------------------------------------------------ signe de la main (bras droit levé, l'avant-bras balance) */
@@ -256,7 +260,7 @@ export class Anim {
       for (let i = 3; i < 6; i++) FK[i].copy(o[BRAS[i]].quaternion);
       o[OS.brasD].rotation.set(-0.25, 0, -2.45); o[OS.coudeD].rotation.set(-0.3, 0, -0.2 + 0.5 * osc); o[OS.mainD].rotation.set(0, -1.35, 0.1);
       for (let i = 3; i < 6; i++) { q1.copy(o[BRAS[i]].quaternion); o[BRAS[i]].quaternion.copy(FK[i]).slerp(q1, w); }
-      o[OS.tete].rotation.z += 0.08 * w; o[OS.tete].rotation.x += 0.05 * w * Math.sin(t * 5.5);
+      { const r = o[OS.tete].rotation; r.set(r.x + 0.05 * w * Math.sin(t * 5.5), r.y, r.z + 0.08 * w); }
     }
 
     /* ------------------------------------------------ queue de cheval : balance avec les pas et pend malgré la tête */
@@ -278,17 +282,16 @@ export class Anim {
     // parler (p.parle, vrai ou de 0 à 1 ; au bureau, poseClavier s'en charge) : la tête hoche et tourne, une main accompagne
     const pa = p.parle === true ? 1 : +p.parle || 0;
     // (sans appel inutile à kl : le nombre qu'elle rend serait mis en boîte, à chaque image)
-    if (pa || this.wParle) { this.wParle += (pa - this.wParle) * kl(dt, 4); if (!pa && this.wParle < 0.002) this.wParle = 0; }
+    if (pa || this.wParle) { this.wParle += (pa - this.wParle) * (dt === 0 ? 1 : 1 - Math.exp(-dt * 4)); if (!pa && this.wParle < 0.002) this.wParle = 0; }
     const libres = !p.fume && !pile && !p.outil && this.wTel < 0.05 && this.wSalut < 0.05 && !p.service && !(p.verre > 0) && !p.appuis && !p.saisir && !(p.caresse && p.caresse.w > 0.01) && !p.jeu && !p.velo;
     if (this.wParle > 0.01 && !(p.assis && p.clavier) && !conduite) {
       const w = this.wParle;
-      o[OS.tete].rotation.x += w * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
-      o[OS.tete].rotation.y += w * 0.14 * Math.sin(t * 0.8 + this.resp);
-      o[OS.tete].rotation.z += w * 0.04 * Math.sin(t * 1.3);
+      // (une seule écriture par os : chacune refait son quaternion)
+      { const r = o[OS.tete].rotation; r.set(r.x + w * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1)), r.y + w * 0.14 * Math.sin(t * 0.8 + this.resp), r.z + w * 0.04 * Math.sin(t * 1.3)); }
       if (libres) {
         const yb = o[OS.bassin].position.y, gs = w * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2));
         this.brasIK(0, 0.15 + 0.05 * Math.sin(t * 1.7), yb + 0.2 + 0.05 * Math.sin(t * 2.9), 0.26 + 0.03 * Math.sin(t * 2.3), 0.7, -0.5, -0.6, gs);
-        o[OS.mainG].rotation.x -= 0.6 * gs; o[OS.mainG].rotation.y += 0.9 * gs;
+        { const r = o[OS.mainG].rotation; r.set(r.x - 0.6 * gs, r.y + 0.9 * gs, r.z); }
       }
     }
     // Une attitude, à l'arrêt, de temps en temps (un adulte debout, les mains libres) : les mains jointes devant, dans le
@@ -300,7 +303,7 @@ export class Anim {
       this.att = x < 0.5 ? 0 : x < 0.65 ? 1 : x < 0.8 ? 2 : x < 0.9 && !epais ? 3 : 4;
     }
     const vAtt = debout && this.repos > 2 && this.att ? 1 : 0;
-    if (vAtt || this.wAtt) { this.wAtt += (vAtt - this.wAtt) * kl(dt, 3); if (!vAtt && this.wAtt < 0.002) this.wAtt = 0; }
+    if (vAtt || this.wAtt) { this.wAtt += (vAtt - this.wAtt) * (dt === 0 ? 1 : 1 - Math.exp(-dt * 3)); if (!vAtt && this.wAtt < 0.002) this.wAtt = 0; }
     if (this.wAtt > 0.01 && this.att && !p.assis && !p.jeu && !p.velo) {
       const w = this.wAtt, yb = o[OS.bassin].position.y, dm = this.m.dim;
       if (this.att === 1) { this.brasIK(0, 0.035, yb - 0.07, 0.15, 0.8, -0.3, 0.2, w); this.brasIK(3, -0.035, yb - 0.06, 0.16, -0.8, -0.3, 0.2, w); }
@@ -363,23 +366,26 @@ export class Anim {
     // (un enfant : ses jambes, plus courtes ; il court plus tôt, à vitesse égale, et à plus petits pas : kv, sa vitesse
     // ramenée à des jambes d'adulte, comme le nombre de Froude)
     const LG = this.long, L1 = LG[0], L2 = LG[1], enf = this.m.enfant, kv = enf ? Math.sqrt(0.806 / ((L1 + L2) * E)) : 1, vk = va * kv;
-    const tourne = borne(Math.abs(p.om) / 2.2, 0, 1) * (1 - entre(0.4, 1.2, va));
-    this.wPas += ((tourne > 0.2 ? 1 : 0) - this.wPas) * kl(dt, 8);
-    const wg = entre(0.03, 0.5, va), w = entre(2.4, 4.6, vk);
+    // (bornes, transitions et lissages écrits sur place, comme dans poser : sans petite fonction qui rende un nombre)
+    const z0 = dt === 0, om = Math.min(1, Math.abs(p.om) / 2.2), u1 = Math.min(1, Math.max(0, (va - 0.4) / 0.8)), u2 = Math.min(1, Math.max(0, (va - 0.03) / 0.47)), u3 = Math.min(1, Math.max(0, (vk - 2.4) / 2.2));
+    const tourne = om * (1 - u1 * u1 * (3 - 2 * u1));
+    this.wPas += ((tourne > 0.2 ? 1 : 0) - this.wPas) * (z0 ? 1 : 1 - Math.exp(-dt * 8));
+    const wg = u2 * u2 * (3 - 2 * u2), w = u3 * u3 * (3 - 2 * u3);
     // Cadence (cycles de deux pas par seconde). En marchant, la foulée suit la longueur des jambes (relation d'Alexander :
     // foulée / jambe = 2,3 x (v² / g x jambe)^0,3, ici un peu allongée) : des jambes courtes font des pas plus courts et
     // plus vifs ; en courant, la cadence monte doucement avec la vitesse. Foulée (S, repère du personnage : à son échelle,
     // sinon les pieds glisseraient) ; part du cycle où le pied est au sol (beta), chemin qu'il y fait (pas).
     const jw = (L1 + L2) * E, vw = Math.max(va, 0.03);
-    const cad = mix(vw / (2.45 * jw * Math.pow(vw * vw / (9.81 * jw), 0.3)), (1.3 + 0.1 * va) * (enf ? Math.sqrt(kv) : 1), w);
+    const cadM = vw / (2.45 * jw * Math.pow(vw * vw / (9.81 * jw), 0.3)), cad = cadM + ((1.3 + 0.1 * va) * (enf ? Math.sqrt(kv) : 1) - cadM) * w;
     this.ph += dt * Math.max(va > 0.03 ? cad : 0, this.wPas * 1.7) * sens;
     this.ph -= Math.floor(this.ph);
     const ph = this.ph, beta = 0.6 - 0.3 * w, S = va > 0.03 ? va / (cad * E) : 0, pas = Math.min(beta * S, 1.05 * (L1 + L2) / 0.84);
     const lever = ((0.03 + 0.06 * Math.min(1, vk / 1.4)) * (1 - w) + 0.26 * w * (L1 + L2) / 0.84) * wg + 0.07 * this.wPas * (1 - wg);
     const c1 = Math.cos(TAU * ph), s1 = Math.sin(TAU * ph);
     const choc = p.choc * p.choc, sj = p.saut > 0 ? Math.sin(PI * p.saut) : 0, att = p.atterri / 0.28;
-    this.bank += (-borne(p.om * va * 0.035, -0.22, 0.22) - this.bank) * kl(dt, 6);
-    this.pench += (borne(p.acc * 0.03, -0.14, 0.2) - this.pench) * kl(dt, 5);
+    const bk = p.om * va * 0.035, pc = p.acc * 0.03;
+    this.bank += (-(bk < -0.22 ? -0.22 : bk > 0.22 ? 0.22 : bk) - this.bank) * (z0 ? 1 : 1 - Math.exp(-dt * 6));
+    this.pench += ((pc < -0.14 ? -0.14 : pc > 0.2 ? 0.2 : pc) - this.pench) * (z0 ? 1 : 1 - Math.exp(-dt * 5));
     const cr = this.accroupi;
 
     // pieds : où est chaque cheville (repère du personnage), son inclinaison ; mélangés à la pose de repos à l'arrêt
@@ -431,14 +437,15 @@ export class Anim {
     // bras : balancier opposé aux jambes, un peu plus devant que derrière, la main vient vers le milieu en avançant ; coudes
     // pliés en courant ; bras levés en sautant, en avant au choc. Au repos, un peu écartés du corps, coudes légèrement
     // pliés (des bras tout droits collés au corps font mannequin)
-    const A = mix(0.56 * Math.min(1, vk / 1.3), 0.75, w) * wg * sens, retard = 0.06 * (1 - w);
+    const a0 = 0.56 * Math.min(1, vk / 1.3), A = (a0 + (0.75 - a0) * w) * wg * sens, retard = 0.06 * (1 - w);
     const cG = Math.cos(TAU * (ph - 0.5 - retard)), cD = Math.cos(TAU * (ph - retard)), flot = Math.sin(this.resp * 0.9) * 0.02, devant = 0.1 * marche;
     const eG = Math.cos(TAU * (ph - 0.5 - 2 * retard)), eD = Math.cos(TAU * (ph - 2 * retard)); // le coude, encore un peu plus en retard
     const dedansG = 0.07 * marche * Math.max(0, cG), dedansD = 0.07 * marche * Math.max(0, cD), ecart = 0.115 + 0.05 * marche + 0.1 * w;
     o[OS.brasG].rotation.set(-A * cG - 0.04 - devant - 0.9 * choc - 0.5 * sj + flot, 0.06 * marche * cG, ecart + 1.9 * sj - dedansG);
     o[OS.brasD].rotation.set(-A * cD - 0.04 - devant - 0.9 * choc - 0.5 * sj - flot, -0.06 * marche * cD, -(ecart + 1.9 * sj - dedansD));
-    o[OS.coudeG].rotation.set(mix(-0.28 - 0.7 * Math.max(0, eG) * wg - 0.06 * marche, -1.5 + 0.25 * cG, w) - 0.6 * choc - 0.5 * sj, 0, 0);
-    o[OS.coudeD].rotation.set(mix(-0.28 - 0.7 * Math.max(0, eD) * wg - 0.06 * marche, -1.5 + 0.25 * cD, w) - 0.6 * choc - 0.5 * sj, 0, 0);
+    const cgM = -0.28 - 0.7 * Math.max(0, eG) * wg - 0.06 * marche, cdM = -0.28 - 0.7 * Math.max(0, eD) * wg - 0.06 * marche;
+    o[OS.coudeG].rotation.set(cgM + (-1.5 + 0.25 * cG - cgM) * w - 0.6 * choc - 0.5 * sj, 0, 0);
+    o[OS.coudeD].rotation.set(cdM + (-1.5 + 0.25 * cD - cdM) * w - 0.6 * choc - 0.5 * sj, 0, 0);
     // les mains : détendues, le poignet qui suit un peu le balancement
     o[OS.mainG].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eG, 0.1, 0.08);
     o[OS.mainD].rotation.set(-0.14 - 0.2 * w + 0.12 * marche * eD, -0.1, -0.08);
@@ -629,9 +636,9 @@ export class Anim {
       B[0] = r < 0.46 ? 0 : r < 0.72 ? 1 : r < 0.88 || heros ? 2 : 3; B[1] = 3 + Math.random() * 8;
       if (dt === 0) for (let k = 2; k < 6; k++) B[k] = k - 2 === B[0] ? 1 : 0;
     }
-    const pa = p.parle === true ? 1 : +p.parle || 0, kk = kl(dt, 3);
+    const pa = p.parle === true ? 1 : +p.parle || 0, kk = dt === 0 ? 1 : 1 - Math.exp(-dt * 3);
     for (let k = 0; k < 4; k++) B[2 + k] += ((B[0] === k ? 1 : 0) - B[2 + k]) * kk;
-    B[6] += (pa - B[6]) * kl(dt, 4);
+    B[6] += (pa - B[6]) * (dt === 0 ? 1 : 1 - Math.exp(-dt * 4));
     const wT = B[2], wS = B[3], wL = B[4], wA = B[5], wP = B[6];
     // la rafale : on tape par à-coups (une enveloppe lente), chaque main à son rythme
     B[7] += dt * (0.6 + 0.5 * Math.sin(t * 0.37 + this.resp));
@@ -639,30 +646,28 @@ export class Anim {
     // le buste : penché vers l'écran pour taper, davantage pour lire, en arrière adossé
     const pen = 0.12 * wT + 0.1 * wS + 0.2 * wL - 0.1 * wA, penP = 0.1 * wT + 0.08 * wS + 0.15 * wL - 0.12 * wA;
     o[OS.ventre].rotation.x += pen; o[OS.poitrine].rotation.x += penP;
-    o[OS.tete].rotation.x += 0.06 * wL - 0.06 * wA - 0.6 * this.rp * (1 - wA); // (le regard reste sur l'écran)
-    o[OS.tete].rotation.y -= this.ry * 0.45 * (1 - wA);
+    // (le regard reste sur l'écran ; en parlant, la tête hoche et tourne un peu, le buste suit : une écriture par os)
+    let tx = 0.06 * wL - 0.06 * wA - 0.6 * this.rp * (1 - wA), ty = -this.ry * 0.45 * (1 - wA), tz = 0;
     if (wP > 0.01) {
-      // parler : la tête hoche et tourne un peu, le buste suit
-      o[OS.tete].rotation.x += wP * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1));
-      o[OS.tete].rotation.y += wP * 0.16 * Math.sin(t * 0.8 + this.resp);
-      o[OS.tete].rotation.z += wP * 0.05 * Math.sin(t * 1.3);
+      tx += wP * (0.05 * Math.sin(t * 3.3) + 0.03 * Math.sin(t * 7.1 + 1)); ty += wP * 0.16 * Math.sin(t * 0.8 + this.resp); tz = wP * 0.05 * Math.sin(t * 1.3);
       o[OS.poitrine].rotation.y += wP * 0.05 * Math.sin(t * 0.8 + this.resp);
     }
+    { const r = o[OS.tete].rotation; r.set(r.x + tx, r.y + ty, r.z + tz); }
     this.reperes();
     // la main droite : sur le clavier, ou sur la souris (aussi en parlant et adossé)
     const surSouris = Math.min(1, wS + wA + wP);
     const tapD = raf * 0.012 * Math.max(0, Math.sin(t * 19.3 + 1.1)), tapG = raf * 0.012 * Math.max(0, Math.sin(t * 17.1 + 2.7));
-    const xd = mix(-0.13 + 0.012 * Math.sin(t * 4.1) * wT, -0.33 + 0.02 * Math.sin(t * 1.3), surSouris);
-    const yd = mix(yC + tapD, yC - 0.015, surSouris), zd = mix(kz, kz - 0.03 + 0.015 * Math.sin(t * 1.7), surSouris);
+    const xd0 = -0.13 + 0.012 * Math.sin(t * 4.1) * wT, xd = xd0 + (-0.33 + 0.02 * Math.sin(t * 1.3) - xd0) * surSouris;
+    const yd = yC + tapD + (-0.015 - tapD) * surSouris, zd = kz + (-0.03 + 0.015 * Math.sin(t * 1.7)) * surSouris;
     this.brasIK(3, xd, yd, zd, -0.7, -0.5, -0.6, 1);
     o[OS.mainD].rotation.set(0.25, 0, -0.2 + 0.15 * surSouris);
     // la main gauche : sur le clavier ; posée sur la cuisse, adossé ; des gestes, en parlant (par moments)
     const geste = wP * (0.55 + 0.45 * Math.sin(t * 0.9 + this.resp * 2)), cuisse = wA * (1 - geste);
     let xg = 0.13 + 0.012 * Math.sin(t * 3.7) * wT, yg = yC + tapG, zg = kz;
-    xg = mix(xg, dm.xh + 0.05, cuisse); yg = mix(yg, yB + 0.07, cuisse); zg = mix(zg, 0.3, cuisse);
-    xg = mix(xg, 0.12 + 0.05 * Math.sin(t * 1.7), geste); yg = mix(yg, yC + 0.12 + 0.05 * Math.sin(t * 2.9), geste); zg = mix(zg, kz - 0.14 + 0.03 * Math.sin(t * 2.3), geste);
+    xg += (dm.xh + 0.05 - xg) * cuisse; yg += (yB + 0.07 - yg) * cuisse; zg += (0.3 - zg) * cuisse;
+    xg += (0.12 + 0.05 * Math.sin(t * 1.7) - xg) * geste; yg += (yC + 0.12 + 0.05 * Math.sin(t * 2.9) - yg) * geste; zg += (kz - 0.14 + 0.03 * Math.sin(t * 2.3) - zg) * geste;
     this.brasIK(0, xg, yg, zg, 0.7, -0.5, -0.6, 1);
-    o[OS.mainG].rotation.set(mix(0.25, -0.5, cuisse) - 0.6 * geste, 0.9 * geste, mix(0.2, 0.3, cuisse) + 0.2 * geste);
+    o[OS.mainG].rotation.set(0.25 - 0.75 * cuisse - 0.6 * geste, 0.9 * geste, 0.2 + 0.1 * cuisse + 0.2 * geste);
   }
 
   /* ---------------------------------------------------------------- au volant (tracteur ou van) */
@@ -816,7 +821,7 @@ export class Anim {
   poseCaresse(C) {
     const o = this.o, dm = this.m.dim, w = C.w, b = o[OS.bassin];
     b.position.y = mix(b.position.y, 0.53, w); b.position.z = mix(b.position.z, -0.06, w);
-    b.rotation.x = mix(b.rotation.x, 0.1, w); b.rotation.y = mix(b.rotation.y, 0.12, w); b.rotation.z *= 1 - w;
+    b.rotation.set(mix(b.rotation.x, 0.1, w), mix(b.rotation.y, 0.12, w), b.rotation.z * (1 - w));
     o[OS.ventre].rotation.x = mix(o[OS.ventre].rotation.x, 0.3, w);
     o[OS.poitrine].rotation.x = mix(o[OS.poitrine].rotation.x, 0.24, w);
     this.reperes();
@@ -930,7 +935,7 @@ export class Anim {
       else this.brasIK(0, dm.xh + 0.1, yb - 0.05, 0.05, 0.8, -0.2, -0.3, w);
     }
     // souffler : la tête se relève un peu
-    te.rotation.x -= 0.16 * souffle * w; te.rotation.y += 0.1 * souffle * w;
+    if (souffle > 0) te.rotation.set(te.rotation.x - 0.16 * souffle * w, te.rotation.y + 0.1 * souffle * w, te.rotation.z);
     // le bout allumé, en coordonnées du monde
     if (!p.bout) p.bout = new THREE.Vector3();
     cig.updateWorldMatrix(true, false);

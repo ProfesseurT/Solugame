@@ -1535,7 +1535,7 @@ export class Solumatic {
     if (this.vLa) { const la = this.gens.some(g => g.id === 'vanessa' && g.etat !== 'absent'); this.vLa.visible = this.vEcran.visible = la; this.vPas.visible = !la; }
   }
   // Une personne de plus (dans l'ordre : Romane d'abord) ; son apparence, tirée d'après son nom (textes.js : EQUIPE). En
-  // approchant, une étape par image (perso.js : persoPas, sept étapes de moins de 0,5 ms) ; d'un coup (fini) en entrant.
+  // approchant, une étape par image (perso.js : persoPas, neuf étapes de 0,25 ms en moyenne) ; d'un coup (fini) en entrant.
   // Rend vrai quand la personne est là.
   creer(fini = true) {
     if (!this.enCreation) {
@@ -1760,7 +1760,8 @@ export class Solumatic {
       const aSonPoste = g.mode === 'assis' && g.siege === g.home && !g.tache;
       if (g.parle && (!aSonPoste || g.tApp <= 0)) { g.parle = false; g.tApp = (1 - k) * (20 + this.rnd() * 40); }
       else if (!g.parle && aSonPoste && g.tApp <= 0) {
-        const piece = g.e.piece, enLigne = this.gens.filter(o => o.parle && o.e.piece === piece).length, tous = this.gens.filter(o => o.e.piece === piece && o.etat === 'poste').length;
+        const piece = g.e.piece; let enLigne = 0, tous = 0;
+        for (const o of this.gens) if (o.e.piece === piece) { if (o.parle) enLigne++; if (o.etat === 'poste') tous++; }
         if (enLigne < Math.max(1, Math.ceil(tous * 0.67))) { g.parle = true; g.tApp = k * (25 + this.rnd() * 50); if (this.dedans && g.vu && ['support', 'manager'].includes(g.role)) this.c.son.tonalite?.(this.prox(g, 10)); }
         else g.tApp = 4 + this.rnd() * 6;
       }
@@ -1787,7 +1788,7 @@ export class Solumatic {
     // la porte s'est ouverte (Romane est arrivée, elle a la clé) : le « fermé » qu'on venait d'entendre n'a plus cours
     if (this.ligneFerme) { if (h.ligne !== this.ligneFerme && !h.file.includes(this.ligneFerme)) this.ligneFerme = null; else if (this.ouverte) this.taireFerme(); }
     if (!this.dedans) {
-      // (un personnage coûte 2 ms à créer, 8 à 10 sur un téléphone lent : une étape par image, sept par personne, en
+      // (un personnage coûte 2 ms à créer, 8 à 10 sur un téléphone lent : une étape par image, neuf par personne, en
       // approchant à moins de 60 m ; persoPas)
       const e = c.jeu.auVolant ? c.jeu.tr.pos : c.jeu.joueur.pos;
       if (this.n < this.ordre.length && Math.hypot(e.x - (SOLU.x0 + SOLU.x1) / 2, e.z - (SOLU.z0 + SOLU.z1) / 2) < 60) this.creer(false);
@@ -1807,7 +1808,7 @@ export class Solumatic {
     const j = c.jeu.auVolant ? c.jeu.tr.pos : c.jeu.joueur.pos, d = Math.hypot(j.x - p.pos.x, j.z - p.pos.z);
     p.regard = d < 7 ? this.vers(g, j.x, 1.6, j.z) : null;
     g.tParle -= dt; this.tBulle -= dt;
-    if (d < 3.5 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !c.jeu.auVolant) { g.tParle = 40; this.tBulle = 3; p.saluer(); c.hud.bulle(g.etq, `${g.e.prenom} : ${TXT.fume[g.i++ % TXT.fume.length]}`, 3.2); }
+    if (d < 3.5 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !c.jeu.auVolant) { g.tParle = 40; this.tBulle = 3.7; p.saluer(); c.hud.bulle(g.etq, `${g.e.prenom} : ${TXT.fume[g.i++ % TXT.fume.length]}`, 3.2); }
     if (g.etq.vu) c.hud.placer(g.etq, p.pos.x, 2.25, p.pos.z, true);
     if (dc < 45) p.update(dt, 0, 0, 0, false, LIBRE, t + g.ph);
     if (dc > 40 || !c.emettre) return;
@@ -1823,14 +1824,29 @@ export class Solumatic {
       for (let i = 0; i < 7; i++) c.emettre(VT2.x, VT2.y, VT2.z, hx * (0.35 + this.rnd() * 0.25) + (this.rnd() - 0.5) * 0.12, 0.12 + this.rnd() * 0.1, hz * (0.35 + this.rnd() * 0.25) + (this.rnd() - 0.5) * 0.12, 1.6 + this.rnd() * 0.6, 0xe6e6e2, 0.3 + this.rnd() * 0.12, -0.04, 0);
     }
   }
+  // le voit-on ? (tout près, ou aucun mur entre la caméra et lui : libre, écrit sur place, sans nombre en argument)
+  revoir(g, gp, cam) {
+    const ax = cam.x, az = cam.z, dx = gp.x - ax, dz = gp.z - az, M = this.L.murs;
+    let v = dx * dx + dz * dz < 6.25;
+    if (!v) {
+      v = true;
+      for (let i = 0; i < M.length && v; i++) {
+        const m = M[i]; let t0 = 0, t1 = 1;
+        if (Math.abs(dx) < 1e-6) { if (ax < m[0] || ax > m[2]) continue; } else { let a = (m[0] - ax) / dx, b = (m[2] - ax) / dx; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+        if (Math.abs(dz) < 1e-6) { if (az < m[1] || az > m[3]) continue; } else { let a = (m[1] - az) / dz, b = (m[3] - az) / dz; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+        v = false;
+      }
+    }
+    if (v !== g.vu) { g.vu = v; g.p.m.maillage.visible = v; }
+  }
   // Aucun mur entre (ax, az) et (bx, bz) ? (les cloisons du plan, en boîtes ; méthode des tranches)
   libre(ax, az, bx, bz) {
     const dx = bx - ax, dz = bz - az, M = this.L.murs;
     for (let i = 0; i < M.length; i++) {
       const m = M[i], x0 = m[0], z0 = m[1], x1 = m[2], z1 = m[3];
       let t0 = 0, t1 = 1;
-      if (Math.abs(dx) < 1e-6) { if (ax < x0 || ax > x1) continue; } else { let a = (x0 - ax) / dx, b = (x1 - ax) / dx; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
-      if (Math.abs(dz) < 1e-6) { if (az < z0 || az > z1) continue; } else { let a = (z0 - az) / dz, b = (z1 - az) / dz; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+      if (Math.abs(dx) < 1e-6) { if (ax < x0 || ax > x1) continue; } else { let a = (x0 - ax) / dx, b = (x1 - ax) / dx; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
+      if (Math.abs(dz) < 1e-6) { if (az < z0 || az > z1) continue; } else { let a = (z0 - az) / dz, b = (z1 - az) / dz; if (a > b) { const c = a; a = b; b = c; } t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) continue; }
       return false;
     }
     return true;
@@ -1852,7 +1868,7 @@ export class Solumatic {
       const p = g.p;
       if (g.mode === 'cache' || g.dehors) { if (g.etq.vu) h.placer(g.etq, 0, 0, 0, false); continue; }
       const gp = p.assis ? p.m.groupe.position : p.pos;
-      if (revoir) { const v = Math.hypot(gp.x - cam.x, gp.z - cam.z) < 2.5 || this.libre(cam.x, cam.z, gp.x, gp.z); if (v !== g.vu) { g.vu = v; p.m.maillage.visible = v; } }
+      if (revoir) this.revoir(g, gp, cam);
       const d = Math.hypot(j.x - gp.x, j.z - gp.z);
       if (g.mode === 'marche') this.pas(g, dt, t, j);
       // s'asseoir, se lever : chaque image (0,6 s), vu ou pas (qui ne se voit plus finit d'un coup)
@@ -1862,7 +1878,8 @@ export class Solumatic {
       // il lève les yeux vers qui passe tout près, le salue de temps en temps (un seul à la fois), avec son prénom
       g.tParle -= dt;
       if (g.vu && d < 2.4 && g.tParle <= 0 && this.tBulle <= 0 && !c.gestes.actif && !bulle) {
-        g.tParle = 45; this.tBulle = 3; bulle = true; if (g.mode === 'debout' && !(g.tache && g.tache.type === 'babyfoot')) p.saluer();
+        // (la bulle dure 3,2 s, plus son fondu : la suivante attend qu'elle soit partie, jamais deux à la fois)
+        g.tParle = 45; this.tBulle = 3.7; bulle = true; if (g.mode === 'debout' && !(g.tache && g.tache.type === 'babyfoot')) p.saluer();
         const l = (g.tache && g.tache.arrive && TXT[g.tache.type]) || TXT[g.role] || TXT.bonjour; h.bulle(g.etq, `${g.e.prenom} : ${l[g.i++ % l.length]}`, 3.2);
       }
       if (g.etq.vu) h.placer(g.etq, gp.x, p.assis ? 1.75 : 2.25, gp.z, g.vu);
@@ -1937,7 +1954,7 @@ export class Solumatic {
         if (Math.abs(b.t) < 0.1) {
           // un but (le cri du buteur, s'il n'y a pas déjà une bulle : jamais deux à la fois)
           const g = J[b.s > 0 ? 0 : 1], cri = TXT.but[Math.floor(this.rnd() * TXT.but.length)];
-          if (this.tBulle <= 0) { this.tBulle = 2.2; this.c.hud.bulle(g.etq, `${g.e.prenom} : ${cri}`, 2.2); }
+          if (this.tBulle <= 0) { this.tBulle = 2.7; this.c.hud.bulle(g.etq, `${g.e.prenom} : ${cri}`, 2.2); }
           b.tBut = 1.6; b.vs = (this.rnd() < 0.5 ? -1 : 1) * 0.9; this.c.son.babyfoot(1);
         }
         else { b.s = Math.sign(b.s) * 0.56; b.vs = -b.vs; }

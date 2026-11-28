@@ -959,6 +959,43 @@ function oreille(s, c, rx, yb, zb, k) {
   return finir(g, c, Z.peau, uvBoite(g, Z.peau));
 }
 
+// Les os. L'angle d'un os (son Euler) n'est recalculé depuis son quaternion que quand on le lit : anim.js écrit souvent le
+// quaternion (la cinématique inverse, les mélanges de poses) et lit rarement l'angle ensuite ; three.js le recalculait à
+// chaque écriture (une matrice de rotation, des arcs tangentes : 10 % du temps de jeu sur la place, mesuré le 28/11/2026).
+// L'angle écrit refait le quaternion, comme avant.
+class EulerOs extends THREE.Euler {
+  constructor() { super(); this.q = null; this.perime = false; }
+  frais() { if (this.perime) { this.perime = false; this.setFromQuaternion(this.q, this._order, false); } }
+  get x() { this.frais(); return this._x; }
+  set x(v) { this.frais(); this._x = v; this._onChangeCallback(); }
+  get y() { this.frais(); return this._y; }
+  set y(v) { this.frais(); this._y = v; this._onChangeCallback(); }
+  get z() { this.frais(); return this._z; }
+  set z(v) { this.frais(); this._z = v; this._onChangeCallback(); }
+  get order() { return this._order; }
+  set order(v) { this.frais(); this._order = v; this._onChangeCallback(); }
+  set(x, y, z, order = this._order) { this.perime = false; return super.set(x, y, z, order); }
+  copy(e) { this.perime = false; return super.copy(e); }
+}
+class OsPerso extends THREE.Bone {
+  constructor() {
+    super();
+    const q = this.quaternion, r = new EulerOs();
+    r.q = q;
+    r._onChange(() => q.setFromEuler(r, false));
+    q._onChange(() => { r.perime = true; });
+    Object.defineProperty(this, 'rotation', { configurable: true, enumerable: true, value: r });
+  }
+}
+// Le groupe d'un personnage : caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer
+// les matrices de ses 18 os à chaque image (three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai).
+// L'accesseur est sur la classe, pas posé sur chaque groupe (Object.defineProperty, une fonction par personnage) : tous les
+// groupes ont ainsi la même forme pour V8, et le parcours de la scène par three.js reste rapide.
+class GroupePerso extends THREE.Group {
+  constructor() { super(); this.maillage = null; }
+  get matrixWorldAutoUpdate() { return this.visible && (this.maillage === null || this.maillage.visible); }
+  set matrixWorldAutoUpdate(v) { /* (le constructeur de three.js l'écrit : on l'ignore) */ }
+}
 // Renvoie { groupe, maillage, os, dim, ... } : groupe est l'objet à ajouter à la scène (ou au tracteur). Options nouvelles
 // (27/11/2026) : casque (vrai, ou sa couleur : le casque-micro de bureau, par-dessus la coiffure), badge (vrai, ou la
 // couleur du cordon). Rend aussi paupieres (le clignement : pas de queue de cheval) et mecheZ (anim.js).
@@ -968,8 +1005,8 @@ export function perso(o0) {
   while (!r.done) r = it.next();
   return r.value;
 }
-// Le même, en sept étapes (une par appel de next ; la dernière rend le personnage) : créer quelqu'un coûte 2 ms (8 à
-// 10 ms sur un téléphone lent), en une seule image ça se voit ; en sept, moins de 0,5 ms chacune (solumatic.js : creer).
+// Le même, en neuf étapes (une par appel de next ; la dernière rend le personnage) : créer quelqu'un coûte 2 ms (8 à
+// 10 ms sur un téléphone lent), en une seule image ça se voit ; en neuf, 0,25 ms chacune en moyenne (solumatic.js : creer).
 // Rien n'y est tiré au sort : le personnage est le même, d'un coup ou en plusieurs fois.
 export function* persoPas(o0) {
   if (!MAT_PERSO.map) { MAT_PERSO.map = texturePersos(); MAT_PERSO.map.repeat.set(UVK, UVK); }
@@ -1437,7 +1474,7 @@ export function* persoPas(o0) {
     add(T, finir(face, peau, zVisage, uvVisage(face, yc)), finir(crane, peau, Z.peau, uvBoite(crane, Z.peau)));
   }
 
-  yield; // (étape 5 : les bras et les mains, les jambes)
+  yield; // (étapes 5 et 6 : les bras et les mains ; 7 : les jambes)
   /* bras : épaule, coude, main (paume et doigts d'un seul tenant, pouce) */
   for (const [i, s] of [[4, 1], [7, -1]]) {
     // (le haut du bras : le biceps devant, le deltoïde qui arrondit l'épaule ; l'avant-bras : plus large près du coude, le
@@ -1451,6 +1488,7 @@ export function* persoPas(o0) {
     if (avantBras === peau) add(i, bande(anH, -0.3 * ka, -0.24 * ka, 1.12, manche, zManche, NM));
     else add(i + 1, bande(anA, -0.245 * ka, -0.215 * ka, 1.08, fonce(manche, 0.8), zManche === Z.matelasse || zManche === Z.maille ? Z.cotes : zManche, NM));
     add(i + 2, ...main(s, femme ? 0.9 : 1, peau));
+    yield; // (une étape par bras : la main et ses cinq doigts, c'est le plus long)
   }
   if (f > 1) for (const i of [4, 5, 7, 8]) gonfler(G[i], tenue0 === 'doudoune' ? 1.13 : 1.05); // les manches du manteau, de la doudoune
   // le dedans des mains, plus clair sur une peau foncée (la paume, l'intérieur des doigts)
@@ -1526,7 +1564,7 @@ export function* persoPas(o0) {
     for (const i of [OS.tete, OS.brasG, OS.brasD]) { const [x, y, z] = P[i]; P[i] = [x, y * ca - z * sa, y * sa + z * ca]; }
   }
 
-  yield; // (étape 6 : l'assemblage ; étape 7 : le squelette)
+  yield; // (étape 8 : l'assemblage ; étape 9 : le squelette)
   /* assemblage : chaque pièce suit son os ; près d'une jointure, elle suit aussi l'os voisin (peau souple, voir liens) */
   const W = [], PAR = PE ? PARENT_ENFANT : PARENT;
   for (let i = 0; i < P.length; i++) {
@@ -1535,7 +1573,7 @@ export function* persoPas(o0) {
   }
   const geo = assembler(G, W, kj, ka);
   yield;
-  const os = P.map(p => { const b = new THREE.Bone(); b.position.set(p[0], p[1], p[2]); return b; });
+  const os = P.map(p => { const b = new OsPerso(); b.position.set(p[0], p[1], p[2]); return b; });
   for (let i = 1; i < os.length; i++) os[PAR[i]].add(os[i]);
   const maillage = new THREE.SkinnedMesh(geo, MAT_PERSO);
   maillage.add(os[0]);
@@ -1548,13 +1586,10 @@ export function* persoPas(o0) {
   if (!aQueue) { os[OS.meche].scale.y = 0.03; os[OS.meche].position.z -= 0.004; } // les yeux ouverts (anim.js : le clignement)
   os[OS.tete].scale.setScalar(TETE * kt); // après bind : la tête (cou, cheveux, couvre-chef compris) un peu plus grande
 
-  const groupe = new THREE.Group();
+  const groupe = new GroupePerso();
   const echelle = PE ? (o.hauteur ?? PE.hauteur) / PE.Hm : 0.96 * (o.taille ?? 1);
   groupe.scale.setScalar(echelle);
-  groupe.add(maillage);
-  // caché (lui, ou son maillage : trop loin, derrière une cloison), il ne fait plus recalculer les matrices de ses 18 os à
-  // chaque image : three.js ne descend dans un enfant que si son matrixWorldAutoUpdate est vrai
-  Object.defineProperty(groupe, 'matrixWorldAutoUpdate', { get: () => groupe.visible && maillage.visible, set() {}, configurable: true });
+  groupe.add(maillage); groupe.maillage = maillage;
   // (traits : l'apparence complète, pour les bancs ; aine : il marche plus lentement, pieton.js ; enfant : l'école)
   // (acc, cig : les accessoires, créés à la demande ; déclarés ici, une seule forme d'objet pour tous : pieton.js)
   return { groupe, maillage, os, echelle, femme, queue: aQueue, paupieres: !aQueue, mecheZ: P[17][2], enfant: !!PE, dim: { xh, xe, H, K, L1, L2, yB, bras: LB, avantBras: LA }, traits: o, aine: o.age === 'aine', acc: null, cig: null };
